@@ -1,0 +1,16 @@
+{"event_id": "e1", "tenant_id": "factory_a", "device_id": "t1", "metric": "temperature", "value": 85, "timestamp": "2026-09-09T10:00:00Z"}
+{"event_id": "e2", "tenant_id": "factory_a", "device_id": "t2", "metric": "temperature", "value": 50, "timestamp": "2026-09-09T10:01:00Z"}
+{"event_id": "e3", "tenant_id": "factory_b", "device_id": "h1", "metric": "humidity", "value": 15, "timestamp": "2026-09-09T10:02:00Z"}
+{"event_id": "e4", "tenant_id": "factory_b", "device_id": "t1", "metric": "temperature", "value": 75, "timestamp": "2026-09-09T10:03:00Z"}
+{"event_id": "e5", "tenant_id": "factory_c", "device_id": "s1", "metric": "temperature", "value": 60, "timestamp": "2026-09-09T10:04:00Z"}
+{"event_id": "e6", "tenant_id": "factory_c", "device_id": "h1", "metric": "humidity", "value": 35, "timestamp": "2026-09-09T10:05:00Z"}
+{"event_id": "e7", "tenant_id": "factory_c", "device_id": "p1", "metric": "pressure", "value": 1000, "timestamp": "2026-09-09T10:06:00Z"}
+{"event_id": "e8", "tenant_id": "factory_c", "device_id": "p2", "metric": "pressure", "value": 1015, "timestamp": "2026-09-09T10:07:00Z"}
+{"event_id": "e9", "tenant_id": "factory_c", "device_id": "t3", "metric": "temperature", "value": -5, "timestamp": "2026-09-09T10:08:00Z"}
+{"event_id": "e10", "tenant_id": "factory_a", "device_id": "t_sensor", "metric": "temperature", "value": 105, "timestamp": "2026-09-09T10:09:00Z"}
+{"event_id": "e11", "tenant_id": "factory_a", "device_id": "h_sensor", "metric": "humidity", "value": 25, "timestamp": "2026-09-09T10:10:00Z"}
+{"event_id": "e12", "tenant_id": "factory_b", "device_id": "p_sensor", "metric": "pressure", "value": 1012, "timestamp": "2026-09-09T10:11:00Z"}
+{"event_id": "e13", "tenant_id": "factory_b", "device_id": "temp_sensor", "metric": "temperature", "value": 65, "timestamp": "2026-09-09T10:12:00Z"}
+{"event_id": "e14", "tenant_id": "factory_a", "device_id": "temp_sensor_2", "metric": "temperature", "value": 15, "timestamp": "2026-09-09T10:13:00Z"}
+{"event_id": "e15", "tenant_id": "factory_c", "device_id": "temp_humid", "metric": "temperature", "value": 55, "timestamp": "2026-09-09T10:14:00Z"}
+{"event_id": "e16", "tenant_id": "factory_c", "device_id": "temp_humid", "metric": "humidity", "value": 38, "timestamp": "2026-09-09T10:15:00Z"}

@@ -1,0 +1,65 @@
+[
+    {
+        "rule_id": "factory_a_temp_gt_80",
+        "tenant_id": "factory_a",
+        "priority": 1,
+        "condition": "temperature > 80",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_a_temp_lt_20",
+        "tenant_id": "factory_a",
+        "priority": 2,
+        "condition": "temperature < 20",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_a_humidity_lt_30",
+        "tenant_id": "factory_a",
+        "priority": 3,
+        "condition": "humidity < 30",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_a_drop",
+        "tenant_id": "factory_a",
+        "priority": 10,
+        "condition": "temperature > 100",
+        "action": "drop"
+    },
+    {
+        "rule_id": "factory_b_humidity_lt_20",
+        "tenant_id": "factory_b",
+        "priority": 1,
+        "condition": "humidity < 20",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_b_temp_gt_70",
+        "tenant_id": "factory_b",
+        "priority": 2,
+        "condition": "temperature >= 70",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_b_pressure_gt_1010",
+        "tenant_id": "factory_b",
+        "priority": 3,
+        "condition": "pressure > 1010",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_c_complex",
+        "tenant_id": "factory_c",
+        "priority": 1,
+        "condition": "(temperature > 50 AND humidity < 40) OR pressure > 1010",
+        "action": "alert"
+    },
+    {
+        "rule_id": "factory_c_drop_negative",
+        "tenant_id": "factory_c",
+        "priority": 2,
+        "condition": "NOT temperature > 0",
+        "action": "drop"
+    }
+]
