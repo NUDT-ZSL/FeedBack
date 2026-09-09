@@ -73,13 +73,15 @@ class MetricEvent:
         if not isinstance(self.timestamp, datetime) or self.timestamp.tzinfo is None:
             raise ValueError("timestamp 必须是带时区信息的 datetime")
         tags = dict(self.tags)
+        coerced: dict[str, str] = {}
         for k, v in tag_items(tags):
             if not isinstance(k, str) or not k.strip():
                 raise ValueError("tags 的键必须是非空字符串")
             if not isinstance(v, str) or not v.strip():
                 raise ValueError(f"tags[{k!r}] 的值必须是非空字符串")
-        # 冻结后使用固定的普通 dict，保证可哈希前提成立时行为稳定。
-        object.__setattr__(self, "tags", tags)
+            coerced[k] = v
+        # 冻结后使用固定的普通 dict，数字标签值已归一化为字符串。
+        object.__setattr__(self, "tags", coerced)
 
     # -- 序列化 ------------------------------------------------------------- #
     def to_dict(self) -> dict[str, Any]:
@@ -145,7 +147,7 @@ class TimeSeriesPoint:
             "timestamp": iso(self.timestamp),
             "window_start": iso(self.window_start),
             "window_end": iso(self.window_end),
-            key_tags": dict(self.tags),
+            "key_tags": dict(self.tags),
             "value": round2(self.value),
         }
 

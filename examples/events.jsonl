@@ -1,0 +1,38 @@
+# 示例指标事件（JSON Lines）。
+# 行序基本按时间排列，但同一 60s 窗口内刻意做了秒级打乱（如 10:00:08 早于 10:00:07），
+# 用于演示有界乱序；另有两类特殊事件：
+#   * 09:30:00 的 legacy 事件比 watermark 落后超过 5 分钟宽限 -> 丢弃并计入 late_dropped；
+#   * 在 10:03 之后才到达的 10:00:09 事件仍在 5 分钟宽限内 -> 正确并入 10:00 窗口。
+# 以 # 开头的行是注释，空行会被忽略。
+{"metric_name": "cpu_usage", "value": 80, "timestamp": "2026-09-09T10:00:05Z", "tags": {"service": "auth", "instance": "a1", "region": "cn-east"}}
+{"metric_name": "cpu_usage", "value": 95, "timestamp": "2026-09-09T10:00:06Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 90, "timestamp": "2026-09-09T10:00:08Z", "tags": {"service": "auth", "instance": "a2", "region": "cn-east"}}
+{"metric_name": "cpu_usage", "value": 95, "timestamp": "2026-09-09T10:00:07Z", "tags": {"service": "checkout", "instance": "c2", "region": "us-east"}}
+{"metric_name": "http_5xx", "value": 1, "timestamp": "2026-09-09T10:00:12Z", "tags": {"service": "gateway", "instance": "g1", "region": "cn-east"}}
+{"metric_name": "http_5xx", "value": 1, "timestamp": "2026-09-09T10:00:14Z", "tags": {"service": "gateway", "instance": "g2", "region": "cn-east"}}
+{"metric_name": "http_5xx", "value": 1, "timestamp": "2026-09-09T10:00:13Z", "tags": {"service": "gateway", "instance": "g1", "region": "cn-east"}}
+{"metric_name": "http_requests", "value": 1, "timestamp": "2026-09-09T10:00:20Z", "tags": {"service": "gateway", "instance": "g1", "region": "cn-east"}}
+{"metric_name": "http_requests", "value": 1, "timestamp": "2026-09-09T10:00:22Z", "tags": {"service": "gateway", "instance": "g1", "region": "cn-east"}}
+{"metric_name": "http_requests", "value": 1, "timestamp": "2026-09-09T10:00:21Z", "tags": {"service": "gateway", "instance": "g2", "region": "cn-east"}}
+{"metric_name": "request_latency", "value": 300, "timestamp": "2026-09-09T10:00:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "error_rate", "value": 0.3, "timestamp": "2026-09-09T10:00:40Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 90, "timestamp": "2026-09-09T10:01:05Z", "tags": {"service": "auth", "instance": "a1", "region": "cn-east"}}
+{"metric_name": "cpu_usage", "value": 90, "timestamp": "2026-09-09T10:01:07Z", "tags": {"service": "auth", "instance": "a2", "region": "cn-east"}}
+{"metric_name": "cpu_usage", "value": 30, "timestamp": "2026-09-09T10:01:06Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 30, "timestamp": "2026-09-09T10:01:08Z", "tags": {"service": "checkout", "instance": "c2", "region": "us-east"}}
+{"metric_name": "request_latency", "value": 300, "timestamp": "2026-09-09T10:01:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "error_rate", "value": 0.3, "timestamp": "2026-09-09T10:01:40Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 40, "timestamp": "2026-09-09T10:02:05Z", "tags": {"service": "auth", "instance": "a1", "region": "cn-east"}}
+{"metric_name": "cpu_usage", "value": 40, "timestamp": "2026-09-09T10:02:06Z", "tags": {"service": "auth", "instance": "a2", "region": "cn-east"}}
+{"metric_name": "request_latency", "value": 300, "timestamp": "2026-09-09T10:02:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "error_rate", "value": 0.3, "timestamp": "2026-09-09T10:02:40Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "request_latency", "value": 100, "timestamp": "2026-09-09T10:03:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "error_rate", "value": 0.0, "timestamp": "2026-09-09T10:03:40Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 90, "timestamp": "2026-09-09T10:00:09Z", "tags": {"service": "auth", "instance": "a1", "region": "cn-east"}}
+{"metric_name": "request_latency", "value": 300, "timestamp": "2026-09-09T10:04:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "error_rate", "value": 0.0, "timestamp": "2026-09-09T10:04:40Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "request_latency", "value": 100, "timestamp": "2026-09-09T10:05:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "request_latency", "value": 100, "timestamp": "2026-09-09T10:06:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "request_latency", "value": 100, "timestamp": "2026-09-09T10:07:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "request_latency", "value": 100, "timestamp": "2026-09-09T10:08:30Z", "tags": {"service": "checkout", "instance": "c1", "region": "us-west"}}
+{"metric_name": "cpu_usage", "value": 72, "timestamp": "2026-09-09T09:30:00Z", "tags": {"service": "legacy", "instance": "l1", "region": "cn-east"}}

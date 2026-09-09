@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "id": "cpu_critical",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">=",
+      "threshold": 95,
+      "duration_windows": 1,
+      "tags": {"region": "*"},
+      "channel": "webhook:https://oncall.example.com/hooks/critical"
+    }
+  ]
+}

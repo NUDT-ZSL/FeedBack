@@ -129,12 +129,15 @@ def build_engine(args: argparse.Namespace) -> MonitoringEngine:
     if invalid:
         raise SystemExit(f"非法聚合函数: {invalid}，可选 {AGG_FUNCS}")
 
-    engine = MonitoringEngine(
-        window_size=args.window_size,
-        slide_seconds=args.slide,
-        group_by=parse_csv(args.group_by),
-        allowed_lateness=args.allowed_lateness,
-    )
+    try:
+        engine = MonitoringEngine(
+            window_size=args.window_size,
+            slide_seconds=args.slide,
+            group_by=parse_csv(args.group_by),
+            allowed_lateness=args.allowed_lateness,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"窗口参数非法: {exc}") from exc
     rule_errors: list[str] = []
     if args.rules:
         path = Path(args.rules)
@@ -196,14 +199,17 @@ def run_batch(args: argparse.Namespace) -> int:
     engine = build_engine(args)
     funcs = parse_csv(args.funcs)
 
-    if args.events and args.events != "-":
-        source: EventSource = FileEventSource(args.events)
-        engine.process_source(source)
-    elif not sys.stdin.isatty() or args.events == "-":
-        engine.process_source(StdinEventSource())
-    else:
-        # 没有事件输入（例如只看规则校验）也能正常输出空结果。
-        engine.finalize()
+    try:
+        if args.events and args.events != "-":
+            source: EventSource = FileEventSource(args.events)
+            engine.process_source(source)
+        elif not sys.stdin.isatty() or args.events == "-":
+            engine.process_source(StdinEventSource())
+        else:
+            # 没有事件输入（例如只看规则校验）也能正常输出空结果。
+            engine.finalize()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"错误: {exc}") from exc
 
     result = render_result(engine, args, funcs)
     text = dump_json(result, args.pretty)
@@ -365,6 +371,11 @@ def _do_query(engine: MonitoringEngine, arg: str, default_funcs: Sequence[str]) 
 # 入口
 # --------------------------------------------------------------------------- #
 def main(argv: Sequence[str] | None = None) -> int:
+    # Windows 控制台默认 GBK，统一 UTF-8 输出，避免中文乱码。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

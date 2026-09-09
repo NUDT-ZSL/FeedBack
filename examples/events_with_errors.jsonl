@@ -1,0 +1,14 @@
+# 故意混入各类非法事件，验证引擎“跳过坏行、继续处理”的容错能力。
+# 合法事件夹在中间，最终仍应产出正常聚合/告警。
+{"metric_name": "cpu_usage", "value": 90, "timestamp": "2026-09-09T10:00:05Z", "tags": {"service": "auth", "instance": "a1"}}
+this is not json at all
+{"metric_name": "cpu_usage", "value": "not-a-number", "timestamp": "2026-09-09T10:00:06Z", "tags": {"service": "auth"}}
+{"metric_name": "cpu_usage", "value": 95, "timestamp": "not-a-timestamp", "tags": {"service": "auth"}}
+{"metric_name": "cpu_usage", "value": 95, "timestamp": "2026-09-09T10:00:07Z"}
+{"value": 88, "timestamp": "2026-09-09T10:00:08Z", "tags": {"service": "auth"}}
+{"metric_name": "cpu_usage", "value": NaN, "timestamp": "2026-09-09T10:00:09Z", "tags": {"service": "auth"}}
+{"metric_name": "cpu_usage", "value": true, "timestamp": "2026-09-09T10:00:10Z", "tags": {"service": "auth"}}
+{"metric_name": "cpu_usage", "value": 92, "timestamp": "2026-09-09T10:00:11Z", "tags": {"service": "auth", "instance": "a1"}}
+
+{"metric_name": "cpu_usage", "value": 91, "timestamp": "2026-09-09T10:01:05Z", "tags": {"service": "auth", "instance": "a1"}}
+{"metric_name": "cpu_usage", "value": 93, "timestamp": "2026-09-09T10:01:06Z", "tags": {"service": "auth", "instance": "a1"}}

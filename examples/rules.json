@@ -1,0 +1,94 @@
+{
+  "description": "示例告警规则：覆盖固定/滑动窗口、五种聚合函数、全部比较运算符、通配符标签与持续时间去抖",
+  "rules": [
+    {
+      "id": "cpu_auth_high",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 70,
+      "duration_windows": 2,
+      "tags": {"service": "auth"},
+      "channel": "email:ops@example.com"
+    },
+    {
+      "id": "cpu_checkout_high",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80,
+      "duration_windows": 1,
+      "tags": {"service": "checkout"},
+      "channel": "webhook:https://oncall.example.com/hooks/cpu"
+    },
+    {
+      "id": "error_rate_high",
+      "metric_name": "error_rate",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">=",
+      "threshold": 0.1,
+      "duration_windows": 2,
+      "tags": {"service": "checkout"},
+      "channel": "email:sre@example.com"
+    },
+    {
+      "id": "latency_sustained",
+      "metric_name": "request_latency",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">=",
+      "threshold": 200,
+      "duration_windows": 3,
+      "tags": {"service": "checkout"},
+      "channel": "webhook:https://oncall.example.com/hooks/latency"
+    },
+    {
+      "id": "error_spike_sliding",
+      "metric_name": "error_rate",
+      "agg_func": "max",
+      "window_seconds": 120,
+      "slide_seconds": 60,
+      "operator": ">=",
+      "threshold": 0.3,
+      "duration_windows": 2,
+      "tags": {"service": "checkout"},
+      "channel": "webhook:https://oncall.example.com/hooks/spike"
+    },
+    {
+      "id": "gateway_5xx_burst",
+      "metric_name": "http_5xx",
+      "agg_func": "sum",
+      "window_seconds": 60,
+      "operator": ">=",
+      "threshold": 3,
+      "duration_windows": 1,
+      "tags": {"service": "gateway"},
+      "channel": "email:gateway-oncall@example.com"
+    },
+    {
+      "id": "gateway_traffic_seen",
+      "metric_name": "http_requests",
+      "agg_func": "count",
+      "window_seconds": 60,
+      "operator": "==",
+      "threshold": 3,
+      "duration_windows": 1,
+      "tags": {"service": "gateway"},
+      "channel": "log"
+    },
+    {
+      "id": "cpu_us_regions_hot",
+      "metric_name": "cpu_usage",
+      "agg_func": "max",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 90,
+      "duration_windows": 1,
+      "tags": {"region": "us-*"},
+      "channel": "webhook:https://oncall.example.com/hooks/regions"
+    }
+  ]
+}

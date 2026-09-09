@@ -130,9 +130,11 @@ class AlertEngine:
 
         :param window_result: 单个 :class:`WindowEval` 或其可迭代对象（本窗口
             实际有数据的标签组）。
-        :param tick_rules: 该窗口时钟上需要“空跳”的规则：对于此前出现过、
-            但本窗口没有数据的标签组，按条件不满足处理（连续计数清零，
-            必要时产生 resolved）。这样数据空洞不会被误判为持续满足。
+        :param tick_rules: 该窗口时钟（窗口形状）上生效的规则白名单。**只有
+            这些规则会被评估**——切片可能来自滑动/固定等不同聚合器，不能让
+            窗口形状不匹配的规则在别人的切片上评估。同时它们也用于“空跳”：
+            此前出现过但本窗口没有数据的标签组按条件不满足处理（连续计数
+            清零，必要时产生 resolved），数据空洞不会被误判为持续满足。
         :param tick_window: 空跳时使用的 ``(start, end)``；默认取首个切片的窗口。
         """
         if isinstance(window_result, WindowEval):
@@ -140,10 +142,11 @@ class AlertEngine:
         else:
             slices = list(window_result)
 
+        active_rules = tick_rules
         produced: list[Alert] = []
         present: set[tuple[str, GroupKey]] = set()
         for slice_ in slices:
-            for rule in self._rules_for(slice_.metric_name):
+            for rule in self._rules_for(slice_.metric_name, active_rules):
                 group_key = self._group_key(rule, slice_.tags)
                 if not rule.tag_filter.matches(slice_.tags):
                     # 标签不再匹配（动态标签集场景）：不评估也不恢复。
@@ -175,8 +178,11 @@ class AlertEngine:
         self._alerts.extend(alerts)
         return alerts
 
-    def _rules_for(self, metric_name: str) -> list[AlertRule]:
-        return [r for r in self._rules.values() if r.metric_name == metric_name]
+    def _rules_for(
+        self, metric_name: str, active_rules: list[AlertRule] | None = None
+    ) -> list[AlertRule]:
+        pool = self._rules.values() if active_rules is None else active_rules
+        return [r for r in pool if r.metric_name == metric_name]
 
     def _evaluate_one(
         self, rule: AlertRule, group_key: GroupKey, slice_: WindowEval

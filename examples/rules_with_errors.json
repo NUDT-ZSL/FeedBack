@@ -1,0 +1,90 @@
+{
+  "rules": [
+    {
+      "id": "valid_cpu",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80,
+      "duration_windows": 1,
+      "tags": {"service": "auth"},
+      "channel": "email:ops@example.com"
+    },
+    {
+      "id": "",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80
+    },
+    {
+      "id": "bad_func",
+      "metric_name": "cpu_usage",
+      "agg_func": "median",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80
+    },
+    {
+      "id": "bad_window",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": -5,
+      "operator": ">",
+      "threshold": 80
+    },
+    {
+      "id": "bad_slide",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "slide_seconds": 37,
+      "operator": ">",
+      "threshold": 80
+    },
+    {
+      "id": "bad_operator",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": "==>",
+      "threshold": 80
+    },
+    {
+      "id": "bad_threshold",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": "high"
+    },
+    {
+      "id": "bad_duration",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80,
+      "duration_windows": 0
+    },
+    {
+      "id": "bad_tags",
+      "metric_name": "cpu_usage",
+      "agg_func": "avg",
+      "window_seconds": 60,
+      "operator": ">",
+      "threshold": 80,
+      "tags": {"service": 123}
+    },
+    {
+      "id": "valid_cpu",
+      "metric_name": "cpu_usage",
+      "agg_func": "max",
+      "window_seconds": 60,
+      "operator": "<",
+      "threshold": 0
+    }
+  ]
+}

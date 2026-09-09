@@ -26,7 +26,7 @@ from .alerting import AlertEngine, WindowEval
 from .models import Alert, MetricEvent, TimeSeriesPoint
 from .sources import EventSource
 
-AggKey = tuple[int, int]  # (window_seconds, slide_seconds)
+AggKey = tuple[int, int, frozenset[str]]  # (window_seconds, slide_seconds, 分组标签键集)
 
 
 @dataclass(slots=True)
@@ -100,22 +100,39 @@ class MonitoringEngine:
         """
         added, errors = self.alert_engine.load_rules(payload)
         for rule in self.alert_engine.rules:
-            key = (rule.window_seconds, rule.slide_seconds)
+            key = self._agg_key(rule)
             if key not in self._rule_aggs:
                 self._rule_aggs[key] = _RuleAggMeta(
                     WindowAggregator(
                         WindowConfig(
                             size_seconds=rule.window_seconds,
                             slide_seconds=rule.slide_seconds,
-                            group_by=("*",),
+                            # 按规则过滤涉及的标签键分组：同一过滤值的不同实例
+                            # 才合并聚合；不同过滤值（含通配展开）各自独立。
+                            group_by=tuple(sorted(rule.tags)),
                             allowed_lateness_seconds=self.query_config.allowed_lateness_seconds,
                         )
                     )
                 )
+        self._prune_rule_aggs()
         return added, errors
 
+    def _prune_rule_aggs(self) -> None:
+        """回收已无任何规则使用的窗口形状聚合器（规则删除/替换后）。"""
+        live = {self._agg_key(rule) for rule in self.alert_engine.rules}
+        for key in list(self._rule_aggs):
+            if key not in live:
+                del self._rule_aggs[key]
+
+    @staticmethod
+    def _agg_key(rule: AlertRule) -> AggKey:
+        return (rule.window_seconds, rule.slide_seconds, frozenset(rule.tags))
+
     def remove_rule(self, rule_id: str) -> bool:
-        return self.alert_engine.remove_rule(rule_id)
+        existed = self.alert_engine.remove_rule(rule_id)
+        if existed:
+            self._prune_rule_aggs()
+        return existed
 
     # ------------------------------------------------------------------ #
     # 事件处理
@@ -157,23 +174,25 @@ class MonitoringEngine:
 
         无数据的空窗口也占一拍：告警引擎据此把连续计数清零，保证“连续 N 个
         窗口”指时钟连续而非数据连续。
+
+        乱序安全性：迟到事件能被接受的前提是
+        ``window_end + allowed_lateness > watermark``，即其窗口终点必在封口
+        边界 ``sealable_end`` 之后，因此一旦 ``cursor`` 已越过某窗口，该窗口
+        不可能再收到可接受的迟到数据，时钟只能单调向前。
         """
-        size, slide = key
+        size, slide, _tag_keys = key
         agg = meta.agg
 
         if meta.min_start is None:
             return
-        if meta.cursor is None:
-            # 第一拍从最早窗口开始。
-            meta.cursor = meta.min_start + size - slide
 
         if force_all:
             # EOF：推进到现存最晚窗口（可能不完整，批处理验收需要末窗口结果）。
             max_start = max(
                 (start for windows in agg._windows.values() for start in windows),  # noqa: SLF001
-                default=meta.cursor,
+                default=meta.min_start,
             )
-            last_end = max(meta.cursor, max_start + size)
+            last_end = max_start + size
         else:
             watermark = agg._max_event_time  # noqa: SLF001
             if watermark is None:
@@ -183,16 +202,21 @@ class MonitoringEngine:
             sealable_end = int((watermark - grace - size) // slide) * slide + size
             last_end = sealable_end
 
-        if last_end <= meta.cursor:
+        # cursor=None：首个待评估窗口是当前见过的最早窗口。
+        # 已推进过：从下一拍继续（更早的可接受窗口必在 last_end 之后，不会遗漏）。
+        first_end = (
+            meta.min_start + size if meta.cursor is None else meta.cursor + slide
+        )
+        if last_end < first_end:
             return
 
         tick_rules = [
             rule
             for rule in self.alert_engine.rules
-            if (rule.window_seconds, rule.slide_seconds) == key
+            if self._agg_key(rule) == key
         ]
 
-        for end in range(meta.cursor + slide, last_end + 1, slide):
+        for end in range(first_end, last_end + 1, slide):
             start = end - size
             slices = []
             for metric, metric_windows in agg._windows.items():  # noqa: SLF001
