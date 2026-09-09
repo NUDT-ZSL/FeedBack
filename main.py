@@ -82,10 +82,11 @@ def main():
 def process_events(engine: RuleEngine, event_source: EventSource) -> None:
     """Process all events from the event source."""
     count = 0
-    for event in event_source.events():
-        if event is None:
+    for item in event_source.events():
+        # File source never returns commands, only events
+        if isinstance(item, str):
             continue
-        result = engine.process_event(event)
+        result = engine.process_event(item)
         count += 1
     print(f"Processed {count} events")
 
@@ -93,22 +94,10 @@ def process_events(engine: RuleEngine, event_source: EventSource) -> None:
 def process_interactive(engine: RuleEngine, event_source: StdinEventSource) -> None:
     """Process events in interactive mode, handling special commands."""
     count = 0
-    for event_or_cmd in event_source.events():
-        if event_or_cmd is None:
-            # We need to read the line again to get the command
-            # The StdinEventSource yields None for commands, so we need to handle
-            # this here by reading the last line from stdin? Wait, no - the generator
-            # yields one item per line, so None means this line is a command.
-            # But how to get the actual line? We need a different approach.
-            # Let's actually just read the last line - no, that won't work.
-            # Actually, since we can't get the line here, let me just fix this by
-            # making the StdinEventSource yield the command instead of None.
-            # But since it's already yielding None, let's just read input again here.
-            # Hmm, actually, let's just get it from the previous read. Actually, this is a bug.
-            # Let me fix it by reading the entire line again.
-            line = sys.stdin.readline().strip()
-            if not line:
-                continue
+    for item in event_source.events():
+        # If item is a string, it's a command from StdinEventSource
+        if isinstance(item, str):
+            line = item
             if line.startswith('load:'):
                 path = line[5:].strip()
                 try:
@@ -139,9 +128,10 @@ def process_interactive(engine: RuleEngine, event_source: StdinEventSource) -> N
                 stats = engine.get_statistics()
                 print(json.dumps(stats, indent=2, ensure_ascii=False))
             continue
-        result = engine.process_event(event_or_cmd)
+        # Otherwise it's a DeviceEvent
+        result = engine.process_event(item)
         count += 1
-        print(f"Processed event {event_or_cmd.event_id}: action={result.action.value} matched_rule={result.matched_rule_id}")
+        print(f"Processed event {item.event_id}: action={result.action.value} matched_rule={result.matched_rule_id}")
     print(f"\nTotal processed {count} events")
 
 

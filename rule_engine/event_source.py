@@ -2,7 +2,7 @@
 EventSource implementations for file and stdin.
 """
 import json
-from typing import Iterator
+from typing import Iterator, Union
 from abc import ABC, abstractmethod
 from .event import DeviceEvent
 import sys
@@ -12,12 +12,12 @@ class EventSource(ABC):
     """Abstract base class for event sources."""
 
     @abstractmethod
-    def events(self) -> Iterator[DeviceEvent]:
+    def events(self) -> Iterator[Union[DeviceEvent, str]]:
         """
         Yield events from the source.
 
         Yields:
-            DeviceEvent instances.
+            DeviceEvent instances or command strings for interactive mode.
         """
         pass
 
@@ -37,7 +37,7 @@ class FileEventSource(EventSource):
         """
         self.file_path = file_path
 
-    def events(self) -> Iterator[DeviceEvent]:
+    def events(self) -> Iterator[Union[DeviceEvent, str]]:
         """
         Yield events from the file.
 
@@ -63,27 +63,23 @@ class StdinEventSource(EventSource):
     For interactive testing.
     """
 
-    def events(self) -> Iterator[DeviceEvent]:
+    def events(self) -> Iterator[Union[DeviceEvent, str]]:
         """
         Yield events from stdin.
 
         Yields:
-            DeviceEvent instances. Invalid lines will be skipped and error printed.
+            - DeviceEvent instances for valid events
+            - string for commands (starting with load:, delete:, stats)
+            Invalid lines will be skipped and error printed.
         """
         for line_num, line in enumerate(sys.stdin, 1):
             line = line.strip()
             if not line:
                 continue
             # Check for special commands in interactive mode
-            if line.startswith('load:'):
-                # Handled by main, just yield as a command
-                yield None
-                continue
-            elif line.startswith('delete:'):
-                yield None
-                continue
-            elif line == 'stats':
-                yield None
+            if line.startswith('load:') or line.startswith('delete:') or line == 'stats':
+                # Return the full command line for processing in main
+                yield line
                 continue
             try:
                 data = json.loads(line)

@@ -1,0 +1,6 @@
+{"event_id": "e1", "tenant_id": "factory_a", "device_id": "t1", "metric": "temperature", "value": 85, "timestamp": "2026-09-09T10:00:00Z"}
+load: examples/rules.json
+{"event_id": "e2", "tenant_id": "factory_a", "device_id": "t2", "metric": "temperature", "value": 15, "timestamp": "2026-09-09T10:01:00Z"}
+{"event_id": "e3", "tenant_id": "factory_b", "device_id": "h1", "metric": "humidity", "value": 15, "timestamp": "2026-09-09T10:02:00Z"}
+delete: factory_a_temp_gt_80
+{"event_id": "e4", "tenant_id": "factory_a", "device_id": "t3", "metric": "temperature", "value": 85, "timestamp": "2026-09-09T10:03:00Z"}
