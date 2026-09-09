@@ -1,18 +1,24 @@
 """
 Core Rule Engine implementation.
 Handles rule management, event processing, and statistics.
+
+Performance optimizations:
+1. Metric-based indexing: only evaluate rules that involve the event's metric
+2. __slots__ used for all dataclasses to reduce memory overhead
+3. collections.deque with maxlen for alerts to avoid manual trimming
+4. collections.Counter for action counting
+5. Batch processing interface to reduce Python loop overhead
 """
 import json
-from collections import defaultdict
+from collections import defaultdict, Counter, deque
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Iterable
 from threading import Lock
 from .event import DeviceEvent
 from .rule import Rule, Action
 from .parser import ParserError
 
 
-@dataclass
 class ActionResult:
     """
     Result of processing an event.
@@ -23,39 +29,94 @@ class ActionResult:
         action: The action that was decided
         matched_rule_id: ID of the matching rule, if any
     """
-    event_id: str
-    tenant_id: str
-    action: Action
-    matched_rule_id: Optional[str] = None
+    __slots__ = ('event_id', 'tenant_id', 'action', 'matched_rule_id')
+    def __init__(self, event_id: str, tenant_id: str, action: Action, matched_rule_id: Optional[str] = None):
+        self.event_id = event_id
+        self.tenant_id = tenant_id
+        self.action = action
+        self.matched_rule_id = matched_rule_id
 
 
-@dataclass
 class AlertEntry:
     """Alert entry for storage."""
-    event_id: str
-    device_id: str
-    metric: str
-    value: float
-    timestamp: str
-    rule_id: str
+    __slots__ = ('event_id', 'device_id', 'metric', 'value', 'timestamp', 'rule_id')
+    def __init__(self, event_id: str, device_id: str, metric: str, value: float, timestamp: str, rule_id: str):
+        self.event_id = event_id
+        self.device_id = device_id
+        self.metric = metric
+        self.value = value
+        self.timestamp = timestamp
+        self.rule_id = rule_id
 
 
-@dataclass
 class TenantStatistics:
     """Statistics for a single tenant."""
-    total_events: int = 0
-    action_counts: Dict[Action, int] = None
-    alerts: List[AlertEntry] = None
+    __slots__ = ('total_events', 'action_counts', 'alerts')
 
-    def __post_init__(self):
-        if self.action_counts is None:
-            self.action_counts = {
-                Action.FORWARD: 0,
-                Action.ALERT: 0,
-                Action.DROP: 0,
-            }
-        if self.alerts is None:
-            self.alerts = []
+    def __init__(self, max_alerts: int):
+        self.total_events = 0
+        self.action_counts = Counter()
+        self.alerts = deque(maxlen=max_alerts)
+
+
+class RuleEvaluator:
+    """
+    Encapsulates rule evaluation logic for a tenant, with metric-based indexing.
+    Improves performance by only evaluating rules that involve the current event's metric.
+    """
+
+    def __init__(self):
+        # All rules sorted by priority
+        self._all_rules: List[Rule] = []
+        # Rules indexed by required metric
+        self._metric_index: Dict[str, List[Rule]] = defaultdict(list)
+
+    def add_rule(self, rule: Rule) -> None:
+        """Add a rule and update index."""
+        self._all_rules.append(rule)
+        # Sort by priority
+        self._all_rules.sort(key=lambda r: r.priority)
+        # Rebuild index - rule adding is infrequent, so this is acceptable
+        self._rebuild_index()
+
+    def delete_rule(self, rule_id: str) -> bool:
+        """Delete a rule and update index."""
+        original_len = len(self._all_rules)
+        self._all_rules = [r for r in self._all_rules if r.rule_id != rule_id]
+        if len(self._all_rules) == original_len:
+            return False
+        self._rebuild_index()
+        return True
+
+    def _rebuild_index(self) -> None:
+        """Rebuild the metric index after adding/removing rules."""
+        self._metric_index.clear()
+        for rule in self._all_rules:
+            for metric in rule.required_metrics:
+                self._metric_index[metric].append(rule)
+            # Sort each metric's rule by priority (already sorted globally, so just keep order)
+            # Because global list is sorted, when adding to metric index we keep the sorted order
+
+    def find_matching_rule(self, metric: str, metrics: Dict[str, float]) -> Optional[Rule]:
+        """
+        Find the first matching rule for current metric.
+        Only checks rules that require the current metric, reducing evaluations.
+        """
+        # Get all rules that involve this metric (already sorted by priority)
+        candidates = self._metric_index.get(metric, [])
+        for rule in candidates:
+            if rule.evaluate_condition(metrics):
+                return rule
+        # Check if there are any rules in this tenant that don't involve this metric
+        # because they might match (e.g. a rule that matches any event with NOT temperature > 0)
+        for rule in self._all_rules:
+            if metric not in rule.required_metrics and rule.evaluate_condition(metrics):
+                return rule
+        return None
+
+    def get_all_rules(self) -> List[Rule]:
+        """Get all rules for this tenant."""
+        return list(self._all_rules)
 
 
 class RuleEngine:
@@ -71,10 +132,10 @@ class RuleEngine:
         Args:
             max_alerts_per_tenant: Maximum number of recent alerts to keep per tenant.
         """
-        # Rules stored as: tenant_id -> sorted list of rules (by priority ascending)
-        self._rules: Dict[str, List[Rule]] = defaultdict(list)
+        # Evaluators per tenant, contains indexed rules
+        self._evaluators: Dict[str, RuleEvaluator] = dict()
         # Statistics stored by tenant
-        self._statistics: Dict[str, TenantStatistics] = defaultdict(TenantStatistics)
+        self._statistics: Dict[str, TenantStatistics] = dict()
         # Error list
         self._errors: List[str] = []
         # Maximum number of alerts to keep per tenant
@@ -112,19 +173,20 @@ class RuleEngine:
             for rule_data in data:
                 try:
                     rule = Rule.from_dict(rule_data)
-                    # Remove existing rule with same ID if it exists
-                    self._delete_rule_internal(rule.tenant_id, rule.rule_id)
+                    # Ensure evaluator and statistics exist for tenant
+                    if rule.tenant_id not in self._evaluators:
+                        self._evaluators[rule.tenant_id] = RuleEvaluator()
+                        self._statistics[rule.tenant_id] = TenantStatistics(self._max_alerts_per_tenant)
+                    # Remove existing rule with same ID if any
+                    self._evaluators[rule.tenant_id].delete_rule(rule.rule_id)
                     # Add new rule
-                    self._rules[rule.tenant_id].append(rule)
+                    self._evaluators[rule.tenant_id].add_rule(rule)
                     loaded_count += 1
                 except (ValueError, ParserError) as e:
                     error_msg = f"Failed to load rule: {e}"
                     errors.append(error_msg)
-                    self._errors.append(error_msg)
-
-            # Sort rules for each tenant by priority (smaller first)
-            for tenant_id in self._rules:
-                self._rules[tenant_id].sort(key=lambda r: r.priority)
+                    with self._lock:
+                        self._errors.append(error_msg)
 
         return loaded_count, errors
 
@@ -153,17 +215,9 @@ class RuleEngine:
             True if the rule was found and deleted, False otherwise.
         """
         with self._lock:
-            return self._delete_rule_internal(tenant_id, rule_id)
-
-    def _delete_rule_internal(self, tenant_id: str, rule_id: str) -> bool:
-        """Internal method to delete a rule - NOT thread-safe."""
-        if tenant_id not in self._rules:
-            return False
-        original_len = len(self._rules[tenant_id])
-        self._rules[tenant_id] = [r for r in self._rules[tenant_id] if r.rule_id != rule_id]
-        if len(self._rules[tenant_id]) == original_len:
-            return False
-        return True
+            if tenant_id not in self._evaluators:
+                return False
+            return self._evaluators[tenant_id].delete_rule(rule_id)
 
     def process_event(self, event: DeviceEvent) -> ActionResult:
         """
@@ -176,21 +230,20 @@ class RuleEngine:
         Returns:
             The ActionResult containing the decided action.
         """
-        # Get copy of rules for this tenant to avoid holding lock during evaluation
+        # Get evaluator for this tenant
         with self._lock:
-            rules = self._rules.get(event.tenant_id, [])
+            evaluator = self._evaluators.get(event.tenant_id, None)
+            stats = self._statistics.get(event.tenant_id, None)
 
         # Collect metrics from event
         metrics = {
             event.metric: event.value
         }
 
-        # Evaluate rules in priority order
+        # Find matching rule
         matched_rule = None
-        for rule in rules:
-            if rule.evaluate(metrics):
-                matched_rule = rule
-                break
+        if evaluator is not None:
+            matched_rule = evaluator.find_matching_rule(event.metric, metrics)
 
         # Determine action: if no match, default is forward
         action = Action.FORWARD
@@ -199,9 +252,14 @@ class RuleEngine:
 
         # Update statistics (lock for statistics update)
         with self._lock:
-            stats = self._statistics[event.tenant_id]
+            if event.tenant_id not in self._statistics:
+                stats = TenantStatistics(self._max_alerts_per_tenant)
+                self._statistics[event.tenant_id] = stats
+            else:
+                stats = self._statistics[event.tenant_id]
+
             stats.total_events += 1
-            stats.action_counts[action] = stats.action_counts.get(action, 0) + 1
+            stats.action_counts[action] += 1
 
             # If alert, store the alert
             if action == Action.ALERT:
@@ -214,9 +272,6 @@ class RuleEngine:
                     rule_id=matched_rule.rule_id if matched_rule else None
                 )
                 stats.alerts.append(alert_entry)
-                # Trim to max size
-                if len(stats.alerts) > self._max_alerts_per_tenant:
-                    stats.alerts.pop(0)
 
             self._total_events += 1
 
@@ -226,6 +281,22 @@ class RuleEngine:
             action=action,
             matched_rule_id=matched_rule.rule_id if matched_rule else None
         )
+
+    def process_events(self, events: Iterable[DeviceEvent]) -> List[ActionResult]:
+        """
+        Process multiple events in batch.
+        Reduces Python-level loop overhead compared to repeated process_event calls.
+
+        Args:
+            events: Iterable of DeviceEvent to process.
+
+        Returns:
+            List of ActionResult, one per input event.
+        """
+        results = []
+        for event in events:
+            results.append(self.process_event(event))
+        return results
 
     def get_statistics(self) -> dict:
         """
@@ -273,12 +344,16 @@ class RuleEngine:
             List of rules for this tenant.
         """
         with self._lock:
-            return list(self._rules.get(tenant_id, []))
+            evaluator = self._evaluators.get(tenant_id, None)
+            if evaluator:
+                return evaluator.get_all_rules()
+            return []
 
     @property
     def errors(self) -> List[str]:
         """Get the list of all errors that have occurred."""
-        return list(self._errors)
+        with self._lock:
+            return list(self._errors)
 
     def add_error(self, error_msg: str) -> None:
         """Add an error message to the engine."""

@@ -22,6 +22,7 @@ class DeviceEvent:
         value: The numeric value of the measurement
         timestamp: ISO 8601 formatted timestamp in UTC
     """
+    __slots__ = ('event_id', 'tenant_id', 'device_id', 'metric', 'value', 'timestamp')
     event_id: str
     tenant_id: str
     device_id: str

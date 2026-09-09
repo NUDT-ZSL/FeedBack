@@ -80,15 +80,17 @@ def main():
 
 
 def process_events(engine: RuleEngine, event_source: EventSource) -> None:
-    """Process all events from the event source."""
-    count = 0
+    """Process all events from the event source using batch processing."""
+    # Collect all events first, then process in batch for better performance
+    events = []
     for item in event_source.events():
         # File source never returns commands, only events
         if isinstance(item, str):
             continue
-        result = engine.process_event(item)
-        count += 1
-    print(f"Processed {count} events")
+        events.append(item)
+    # Batch process
+    engine.process_events(events)
+    print(f"Processed {len(events)} events")
 
 
 def process_interactive(engine: RuleEngine, event_source: StdinEventSource) -> None:
