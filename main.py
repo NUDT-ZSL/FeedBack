@@ -87,8 +87,8 @@ def simulate_command(args) -> None:
     )
 
     print(f"Starting simulation: {args.nodes} nodes, {args.ids_per_node} IDs per node...", file=sys.stderr)
-    all_ids = simulation.generate_ids(args.ids_per_node)
-    stats = simulation.get_stats(all_ids)
+    all_ids, failed_nodes = simulation.generate_ids(args.ids_per_node)
+    stats = simulation.get_stats(all_ids, failed_nodes)
 
     if args.check_unique:
         stats["unique_check_passed"] = simulation.check_uniqueness(all_ids)

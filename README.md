@@ -57,6 +57,8 @@ print(f"Generated ID: {new_id}")
 
 # 解析ID
 timestamp, machine_id, sequence, _ = parse_id(new_id, epoch_ms=epoch_ms)
+# 或使用全参数调用
+# timestamp, machine_id, sequence, _ = parse_id(new_id, 41, 10, 12, epoch_ms)
 print(f"Timestamp: {timestamp}")
 print(f"Machine ID: {machine_id}")
 print(f"Sequence: {sequence}")

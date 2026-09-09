@@ -121,17 +121,54 @@ class TestSnowflakeIDGenerator(unittest.TestCase):
 
         # 先生成一个ID记录当前时间
         _id1 = generator.next_id()
+        status_before = generator.get_status()
+        last_timestamp_before = status_before["last_timestamp"]
+
         # 直接修改last_timestamp模拟时钟回拨5毫秒
         with generator._lock:
             generator.last_timestamp += 5
 
-        # 生成下一个ID应该能处理回拨
+        # 生成下一个ID应该能处理回拨，循环等待直到时钟追上
         _id2 = generator.next_id()
         # 回拨次数应该增加1
         status = generator.get_status()
         self.assertEqual(status["clock_backward_count"], 1)
+        # 最终last_timestamp应该大于等于修改后的last_timestamp，保证单调递增
+        self.assertGreaterEqual(status["last_timestamp"], last_timestamp_before + 5)
         # 两个ID都唯一
         self.assertNotEqual(_id1, _id2)
+
+    def test_clock_backward_continues_after_wait(self):
+        """测试回拨处理后，时钟正常继续，不会停滞"""
+        generator = SnowflakeIDGenerator(
+            machine_id=1,
+            epoch_ms=self.default_epoch,
+            clock_backward_threshold=10
+        )
+
+        _id1 = generator.next_id()
+        status1 = generator.get_status()
+
+        # 模拟时钟回拨3毫秒
+        with generator._lock:
+            original_last_timestamp = status1["last_timestamp"]
+            generator.last_timestamp = original_last_timestamp + 3
+
+        # 第一次处理回拨
+        _id2 = generator.next_id()
+        status2 = generator.get_status()
+        self.assertEqual(status2["clock_backward_count"], 1)
+        # last_timestamp 现在应该 >= 原last_timestamp + 3
+        self.assertGreaterEqual(status2["last_timestamp"], original_last_timestamp + 3)
+
+        # 等待真实时钟追上后，再次生成应该使用真实时间，不会停滞
+        time.sleep(0.01)  # 等待时钟推进
+        _id3 = generator.next_id()
+        status3 = generator.get_status()
+        # 这次生成应该使用更大的真实时间戳
+        self.assertGreater(status3["last_timestamp"], status2["last_timestamp"])
+        # 三个ID都唯一
+        self.assertEqual(len(set([_id1, _id2, _id3])), 3)
 
     def test_large_clock_backward_throw(self):
         """测试大回拨抛出异常"""
@@ -202,8 +239,9 @@ class TestSimulation(unittest.TestCase):
             num_nodes=num_nodes,
             epoch_ms=self.default_epoch
         )
-        all_ids = simulation.generate_ids(ids_per_node)
+        all_ids, failed_nodes = simulation.generate_ids(ids_per_node)
         self.assertEqual(len(all_ids), num_nodes * ids_per_node)
+        self.assertEqual(len(failed_nodes), 0)
         self.assertTrue(simulation.check_uniqueness(all_ids))
 
     def test_get_stats(self):
@@ -214,14 +252,32 @@ class TestSimulation(unittest.TestCase):
             num_nodes=num_nodes,
             epoch_ms=self.default_epoch
         )
-        all_ids = simulation.generate_ids(ids_per_node)
-        stats = simulation.get_stats(all_ids)
+        all_ids, failed_nodes = simulation.generate_ids(ids_per_node)
+        stats = simulation.get_stats(all_ids, failed_nodes)
 
         self.assertEqual(stats["num_nodes"], num_nodes)
-        self.assertEqual(stats["num_ids_per_node"], ids_per_node)
+        self.assertEqual(len(failed_nodes), 0)
+        self.assertEqual(stats["successful_nodes"], num_nodes)
+        self.assertEqual(stats["avg_ids_per_successful_node"], ids_per_node)
         self.assertEqual(stats["total_ids"], num_nodes * ids_per_node)
         self.assertEqual(stats["unique_ids"], num_nodes * ids_per_node)
         self.assertFalse(stats["has_duplicates"])
+
+    def test_some_nodes_fail(self):
+        """测试部分节点失败时的异常处理"""
+        num_nodes = 3
+        ids_per_node = 100
+        simulation = Simulation(
+            num_nodes=num_nodes,
+            epoch_ms=self.default_epoch
+        )
+        # 手动让第二个节点的生成器抛出异常
+        original_next_id = simulation.generators[1].next_id
+        simulation.generators[1].next_id = lambda: (_ for _ in ()).throw(Exception("Test failure"))
+
+        # 应该抛出异常
+        with self.assertRaises(Exception):
+            simulation.generate_ids(ids_per_node)
 
 
 if __name__ == "__main__":

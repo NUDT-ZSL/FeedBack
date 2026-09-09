@@ -2,8 +2,8 @@
 多节点模拟模块，用于验证多节点部署下的ID唯一性
 """
 import threading
-from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Dict, Tuple
 from .generator import SnowflakeIDGenerator
 
 
@@ -51,7 +51,7 @@ class Simulation:
                 clock_backward_threshold=clock_backward_threshold
             )
 
-    def generate_ids(self, num_ids_per_node: int) -> List[int]:
+    def generate_ids(self, num_ids_per_node: int) -> Tuple[List[int], List[int]]:
         """
         模拟多节点并行生成ID
 
@@ -59,22 +59,43 @@ class Simulation:
             num_ids_per_node: 每个节点生成ID数量
 
         Returns:
-            所有生成的ID列表
+            (所有生成的ID列表, 失败节点的machine_id列表) 元组
+
+        Raises:
+            Exception: 如果任何节点生成失败，会抛出最后一个异常
         """
         all_ids = []
+        failed_nodes = []
         lock = threading.Lock()
+        last_exception = None
 
         def worker(machine_id: int) -> None:
-            generator = self.generators[machine_id]
-            ids = [generator.next_id() for _ in range(num_ids_per_node)]
-            with lock:
-                all_ids.extend(ids)
+            nonlocal last_exception
+            try:
+                generator = self.generators[machine_id]
+                ids = [generator.next_id() for _ in range(num_ids_per_node)]
+                with lock:
+                    all_ids.extend(ids)
+            except Exception:
+                with lock:
+                    failed_nodes.append(machine_id)
+                    last_exception = Exception(f"Node {machine_id} failed to generate IDs")
+                    last_exception.__cause__ = None
+                raise
 
         with ThreadPoolExecutor(max_workers=self.num_nodes) as executor:
+            futures = []
             for machine_id in range(self.num_nodes):
-                executor.submit(worker, machine_id)
+                futures.append(executor.submit(worker, machine_id))
 
-        return all_ids
+            # 等待所有任务完成，这里会抛出异常如果任何任务失败
+            for future in as_completed(futures):
+                future.result()
+
+        if last_exception is not None:
+            raise last_exception
+
+        return (all_ids, failed_nodes)
 
     def check_uniqueness(self, ids: List[int]) -> bool:
         """
@@ -93,19 +114,25 @@ class Simulation:
             seen.add(_id)
         return True
 
-    def get_stats(self, ids: List[int]) -> Dict:
+    def get_stats(self, all_ids: List[int], failed_nodes: List[int] = None) -> Dict:
         """
         获取生成统计信息
 
         Args:
-            ids: 生成的ID列表
+            all_ids: 生成的ID列表
+            failed_nodes: 失败节点列表，可选
 
         Returns:
             统计信息字典
         """
-        total_ids = len(ids)
-        unique_ids = len(set(ids))
-        has_duplicates = not self.check_uniqueness(ids)
+        if failed_nodes is None:
+            failed_nodes = []
+
+        total_ids = len(all_ids)
+        unique_ids = len(set(all_ids))
+        has_duplicates = not self.check_uniqueness(all_ids)
+        successful_nodes = self.num_nodes - len(failed_nodes)
+        ids_per_successful_node = total_ids // successful_nodes if successful_nodes > 0 else 0
 
         total_clock_backward = sum(
             gen.get_status()["clock_backward_count"]
@@ -114,8 +141,10 @@ class Simulation:
 
         return {
             "num_nodes": self.num_nodes,
-            "num_ids_per_node": len(ids) // self.num_nodes if self.num_nodes > 0 else 0,
+            "failed_nodes": failed_nodes,
+            "successful_nodes": successful_nodes,
             "total_ids": total_ids,
+            "avg_ids_per_successful_node": ids_per_successful_node,
             "unique_ids": unique_ids,
             "has_duplicates": has_duplicates,
             "total_clock_backward": total_clock_backward

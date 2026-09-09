@@ -114,12 +114,12 @@ class SnowflakeIDGenerator:
         backoff = self.last_timestamp - current_timestamp
 
         if backoff <= self.clock_backward_threshold:
-            # 回拨较小，等待时钟追上
+            # 回拨较小，循环等待直到真实时钟追上
             time.sleep(backoff / 1000.0)
             current_timestamp = self._current_time_millis()
-            if current_timestamp < self.last_timestamp:
-                # 等待后仍然回拨，使用上次时间戳+1
-                return self.last_timestamp + 1
+            while current_timestamp < self.last_timestamp:
+                time.sleep(0.001)
+                current_timestamp = self._current_time_millis()
             return current_timestamp
         else:
             # 回拨较大，抛出异常
