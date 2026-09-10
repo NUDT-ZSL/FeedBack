@@ -207,7 +207,7 @@ Windows PowerShell 下可用管道逐行传入，或把命令写在文本文件�
 python -m unittest discover -s tests -v
 ```
 
-测试覆盖（65 个用例）：
+测试覆盖（75 个用例）：
 
 - 注册/删除的全部边界：空图、单节点、重复 id、缺依赖节点、自依赖、
   重复依赖、删除不存在的节点、失败注册的原子回滚；
@@ -231,7 +231,8 @@ workspace/
 ├── tests/
 │   ├── test_engine.py     # 核心逻辑
 │   ├── test_persistence.py# 环检测与快照往返
-│   └── test_cli.py        # 命令行端到端
+│   ├── test_cli.py        # 命令行端到端
+│   └── test_regression_round2.py # 黏滞脏状态/三态往返/缺依赖回归
 └── README.md
 ```
 
