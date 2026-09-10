@@ -22,7 +22,7 @@ workspace/
 │   └── errors.py       # TSDBError / ValidationError / BlockFormatError / CorruptionError
 ├── main.py             # 命令行入口：stdin 逐行 JSON 命令 -> stdout 逐行 JSON 结果
 ├── tests/
-│   └── test_tsdb.py    # 78 个 unittest 用例（含 10 万点性能基线）
+│   └── test_tsdb.py    # 88 个 unittest 用例（含 10 万点性能基线）
 └── README.md
 ```
 
@@ -310,7 +310,7 @@ dir/
 python -m unittest discover -s tests -v
 ```
 
-78 个用例覆盖：
+88 个用例覆盖：
 
 - varint/zigzag/差分/浮点编解码往返、截断与负值拒绝、真实压缩率；
 - 列块往返、范围读取、魔数/版本/**CRC 损坏**/截断/长度篡改；
@@ -334,6 +334,8 @@ python -m unittest discover -s tests -v
   列块头部的编码字节为后续扩展留了位置。
 - 列块文件是“一个 entry 一个文件”，小数据集足够；超大规模可以演进为
   分片大文件 + 偏移索引，清单结构无需变。
-- 删除标记按 shard 合并保存，极端频繁的范围删除下读取过滤为 O(点数 ×
-  标记段数)；标记段在 compact 时物化清除，不会无限增长。
+- 删除标记按 shard 独立保存（**不做几何合并**：重叠的删除区间必须各自保留
+  自己的 seq，否则会误杀两次删除之间回填的新点）；极端频繁的范围删除下，
+  读取过滤为 O(点数 × 标记条数)。标记在 compact 时随删除效果物化到新列块
+  而清除，不会无限增长。
 - `count` 以浮点返回，是为了让所有聚合结果共享同一列类型。

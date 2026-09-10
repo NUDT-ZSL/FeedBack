@@ -240,11 +240,14 @@ class TestPointValidation(unittest.TestCase):
 
 
 class TestMergeAndOverwrite(unittest.TestCase):
-    def _blocks(self, sid, field, batches):
-        return [
+    def _blocks(self, sid, field, batches, seqs=None):
+        blocks = [
             ColumnBlock.from_points(sid, field, list(b[0]), list(b[1]))
             for b in batches
         ]
+        if seqs is None:
+            seqs = list(range(1, len(blocks) + 1))
+        return list(zip(blocks, seqs))
 
     def test_disjoint_out_of_order_blocks_merge_sorted(self):
         # 先写 100..200，再回填 50..80，两段不重叠。
@@ -265,6 +268,17 @@ class TestMergeAndOverwrite(unittest.TestCase):
         ts, vals = merge_block_series(blocks, 0, 1000)
         self.assertEqual(ts, [1, 2, 3, 4])
         self.assertEqual(vals, [10.0, 22.0, 333.0, 44.0])
+        self.assertEqual(len(ts), len(set(ts)))  # ts 必须唯一
+
+    def test_lww_uses_block_seq_not_argument_order(self):
+        # 故意把列块以“新块在前、旧块在后”的乱序传入，seq 小的仍是旧值。
+        blocks = self._blocks("s", "v", [
+            ([1, 2], [10.0, 20.0]),
+            ([2, 3], [22.0, 33.0]),
+        ], seqs=[10, 3])  # 第一个传入的块反而是后写入的
+        ts, vals = merge_block_series(blocks, 0, 1000)
+        self.assertEqual(ts, [1, 2, 3])
+        self.assertEqual(vals, [10.0, 20.0, 33.0])  # ts=2 取 seq=10 的值
 
     def test_merge_respects_range(self):
         blocks = self._blocks("s", "v", [
@@ -352,8 +366,25 @@ class TestEngineAppendQuery(unittest.TestCase):
     def test_out_of_order_backfill_merge(self):
         self.db.append(make_points("cpu", {"h": "a"}, range(100, 200, 10)))
         self.db.append(make_points("cpu", {"h": "a"}, range(50, 80, 10)))
-        r = self.db.query("cpu", {}, 0, 300)
-        self.assertEqual(r[0].timestamps, list(range(50, 80, 10)) + list(range(100, 200, 10)))
+        r = self.db.query("cpu", {}, 0, 300)[0]
+        self.assertEqual(r.timestamps, list(range(50, 80, 10)) + list(range(100, 200, 10)))
+
+    def test_overlapping_backfill_lww_unique_ts(self):
+        # 用户报告场景：先 100..200，再回填 150..179，t=160 两边都有且值不同。
+        self.db.append([Point("cpu", {"h": "a"}, t, {"v": float(t)})
+                        for t in range(100, 201)])
+        self.db.append([Point("cpu", {"h": "a"}, t, {"v": -1.0})
+                        for t in range(150, 180)])
+        r = self.db.query("cpu", {}, 100, 201)[0]
+        # ts 严格升序且唯一，绝不重复
+        self.assertEqual(r.timestamps, sorted(set(r.timestamps)))
+        self.assertEqual(len(r.timestamps), 101)
+        by_ts = dict(zip(r.timestamps, r.columns["v"]))
+        self.assertEqual(by_ts[160], -1.0)    # 后写入的回填值覆盖
+        self.assertEqual(by_ts[149], 149.0)  # 回填区间外保持原值
+        self.assertEqual(by_ts[180], 180.0)  # 右边界外保持原值
+        agg = self.db.query("cpu", {}, 150, 180, agg="sum")[0]
+        self.assertEqual(agg.columns["v"], [-30.0])  # 30 个 -1.0
 
     def test_block_size_splits_and_merges(self):
         db = ColumnarTSDB(shard_span=1000, block_size=3)
@@ -451,6 +482,35 @@ class TestDeletionAndCompact(unittest.TestCase):
         r = self.db.query("cpu", {}, 0, 10)
         self.assertEqual(r[0].columns["v"], [2.0])
 
+    def test_delete_range_right_open_boundary(self):
+        # 用户报告场景：删除 [150,180)，t=180 必须保留（end 右开）。
+        self.db.append([Point("cpu", {"h": "a"}, t, {"v": float(t)})
+                         for t in range(100, 201)])
+        self.db.delete_range("cpu", {"h": "a"}, 150, 180)
+        r = self.db.query("cpu", {"h": "a"}, 100, 201)[0]
+        by_ts = dict(zip(r.timestamps, r.columns["v"]))
+        self.assertNotIn(150, by_ts)
+        self.assertNotIn(179, by_ts)
+        self.assertIn(180, by_ts)       # 右开边界保留
+        self.assertEqual(by_ts[180], 180.0)
+        self.assertEqual(by_ts[149], 149.0)
+
+    def test_delete_range_fragmented_tombstones_keep_intermediate_writes(self):
+        # 两个重叠但不同时刻的删除区间之间写入的新点不能被后一次删除误杀：
+        # 删 [13,27) -> 写 t=14 的新点 -> 再删 [18,20)，t=14 必须存活。
+        self.db = ColumnarTSDB(shard_span=100, block_size=8)
+        self.db.append(make_points("cpu", {"h": "a"}, range(10, 30)))
+        self.db.delete_range("cpu", {"h": "a"}, 13, 27)
+        self.db.append([Point("cpu", {"h": "a"}, 14, {"v": 77.0})])
+        self.db.delete_range("cpu", {"h": "a"}, 18, 20)
+        expected_ts = [10, 11, 12, 14, 27, 28, 29]
+        for label, snap in [("before compact", lambda: None),
+                            ("after compact", self.db.compact)]:
+            snap()
+            r = self.db.query("cpu", {"h": "a"}, 0, 100)[0]
+            self.assertEqual(r.timestamps, expected_ts, label)
+            self.assertEqual(dict(zip(r.timestamps, r.columns["v"]))[14], 77.0, label)
+
     def test_delete_range_hides_points(self):
         self._seed()
         self.db.delete_range("cpu", {"h": "a"}, 20, 50)
@@ -515,6 +575,33 @@ class TestDeletionAndCompact(unittest.TestCase):
         info = self.db.compact()
         self.assertEqual(info["reclaimed_bytes"], 0)
         self.assertEqual(self.db.stats()["shards"], 0)
+
+    def test_compact_collapses_blocks_and_preserves_overwrite(self):
+        # 用户报告场景：乱序回填 + 区间删除后 compact，结果不变、块数明显下降。
+        self.db = ColumnarTSDB(shard_span=3600, block_size=4)
+        self.db.append([Point("m", {}, t, {"v": float(t)}) for t in range(100, 201)])
+        self.db.append([Point("m", {}, t, {"v": -9.0}) for t in range(150, 180)])
+        self.db.delete_range("m", {}, 120, 130)
+        expected_ts, expected_vals = None, None
+        r0 = self.db.query("m", {}, 100, 201)[0]
+        expected_ts, expected_vals = r0.timestamps, r0.columns["v"]
+        before = self.db.stats()
+        self.assertGreaterEqual(before["blocks"], 13)  # 26 个点/块 * 两批
+        info = self.db.compact()
+        after = self.db.stats()
+        r1 = self.db.query("m", {}, 100, 201)[0]
+        self.assertEqual(r1.timestamps, expected_ts)
+        self.assertEqual(r1.columns["v"], expected_vals)
+        self.assertLess(after["blocks"], before["blocks"])
+        self.assertLess(after["compressed_bytes"], before["compressed_bytes"])
+        self.assertEqual(after["blocks"], 23)  # 91 点 // 4 -> 23 块
+        self.assertEqual(info["reclaimed_bytes"],
+                         before["compressed_bytes"] - after["compressed_bytes"])
+        # 覆盖值在 compact 后仍然生效
+        by_ts = dict(zip(r1.timestamps, r1.columns["v"]))
+        self.assertEqual(by_ts[160], -9.0)
+        self.assertNotIn(120, by_ts)
+        self.assertIn(130, by_ts)  # 删除区间右开
 
     def test_compact_merges_backfilled_blocks(self):
         self.db.append(make_points("cpu", {"h": "a"}, range(100, 200, 10)))
@@ -702,6 +789,54 @@ class TestPersistence(unittest.TestCase):
             json.dump(manifest, f)
         with self.assertRaisesRegex(CorruptionError, "未登记"):
             ColumnarTSDB().load(path)
+
+    def test_load_manifest_min_ts_greater_than_max_ts(self):
+        db = self._build_db()
+        path = os.path.join(self.tmp, "badminmax")
+        db.save(path)
+        with open(os.path.join(path, "manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+        shard = next(iter(manifest["shards"].values()))
+        record = next(iter(next(iter(shard.values())).values()))[0]
+        record["min_ts"], record["max_ts"] = record["max_ts"], record["min_ts"]
+        with open(os.path.join(path, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        with self.assertRaisesRegex(CorruptionError, "min_ts"):
+            ColumnarTSDB().load(path)
+
+    def test_load_duplicate_block_seq(self):
+        db = self._build_db()
+        path = os.path.join(self.tmp, "dupseq")
+        db.save(path)
+        with open(os.path.join(path, "manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+        records = []
+        for by_sid in manifest["shards"].values():
+            for by_field in by_sid.values():
+                for entries in by_field.values():
+                    records.extend(entries)
+        self.assertGreaterEqual(len(records), 2)
+        records[1]["seq"] = records[0]["seq"]
+        with open(os.path.join(path, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        with self.assertRaisesRegex(CorruptionError, "block_seq"):
+            ColumnarTSDB().load(path)
+
+    def test_revive_series_after_load_then_queryable(self):
+        # 删除 series -> save -> load -> append 复活：复活后必须能按 metric 查到。
+        db = ColumnarTSDB(shard_span=100, block_size=8)
+        db.append(make_points("cpu", {"h": "a"}, [1, 2, 3]))
+        db.delete_series("cpu", {"h": "a"})
+        path = os.path.join(self.tmp, "revive")
+        db.save(path)
+        loaded = ColumnarTSDB()
+        loaded.load(path)
+        self.assertEqual(loaded.query("cpu", {}, 0, 100), [])
+        loaded.append([Point("cpu", {"h": "a"}, 4, {"v": 4.0})])
+        r = loaded.query("cpu", {"h": "*"}, 0, 100)
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].timestamps, [4])
+        self.assertEqual(r[0].columns["v"], [4.0])
 
 
 class TestCLI(unittest.TestCase):

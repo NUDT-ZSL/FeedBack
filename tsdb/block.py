@@ -219,24 +219,28 @@ def _lower_bound(sorted_values: Sequence[int], target: int) -> int:
 
 
 def merge_block_series(
-    blocks: Sequence[ColumnBlock],
+    blocks: Sequence[Tuple[ColumnBlock, int]],
     start: int,
     end: int,
 ) -> Tuple[List[int], List[float]]:
     """把同一 (shard, series, field) 的多个列块合并成按 ts 升序的唯一点序列。
 
+    :param blocks: ``(列块, block_seq)`` 序列；``block_seq`` 是写入时
+        分配的单调递增写入序号。
+    :param start, end: 左闭右开的裁剪区间。
+
     合并语义（重要）：
 
-    * 列块按 **写入顺序** 排列；不同列块中出现相同 ts 时，
-      **后写入列块的值覆盖先写入列块的值**（last-write-wins）。
-    * 实现上先让每个列块裁剪到 ``[start, end)``，再把较晚列块的点
-      依次写入 ``ts -> value`` 字典，最后按键排序。列块数量通常很少
-      （只有乱序回填/覆盖才会产生多个列块），直接合并简单可靠。
-
-    返回 ``(timestamps, values)``，长度相同且 timestamps 严格升序。
+    * 不同列块中出现相同 ts 时，**block_seq 最大（后写入）的值覆盖
+      先写入的值**（last-write-wins），不依赖传入顺序；
+    * 最终结果的时间戳**严格升序且唯一**，绝不会出现重复 ts；
+    * 只输出落在 ``[start, end)`` 内的点。列块数量通常很少（只有乱序
+      回填/覆盖才会产生多个列块），先裁剪再用字典合并简单可靠。
     """
+    # 显式按写入序号升序，后写的同 ts 值覆盖先写的。
+    ordered = sorted(blocks, key=lambda pair: pair[1])
     merged: Dict[int, float] = {}
-    for block in blocks:  # 顺序即写入顺序，后写的天然覆盖先写的
+    for block, _seq in ordered:
         if not block.overlaps(start, end):
             continue
         ts_slice, val_slice = block.read_range(start, end)

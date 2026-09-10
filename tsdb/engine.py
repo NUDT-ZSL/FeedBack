@@ -115,12 +115,10 @@ class ColumnarTSDB:
         #    batched[shard][sid][field] = {ts: value}；dict 保留覆盖顺序，
         #    同一 ts 后出现的值天然覆盖先出现的。
         batched: Dict[int, Dict[str, Dict[str, Dict[int, float]]]] = {}
-        sids_in_batch: set[str] = set()
         count = 0
         for raw in points:
             point = raw if isinstance(raw, Point) else Point.from_dict(raw)
             sid = point.series_id
-            sids_in_batch.add(sid)
             meta = self._series.get(sid)
             if meta is None:
                 self._series[sid] = _SeriesMeta(sid, point.metric, dict(point.tags))
@@ -131,7 +129,12 @@ class ColumnarTSDB:
                     raise ValidationError(
                         "series_id 冲突：metric/tags 不同却算出了相同哈希"
                     )
-                meta.deleted = False  # 删除后重新写入 => series 复活
+                if meta.deleted:
+                    # series 之前被整系列删除（可能是从快照加载的已删状态），
+                    # 重新写入即复活：必须把 sid 加回 metric 索引，否则按
+                    # metric 查询会永久漏掉这个 series。
+                    meta.deleted = False
+                    self._metric_series.setdefault(point.metric, set()).add(sid)
             for fts, fvalue in point.fields.items():
                 shard = _shard_of(point.ts, self.shard_span)
                 batched.setdefault(shard, {}).setdefault(sid, {}) \
@@ -363,7 +366,7 @@ class ColumnarTSDB:
         if agg == "max":
             return max(values)
         if agg == "count":
-            return len(values)
+            return float(len(values))
         raise ValidationError(f"未知聚合: {agg}")  # 已在参数校验拦截
 
     def _fill_whole_agg(
@@ -484,17 +487,20 @@ class ColumnarTSDB:
     def _add_tombstone(
         ranges: List[List[int]], start: int, end: int, seq: int
     ) -> None:
-        """加入一条范围删除标记并合并重叠/相邻区间（seq 取较大者）。"""
+        """登记一条范围删除标记 ``[start, end, seq]``。
+
+        **每次删除独立保留，不做几何合并/裁剪。** 点的生死是逐点判定的
+        （存在任意一条满足 ``rstart <= ts < rend`` 且 ``del_seq > 点的写入
+        seq`` 的标记才删除），独立记录才能同时正确处理：
+
+        * 重叠删除 ``D1=[13,27)``、``D2=[18,20)``：只被 D1 覆盖的 t=14，
+          对两次删除之间回填的新点（写入 seq 介于 D1/D2 之间）必须存活；
+        * 删除之后回填：新点 seq 大于所有已有删除标记，自然不会被吃掉。
+
+        标记会随 :meth:`compact` 物化到新列块后清除，不会无限增长。
+        """
         ranges.append([start, end, seq])
         ranges.sort(key=lambda r: (r[0], r[1]))
-        merged: List[List[int]] = []
-        for r in ranges:
-            if merged and r[0] <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], r[1])
-                merged[-1][2] = max(merged[-1][2], r[2])
-            else:
-                merged.append(list(r))
-        ranges[:] = merged
 
     def _resolve_series(
         self, metric: Any, tags: Any
@@ -864,6 +870,7 @@ class ColumnarTSDB:
         if not isinstance(manifest["shards"], dict):
             raise CorruptionError("清单 shards 段必须是对象")
         seen_block_ids: set[int] = set()
+        seen_seqs: set[int] = set()
         for shard_key, shard_entry in manifest["shards"].items():
             try:
                 shard = int(shard_key)
@@ -895,6 +902,11 @@ class ColumnarTSDB:
                                 f"列块 id {entry.entry_id} 在清单中重复出现"
                             )
                         seen_block_ids.add(entry.entry_id)
+                        if entry.seq in seen_seqs:
+                            raise CorruptionError(
+                                f"block_seq {entry.seq} 在清单中重复出现"
+                            )
+                        seen_seqs.add(entry.seq)
                         entries.append(entry)
                     entries.sort(key=lambda e: e.seq)
                     field_bucket[field_name] = entries
@@ -957,6 +969,18 @@ class ColumnarTSDB:
                     "min_ts", "max_ts", "count", "size"):
             if key not in record:
                 raise CorruptionError(f"列块记录缺少字段 {key!r}")
+        if not isinstance(record["file"], str) or record["file"] == "":
+            raise CorruptionError("列块记录的 file 必须是非空字符串")
+        for key in ("min_ts", "max_ts", "count", "size", "enc_ts", "enc_value"):
+            if not isinstance(record[key], int) or isinstance(record[key], bool):
+                raise CorruptionError(f"列块记录的 {key} 必须是整数")
+        if record["min_ts"] > record["max_ts"]:
+            raise CorruptionError(
+                f"列块记录 {record['file']}: min_ts({record['min_ts']}) "
+                f"> max_ts({record['max_ts']})"
+            )
+        if record["count"] <= 0:
+            raise CorruptionError(f"列块记录 {record['file']}: count 必须为正整数")
         file_rel = record["file"]
         block_path = os.path.join(dir_path, file_rel)
         if not os.path.isfile(block_path):
