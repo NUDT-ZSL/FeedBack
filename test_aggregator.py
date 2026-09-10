@@ -553,34 +553,46 @@ class WatermarkTests(unittest.TestCase):
         self.assertFalse(agg.query("k", 0, 10)[0].finalized_dirty)
 
         res = agg.ingest(Event("b", "k", 2, "add", 4.0))  # 迟到
-        # ts=2 同时属于 [-5,5) 与 [0,10)，wm=10 时两者都已 finalized
+        # ts=2 同时属于 [-5,5) 与 [0,10)，wm=10 时两者结构上都已关闭
         self.assertTrue(res.late)
         self.assertEqual(res.dirty_windows, [-5, 0])
+        self.assertEqual(agg.get_state()["late_events"], 1)
         row_old = agg.query("k", -5, 5)[0]   # [-5,5) 含 a(ts=1) 和 b
         row_cur = agg.query("k", 0, 10)[0]   # [0,10) 同样含两者
-        self.assertTrue(row_old.finalized)
+        # 被迟到事件改动过：finalized 回退为 False，finalized_dirty=True
+        self.assertFalse(row_old.finalized)
         self.assertTrue(row_old.finalized_dirty)
         self.assertEqual(row_old.value, 5.0)
-        self.assertTrue(row_cur.finalized)
+        self.assertFalse(row_cur.finalized)
         self.assertTrue(row_cur.finalized_dirty)
         self.assertEqual(row_cur.value, 5.0)
 
-        # 迟到的 retract 也算 dirty
+        # 迟到的 retract 也更新聚合、累加迟到计数，脏标记保持
         res2 = agg.ingest(Event("a", "k", 1, "retract", 1.0))
         self.assertTrue(res2.late)
-        self.assertEqual(agg.query("k", 0, 10, "sum")[0].value, 4.0)
-        self.assertTrue(agg.query("k", 0, 10)[0].finalized_dirty)
+        self.assertEqual(agg.get_state()["late_events"], 2)
+        row = agg.query("k", 0, 10, "sum")[0]
+        self.assertEqual(row.value, 4.0)
+        self.assertFalse(row.finalized)
+        self.assertTrue(row.finalized_dirty)
 
     def test_late_event_into_older_overlapping_window(self) -> None:
         agg = WindowAggregator(10, 5)
         agg.ingest(Event("a", "k", 6, "add", 1.0))  # 区间 0,5
-        agg.advance_watermark(10)  # 0 finalized；5 没有
+        agg.advance_watermark(10)  # 0 已关闭；5 没有
         res = agg.ingest(Event("b", "k", 7, "add", 2.0))
         self.assertEqual(res.dirty_windows, [0])
         self.assertTrue(res.late)
-        flags = {r.window_start: r.finalized_dirty
-                 for r in agg.query("k", 0, 10)}
-        self.assertEqual(flags, {0: True, 5: False})
+        rows = {r.window_start: r for r in agg.query("k", 0, 10)}
+        # 区间 0：被迟到改动 -> finalized 回退为 False、dirty=True、值已更新
+        self.assertFalse(rows[0].finalized)
+        self.assertTrue(rows[0].finalized_dirty)
+        self.assertEqual(rows[0].value, 3.0)
+        # 区间 5：本来就没关闭
+        self.assertFalse(rows[5].finalized)
+        self.assertFalse(rows[5].finalized_dirty)
+        self.assertEqual(rows[5].value, 3.0)
+        self.assertEqual(agg.get_state()["late_events"], 1)
 
     def test_watermark_none_initially(self) -> None:
         agg = WindowAggregator(10, 5)
@@ -741,6 +753,206 @@ class SnapshotTests(unittest.TestCase):
             with open(path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
         self.assertEqual(raw["format"], "window-aggregator-snapshot")
+
+
+# ---------------------------------------------------------------------------
+# 回归测试：提前撤回 / 迟到事件 / 暂存区快照 / 混合等价性
+# ---------------------------------------------------------------------------
+
+class RegressionTests(unittest.TestCase):
+    def test_pending_retract_minimal_repro(self) -> None:
+        """最小复现：retract 先到、add 后到，贡献必须被完全抵消。"""
+        agg = WindowAggregator(window_size=10, slide=5)
+        r1 = agg.ingest(Event("e2", "k", 3, "retract", 5.0))
+        self.assertEqual(r1.status, "pending_retract")
+        r2 = agg.ingest(Event("e2", "k", 3, "add", 5.0))
+        self.assertEqual(r2.status, "retracted")
+        self.assertTrue(r2.pending_matched)
+        # 抵消的 add 不进入任何区间
+        self.assertEqual(r2.windows, [])
+        # ts=3 覆盖区间 [-5,5) 和 [0,10)，两者 sum 都必须是 0
+        self.assertEqual(
+            [(r.window_start, r.value) for r in agg.query("k", -5, 10, "sum")],
+            [(-5, 0.0), (0, 0.0), (5, 0.0)],
+        )
+        for agg_name in ("count", "min", "max"):
+            rows = agg.query("k", -5, 10, agg_name)
+            self.assertTrue(
+                all(r.value in (0, 0.0, None) for r in rows),
+                msg=agg_name,
+            )
+        state = agg.get_state()
+        self.assertEqual(state["pending_retracts"], 0)
+        self.assertEqual(state["retracted_events"], 1)
+        self.assertEqual(state["illegal_events"], 0)
+        # 配对后再撤回一次：double retract，仍非法
+        r3 = agg.ingest(Event("e2", "k", 3, "retract", 5.0))
+        self.assertFalse(r3.accepted)
+        self.assertEqual(r3.error_kind, "double_retract")
+
+    def test_late_event_minimal_repro(self) -> None:
+        """最小复现：watermark=200 后到达的 ts=50 事件必须被接受。"""
+        agg = WindowAggregator(window_size=10, slide=5)
+        agg.ingest(Event("a", "k", 100, "add", 1.0))
+        agg.advance_watermark(200)
+        res = agg.ingest(Event("b", "k", 50, "add", 2.0))
+        # 被接受、标记迟到、贡献进覆盖 ts=50 的两个区间
+        self.assertTrue(res.accepted)
+        self.assertTrue(res.late)
+        self.assertEqual(res.dirty_windows, [45, 50])
+        self.assertEqual(agg.get_state()["late_events"], 1)
+
+        rows = {r.window_start: r for r in agg.query("k", 45, 60, "sum")}
+        self.assertEqual(rows[45].value, 2.0)
+        self.assertEqual(rows[50].value, 2.0)
+        # 结构上已关闭、且被迟到改动：finalized 回退为 False
+        self.assertFalse(rows[45].finalized)
+        self.assertFalse(rows[50].finalized)
+        self.assertTrue(rows[45].finalized_dirty)
+        self.assertTrue(rows[50].finalized_dirty)
+        # 未被改动的区间仍是 finalized=True
+        self.assertTrue(rows[55].finalized)
+
+    def test_pending_retract_survives_snapshot_roundtrip(self) -> None:
+        """最小复现：暂存区的提前 retract 必须随快照持久化并能继续配对。"""
+        agg = WindowAggregator(window_size=10, slide=5)
+        agg.ingest(Event("e2", "k", 3, "retract", 5.0))
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "s.json")
+            agg.save(path)
+            restored = WindowAggregator.load(path)
+
+        self.assertEqual(restored.get_state()["pending_retracts"], 1)
+        res = restored.ingest(Event("e2", "k", 3, "add", 5.0))
+        self.assertEqual(res.status, "retracted")
+        self.assertTrue(res.pending_matched)
+        self.assertEqual(
+            [r.value for r in restored.query("k", 0, 10, "sum")],
+            [0.0, 0.0],
+        )
+
+    def test_mixed_pending_late_snapshot_equivalence(self) -> None:
+        """混合场景：提前撤回 + watermark 后迟到 + 快照往返，对拍参考实现。"""
+        size, slide = 10, 5
+        batch1 = [
+            Event("e2", "k0", 3, "retract", 5.0),   # 提前撤回（暂存）
+            Event("a", "k1", 1, "add", 10.0),
+            Event("b", "k1", 7, "add", 20.0),
+        ]
+        late_and_after = [
+            Event("c", "k1", 6, "add", 7.0),        # 迟到 add
+            Event("e2", "k0", 3, "add", 5.0),       # 与暂存 retract 配对
+            Event("a", "k1", 1, "retract", 10.0),   # 迟到 retract
+            Event("d", "k2", 100, "add", 99.0),
+            Event("b", "k1", 7, "retract", 20.0),   # 迟到 retract
+            Event("g", "k2", 101, "retract", 3.0),  # 结束时仍暂存
+        ]
+        all_events = batch1 + late_and_after
+
+        # 不中断的对照引擎
+        uninterrupted = WindowAggregator(size, slide)
+        for ev in batch1:
+            uninterrupted.ingest(ev)
+        uninterrupted.advance_watermark(15)
+        for ev in late_and_after:
+            uninterrupted.ingest(ev)
+
+        # 快照切分：watermark 之后先 save/load，再继续处理
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "s.json")
+            head = WindowAggregator(size, slide)
+            for ev in batch1:
+                head.ingest(ev)
+            head.advance_watermark(15)
+            head.ingest(late_and_after[0])  # 一次迟到写入也落在快照前
+            head.save(path)
+            restored = WindowAggregator.load(path)
+            self.assertEqual(restored.get_state()["pending_retracts"], 1)
+            self.assertEqual(restored.get_state()["late_events"], 1)
+            for ev in late_and_after[1:]:
+                restored.ingest(ev)
+            # 再存一次：结束时的暂存 retract g 也要存活
+            path2 = os.path.join(td, "s2.json")
+            restored.save(path2)
+            restored2 = WindowAggregator.load(path2)
+
+        # 1) 与不中断处理的状态一致
+        self.assertEqual(restored.get_state(), uninterrupted.get_state())
+        self.assertEqual(restored2.get_state(), uninterrupted.get_state())
+        self.assertEqual(uninterrupted.get_state()["late_events"], 3)
+        self.assertEqual(uninterrupted.get_state()["pending_retracts"], 1)
+        # e2（提前配对）、a、b 三条 add 当前处于撤回状态
+        self.assertEqual(uninterrupted.get_state()["retracted_events"], 3)
+
+        # 2) 与排序批处理参考实现逐区间一致（四种聚合）
+        for agg_name in AGGREGATORS:
+            ref = reference_batch(all_events, size, slide, agg_name, -10, 105)
+            got = {
+                (r.key, r.window_start): r.value
+                for r in restored.query_all(-10, 105, agg_name)
+            }
+            got2 = {
+                (r.key, r.window_start): r.value
+                for r in uninterrupted.query_all(-10, 105, agg_name)
+            }
+            self.assertEqual(got, got2, msg=f"快照切分前后不一致: {agg_name}")
+            # 参考实现中所有非空区间都必须在流式结果里且相等
+            for coord, value in ref.items():
+                if value in (None, 0, 0.0):
+                    continue
+                self.assertIn(coord, got, msg=f"{agg_name} 缺少区间 {coord}")
+                self.assertEqual(got[coord], value,
+                                 msg=f"{agg_name} 区间 {coord} 与批处理不一致")
+            for coord, value in got.items():
+                self.assertEqual(value, ref.get(coord),
+                                 msg=f"{agg_name} 多出/不一致区间 {coord}")
+
+        # 3) 迟到写入的区间：值已更新且 finalized 回退、dirty 置位
+        rows = {r.window_start: r for r in restored.query("k1", 0, 10, "sum")}
+        # [0,10)：a(10)+b(20)+c(7)-a(10)-b(20) = 7
+        self.assertEqual(rows[0].value, 7.0)
+        self.assertFalse(rows[0].finalized)
+        self.assertTrue(rows[0].finalized_dirty)
+        # 被抵消的 e2 对 k0 没有任何贡献
+        self.assertEqual(
+            [r.value for r in restored.query("k0", 0, 10, "sum")],
+            [0.0, 0.0],
+        )
+        # 第二次快照恢复后暂存的 g 仍可配对
+        res = restored2.ingest(Event("g", "k2", 101, "add", 3.0))
+        self.assertTrue(res.pending_matched)
+        self.assertEqual(
+            [r.value for r in restored2.query("k2", 100, 105, "sum")],
+            [99.0],
+        )
+
+
+    def test_pending_match_after_watermark_is_not_late(self) -> None:
+        """retract 在 watermark 前暂存、add 在 watermark 后到：净贡献为 0，
+        不算迟到、不弄脏任何已关闭区间。"""
+        agg = WindowAggregator(10, 5)
+        agg.ingest(Event("e", "k", 1, "retract", 4.0))
+        agg.advance_watermark(10)
+        res = agg.ingest(Event("e", "k", 1, "add", 4.0))
+        self.assertTrue(res.pending_matched)
+        self.assertFalse(res.late)
+        self.assertEqual(res.dirty_windows, [])
+        self.assertEqual(agg.get_state()["late_events"], 0)
+        rows = agg.query("k", -5, 5, "sum")  # 对齐后区间 -5、0，均已关闭
+        self.assertTrue(all(r.value == 0.0 for r in rows))
+        self.assertTrue(all(r.finalized for r in rows))
+        self.assertFalse(any(r.finalized_dirty for r in rows))
+
+    def test_snapshot_rejects_negative_late_count(self) -> None:
+        import copy
+        snap = WindowAggregator(10, 5).to_snapshot()
+        snap["stats"]["late_events"] = -1
+        with self.assertRaises(SnapshotError):
+            WindowAggregator.from_snapshot(copy.deepcopy(snap))
+        # 旧版快照缺少 late_events 字段：按 0 兼容加载
+        del snap["stats"]["late_events"]
+        restored = WindowAggregator.from_snapshot(copy.deepcopy(snap))
+        self.assertEqual(restored.get_state()["late_events"], 0)
 
 
 # ---------------------------------------------------------------------------

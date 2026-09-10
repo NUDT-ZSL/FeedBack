@@ -158,9 +158,11 @@ class WindowResult:
     window_end: int
     #: 聚合值；``min`` / ``max`` 在区间内没有活跃事件时为 ``None``。
     value: Optional[float]
-    #: 区间是否已被 watermark finalize。
+    #: 区间是否 finalized：结构上已关闭（window_end <= watermark）**且**
+    #: 关闭后未被迟到事件改动。一旦迟到写入改动该区间，finalized 回退为
+    #: ``False``（语义：结果已变更、需要重新下发）。
     finalized: bool
-    #: finalize 之后是否又被迟到事件修改过（需要重新查询/下发）。
+    #: 该区间在 finalize 之后是否被迟到事件修改过（单调的脏标记）。
     finalized_dirty: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
@@ -291,6 +293,8 @@ class WindowAggregator:
         self._illegal_count = 0
         # 被撤回（当前处于撤回状态）的 add 条数
         self._retracted_count = 0
+        # 落在已关闭（结构上 finalized）区间内的写入次数（迟到 add/retract）
+        self._late_count = 0
 
     # ------------------------------------------------------------------ #
     # 事件写入
@@ -381,6 +385,8 @@ class WindowAggregator:
         )
         self._accepted_count += 1
         dirty = [s for s in starts if self._is_finalized_start(s)]
+        if dirty:
+            self._late_count += 1
         for s in dirty:
             self._dirty.add((ev.key, s))
         return IngestResult(
@@ -446,6 +452,8 @@ class WindowAggregator:
         self._retracted_count += 1
         self._accepted_count += 1
         dirty = [s for s in starts if self._is_finalized_start(s)]
+        if dirty:
+            self._late_count += 1
         for s in dirty:
             # 即使撤回后区间变空，"finalize 后发生过变化"这一事实仍保留。
             self._dirty.add((rec.key, s))
@@ -564,14 +572,18 @@ class WindowAggregator:
         s = aligned_start
         while s < aligned_end:
             values = self._windows.get((key, s))
+            closed = self._is_finalized_start(s)
+            dirty = (key, s) in self._dirty
             results.append(
                 WindowResult(
                     key=key,
                     window_start=s,
                     window_end=s + self.window_size,
                     value=self._compute(values, agg),
-                    finalized=self._is_finalized_start(s),
-                    finalized_dirty=(key, s) in self._dirty,
+                    # 结构上已关闭、但被迟到事件改动过的区间：finalized 回退
+                    # 为 False，表示"结果已变更、需要重新下发/查询"。
+                    finalized=closed and not dirty,
+                    finalized_dirty=dirty,
                 )
             )
             s += self.slide
@@ -598,14 +610,16 @@ class WindowAggregator:
             while s < aligned_end:
                 values = self._windows.get((key, s))
                 if values is not None:
+                    closed = self._is_finalized_start(s)
+                    dirty = (key, s) in self._dirty
                     results.append(
                         WindowResult(
                             key=key,
                             window_start=s,
                             window_end=s + self.window_size,
                             value=self._compute(values, agg),
-                            finalized=self._is_finalized_start(s),
-                            finalized_dirty=(key, s) in self._dirty,
+                            finalized=closed and not dirty,
+                            finalized_dirty=dirty,
                         )
                     )
                 s += self.slide
@@ -618,7 +632,9 @@ class WindowAggregator:
     def get_state(self) -> Dict[str, Any]:
         """返回引擎内部状态摘要（用于监控 / 命令行 ``state``）。"""
         finalized_windows = sum(
-            1 for (_k, s) in self._windows if self._is_finalized_start(s)
+            1
+            for (k, s) in self._windows
+            if self._is_finalized_start(s) and (k, s) not in self._dirty
         )
         return {
             "window_size": self.window_size,
@@ -628,10 +644,18 @@ class WindowAggregator:
             "accepted_events": self._accepted_count,
             "retracted_events": self._retracted_count,
             "illegal_events": self._illegal_count,
+            # 落在已关闭区间内的写入次数（迟到 add / 迟到 retract 各计一次）
+            "late_events": self._late_count,
             "pending_retracts": len(self._pending_retracts),
             "tracked_adds": len(self._adds),
             "active_windows": len(self._windows),
             "active_keys": len({k for (k, _s) in self._windows}),
+            # 结构上已关闭（window_end <= watermark）的活跃区间数
+            "closed_active_windows": sum(
+                1 for (_k, s) in self._windows
+                if self._is_finalized_start(s)
+            ),
+            # 当前对外仍报告 finalized=True 的区间（已关闭且未被迟到改动）
             "finalized_active_windows": finalized_windows,
             "dirty_windows": len(self._dirty),
         }
@@ -675,6 +699,7 @@ class WindowAggregator:
                 "accepted_events": self._accepted_count,
                 "retracted_events": self._retracted_count,
                 "illegal_events": self._illegal_count,
+                "late_events": self._late_count,
             },
             "pending_retracts": [
                 ev.to_dict() for _eid, ev in sorted(self._pending_retracts.items())
@@ -754,13 +779,21 @@ class WindowAggregator:
         stats = raw.get("stats", {})
         if not isinstance(stats, dict):
             raise SnapshotError("stats 必须是对象")
-        for name in ("accepted_events", "retracted_events", "illegal_events"):
-            v = stats.get(name, 0)
+        for name in (
+            "accepted_events",
+            "retracted_events",
+            "illegal_events",
+            "late_events",
+        ):
+            if name == "late_events" and name not in stats:
+                continue  # 兼容旧版快照
+            v = stats[name]
             if not _is_plain_int(v) or v < 0:
                 raise SnapshotError(f"stats.{name} 必须是非负整数")
         agg._accepted_count = stats["accepted_events"]
         agg._retracted_count = stats["retracted_events"]
         agg._illegal_count = stats["illegal_events"]
+        agg._late_count = stats.get("late_events", 0)
 
         # --- 事件记录 --------------------------------------------------
         events = raw.get("events")
