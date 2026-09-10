@@ -24,10 +24,16 @@
 租约过期边界规则（重要）
 -----------------------
 
-采用 **闭区间失效** 规则：当 ``当前时钟 >= lease_expire_at`` 时租约视为过期，
-即 ``lease_expire_at == 当前时钟`` 的那一刻任务就已经失联、可被重新分配。
+采用 **闭区间失效** 规则，tick 与 acquire 走同一个判定函数
+:meth:`Scheduler._lease_expired`，不存在两份比较逻辑：
+
+    ``lease_expire_at <= 当前时钟`` 即视为过期。
+
+等价地说，当 ``当前时钟 >= lease_expire_at`` 时租约失效——
+``lease_expire_at == 当前时钟`` 的那一刻任务就已经失联、可被重新分配。
 例如租约长度为 3、在时钟 2 续约，则 ``lease_expire_at = 5``：时钟 4 时租约
-仍然有效，时钟 5 时立即失效。判定在每次 ``tick()`` 与 ``acquire()`` 之前进行。
+仍然有效（4 < 5），时钟 5 时立即失效（5 <= 5）。判定在每次 ``tick()`` 与
+``acquire()`` 之前进行。
 
 同一时钟单位的去重
 ------------------
@@ -39,8 +45,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -284,12 +293,10 @@ class Scheduler:
         return renewed
 
     def _reap_expired_leases(self) -> None:
-        """回收所有到期租约（``clock >= lease_expire_at``），owner 清空。"""
+        """回收所有到期租约，owner 清空。过期规则见 :meth:`_lease_expired`。"""
         for task in self._tasks.values():
-            if (
-                task.owner is not None
-                and task.lease_expire_at is not None
-                and self._clock >= task.lease_expire_at
+            if task.owner is not None and self._lease_expired(
+                task.lease_expire_at, self._clock
             ):
                 owner_node = self._nodes.get(task.owner)
                 if owner_node is not None:
@@ -297,32 +304,54 @@ class Scheduler:
                 task.owner = None
                 task.lease_expire_at = None
 
+    @staticmethod
+    def _lease_expired(lease_expire_at: Optional[int], clock: int) -> bool:
+        """唯一的租约过期判定：``lease_expire_at <= clock`` 即过期。
+
+        无租约（None）的任务不参与回收（调用方已先检查 owner）。
+        tick 与 acquire 两条路径都经由 :meth:`_reap_expired_leases` 调用本方法。
+        """
+        return lease_expire_at is not None and lease_expire_at <= clock
+
     # ------------------------------------------------------------------ #
     # 分配 / 完成
     # ------------------------------------------------------------------ #
-    def acquire(self, node_id: str) -> List[str]:
+    def acquire(self, node_id: str) -> List[Dict[str, Any]]:
         """工作节点拉取任务。
 
         先做失联回收，再把所有"当前时钟命中调度表达式、没有有效租约、本时钟
         单位尚未分配过"的任务一次性分配给该节点，并发放长度为
         ``lease_duration`` 的新租约。同一时钟单位内连续调用（无论是否同一
         节点）不会重复分配。
+
+        Returns:
+            本次新分配任务的租约信息列表，按 task_id 排序，每个元素为
+            ``{"task_id", "lease_expire_at", "schedule"}``；没有新任务时
+            返回空列表。注意只包含本次新拿到的任务，不含该节点之前已持有、
+            只是仍在租约内的任务。
         """
         node = self._nodes.get(node_id)
         if node is None:
             raise SchedulerError(f"节点未注册: {node_id!r}")
         self._reap_expired_leases()
 
-        acquired: List[str] = []
+        acquired: List[Dict[str, Any]] = []
         for task_id in sorted(self._tasks):
             task = self._tasks[task_id]
             if not self._is_due(task):
                 continue
+            expire_at = self._clock + self._lease_duration
             task.owner = node_id
-            task.lease_expire_at = self._clock + self._lease_duration
+            task.lease_expire_at = expire_at
             task.last_fired_at = self._clock
             node.tasks.add(task_id)
-            acquired.append(task_id)
+            acquired.append(
+                {
+                    "task_id": task_id,
+                    "lease_expire_at": expire_at,
+                    "schedule": task.schedule,
+                }
+            )
         return acquired
 
     def complete(self, node_id: str, task_id: str) -> None:
@@ -413,10 +442,29 @@ class Scheduler:
         }
 
     def save(self, path: str) -> None:
-        """把快照以 JSON 写入 ``path``（UTF-8、带缩进）。"""
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(self.snapshot(), fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
+        """把快照原子写入 ``path``（UTF-8、带缩进）。
+
+        先在目标同目录写临时文件并 fsync，再用 ``os.replace`` 原子替换：
+        序列化失败、写盘失败或替换失败都不会破坏已有的目标文件，也不会
+        留下半个快照；失败时清理临时文件并抛 :class:`SchedulerError`。
+        """
+        payload = json.dumps(self.snapshot(), ensure_ascii=False, indent=2) + "\n"
+        directory = os.path.dirname(os.path.abspath(path))
+        tmp_path: Optional[str] = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                prefix=".snapshot-", suffix=".tmp", dir=directory
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_path, path)
+        except OSError as exc:
+            if tmp_path is not None:
+                with contextlib.suppress(OSError):
+                    os.remove(tmp_path)
+            raise SchedulerError(f"写入快照文件失败: {exc}")
 
     @classmethod
     def restore(cls, data: Any) -> "Scheduler":

@@ -11,7 +11,7 @@
 - 租约机制 + 心跳续约 + 失联自动故障转移
 - JSON 文件快照保存/加载，加载时严格校验一致性
 - 逐行 JSON 协议的命令行入口
-- 59 个 unittest 用例
+- 74 个 unittest 用例
 
 ## 文件说明
 
@@ -36,14 +36,20 @@ s.add_node("n1")
 s.add_node("n2")
 
 s.tick(5)                            # 时钟 0 -> 5
-s.acquire("n1")                      # ["t1"]，t1 租约到期时刻 = 5 + 3 = 8
+s.acquire("n1")
+# [{"task_id": "t1", "lease_expire_at": 8, "schedule": "*/5"}]
 s.acquire("n2")                      # []，同一时钟单位不能重复分配
-s.heartbeat("n1")                    # 续约 n1 持有的全部任务
+s.heartbeat("n1")                    # 续约 n1 持有的全部任务（-> 5+3=8）
 s.complete("n1", "t1")               # 完成上报，释放租约
 
 s.tick(5)                            # 时钟 10
-s.acquire("n2")                      # ["t1"]，下一个触发点可再次分配
+s.acquire("n2")
+# [{"task_id": "t1", "lease_expire_at": 13, "schedule": "*/5"}]
 ```
+
+`acquire` 返回的是**本次新分配任务**的租约三元组列表（不是 id 列表），
+每个元素为 `{"task_id", "lease_expire_at", "schedule"}`；节点之前已持有、
+仍在租约内的任务不会重复出现。
 
 ### 命令行
 
@@ -83,14 +89,18 @@ python main.py < commands.txt
 
 ### 租约过期边界规则
 
-采用**闭区间失效**：
+采用**闭区间失效**，且判定只有一处实现——内部函数
+`Scheduler._lease_expired(lease_expire_at, clock)`，`tick()` 与
+`acquire()` 两条路径都经由 `_reap_expired_leases()` 调用它，不存在各写
+一份比较的情况：
 
-> 当 `当前逻辑时钟 >= lease_expire_at` 时，租约视为过期。
+> `lease_expire_at <= 当前时钟` 即视为过期。
 > 即 `lease_expire_at == 当前时钟` 的那一刻，任务就已经失联、可重新分配。
 
 例如租约长度为 3、在时钟 5 acquire：`lease_expire_at = 8`。时钟 7 时租约
-**仍有效**（其他节点不能抢）；时钟 8 时**立即失效**，owner 清空，任务回到
-可分配状态。过期判定在每次 `tick()` 推进之后和每次 `acquire()` 之前执行。
+**仍有效**（7 < 8，其他节点不能抢）；时钟 8 时**立即失效**（8 <= 8），
+owner 清空，任务回到可分配状态。过期判定在每次 `tick()` 推进之后和每次
+`acquire()` 之前执行。
 
 ### 互斥与同一时钟单位去重
 
@@ -105,9 +115,14 @@ python main.py < commands.txt
 
 ### 心跳与故障转移
 
-- `heartbeat(node_id)` 把**该节点自己持有的**全部任务的
-  `lease_expire_at` 刷新为 `当前时钟 + 租约长度`；不能续约别人的任务。
-- 节点注册时刻记为首次心跳；心跳同时更新节点的 `last_heartbeat`。
+- `heartbeat(node_id)` 做两件事：把节点的 `last_heartbeat` 更新为当前时钟；
+  并把**该节点自己当前持有的每一个任务**的 `lease_expire_at` 重算为
+  `当前时钟 + 租约长度`。只动自己持有的任务，其他节点的任务到期时刻一律
+  不变。心跳返回本次续约的 task_id 列表。
+- 因此**持续心跳的节点不会因租约到期被误判失联**：只要每次心跳间隔不超过
+  租约长度，到期时刻就一直向后推；其他节点在这段时间内 `acquire` 拿不到
+  这些任务。
+- 节点注册时刻记为首次心跳。
 - 超过租约长度没有心跳的节点，其任务在**下一次 `tick()` 或 `acquire()`**
   时被回收（owner 清空、从节点任务集合移除）。
 - `remove_node(node_id)` 主动下线会**立即**释放全部任务并删除节点。
@@ -126,7 +141,7 @@ python main.py < commands.txt
 | `remove_node(node_id)` | 节点下线，立即释放全部任务，返回被释放 id 列表 |
 | `tick(n=1)` | 时钟前进 n（正整数），随后回收过期租约，返回新时钟 |
 | `heartbeat(node_id)` | 续约该节点持有的全部任务，返回续约的 id 列表 |
-| `acquire(node_id)` | 先回收过期租约，再分配所有到期可领的任务，返回 id 列表 |
+| `acquire(node_id)` | 先回收过期租约，再分配所有到期可领的任务，返回租约三元组列表（见下） |
 | `complete(node_id, task_id)` | 完成上报；只有当前 owner 可上报 |
 | `get_task(task_id)` | 任务详情字典（值拷贝） |
 | `get_node(node_id)` | 节点详情字典（值拷贝） |
@@ -153,6 +168,18 @@ python main.py < commands.txt
 `get_node` 返回 `{"node_id", "last_heartbeat", "tasks"}`，其中 `tasks` 是
 排序后的持有的 task_id 列表。
 
+`acquire(node_id)` 返回**本次新分配**任务的列表（按 task_id 排序），每项：
+
+```python
+{
+  "task_id": "t1",
+  "lease_expire_at": 8,   # = acquire 时的逻辑时钟 + lease_duration
+  "schedule": "*/5",      # 任务的原始调度表达式
+}
+```
+
+没有新任务时返回 `[]`；节点此前已持有、仍在租约内的任务不重复出现。
+
 ### orphaned 的语义
 
 `get_orphaned_tasks()` 是**纯查询**，不触发失联回收。它返回当前时钟恰好
@@ -162,7 +189,10 @@ python main.py < commands.txt
 
 ## 快照格式与一致性校验
 
-`save(path)` 写出 UTF-8 JSON：
+`save(path)` **原子地**写出 UTF-8 JSON：先在目标同目录创建临时文件
+（`.snapshot-*.tmp`）、写入并 `fsync`，成功后用 `os.replace` 原子替换目标。
+序列化或写盘中途失败只会清理临时文件并抛 `SchedulerError`，**已有的目标
+文件保持原样不变**，不会留下半个快照。
 
 ```json
 {
@@ -179,12 +209,15 @@ python main.py < commands.txt
 }
 ```
 
-`load()` / `restore()` 会校验并在不通过时抛出带清晰信息的 `SchedulerError`：
+`load()` / `restore()` 会校验并在不通过时抛出**带字段名**的
+`SchedulerError`：
 
 - 文件不存在、不是合法 UTF-8、不是合法 JSON（带行列号）；
-- 缺少字段、版本号不符、类型错误（含把 `true/false` 当整数）；
-- `clock < 0`、租约长度非正、`lease_expire_at` 为负；
-- 任务 `owner` 指向不存在的节点；节点持有不存在的任务；
+- 缺少字段、版本号不符、类型错误（含把 `true/false`、小数、字符串当整数）；
+- `clock` 必须是非负整数；
+- `lease_duration`（租约 ttl）必须是**正整数**，`0`/负数/小数一律拒绝；
+- `lease_expire_at` 不能为负；
+- 任务 `owner` 指向的节点必须存在；节点持有的 `task_id` 必须在任务表中；
 - 任务 owner 与节点任务集合**双向引用**必须一致；
 - 有 owner 必须有 `lease_expire_at`，无 owner 不允许带到期时刻；
 - `last_fired_at` 必须命中该任务自己的调度表达式，且不超过当前时钟。
@@ -214,16 +247,23 @@ python -m unittest -v test_scheduler
 测试覆盖：
 
 - 表达式解析（合法/非法全量样例）、重复注册与空 id；
-- 基本分配（步长、单点、多值、并集、时钟 0 不触发）；
+- 基本分配（步长、单点、多值、并集、时钟 0 不触发）；acquire 返回
+  `{task_id, lease_expire_at, schedule}` 三元组；
 - 互斥：同单位双节点连续 acquire、租约内不可抢占、下线/完成后同单位不重放；
-- 租约边界：到期前一单位有效、`clock == lease_expire_at` 恰好失效、逐步推进；
-- 心跳：续约自己的任务、不能续约别人的、未注册节点报错、续约后跨过原到期点；
+- 租约边界：`_lease_expired` 单一判定函数的真值表、到期前一单位有效、
+  `clock == lease_expire_at` 恰好失效（tick 与 acquire 两条路径各一个）、
+  逐步推进；
+- 心跳：逐任务续约、持续心跳跨过多个租约长度不被释放且别的节点抢不到、
+  不心跳的对照组超时、只续约自己不影响他人任务、未注册节点报错；
 - 故障转移：失联后任务在下一个触发点被其他节点接走，节点"复活"也拿不回；
 - `complete` 越权上报、未分配任务上报、未知 id；
-- 状态查询、排序、返回值防篡改、orphaned 各场景；
-- 快照往返一致、坏 JSON/坏 UTF-8/缺字段/坏版本/悬空引用/双向不一致/负数；
-- 3 节点 20 任务、时钟推进 30 步的轮流 acquire 模拟，逐单位校验全局唯一持有；
-- CLI 全链路与错误 JSON 化。
+- 状态查询、排序、返回值防篡改；orphaned 三种情形（空/未到点/真正积压）；
+- 快照：往返一致、坏 JSON/坏 UTF-8/缺字段/坏版本；坏数据四类
+  （负租约、owner 悬空、节点持有不存在任务、`lease_duration=0`，另加负时钟、
+  非整数 ttl）各自报错；save 原子性——写盘失败不破坏已有文件、不留临时文件；
+- 3 节点 20 任务、时钟推进 30 步的轮流 acquire 模拟，逐单位校验全局唯一持有
+  与租约到期时刻；
+- CLI 全链路（含 acquire 三元组输出）与错误 JSON 化。
 
 ## 设计取舍
 
@@ -231,4 +271,6 @@ python -m unittest -v test_scheduler
 - **只模拟消息传递**：没有 socket/线程/锁；"网络"就是方法调用，调用串行
   执行，因此互斥由"分配即时落表"天然保证。
 - **错过触发点不补跑**：简化 cron 的常见取舍，避免暂停期间产生大量积压执行。
-- **闭区间失效（`>=`）**：租约长度精确表示"持有的时钟单位数"，边界无歧义。
+- **闭区间失效（`lease_expire_at <= clock`）**：租约长度精确表示"持有的
+  时钟单位数"，边界无歧义；判定集中在单一函数，tick/acquire 不可能不一致。
+- **快照原子替换**：临时文件 + fsync + `os.replace`，崩溃不会产生半截快照。
