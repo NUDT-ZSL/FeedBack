@@ -353,31 +353,53 @@ class StreamAligner:
     # ----- 逐点代价 -------------------------------------------------------
 
     def _check_zero_prefixes(self, side: str, fvalue: float) -> None:
-        """状态变更前的 cos 零向量预检。
+        """状态变更前的 cos 零向量预检（只针对本次将新增的窗内单元格）。
 
-        前缀平方和只会随追加单调增大，因此零向量前缀只可能出现在“序列首值
-        为 0”这一种情形。而任何 DTW 路径都必经过某个 i=1 / j=1 的单元格，
-        零首值会让对齐永远无定义，故在写入前直接拒绝，状态保持不变。
-        首值非零后，前缀范数不可能再回到 0，无需逐单元格检查。
+        语义：只有“参与比较的某个前缀向量范数为 0”才报错。因此：
 
-        :raises ZeroVectorError: 被追加序列当前为空且新值为 0。
+        * 首值为 0、但对侧还是空序列时，新行/列与窗口不相交、没有任何
+          单元格会被计算，**允许暂存**该 0（之后追加非零值可使该侧更长
+          前缀的范数恢复为正）；
+        * 一旦本次 append 新增的某个窗内单元格用到零范数前缀——可能是
+          本侧新前缀（新值让该前缀平方和为 0），也可能是对侧某个历史
+          前缀——就在改动任何状态前抛 :class:`ZeroVectorError`，保证
+          预检失败时内核状态完全不变、调用方捕获后仍可追加别的值。
+
+        :raises ZeroVectorError: 本次将填充的某个窗内单元格的前缀范数为 0。
         """
-        if fvalue != 0.0:
-            return
+        n, m = len(self._a), len(self._b)
         if side == "a":
-            if not self._a:
-                raise ZeroVectorError(
-                    "cosine cost undefined: first value of series "
-                    f"{self._name_a!r} must be non-zero (its length-1 prefix "
-                    "would be a zero vector)"
-                )
+            i = n + 1
+            norm_new = self._norm_a[n] + fvalue * fvalue
+            lo = max(1, i - self._band)
+            hi = min(m, i + self._band)
+            for j in range(lo, hi + 1):
+                if norm_new == 0.0:
+                    raise ZeroVectorError(
+                        "cosine cost undefined: series A prefix of length "
+                        f"{i} is a zero vector at cell ({i},{j})"
+                    )
+                if self._norm_b[j] == 0.0:
+                    raise ZeroVectorError(
+                        "cosine cost undefined: series B prefix of length "
+                        f"{j} is a zero vector at cell ({i},{j})"
+                    )
         else:
-            if not self._b:
-                raise ZeroVectorError(
-                    "cosine cost undefined: first value of series "
-                    f"{self._name_b!r} must be non-zero (its length-1 prefix "
-                    "would be a zero vector)"
-                )
+            j = m + 1
+            norm_new = self._norm_b[m] + fvalue * fvalue
+            lo = max(1, j - self._band)
+            hi = min(n, j + self._band)
+            for i in range(lo, hi + 1):
+                if norm_new == 0.0:
+                    raise ZeroVectorError(
+                        "cosine cost undefined: series B prefix of length "
+                        f"{j} is a zero vector at cell ({i},{j})"
+                    )
+                if self._norm_a[i] == 0.0:
+                    raise ZeroVectorError(
+                        "cosine cost undefined: series A prefix of length "
+                        f"{i} is a zero vector at cell ({i},{j})"
+                    )
 
     def _cost(self, i: int, j: int) -> float:
         """序列前缀端点 A[i-1] 与 B[j-1] 之间的逐点距离。"""
@@ -434,6 +456,8 @@ class StreamAligner:
         :param series_name: 构造时给定的序列名之一。
         :param value: 有限浮点数。
         :raises SeriesValidationError: 序列名未知、值非有限、序列长度超过 4096。
+        :raises ZeroVectorError: cos 度量下本次新增的某个窗内单元格用到零范数
+            前缀（在任何状态变更前抛出，状态保持不变）。
         :raises MemoryLimitError: 本次追加会超过 ``max_cells``（状态保持不变）。
         """
         if series_name == self._name_a:

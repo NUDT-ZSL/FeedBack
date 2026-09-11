@@ -17,6 +17,7 @@ import random
 import subprocess
 import sys
 import tempfile
+import itertools
 import unittest
 
 from stream_aligner import (
@@ -262,17 +263,63 @@ class MetricTests(unittest.TestCase):
         self.assertAlmostEqual(al.align().distance, d)
         self.assertEqual(al.align().path, path)
 
-    def test_cos_zero_head_rejected(self):
+    def test_cos_zero_head_allowed_while_opposite_empty(self):
+        # 放宽后的语义：首值为 0 但对侧还是空序列时，没有任何窗内单元格会
+        # 参与比较，0 应被暂存（不再急切拒绝），序列长度正常增长。
         al = StreamAligner("a", "b", metric="cos", band=2)
+        r = al.append("a", 0.0)
+        self.assertEqual(r.new_length, 1)
+        self.assertEqual(al.get_state().length_a, 1)
+        # 更长前缀的范数恢复为正，也照常接受。
+        al.append("a", 3.0)
+        self.assertEqual(al.get_state().length_a, 2)
+        # 对侧始终为空：align 走“空序列不可达”，返回 null + reason，不抛零向量。
+        res = al.align()
+        self.assertIsNone(res.distance)
+        self.assertIn("empty", res.reason)
+
+    def test_cos_zero_head_raises_only_when_compared(self):
+        # 当对侧进点、单元格 (1,1) 必须拿长度为 1 的零前缀做比较时才报错。
+        al = StreamAligner("a", "b", metric="cos", band=4096)
+        al.append("a", 0.0)
+        al.append("a", 3.0)  # 长度 2 前缀范数为正，但长度 1 前缀仍是零向量
+        with self.assertRaises(ZeroVectorError):
+            al.append("b", 4.0)
+
+    def test_cos_precheck_failure_is_atomic(self):
+        # 预检失败时内核状态完全不变，捕获后可继续追加别的值。
+        al = StreamAligner("a", "b", metric="cos", band=2)
+        al.append("a", 0.0)
+        al.append("a", 3.0)
+        before = (
+            al.values_a,
+            al.values_b,
+            al.get_state().filled_cells,
+        )
+        with self.assertRaises(ZeroVectorError):
+            al.append("b", 4.0)
+        after = (
+            al.values_a,
+            al.values_b,
+            al.get_state().filled_cells,
+        )
+        self.assertEqual(before, after)
+        # 对侧仍为空：继续往 A 追加合法（新行窗口为空，不触发比较）。
+        al.append("a", 4.0)
+        self.assertEqual(al.get_state().length_a, 3)
+        self.assertEqual(al.get_state().length_b, 0)
+
+    def test_cos_precheck_failure_atomic_on_other_side(self):
+        # 对称情形：B 非零，A 以 0 开头，append A=0 且 (1,1) 将被比较 -> 拒绝。
+        al = StreamAligner("a", "b", metric="cos", band=0)
+        al.append("b", 2.0)
+        before = (al.get_state().length_a, al.get_state().length_b, al.filled_cells)
         with self.assertRaises(ZeroVectorError):
             al.append("a", 0.0)
-        # 状态不变，仍可追加非零首值
-        self.assertEqual(al.get_state().length_a, 0)
-        al.append("a", 0.5)
-        with self.assertRaises(ZeroVectorError):
-            al.append("b", 0.0)
-        self.assertEqual(al.get_state().length_b, 0)
-        al.append("b", 1.0)
+        after = (al.get_state().length_a, al.get_state().length_b, al.filled_cells)
+        self.assertEqual(before, after)
+        # 换成非零首值即可正常对齐。
+        al.append("a", 2.0)
         self.assertAlmostEqual(al.align().distance, 0.0)
 
     def test_cos_zero_on_both_heads(self):
@@ -430,6 +477,87 @@ class IncrementalEquivalenceTests(unittest.TestCase):
         self.assertEqual(result.path, [(0, 0), (1, 1), (2, 2)])
         self.assertAlmostEqual(result.distance, 0.5 + 0.5 + 0.5)
 
+    def test_tie_priority_up_diag_left_deterministic(self):
+        # 精确构造用户描述的平局：终点 (3,3) 处 up == left (=1) 且都 < diag (=2)。
+        # 按“上 -> 左上 -> 左”应选“上”，路径倒数第二点为 (1,2)，
+        # 若错误地选“左”则会分叉到 (2,1)。
+        a, b = [0, 1, 0], [1, 0, 1]
+        ref_d, ref_path = reference_align(a, b, 4096, "abs")
+        for mode in ("a_first", "b_first", "interleaved"):
+            al = StreamAligner("a", "b", metric="abs", band=4096)
+            if mode == "a_first":
+                for v in a:
+                    al.append("a", float(v))
+                for v in b:
+                    al.append("b", float(v))
+            elif mode == "b_first":
+                for v in b:
+                    al.append("b", float(v))
+                for v in a:
+                    al.append("a", float(v))
+            else:
+                for side, v in (
+                    ("a", 0),
+                    ("b", 1),
+                    ("a", 1),
+                    ("b", 0),
+                    ("a", 0),
+                    ("b", 1),
+                ):
+                    al.append(side, float(v))
+            result = al.align()
+            # distance 不变
+            self.assertEqual(result.distance, ref_d, mode)
+            # path 与全量参考逐点一致，且平局格选“上”
+            self.assertEqual(result.path, ref_path, mode)
+            self.assertEqual(result.path[-2], (1, 2), mode)
+            self.assertNotIn((2, 1), result.path, mode)
+            # ratio / violations 随 path 同步派生
+            self.assertEqual(result.warping_ratio, len(result.path) / 3)
+            self.assertEqual(result.band_violations, 0)
+            # 白盒：平局格 (3,3) 的回溯指针确实指向“上” (2,3)
+            self.assertEqual(al._bp[3][3], (2, 3))
+
+    def test_tie_priority_exhaustive_small_alphabet(self):
+        # 小整数网格穷举：只要终点可达，内核 path 必须与“上->左上->左”的
+        # 全量参考逐点一致（覆盖各种平局组合，含 up==left<diag）。
+        alphabet = (0, 1, 2)
+        checked = 0
+        for n in (1, 2, 3):
+            for m in (1, 2, 3):
+                for a in itertools.product(alphabet, repeat=n):
+                    for b in itertools.product(alphabet, repeat=m):
+                        for band in (0, 1, 4096):
+                            if abs(n - m) > band:
+                                continue
+                            ref_d, ref_path = reference_align(list(a), list(b), band, "abs")
+                            al = StreamAligner("a", "b", metric="abs", band=band)
+                            for v in a:
+                                al.append("a", float(v))
+                            for v in b:
+                                al.append("b", float(v))
+                            result = al.align()
+                            self.assertEqual(result.distance, ref_d, (a, b, band))
+                            self.assertEqual(result.path, ref_path, (a, b, band))
+                            checked += 1
+        self.assertGreater(checked, 1000)
+
+    def test_ratio_and_violations_tie_to_each_align(self):
+        # warping_ratio / band_violations 必须每次 align 由当前 path 实时派生，
+        # 不能残留上一次 path 的旧值。
+        al = StreamAligner("a", "b", metric="abs", band=4096)
+        al.append("a", 0.0)
+        al.append("b", 1.0)
+        r1 = al.align()
+        self.assertEqual((r1.warping_ratio, r1.band_violations), (1.0, 0))
+        # 追加后路径变长，ratio 必须跟着变
+        al.append("a", 1.0)
+        al.append("b", 0.0)
+        r2 = al.align()
+        self.assertEqual(r2.warping_ratio, len(r2.path) / 2)
+        self.assertEqual(r2.band_violations, 0)
+        self.assertNotEqual(r1.path, r2.path)
+
     def test_old_cells_never_recomputed(self):
         # 增量性质的白盒验证：后续 append 不得改动任何历史单元格。
         al = StreamAligner("a", "b", metric="abs", band=2)
@@ -506,6 +634,41 @@ class UnreachableTests(unittest.TestCase):
         self.assertIsNotNone(al.align().distance)
         al.append("b", 2.0)                     # 3 vs 3
         self.assertIsNotNone(al.align().distance)
+
+    def test_recovery_has_no_stale_unreachable_state(self):
+        # 不可达 -> 恢复可达后，结果必须与“从未经过不可达阶段”的全量参考
+        # distance/path 完全一致；并覆盖 可达->不可达->可达 的反复切换。
+        band = 2
+        a = [0.1, 1.0, 2.2, 3.0, 4.3]
+        al = StreamAligner("a", "b", metric="sq", band=band)
+        for v in a:
+            al.append("a", v)
+        checkpoints = [0.5, 0.9, 1.8, 2.6, 3.9]
+        b_seen: list = []
+        states: list = []  # (reachable, distance, path)
+        for v in checkpoints:
+            al.append("b", v)
+            b_seen.append(v)
+            r = al.align()
+            states.append((r.distance is not None, r.distance, list(r.path), r.reason))
+            ref_d, ref_path = reference_align(a, b_seen, band, "sq")
+            if abs(len(a) - len(b_seen)) > band:
+                self.assertIsNone(r.distance)
+                self.assertIsNotNone(r.reason)
+                self.assertEqual(r.path, [])
+            else:
+                self.assertIsNotNone(r.distance, r.reason)
+                self.assertTrue(math.isclose(r.distance, ref_d, abs_tol=1e-12))
+                self.assertEqual(r.path, ref_path)
+        # 最终长度相等，可达；经过多次不可达阶段后仍与全量参考一致，
+        # 说明没有残留任何旧的不可达标记或旧 path。
+        final = al.align()
+        ref_d, ref_path = reference_align(a, checkpoints, band, "sq")
+        self.assertTrue(math.isclose(final.distance, ref_d, abs_tol=1e-12))
+        self.assertEqual(final.path, ref_path)
+        # 中途确实出现过不可达，否则本测试没有真正覆盖恢复路径
+        self.assertFalse(all(s[0] for s in states))
+        self.assertTrue(states[-1][0])
 
     def test_tight_band_path_truncation(self):
         # band 很小且形状不匹配：|n-m|<=band 仍可能不可达？对满代价网格不会，
@@ -594,9 +757,16 @@ class MemoryLimitTests(unittest.TestCase):
         with self.assertRaises(MemoryLimitError):
             al.append("b", 1.0)  # 新列覆盖 i=1,2 -> +2 -> 4 > 2，拒绝
         after = al.get_state()
+        # 长度、已填充格数都不能被污染
         self.assertEqual(before.length_a, after.length_a)
         self.assertEqual(before.length_b, after.length_b)
         self.assertEqual(before.filled_cells, after.filled_cells)
+        # 窗口利用率也必须与拒绝前逐字段一致（分母未变、计数未变）
+        self.assertEqual(before.window_utilization, after.window_utilization)
+        self.assertEqual(before.last_distance, after.last_distance)
+        # 白盒：表的物理维度也没有为被拒绝的那次 append 扩列
+        n, m = after.length_a, after.length_b
+        self.assertEqual((len(al._dp), len(al._dp[0])), (n + 1, m + 1))
         # 拒绝后状态仍可正常使用
         self.assertIsNotNone(al.align().distance)
 
@@ -689,6 +859,94 @@ class SnapshotTests(unittest.TestCase):
             loaded = StreamAligner.load(path)
             self.assertIsNone(loaded.align().distance)
             self.assertIsNotNone(loaded.align().reason)
+
+    def test_roundtrip_preserves_tie_break_path(self):
+        # 平局场景（终点 up==left<diag）：save/load 往返后继续 append，
+        # distance/path/格数必须与不中断处理完全一致。
+        a, b = [0, 1, 0], [1, 0, 1]
+        live = StreamAligner("a", "b", metric="abs", band=4096)
+        snap = StreamAligner("a", "b", metric="abs", band=4096)
+        for v in a:
+            live.append("a", float(v))
+            snap.append("a", float(v))
+        for v in b:
+            live.append("b", float(v))
+            snap.append("b", float(v))
+        tie_path = [(0, 0), (0, 1), (1, 2), (2, 2)]
+        self.assertEqual(live.align().path, tie_path)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "tie.json")
+            snap.save(path)
+            loaded = StreamAligner.load(path)
+            self.assertEqual(loaded.align().path, tie_path)
+            self.assertEqual(loaded.align().distance, live.align().distance)
+            # 往返后继续 append，两边保持逐点一致
+            for side, v in (("a", 2.0), ("b", 2.0), ("a", -1.0), ("b", 3.0)):
+                live.append(side, v)
+                loaded.append(side, v)
+            self.assertEqual(loaded.align().distance, live.align().distance)
+            self.assertEqual(loaded.align().path, live.align().path)
+            self.assertEqual(
+                loaded.get_state().filled_cells, live.get_state().filled_cells
+            )
+
+    def test_roundtrip_cos_zero_head_pending(self):
+        # cos 放宽边界：零首值在对侧为空时被暂存（无单元格）。
+        # 该状态可正常 save/load，往返后继续追加与不中断实例一致。
+        def build():
+            al = StreamAligner("a", "b", metric="cos", band=4096, max_cells=None)
+            al.append("a", 0.0)  # b 空：允许暂存
+            al.append("a", 3.0)  # 长度 2 前缀范数恢复为正
+            return al
+
+        live, snap = build(), build()
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "coszero.json")
+            snap.save(path)
+            loaded = StreamAligner.load(path)
+            self.assertEqual(loaded.values_a, [0.0, 3.0])
+            self.assertEqual(loaded.get_state().filled_cells, 0)
+            self.assertIsNone(loaded.align().distance)  # 对侧仍空
+            # 三条路径（不中断 / 往返）行为一致：对侧进点即报零向量且原子
+            for al in (live, loaded):
+                st = (al.get_state().length_a, al.get_state().length_b, al.filled_cells)
+                with self.assertRaises(ZeroVectorError):
+                    al.append("b", 4.0)  # (1,1) 用到长度 1 的零前缀
+                self.assertEqual(
+                    (al.get_state().length_a, al.get_state().length_b, al.filled_cells),
+                    st,
+                )
+            # 捕获后继续往对侧仍空的 A 追加，两边一致
+            live.append("a", 4.0)
+            loaded.append("a", 4.0)
+            self.assertEqual(loaded.values_a, live.values_a)
+            self.assertEqual(loaded.get_state().filled_cells, live.filled_cells)
+
+    def test_roundtrip_cos_interior_zeros_then_continue(self):
+        # cos 正常非零首值 + 内部零：往返后继续追加与全量参考一致。
+        a, b = [1.0, 0.0, 2.0], [2.0, 0.0, 1.0]
+        live = StreamAligner("a", "b", metric="cos", band=2)
+        snap = StreamAligner("a", "b", metric="cos", band=2)
+        for v in a:
+            live.append("a", v)
+            snap.append("a", v)
+        for v in b:
+            live.append("b", v)
+            snap.append("b", v)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "cosint.json")
+            snap.save(path)
+            loaded = StreamAligner.load(path)
+            for side, v in (("a", 3.0), ("b", -1.0), ("a", 0.0)):
+                live.append(side, v)
+                loaded.append(side, v)
+            full_a, full_b = [1, 0, 2, 3, 0], [2, 0, 1, -1]
+            ref_d, ref_path = reference_align(full_a, full_b, 2, "cos")
+            self.assertTrue(
+                math.isclose(loaded.align().distance, ref_d, abs_tol=1e-12)
+            )
+            self.assertEqual(loaded.align().path, ref_path)
+            self.assertEqual(loaded.align().distance, live.align().distance)
 
     def test_corrupt_json_and_missing_file(self):
         with tempfile.TemporaryDirectory() as d:
