@@ -99,6 +99,27 @@ class TestCLILibrary(unittest.TestCase):
         self.assertFalse(responses[0]["result"]["feasible"])
         self.assertTrue(responses[0]["result"]["reasons"])
 
+    def test_schedule_resource_window_overload(self):
+        # CLI 必须把 resources[].windows 传到求解器：release 100 的任务
+        # 在资源窗 [0,10) 内无法执行。
+        responses = self._run_lines([json.dumps({
+            "cmd": "schedule",
+            "tasks": [
+                {"task_id": "a", "duration": 5, "resource": "r"},
+                {"task_id": "b", "duration": 5, "resource": "r",
+                 "release": 100},
+            ],
+            "resources": [{"resource": "r", "windows": [[0, 10]]}],
+        })])
+        result = responses[0]["result"]
+        self.assertTrue(responses[0]["ok"])
+        self.assertFalse(result["feasible"])
+        self.assertEqual(result["infeasibility_type"], "window_overload")
+        conflict = result["window_conflicts"][0]
+        self.assertEqual(conflict["resource"], "r")
+        self.assertIn("b", conflict["tasks"])
+        self.assertGreater(conflict["required"], conflict["available"])
+
     def test_schedule_cycle_is_ok_response(self):
         responses = self._run_lines([json.dumps({
             "cmd": "schedule",

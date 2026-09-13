@@ -54,6 +54,8 @@ class Task:
     :param resource: 非空资源标识；同一资源上任务不可时间重叠。
     :param deps: 前置任务 id 集合；任务必须等所有前置完成后才能开始。
     :param release: 最早开始时间（整数）。
+    :param deadline: 可选截止时间（正整数，半开区间，任务须在该时刻前
+        完成）；``None`` 表示无上界。
     """
 
     task_id: str
@@ -61,6 +63,7 @@ class Task:
     resource: str
     deps: frozenset = field(default_factory=frozenset)
     release: int = 0
+    deadline: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为可 JSON 化的普通字典（deps 排序输出，保证稳定）。"""
@@ -70,6 +73,7 @@ class Task:
             "resource": self.resource,
             "deps": sorted(self.deps),
             "release": self.release,
+            "deadline": self.deadline,
         }
 
 
@@ -150,6 +154,13 @@ class ScheduleResult:
     :param resource_conflicts: 资源冲突时间窗列表，元素为
         ``(resource, start, end, [task_id, ...])``。由构造合法调度的求解器
         产生时该列表恒为空；持久化往返或外部校验时可能非空。
+    :param infeasibility_type: 不可行类型标识：``"cycle"``（依赖成环）、
+        ``"window_overload"``（release/deadline/资源时间窗内任务总时长
+        超出可用时长）；可行时为 None。
+    :param window_conflicts: 时间窗不可行证明，每项为字典
+        ``{"resource", "window": [start, end], "available", "required",
+        "tasks"}``：在资源 resource 的 [start,end) 区间内，可用时长
+        available 容纳不下 tasks 的总需求时长 required。
     """
 
     assignments: Dict[str, Tuple[int, int]] = field(default_factory=dict)
@@ -161,6 +172,8 @@ class ScheduleResult:
     resource_conflicts: List[Tuple[str, int, int, List[str]]] = field(
         default_factory=list
     )
+    infeasibility_type: Optional[str] = None
+    window_conflicts: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """转为 JSON 友好字典（时间区间元组序列化为两元素列表）。"""
@@ -183,6 +196,8 @@ class ScheduleResult:
                 }
                 for resource, start, end, tasks in self.resource_conflicts
             ],
+            "infeasibility_type": self.infeasibility_type,
+            "window_conflicts": [dict(c) for c in self.window_conflicts],
         }
 
     @classmethod
@@ -216,6 +231,28 @@ class ScheduleResult:
                     _as_str_list(c.get("tasks", []), "resource_conflicts.tasks"),
                 )
             )
+        window_conflicts: List[Dict[str, Any]] = []
+        for c in data.get("window_conflicts", []):
+            if not isinstance(c, dict):
+                raise ValueError("window_conflicts 元素必须是对象")
+            window = c.get("window")
+            if not (
+                isinstance(window, list)
+                and len(window) == 2
+                and all(isinstance(x, int) for x in window)
+            ):
+                raise ValueError("window_conflicts.window 必须是 [start, end]")
+            entry = {
+                "resource": str(c["resource"]),
+                "window": [int(window[0]), int(window[1])],
+                "available": int(c["available"]),
+                "required": int(c["required"]),
+                "tasks": _as_str_list(c.get("tasks", []), "window_conflicts.tasks"),
+            }
+            if "proven_by" in c:
+                entry["proven_by"] = str(c["proven_by"])
+            window_conflicts.append(entry)
+        infeasibility_type = data.get("infeasibility_type")
         return cls(
             assignments=assignments,
             makespan=int(data.get("makespan", 0)),
@@ -224,6 +261,10 @@ class ScheduleResult:
             reasons=[str(x) for x in data.get("reasons", [])],
             cycle=cycle,
             resource_conflicts=conflicts,
+            infeasibility_type=(
+                str(infeasibility_type) if infeasibility_type is not None else None
+            ),
+            window_conflicts=window_conflicts,
         )
 
 

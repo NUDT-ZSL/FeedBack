@@ -3,7 +3,7 @@
 公共 API：
     solve(items, bins, tasks, resources) -> SolveResult
     pack_items(items, bins)             -> PackingResult
-    schedule_tasks(tasks, resources)    -> ScheduleResult
+    schedule_tasks(tasks, resource_windows) -> ScheduleResult
 
 命令行入口见仓库根目录的 ``main.py``。
 """

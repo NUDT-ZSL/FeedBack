@@ -32,13 +32,6 @@ from optcore.persistence import (
     save_problem,
 )
 from optcore.solver import Problem, solve_problem
-from optcore.validation import (
-    normalize_bins,
-    normalize_items,
-    normalize_resources,
-    normalize_tasks,
-    validate_task_references,
-)
 
 JSONDict = Dict[str, Any]
 
@@ -65,14 +58,12 @@ class Session:
 
 
 def _build_problem(payload: JSONDict) -> Problem:
-    """从命令负载构造并校验 Problem。"""
-    tasks = normalize_tasks(payload.get("tasks"))
-    validate_task_references(tasks)
-    return Problem(
-        items=normalize_items(payload.get("items")),
-        bins=normalize_bins(payload.get("bins")),
-        tasks=tasks,
-        resources=normalize_resources(payload.get("resources")),
+    """从命令负载构造并校验 Problem（含资源时间窗解析）。"""
+    return Problem.from_raw(
+        items=payload.get("items"),
+        bins=payload.get("bins"),
+        tasks=payload.get("tasks"),
+        resources=payload.get("resources"),
     )
 
 

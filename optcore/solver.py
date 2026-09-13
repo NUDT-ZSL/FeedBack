@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .models import (
     BinSpec,
@@ -18,6 +18,7 @@ from .scheduling import schedule_tasks
 from .validation import (
     normalize_bins,
     normalize_items,
+    normalize_resource_windows,
     normalize_resources,
     normalize_tasks,
     validate_task_references,
@@ -28,21 +29,44 @@ from .validation import (
 class Problem:
     """一次求解的完整输入：物品、箱子、任务、资源。
 
-    持有强类型模型，便于 :func:`solve_problem` 与持久化层共用。
+    :param resources: 显式登记的资源 id（任务引用未登记资源不算错误）。
+    :param resource_windows: resource_id -> 合并排序后的可用时间窗
+        ``[(start, end), ...]``（半开区间）；缺省资源全天可用。
     """
 
     items: List[Item] = field(default_factory=list)
     bins: List[BinSpec] = field(default_factory=list)
     tasks: List[Task] = field(default_factory=list)
     resources: List[str] = field(default_factory=list)
+    resource_windows: Dict[str, List[Tuple[int, int]]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        """序列化为快照字典。"""
+        """序列化为快照字典。
+
+        带时间窗的资源输出为 ``{"resource": id, "windows": [...]}``，
+        其余输出为纯字符串。
+        """
+        serialized_resources: List[Any] = []
+        for rid in self.resources:
+            if rid in self.resource_windows:
+                serialized_resources.append({
+                    "resource": rid,
+                    "windows": [list(w) for w in self.resource_windows[rid]],
+                })
+            else:
+                serialized_resources.append(rid)
+        listed = set(self.resources)
+        for rid in sorted(self.resource_windows):
+            if rid not in listed:
+                serialized_resources.append({
+                    "resource": rid,
+                    "windows": [list(w) for w in self.resource_windows[rid]],
+                })
         return {
             "items": [item.to_dict() for item in self.items],
             "bins": [bin_spec.to_dict() for bin_spec in self.bins],
             "tasks": [task.to_dict() for task in self.tasks],
-            "resources": list(self.resources),
+            "resources": serialized_resources,
         }
 
     @classmethod
@@ -61,6 +85,7 @@ class Problem:
             bins=normalize_bins(bins),
             tasks=norm_tasks,
             resources=normalize_resources(resources),
+            resource_windows=normalize_resource_windows(resources),
         )
 
 
@@ -81,7 +106,9 @@ def solve_problem(problem: Problem) -> SolveResult:
             reasons.extend(f"[packing] {r}" for r in packing.reasons)
 
     if problem.tasks:
-        schedule = schedule_tasks(problem.tasks, problem.resources)
+        schedule = schedule_tasks(
+            problem.tasks, resource_windows=problem.resource_windows
+        )
         if not schedule.feasible:
             reasons.extend(f"[schedule] {r}" for r in schedule.reasons)
 
@@ -111,8 +138,9 @@ def solve(
 
     :param items: 物品（Item 或 dict）。
     :param bins: 箱子（BinSpec、dict 或裸容量数值）。
-    :param tasks: 任务（Task 或 dict）。
-    :param resources: 显式登记的资源 id（可省略）。
+    :param tasks: 任务（Task 或 dict，可选 ``deadline`` 字段）。
+    :param resources: 资源登记；可附带可用时间窗，形如
+        ``{"resource": "r", "windows": [[0, 10]]}``。
     """
     problem = Problem.from_raw(items, bins, tasks, resources)
     return solve_problem(problem)

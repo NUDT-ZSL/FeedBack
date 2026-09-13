@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from numbers import Real
-from typing import Any, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .errors import InvalidInputError
 from .models import BinSpec, Item, Task
@@ -152,7 +152,8 @@ def normalize_bins(raw_bins: Optional[Iterable[Any]]) -> List[BinSpec]:
 def normalize_tasks(raw_tasks: Optional[Iterable[Any]]) -> List[Task]:
     """把原始任务列表归一化为 :class:`Task` 列表。
 
-    接受 :class:`Task` 或字典；``deps`` 缺省为空集，``release`` 缺省为 0。
+    接受 :class:`Task` 或字典；``deps`` 缺省为空集，``release`` 缺省为 0，
+    ``resource`` 缺省为 ``"default"``，``deadline`` 缺省为 None（无上界）。
     本函数只校验 id、取值以及 deps *内部*的合法性（字符串、不重复、不自依
     赖）；deps 是否指向存在的任务由 :func:`validate_task_references` 校验。
     """
@@ -163,12 +164,22 @@ def normalize_tasks(raw_tasks: Optional[Iterable[Any]]) -> List[Task]:
     for index, raw in enumerate(raw_tasks):
         if isinstance(raw, Task):
             task = raw
-            # 模型对象跳过类型校验，但跨字段规则（不自依赖）仍需保证，
-            # 否则直接构造 Task 可以绕过字典路径上的校验。
+            # 模型对象跳过类型校验，但跨字段规则仍需保证，否则直接构造
+            # Task 可以绕过字典路径上的校验。
             _require(
                 task.task_id not in task.deps,
                 f"任务 {task.task_id!r} 不能依赖自身",
             )
+            if task.deadline is not None:
+                _require(
+                    isinstance(task.deadline, int) and task.deadline > 0,
+                    f"任务 {task.task_id!r} 的 deadline 必须是正整数",
+                )
+                _require(
+                    task.release < task.deadline,
+                    f"任务 {task.task_id!r} 的 release {task.release} 必须"
+                    f"小于 deadline {task.deadline}",
+                )
         elif isinstance(raw, dict):
             _require("task_id" in raw, f"tasks[{index}] 缺少字段 task_id")
             _require("duration" in raw, f"tasks[{index}] 缺少字段 duration")
@@ -212,12 +223,29 @@ def normalize_tasks(raw_tasks: Optional[Iterable[Any]]) -> List[Task]:
                 _is_int(release),
                 f"tasks[{index}].release 必须是整数",
             )
+            deadline_raw = raw.get("deadline", None)
+            _require(
+                deadline_raw is None or _is_int(deadline_raw),
+                f"tasks[{index}].deadline 必须是整数或 null",
+            )
+            deadline = int(deadline_raw) if deadline_raw is not None else None
+            if deadline is not None:
+                _require(
+                    deadline > 0,
+                    f"tasks[{index}].deadline 必须为正整数（缺失表示无上界）",
+                )
+                _require(
+                    int(release) < deadline,
+                    f"tasks[{index}].release {int(release)} 必须小于 "
+                    f"deadline {deadline}",
+                )
             task = Task(
                 task_id=task_id,
                 duration=int(duration),
                 resource=resource,
                 deps=frozenset(deps),
                 release=int(release),
+                deadline=deadline,
             )
         else:
             raise InvalidInputError(
@@ -236,7 +264,9 @@ def normalize_resources(raw_resources: Optional[Iterable[Any]]) -> List[str]:
     """归一化资源列表：返回资源 id 列表，可为空（表示不限制资源集合）。
 
     任务引用了未声明的资源不算错误——未声明时以任务中出现的资源为准；
-    资源列表仅用于显式登记可用资源与容量无约束的情形。
+    资源列表仅用于显式登记可用资源，可附带 ``windows`` 声明该资源的
+    可用时间区间（半开区间 ``[start, end)``）；缺省/空表示全天可用。
+    时间窗由 :func:`normalize_resource_windows` 单独解析。
     """
     if raw_resources is None:
         return []
@@ -257,6 +287,64 @@ def normalize_resources(raw_resources: Optional[Iterable[Any]]) -> List[str]:
             seen.add(value)
             result.append(value)
     return result
+
+
+def normalize_resource_windows(
+    raw_resources: Optional[Iterable[Any]],
+) -> Dict[str, List[Tuple[int, int]]]:
+    """解析资源可用时间窗。
+
+    :returns: resource_id -> 排序后的 ``[(start, end), ...]`` 列表；
+        只有显式给出非空 ``windows`` 的资源才会出现在字典中，缺省资源
+        视为全天可用。多个区间允许重叠，读入后做合并。
+    :raises InvalidInputError: 窗口不是 [start,end] 整数对或 start>=end。
+    """
+    if raw_resources is None:
+        return {}
+    windows_by_resource: Dict[str, List[Tuple[int, int]]] = {}
+    for index, raw in enumerate(raw_resources):
+        if not isinstance(raw, dict):
+            continue
+        rid = raw.get("resource", raw.get("resource_id"))
+        raw_windows = raw.get("windows")
+        if raw_windows is None:
+            continue
+        _require(
+            isinstance(raw_windows, list),
+            f"resources[{index}].windows 必须是数组",
+        )
+        parsed: List[Tuple[int, int]] = []
+        for j, win in enumerate(raw_windows):
+            _require(
+                isinstance(win, (list, tuple)) and len(win) == 2,
+                f"resources[{index}].windows[{j}] 必须是 [start, end]",
+            )
+            start, end = win
+            _require(
+                _is_int(start) and _is_int(end),
+                f"resources[{index}].windows[{j}] 端点必须是整数",
+            )
+            start, end = int(start), int(end)
+            _require(
+                start < end,
+                f"resources[{index}].windows[{j}] 要求 start < end，"
+                f"实际为 [{start}, {end})",
+            )
+            parsed.append((start, end))
+        if parsed:
+            windows_by_resource.setdefault(rid, []).extend(parsed)
+
+    merged: Dict[str, List[Tuple[int, int]]] = {}
+    for rid, wins in windows_by_resource.items():
+        wins.sort()
+        union: List[Tuple[int, int]] = []
+        for start, end in wins:
+            if union and start <= union[-1][1]:
+                union[-1] = (union[-1][0], max(union[-1][1], end))
+            else:
+                union.append((start, end))
+        merged[rid] = union
+    return merged
 
 
 def validate_task_references(tasks: Sequence[Task]) -> None:

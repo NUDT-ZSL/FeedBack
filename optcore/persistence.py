@@ -174,6 +174,34 @@ def _verify_schedule(problem: Problem, result: ScheduleResult) -> None:
     if result.cycle is not None:
         return  # 带环证明的不可行结果，结构在输出时另行保证
 
+    if result.infeasibility_type == "window_overload":
+        # release/deadline/资源时间窗不可行证明：校验冲突条目结构与
+        # 引用合法性即可（证明由求解器生成，区间能量逻辑在单元测试覆盖）。
+        if not result.window_conflicts:
+            raise PersistenceError(
+                "infeasibility_type=window_overload 但 window_conflicts 为空"
+            )
+        for conflict in result.window_conflicts:
+            required_keys = {
+                "resource", "window", "available", "required", "tasks"
+            }
+            if not required_keys <= set(conflict):
+                raise PersistenceError("window_conflicts 条目字段不完整")
+            window = conflict["window"]
+            if not (isinstance(window, (list, tuple)) and len(window) == 2):
+                raise PersistenceError("window_conflicts.window 必须是 [start, end]")
+            if conflict["required"] <= conflict["available"]:
+                raise PersistenceError(
+                    "window_conflicts 条目不构成不可行证明: "
+                    f"required={conflict['required']} <= available={conflict['available']}"
+                )
+            for task_id in conflict["tasks"]:
+                if task_id not in tasks_by_id:
+                    raise PersistenceError(
+                        f"window_conflicts 引用了不存在的 task_id {task_id!r}"
+                    )
+        return
+
     if len(result.assignments) != len(tasks_by_id):
         raise PersistenceError(
             f"排程结果不一致: 共 {len(tasks_by_id)} 个任务但分配了 "
@@ -195,11 +223,27 @@ def _verify_schedule(problem: Problem, result: ScheduleResult) -> None:
             raise PersistenceError(
                 f"任务 {task_id!r} 开始 {start} 早于 release {task.release}"
             )
+        if task.deadline is not None and end > task.deadline:
+            raise PersistenceError(
+                f"任务 {task_id!r} 完成 {end} 晚于 deadline {task.deadline}"
+            )
         for dep in task.deps:
             dep_end = result.assignments[dep][1]
             if start < dep_end:
                 raise PersistenceError(
                     f"任务 {task_id!r} 开始 {start} 早于前置 {dep!r} 完成 {dep_end}"
+                )
+        # 任务区间必须落在其资源的声明可用时间窗内。
+        resource_windows = problem.resource_windows.get(task.resource)
+        if resource_windows is not None:
+            inside = any(
+                win_start <= start and end <= win_end
+                for win_start, win_end in resource_windows
+            )
+            if not inside:
+                raise PersistenceError(
+                    f"任务 {task_id!r} 的区间 [{start}, {end}) 超出资源 "
+                    f"{task.resource!r} 的可用时间窗 {resource_windows}"
                 )
         windows[task_id] = (start, end)
 

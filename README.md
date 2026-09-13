@@ -15,7 +15,7 @@ optcore/                # 内核包
   solver.py             # 统一入口 solve()、Problem
   persistence.py        # JSON 快照 save/load 与结果一致性校验
 main.py                 # 命令行入口（逐行 JSON 协议）
-tests/                  # 98 个 unittest 用例
+tests/                  # 125 个 unittest 用例
 ```
 
 ## 快速开始
@@ -82,9 +82,46 @@ r.reasons                   # 两侧原因分别带 [packing]/[schedule] 前缀
 1. Kahn 拓扑排序，就绪任务用堆按 **duration 降序、task_id 字典序**选取；
 2. 开始时间 = `max(release, 全部 deps 完成时间)`，再在该资源的时间线
    区间列表中找最早不冲突的空隙（半开区间 `[start, end)`）；
-3. 依赖成环时用 DFS 三色标记提取环上 task_id 序列（首尾相同）；
+3. 两类不可行证明，用 `ScheduleResult.infeasibility_type` 区分：
+
+   * `"cycle"`：依赖成环，DFS 三色标记给出环上 task_id 序列
+     （`cycle` 字段，首尾相同）；
+   * `"window_overload"`：release/deadline/资源时间窗冲突，冲突明细在
+     `window_conflicts` 字段（见下）。
+
 4. 关键路径：拓扑序上按 duration 加权的最长*依赖*链（资源等待不计入，
    因此其长度可以小于 makespan）。
+
+任务支持可选的 `deadline`（正整数，半开区间，任务须在该时刻前完成；
+缺省为无上界，且要求 `release < deadline`）。资源可声明可用时间窗：
+
+```python
+solve(
+    tasks=[{"task_id": "a", "duration": 5, "resource": "r"},
+           {"task_id": "b", "duration": 5, "resource": "r", "release": 100}],
+    resources=[{"resource": "r", "windows": [[0, 10]]}],
+)
+# feasible=False, infeasibility_type="window_overload"
+```
+
+`window_conflicts` 中每个冲突条目的字段含义：
+
+| 字段 | 含义 |
+|---|---|
+| `resource` | 发生冲突的资源 id |
+| `window` | `[start, end)` 半开时间窗（资源时间轴上的区间） |
+| `available` | 该区间内资源的可用时长（扣除不可用段） |
+| `required` | 只能在该区间内执行的任务总时长；`required > available` 即无解 |
+| `tasks` | 涉及的 task_id 列表 |
+
+判据是 Hall 型区间能量条件：对资源上每个候选区间，所有可行集合
+`[最早可开始时刻 E, deadline)` 被该区间完整包含的任务都必须在此区间内
+串行执行；若其总时长超过区间可用时长则任何排法都不可行。`E` 在拓扑序
+上由 release 与依赖链动态规划得到。该判据是可靠的充分条件（报告即
+无解，不会误报）；列表调度因固定优先级错过 deadline 时，还会运行
+非抢占式精确搜索（DFS 分支定界）兜底，能重排出可行解时正常返回，
+穷尽时附带叶节点阻塞窗证明。两种判定都无法覆盖且搜索超限时，结果
+仍为 `feasible=False`，但 reason 会显式说明“不构成形式化不可行证明”。
 
 ## 持久化
 
@@ -98,10 +135,12 @@ snap.result    # SolveResult
 ```
 
 加载时除重新执行全部输入校验（id 唯一/非空、size 与 capacity 为正、
-duration 正整数、deps 存在/不自依/不重复、无环、group 非空）外，还会
-校验结果与输入一致：容量不超载、同组不拆箱、物品无遗漏、依赖先后、
-release、资源不重叠、makespan 与关键路径合法。文件损坏、JSON 非法、
-字段缺失一律抛 `PersistenceError` 并在信息中定位字段。
+duration 正整数、release < deadline、deps 存在/不自依/不重复、无环、
+group 非空、资源时间窗合法）外，还会校验结果与输入一致：容量不超载、
+同组不拆箱、物品无遗漏、依赖先后、release/deadline、任务区间位于资源
+可用窗内、资源不重叠、makespan 与关键路径合法；对 `window_overload`
+不可行快照还会验证 `required > available` 等证明结构。文件损坏、JSON
+非法、字段缺失一律抛 `PersistenceError` 并在信息中定位字段。
 
 ## 命令行协议
 
@@ -135,6 +174,7 @@ python -m unittest discover -s tests -v
 ```
 
 覆盖：FFD/group 合并、容量恰好装满、下界剪枝与最优性、300+ 随机实例
-对拍暴力枚举、拓扑调度与资源串行、release、资源/release/依赖组合场景、
+对拍暴力枚举、拓扑调度与资源串行、release/deadline、资源可用时间窗、
+时间窗过载的不可行证明、精确搜索重排、资源/release/依赖组合场景、
 依赖成环证明、save/load 往返与逐字段篡改检测、坏文件错误信息、CLI
 子进程协议。
