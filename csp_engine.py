@@ -473,8 +473,11 @@ class CSPEngine:
         engine unsatisfiable until relaxed.
 
         Returns:
-            The set of variable names whose current domains changed
-            (including ``variable`` itself and anything pruned downstream).
+            The set of variable names whose current domains changed, plus
+            ``variable`` itself whenever its declared (base) domain changed
+            or its current domain is empty. In particular, tightening an
+            already-empty domain returns ``{variable}`` rather than an
+            empty set, so callers never mistake it for a no-op.
 
         Raises:
             UnknownVariableError: ``variable`` is not registered.
@@ -483,9 +486,16 @@ class CSPEngine:
         allowed = set(values)
         for value in allowed:
             _check_value(value)
+        old_base = set(var.base_domain)
         var.base_domain &= allowed
+        base_changed = var.base_domain != old_base
         new_domain = self._domains[variable] & allowed
         if new_domain == self._domains[variable]:
+            # Current domain unchanged: nothing to propagate, but still
+            # report the variable if its declared domain moved or it is
+            # stuck empty -- both are states the caller must not miss.
+            if base_changed or not new_domain:
+                return {variable}
             return set()
         self._domains[variable] = new_domain
         arcs = self._downstream_arcs(variable)
@@ -532,11 +542,21 @@ class CSPEngine:
         ]
 
     def _recompute_domains(self) -> Set[str]:
-        """Rebuild current domains from base domains and fully propagate."""
-        old = self._domains
+        """Rebuild current domains from base domains and fully propagate.
+
+        Compares against a snapshot *copy* of the previous domains and
+        treats missing keys on either side as empty sets, so a domain map
+        that is out of sync with the variable registry cannot raise.
+        """
+        old = self._snapshot()
         self._domains = {name: set(var.base_domain) for name, var in self._variables.items()}
         self._propagate()
-        return {name for name in self._variables if self._domains[name] != old[name]}
+        names = set(old) | set(self._domains)
+        return {
+            name
+            for name in names
+            if old.get(name, set()) != self._domains.get(name, set())
+        }
 
     # ------------------------------------------------------------------
     # Propagation (generalized AC-3)
@@ -915,10 +935,46 @@ class CSPEngine:
         ):
             raise LoadError(f"invalid stats field: {stats!r}")
         engine._stats.update(stats)
+        engine._validate_fixpoint()
         return engine
 
+    def _validate_fixpoint(self) -> None:
+        """Check that the restored current domains are an arc-consistency fixpoint.
+
+        Re-runs propagation on a scratch copy of the domains (stats are
+        restored afterwards, so validation does not pollute them). An empty
+        current domain counts as a valid fixpoint: propagation stops there.
+
+        Raises:
+            LoadError: a saved current domain still holds values that
+                propagation would prune, i.e. the file is inconsistent with
+                its own constraints.
+        """
+        original_domains = self._domains
+        original_stats = self._stats
+        try:
+            self._domains = {name: set(dom) for name, dom in original_domains.items()}
+            self._stats = dict(original_stats)
+            self._propagate()
+            if self._domains != original_domains:
+                for name in self._variables:
+                    if self._domains.get(name) != original_domains.get(name):
+                        raise LoadError(
+                            f"variable {name!r}: saved domain "
+                            f"{_sorted_domain(original_domains.get(name, set()))} is not "
+                            "an arc-consistency fixpoint of the constraints"
+                        )
+        finally:
+            self._domains = original_domains
+            self._stats = original_stats
+
     def _load_variable(self, entry: Any, saved_domains: Dict[str, Set[Any]]) -> None:
-        """Validate and register one variable entry from a saved file."""
+        """Validate and register one variable entry from a saved file.
+
+        ``base_domain`` may legitimately be empty here: ``tighten(x, [])``
+        produces exactly that state, and save/load must round-trip it. The
+        non-empty rule is enforced only by :meth:`add_variable`.
+        """
         if not isinstance(entry, dict):
             raise LoadError(f"variable entry must be an object: {entry!r}")
         for key in ("name", "base_domain", "domain"):
@@ -927,13 +983,21 @@ class CSPEngine:
         name = entry["name"]
         base = entry["base_domain"]
         current = entry["domain"]
+        if not isinstance(name, str) or not name:
+            raise LoadError(f"variable name must be a non-empty string: {name!r}")
+        if name in self._variables:
+            raise LoadError(f"duplicate variable name {name!r}")
         if not isinstance(base, list) or not isinstance(current, list):
             raise LoadError(f"variable {name!r}: domains must be lists")
-        self.add_variable(name, base)  # validates name, uniqueness, non-empty
+        for value in base:
+            _check_value(value)
+        self._variables[name] = Variable(name=name, base_domain=set(base))
+        self._constraints_by_var[name] = []
+        self._domains[name] = set(base)
         for value in current:
             _check_value(value)
         current_set = set(current)
-        if not current_set <= self._variables[name].base_domain:
+        if not current_set <= set(base):
             raise LoadError(f"variable {name!r}: current domain is not a subset of base domain")
         saved_domains[name] = current_set
 

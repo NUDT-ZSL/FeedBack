@@ -383,6 +383,59 @@ class TestIncrementalUpdates(unittest.TestCase):
         with self.assertRaises(UnknownVariableError):
             engine.relax("ghost", [1])
 
+    def test_tighten_after_empty_still_reports_variable(self):
+        engine = CSPEngine()
+        engine.add_variable("x", [1, 2, 3])
+        engine.add_variable("y", [1, 2, 3])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "lt"})
+        first = engine.tighten("x", [])
+        self.assertIn("x", first)
+        self.assertEqual(engine.solve().status, "unsat")
+        # Tightening an already-empty domain must not look like a no-op.
+        second = engine.tighten("x", [1, 2])
+        self.assertEqual(second, {"x"})
+        self.assertEqual(engine.current_domain("x"), set())
+        self.assertEqual(engine.solve().status, "unsat")
+
+    def test_tighten_base_only_change_reports_variable(self):
+        engine = CSPEngine()
+        engine.add_variable("x", [1, 2, 3])
+        engine.add_variable("y", [1, 2, 3])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "lt"})
+        # Current domain of x is {1,2} after propagation; tightening to the
+        # same current values still shrinks the declared base domain.
+        affected = engine.tighten("x", [1, 2])
+        self.assertEqual(affected, {"x"})
+        self.assertEqual(engine.base_domain("x"), {1, 2})
+        self.assertEqual(engine.current_domain("x"), {1, 2})
+
+    def test_remove_constraint_with_empty_domain(self):
+        engine = CSPEngine()
+        engine.add_variable("x", [1])
+        engine.add_variable("y", [1])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "ne"})
+        # Propagation wiped x (and stopped there); removal must recompute
+        # cleanly and report exactly the variables whose domains move.
+        self.assertEqual(engine.current_domain("x"), set())
+        affected = engine.remove_constraint("c1")
+        self.assertEqual(affected, {"x"})
+        self.assertEqual(engine.current_domain("x"), {1})
+        self.assertEqual(engine.current_domain("y"), {1})
+        self.assertEqual(engine.solve().status, "sat")
+
+    def test_relax_with_empty_domain(self):
+        engine = CSPEngine()
+        engine.add_variable("x", [1, 2, 3])
+        engine.add_variable("y", [1, 2, 3])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "lt"})
+        engine.tighten("x", [])  # wipes x; propagation halts at the empty domain
+        self.assertEqual(engine.current_domain("x"), set())
+        affected = engine.relax("x", [1])
+        self.assertEqual(affected, {"x"})
+        self.assertEqual(engine.current_domain("x"), {1})
+        self.assertEqual(engine.current_domain("y"), {2, 3})
+        self.assertEqual(engine.solve().status, "sat")
+
 
 class TestPersistence(unittest.TestCase):
     """save/load round-trip and corrupt-file handling."""
@@ -453,11 +506,12 @@ class TestPersistence(unittest.TestCase):
             self._load_data(data)
         self.assertIn("unknown variable", str(ctx.exception))
 
-    def test_load_empty_base_domain(self):
+    def test_load_current_domain_not_subset_of_base(self):
         data = self._valid_state()
-        data["variables"][0]["base_domain"] = []
-        with self.assertRaises(LoadError):
+        data["variables"][0]["domain"] = [99]  # not in base_domain
+        with self.assertRaises(LoadError) as ctx:
             self._load_data(data)
+        self.assertIn("subset", str(ctx.exception))
 
     def test_load_unparseable_relation(self):
         data = self._valid_state()
@@ -473,6 +527,37 @@ class TestPersistence(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(SerializationError):
                 engine.save(os.path.join(tmp, "state.json"))
+
+    def test_load_non_fixpoint_domain_rejected(self):
+        engine = CSPEngine()
+        engine.add_variable("x", [1, 2, 3])
+        engine.add_variable("y", [1, 2, 3])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "lt"})
+        data = engine.to_dict()
+        # x's fixpoint domain is [1, 2]; hand-corrupt the snapshot to keep
+        # a value propagation would have pruned (still a subset of base).
+        for entry in data["variables"]:
+            if entry["name"] == "x":
+                entry["domain"] = [1, 2, 3]
+        with self.assertRaises(LoadError) as ctx:
+            self._load_data(data)
+        self.assertIn("fixpoint", str(ctx.exception))
+
+    def test_save_load_roundtrip_with_empty_domain(self):
+        # An inconsistent (empty-domain) state is a valid fixpoint and must
+        # round-trip without raising.
+        engine = CSPEngine()
+        engine.add_variable("x", [1, 2])
+        engine.add_variable("y", [1, 2])
+        engine.add_constraint("c1", ["x", "y"], relation={"op": "lt"})
+        engine.tighten("x", [])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            engine.save(path)
+            loaded = CSPEngine.load(path)
+        self.assertEqual(engine.to_dict(), loaded.to_dict())
+        self.assertEqual(loaded.current_domain("x"), set())
+        self.assertEqual(loaded.solve().status, "unsat")
 
 
 class TestCli(unittest.TestCase):
