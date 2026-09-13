@@ -371,9 +371,12 @@ class Instance:
     variables: Dict[str, Any]
     entered_at: int
     history: List[HistoryEntry] = field(default_factory=list)
-    # Timers already fired for the current (state, entered_at) stay, so a
-    # timer whose event does not cause a transition is not re-fired forever.
-    timers_consumed: List[List[Any]] = field(default_factory=list)
+    # Indices (into the machine's timer list) of the timers already fired
+    # during the current stay in ``state``.  Cleared only when the instance
+    # actually changes state — a self-loop keeps the stay, and its consumed
+    # timers, alive.  Re-registering a timer appends a new definition with a
+    # fresh index, which is therefore not suppressed by old markers.
+    timers_consumed: List[int] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -442,11 +445,31 @@ class WorkflowEngine:
     def define_machine(self, spec: Dict[str, Any]) -> Machine:
         """Define a new state machine from a plain-dict *spec*.
 
-        :raises DefinitionError: on structural problems or a duplicate id.
+        Guard expressions are parsed eagerly: if any transition's guard has
+        invalid syntax, a :class:`DefinitionError` naming every offending
+        transition location is raised and the machine is not registered.
+        Other semantic problems (dangling states, duplicate priorities, ...)
+        are left for :meth:`validate` to report.
+
+        :raises DefinitionError: on structural problems, invalid guard
+            syntax, or a duplicate machine id.
         """
         machine = machine_from_spec(spec)
         if machine.machine_id in self._machines:
             raise DefinitionError(f"machine {machine.machine_id!r} is already defined")
+        guard_errors: List[str] = []
+        for index, transition in enumerate(machine.transitions):
+            if transition.guard is None:
+                continue
+            try:
+                parse_guard(transition.guard)
+            except GuardSyntaxError as exc:
+                guard_errors.append(f"transitions[{index}]: {exc}")
+        if guard_errors:
+            raise DefinitionError(
+                f"machine {machine.machine_id!r}: invalid guard syntax: "
+                + "; ".join(guard_errors)
+            )
         self._machines[machine.machine_id] = machine
         return machine
 
@@ -469,7 +492,12 @@ class WorkflowEngine:
         self._compensations[action_name] = fn
 
     def register_timer(self, machine_id: str, state: str, after: int, event: str) -> None:
-        """Register a timed transition on an already-defined machine."""
+        """Register a timed transition on an already-defined machine.
+
+        Each registration appends a new timer definition with a fresh
+        identity, so re-registering (even an identical ``state/after/event``
+        triple) re-arms timing for instances already sitting in that state.
+        """
         machine = self._machines.get(machine_id)
         if machine is None:
             raise DefinitionError(f"unknown machine_id {machine_id!r}")
@@ -554,6 +582,13 @@ class WorkflowEngine:
         ``EventResult.reason`` (``instance_not_found``, ``terminal_state``,
         ``no_transition``, ``guard_not_matched``, ``guard_error``,
         ``unregistered_action``, ``action_failed``).
+
+        Matching semantics: among the transitions sharing the instance's
+        ``(current_state, event)``, candidates are tried in ascending
+        ``priority`` and the first whose guard holds wins.  Ties on
+        ``priority`` are a definition error (reported by :meth:`validate`);
+        at runtime they degrade deterministically to *definition order*,
+        because the candidate sort is stable.
         """
         rejected = lambda reason, state=None: EventResult(  # noqa: E731
             ok=False,
@@ -662,8 +697,14 @@ class WorkflowEngine:
             )
 
         instance.state = transition.to_state
-        instance.entered_at = self._clock
-        instance.timers_consumed.clear()
+        if transition.to_state != prev_state:
+            # A real state change ends the current stay: the clock of the new
+            # state starts now and its timers are all un-fired.  A self-loop
+            # keeps the stay alive — entered_at and the consumed-timer marks
+            # are left untouched, so an already-fired timer is not
+            # re-triggered by the loop.
+            instance.entered_at = self._clock
+            instance.timers_consumed.clear()
         action_result = {"status": "ok", "actions": list(applied)}
         instance.history.append(
             HistoryEntry(
@@ -707,11 +748,16 @@ class WorkflowEngine:
         """Advance the logical clock by *n* units and fire all due timers.
 
         Timers fire in deterministic order: ascending deadline, ties broken
-        by ascending ``instance_id``.  Returns one :class:`EventResult` per
-        fired timer, in firing order.
+        by ascending ``instance_id`` (then timer definition index).  Each
+        timer fires at most once per stay of an instance in its state: the
+        timer is marked consumed when it fires and is only re-armed when the
+        instance re-enters the state (or the timer is re-registered).
+        Returns one :class:`EventResult` per fired timer, in firing order.
 
-        :raises ClockError: if *n* is negative (clock rewind) or a zero-delay
-            timer loop exceeds ``MAX_TIMER_FIRES_PER_TICK`` firings.
+        :raises ClockError: if *n* is negative (clock rewind), or if more
+            than ``MAX_TIMER_FIRES_PER_TICK`` firings occur in one tick —
+            a runaway guard for zero-delay timers whose events bounce
+            instances between states (each re-entry legitimately re-arms).
         """
         _require_int(n, "tick(n)", ClockError)
         if n < 0:
@@ -724,35 +770,40 @@ class WorkflowEngine:
             due = self._due_timers()
             if not due:
                 return fired
-            _deadline, instance_id, event = due[0]
+            _deadline, instance_id, timer_index, event = due[0]
             instance = self._instances[instance_id]
-            # Mark as consumed before firing: if the event does not move the
-            # instance (rejected or missing transition) it must not re-fire.
-            instance.timers_consumed.append([instance.state, instance.entered_at, event])
+            # Mark as consumed before firing: the timer fires exactly once
+            # per stay, whatever the outcome of the event is.
+            instance.timers_consumed.append(timer_index)
             fired.append(self.send_event(instance_id, event))
         raise ClockError(
             f"more than {MAX_TIMER_FIRES_PER_TICK} timer firings in one tick; "
-            "check for zero-delay timers whose event re-enters the same state"
+            "check for zero-delay timers whose events bounce instances "
+            "between states"
         )
 
-    def _due_timers(self) -> List[Tuple[int, str, str]]:
-        """All due timers as ``(deadline, instance_id, event)``, sorted."""
-        due: List[Tuple[int, str, str]] = []
+    def _due_timers(self) -> List[Tuple[int, str, int, str]]:
+        """All due timers as ``(deadline, instance_id, timer_index, event)``.
+
+        A timer is due when its state is the instance's current state, its
+        deadline (state-entry time + ``after``) has been reached, and it has
+        not already been consumed during the current stay.  The list is
+        sorted by ``(deadline, instance_id, timer_index)`` for determinism.
+        """
+        due: List[Tuple[int, str, int, str]] = []
         for instance in self._instances.values():
             machine = self._machines.get(instance.machine_id)
             if machine is None:
                 continue
-            for timer in machine.timers:
+            for index, timer in enumerate(machine.timers):
                 if timer.state != instance.state:
                     continue
-                if [instance.state, instance.entered_at, timer.event] in (
-                    instance.timers_consumed
-                ):
+                if index in instance.timers_consumed:
                     continue
                 deadline = instance.entered_at + timer.after
                 if deadline <= self._clock:
-                    due.append((deadline, instance.instance_id, timer.event))
-        due.sort(key=lambda item: (item[0], item[1]))
+                    due.append((deadline, instance.instance_id, index, timer.event))
+        due.sort(key=lambda item: (item[0], item[1], item[2]))
         return due
 
     # -- validation ------------------------------------------------------------
@@ -932,8 +983,14 @@ class WorkflowEngine:
                 )
 
             timers_consumed = raw.get("timers_consumed", [])
-            if not isinstance(timers_consumed, list):
-                raise fail(f"instance {instance_id!r}: timers_consumed must be a list")
+            if not isinstance(timers_consumed, list) or not all(
+                isinstance(i, int) and not isinstance(i, bool)
+                for i in timers_consumed
+            ):
+                raise fail(
+                    f"instance {instance_id!r}: timers_consumed must be a "
+                    "list of timer indices (integers)"
+                )
             instances[instance_id] = Instance(
                 instance_id=instance_id,
                 machine_id=machine.machine_id,

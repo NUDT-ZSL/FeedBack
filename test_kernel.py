@@ -26,6 +26,8 @@ from kernel import (
     InstanceError,
     PersistenceError,
     WorkflowEngine,
+    machine_from_spec,
+    validate_machine,
 )
 from main import handle_command
 
@@ -411,6 +413,84 @@ class TimerTests(unittest.TestCase):
         with self.assertRaises(DefinitionError):
             engine.register_timer("unknown", "s", 1, "go")
 
+    def test_after_zero_timer_fires_once_per_stay(self) -> None:
+        engine = WorkflowEngine()
+        engine.define_machine({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s", "t"],
+            "transitions": [{"from": "s", "to": "t", "event": "go"}],
+            "timers": [{"state": "s", "after": 0, "event": "go"}],
+        })
+        engine.create_instance("m", "i")
+        fired = engine.tick(0)
+        self.assertEqual(len(fired), 1)
+        self.assertTrue(fired[0].ok)
+        self.assertEqual(engine.get_instance("i")["state"], "t")
+        # Consumed: further ticks never re-fire it, no ClockError.
+        self.assertEqual(engine.tick(5), [])
+        self.assertEqual(engine.tick(5), [])
+
+    def test_after_zero_timer_self_loop_fires_once(self) -> None:
+        engine = WorkflowEngine()
+        engine.define_machine({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s"],
+            "transitions": [{"from": "s", "to": "s", "event": "spin"}],
+            "timers": [{"state": "s", "after": 0, "event": "spin"}],
+        })
+        engine.create_instance("m", "i")
+        fired = engine.tick(0)
+        self.assertEqual(len(fired), 1)
+        self.assertTrue(fired[0].ok)
+        # A self-loop does not re-arm the timer and does not restart the stay.
+        self.assertEqual(engine.tick(1), [])
+        self.assertEqual(engine.tick(1), [])
+        self.assertEqual(len(engine.get_history("i")), 1)
+        self.assertEqual(engine.get_instance("i")["entered_at"], 0)
+
+    def test_timer_rearms_after_leaving_and_reentering(self) -> None:
+        engine = WorkflowEngine()
+        engine.define_machine({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s", "t"],
+            "transitions": [
+                {"from": "s", "to": "t", "event": "timeout"},
+                {"from": "t", "to": "s", "event": "back"},
+            ],
+            "timers": [{"state": "s", "after": 3, "event": "timeout"}],
+        })
+        engine.create_instance("m", "i")
+        engine.tick(3)  # deadline 3: timeout fires, s -> t
+        self.assertEqual(engine.get_instance("i")["state"], "t")
+        engine.send_event("i", "back")  # re-enter s at clock 3
+        self.assertEqual(engine.tick(2), [])  # new deadline is 6, not yet
+        fired = engine.tick(1)
+        self.assertEqual(len(fired), 1)
+        self.assertTrue(fired[0].ok)
+        self.assertEqual(engine.get_instance("i")["state"], "t")
+
+    def test_reregistered_timer_gets_a_fresh_identity(self) -> None:
+        engine = WorkflowEngine()
+        engine.define_machine({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s"],
+            "transitions": [],  # the timer event never moves the instance
+        })
+        engine.register_timer("m", "s", 0, "ping")
+        engine.create_instance("m", "i")
+        self.assertEqual(len(engine.tick(0)), 1)  # fires once, then consumed
+        self.assertEqual(engine.tick(0), [])
+        # Explicit re-registration re-arms the timer for the same stay.
+        engine.register_timer("m", "s", 0, "ping")
+        fired = engine.tick(0)
+        self.assertEqual(len(fired), 1)
+        self.assertEqual(fired[0].instance_id, "i")
+        self.assertEqual(engine.tick(0), [])
+
 
 class ValidateTests(unittest.TestCase):
     """Consistency validation collects every diagnostic, sorted."""
@@ -421,8 +501,9 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(engine.validate("order"), [])
 
     def test_all_problem_kinds_reported(self) -> None:
-        engine = WorkflowEngine()
-        engine.define_machine({
+        # Built via machine_from_spec (not engine.define_machine, which
+        # rejects bad guards eagerly) so validate can aggregate everything.
+        machine = machine_from_spec({
             "machine_id": "broken",
             "initial": "nowhere",
             "states": [{"name": "a"}, {"name": "dead", "terminal": True}],
@@ -435,7 +516,7 @@ class ValidateTests(unittest.TestCase):
             ],
             "timers": [{"state": "limbo", "after": 1, "event": "e5"}],
         })
-        diagnostics = engine.validate("broken")
+        diagnostics = validate_machine(machine)
         messages = "\n".join(d.message for d in diagnostics)
         self.assertIn("initial state 'nowhere'", messages)
         self.assertIn("target state 'ghost'", messages)
@@ -455,20 +536,80 @@ class ValidateTests(unittest.TestCase):
         with self.assertRaises(DefinitionError):
             engine.validate("nope")
 
-    def test_guard_error_surfaces_at_send_time(self) -> None:
+    def test_define_rejects_guard_syntax_error_with_locations(self) -> None:
+        engine = WorkflowEngine()
+        with self.assertRaises(DefinitionError) as ctx:
+            engine.define_machine({
+                "machine_id": "m",
+                "initial": "s",
+                "states": ["s", "t"],
+                "transitions": [
+                    {"from": "s", "to": "t", "event": "a", "guard": "x =="},
+                    {"from": "s", "to": "t", "event": "b", "guard": "ok == 1"},
+                    {"from": "s", "to": "t", "event": "c", "guard": "(y"},
+                ],
+            })
+        message = str(ctx.exception)
+        # Every offending transition location is reported, valid ones are not.
+        self.assertIn("transitions[0]", message)
+        self.assertNotIn("transitions[1]", message)
+        self.assertIn("transitions[2]", message)
+        # The machine was not registered.
+        with self.assertRaises(DefinitionError):
+            engine.validate("m")
+
+    def test_validate_still_aggregates_guard_diagnostics(self) -> None:
+        machine = machine_from_spec({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s", "t"],
+            "transitions": [
+                {"from": "s", "to": "t", "event": "a", "guard": "x =="},
+                {"from": "s", "to": "t", "event": "b", "guard": "(y"},
+                {"from": "s", "to": "ghost", "event": "c"},
+            ],
+        })
+        diagnostics = validate_machine(machine)
+        guard_diags = [d for d in diagnostics if "guard" in d.message]
+        self.assertEqual([d.location for d in guard_diags],
+                         ["transitions[0]", "transitions[1]"])
+        self.assertTrue(any("ghost" in d.message for d in diagnostics))
+
+    def test_guard_evaluation_error_surfaces_at_send_time(self) -> None:
         engine = WorkflowEngine()
         engine.define_machine({
             "machine_id": "m",
             "initial": "s",
             "states": ["s", "t"],
             "transitions": [
-                {"from": "s", "to": "t", "event": "go", "guard": "x =="},
+                {"from": "s", "to": "t", "event": "go", "guard": "missing == 1"},
             ],
         })
         engine.create_instance("m", "i", {"x": 1})
         result = engine.send_event("i", "go")
         self.assertFalse(result.ok)
         self.assertIn("guard_error", result.reason)
+
+    def test_same_priority_falls_back_to_definition_order(self) -> None:
+        engine = WorkflowEngine()
+        engine.define_machine({
+            "machine_id": "m",
+            "initial": "s",
+            "states": ["s", "first", "second"],
+            "transitions": [
+                {"from": "s", "to": "first", "event": "go", "priority": 0},
+                {"from": "s", "to": "second", "event": "go", "priority": 0},
+            ],
+        })
+        # validate flags the duplicate priority...
+        diagnostics = engine.validate("m")
+        self.assertTrue(any("priority 0" in d.message for d in diagnostics))
+        # ...and runtime behaviour is deterministic: definition order wins.
+        for instance_id in ("i1", "i2", "i3"):
+            engine.create_instance("m", instance_id)
+            result = engine.send_event(instance_id, "go")
+            self.assertTrue(result.ok)
+            self.assertEqual(result.state, "first")
 
 
 class PersistenceTests(unittest.TestCase):
