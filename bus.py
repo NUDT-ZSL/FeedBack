@@ -39,20 +39,40 @@ class OverflowPolicy(str, Enum):
 
 
 class UnsubscribePolicy(str, Enum):
-    """订阅者注销时其待投递 / 未确认消息的处理策略。"""
+    """订阅者注销时其待投递 / 未确认消息的处理策略。
 
-    DROP = "drop"
-    """直接丢弃该订阅者持有的消息（默认）。
+    规范值为 ``cleanup`` 与 ``transfer``；``drop`` 作为 ``cleanup`` 的
+    旧别名保留（旧快照里的 ``"drop"`` 仍可正常加载，行为一致）。
+    """
+
+    CLEANUP = "cleanup"
+    """直接清理该订阅者持有的消息，并在状态中累计清理条数。
 
     消息本体仅在没有任何其他订阅者持有时才删除，其他订阅者队列中的副本保留。
     """
 
     TRANSFER = "transfer"
-    """转移给在线、过滤器匹配、队列未满、且尚未持有该消息的其他订阅者。
+    """转移给在线、同主题（过滤器匹配）、队列未满、且尚未持有该消息的
+    其他订阅者，并在状态中累计转移条数。
 
-    转移的消息带 ``redelivered`` 标记；没有任何合格接收者时丢弃。
-    若消息本来就被其他订阅者持有，则仅解除注销者的引用（计入 retained）。
+    消息按原优先级全序转移（接收方队列重新按优先级排序，不依赖追加顺序）；
+    没有任何合格接收者时归入 cleanup 清理。若消息本来就被其他订阅者持有，
+    则仅解除注销者的引用（计入 retained，不计清理/转移）。
     """
+
+    DROP = "cleanup"
+    """``cleanup`` 的旧名别名（``UnsubscribePolicy.DROP is CLEANUP``）。
+
+    旧快照/旧调用里出现的字符串 ``"drop"`` 由 :meth:`_missing_` 归一到
+    ``cleanup``；枚举序列化为规范值 ``"cleanup"``。
+    """
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Optional[UnsubscribePolicy]":
+        # 旧快照/旧参数中的 "drop" 归一到 cleanup，行为完全一致。
+        if value == "drop":
+            return cls.CLEANUP
+        return None
 
 
 @dataclass(frozen=True)
@@ -184,7 +204,7 @@ class MessageBus:
         self,
         clock: Optional[Callable[[], int]] = None,
         overflow_policy: "OverflowPolicy | str" = OverflowPolicy.REJECT,
-        unsubscribe_policy: "UnsubscribePolicy | str" = UnsubscribePolicy.DROP,
+        unsubscribe_policy: "UnsubscribePolicy | str" = UnsubscribePolicy.CLEANUP,
     ) -> None:
         if clock is not None and not callable(clock):
             raise BusError("clock must be a zero-argument callable returning an integer")
@@ -213,6 +233,9 @@ class MessageBus:
         self.backpressure_count: Dict[str, int] = {}
         self.redelivered_count: Dict[str, int] = {}
         self.dropped_count: int = 0
+        # 注销导致的消息去向累计计数（总线级，注销后仍可在 state 中查到）。
+        self.unsubscribe_cleanup_count: int = 0
+        self.unsubscribe_transfer_count: int = 0
 
     # ------------------------------------------------------------------ #
     # 时钟
@@ -397,28 +420,39 @@ class MessageBus:
 
     def unsubscribe(self, sub_id: str,
                     policy: "Optional[UnsubscribePolicy | str]" = None) -> Dict[str, Any]:
-        """注销订阅者。
+        """注销订阅者，并按策略处理其待投递 / 未确认消息。
 
-        :param policy: 覆盖总线默认的 :class:`UnsubscribePolicy`。
-        :returns: ``{sub_id, policy, transferred, retained, dropped}``，
-            三个列表均按 msg_id 字典序。处理顺序按该订阅者的投递历史，
-            先投递过的先处理。
+        :param policy: 覆盖总线默认的 :class:`UnsubscribePolicy`；
+            ``"cleanup"``（规范名，旧名 ``"drop"`` 等价）或 ``"transfer"``。
+        :returns: ``{sub_id, policy, transferred, retained, dropped,
+            transferred_count, cleaned_up_count}``；id 列表按字典序。
+
+            - transfer：每条消息转给在线、同主题（过滤器匹配）、队列未满且
+              尚未持有它的其他订阅者；接收方之后按优先级全序取消息，
+              原优先级顺序保持；其他订阅者本就持有的计入 retained；
+              无处可去的落入 dropped（等同 cleanup）。
+            - cleanup：该订阅者持有的消息全部清理；其他订阅者的副本保留，
+              消息本体仅在无人持有时回收（不静默泄漏）。
+            - cleaned_up_count/transferred_count 同时累计到总线级计数器，
+              订阅者注销后仍可通过 :meth:`get_state` 查询。
         """
         self._require_sub(sub_id)
         try:
             pol = UnsubscribePolicy(policy) if policy is not None else self.unsubscribe_policy
-        except ValueError as e:
+        except ValueError:
             raise BusError(f"invalid unsubscribe policy: {policy}") from None
         now = self.now()
 
         held = self._held_ids(sub_id)  # 已去重，投递历史顺序 + 队列补遗
+        ever_delivered = set(self._delivery_order[sub_id])
         transferred: List[str] = []
         retained: List[str] = []
         dropped: List[str] = []
 
         for msg_id in held:
             if pol is UnsubscribePolicy.TRANSFER:
-                outcome = self._transfer_on_unsubscribe(sub_id, msg_id, now)
+                redeliver = msg_id in ever_delivered
+                outcome = self._transfer_on_unsubscribe(sub_id, msg_id, now, redeliver)
                 if outcome == "transferred":
                     transferred.append(msg_id)
                 elif outcome == "retained":
@@ -439,12 +473,17 @@ class MessageBus:
         # 注销者的数据结构已删除，此时再判断消息本体是否可以回收。
         for msg_id in held:
             self._gc_message(msg_id)
+
+        self.unsubscribe_transfer_count += len(transferred)
+        self.unsubscribe_cleanup_count += len(dropped)
         return {
             "sub_id": sub_id,
             "policy": pol.value,
             "transferred": sorted(transferred),
             "retained": sorted(retained),
             "dropped": sorted(dropped),
+            "transferred_count": len(transferred),
+            "cleaned_up_count": len(dropped),
         }
 
     def _held_ids(self, sub_id: str) -> List[str]:
@@ -466,11 +505,17 @@ class MessageBus:
         ordered.extend(extras)
         return ordered
 
-    def _transfer_on_unsubscribe(self, from_sub: str, msg_id: str, now: int) -> str:
+    def _transfer_on_unsubscribe(self, from_sub: str, msg_id: str, now: int,
+                                 redeliver: bool = False) -> str:
         """注销转移（只改引用关系，消息本体的 GC 由调用方统一做）。
 
+        :param redeliver: 该消息在注销者处是否已真实投递过。投过则标记
+            ``redelivered``；从未投出的消息保持“首次投递”语义，不打标记。
         :returns: "transferred"（放入了新订阅者队列）、
             "retained"（其他订阅者本来就持有）或 "dropped"（无处可去）。
+
+        消息被追加到接收方队列末尾，接收方 deliver 时按优先级全序排序，
+        因此转移保持原优先级顺序、不依赖追加次序。
         """
         if msg_id not in self._messages:
             return "dropped"
@@ -491,7 +536,7 @@ class MessageBus:
                 self._release_ref(msg_id, from_sub)
                 return "retained"
             if len(q) < other_sub.max_queue:
-                q.append(_Pending(msg_id, now, redelivered=True))
+                q.append(_Pending(msg_id, now, redelivered=redeliver))
                 self._refs.setdefault(msg_id, set()).add(sid)
                 self._release_ref(msg_id, from_sub)
                 return "transferred"
@@ -551,6 +596,10 @@ class MessageBus:
                 q.append(_Pending(mid, now, redelivered=True))
                 queued.add(mid)
             returned.append(mid)
+        if returned:
+            # 重投递按“批次”计数：一次掉线、或一次超时扫描命中该订阅者，
+            # 无论涉及多少条消息都只算 1；每条消息的 redelivered 标记仍保留。
+            self.redelivered_count[sub_id] = self.redelivered_count.get(sub_id, 0) + 1
         return returned
 
     def check_timeouts(self, sub_id: Optional[str] = None) -> List[str]:
@@ -624,8 +673,8 @@ class MessageBus:
             delivery_no = seen_before + 1
             inflight[p.msg_id] = _Inflight(p.msg_id, now, delivery_no, p.redelivered)
             order.append(p.msg_id)
-            if p.redelivered:
-                self.redelivered_count[sub_id] += 1
+            # redelivered 标记只表示该条为重投；批次计数在回队/超时时统一加，
+            # 这里不再逐条累加，避免“一次掉线 = N 次重投”的口径错误。
             m = self._messages[p.msg_id]
             d = m.to_dict()
             d["redelivered"] = p.redelivered
@@ -672,14 +721,20 @@ class MessageBus:
         }
 
     def ack_up_to(self, sub_id: str, msg_id: str) -> Dict[str, Any]:
-        """按该订阅者的投递历史，确认从最早一条到 ``msg_id``（含）的消息。
+        """按该订阅者的投递历史，确认从最早一条到 ``msg_id``（含）的前缀。
 
-        分界位置取该消息**第一次**被投递的位置：重投不会改变游标语义，
-        因为重投按同样的顺序再次呈现消息（例如掉线后只重新取到部分消息时，
-        ack_up_to 不会越过该消息去确认其后仍在等待的消息）。前缀中当前
-        仍未确认（in-flight 或掉线回队后在待投递队列中）的消息被确认；
-        早已确认的跳过（幂等）。``msg_id`` 从未投递给该订阅者时不做任何
-        事、不报错，返回 ``found=false``。返回的 ``acked_ids`` 是本次
+        分界位置取该消息**第一次**被投递的位置；重投不会改变游标语义。
+
+        关键约束：只确认当前**真实在途**（已投递给该订阅者、尚未确认，
+        即 inflight）且落在前缀内的消息。**不会**触碰待投递队列中尚未
+        （重新）投出的消息，也不会把它们加入已确认集合——否则掉线重投后
+        队列里还没投出的消息会被误确认、从此再也投递不到。因此典型用法是
+        先重新 ``deliver`` 再 ``ack_up_to``。
+
+        早已确认的前缀消息跳过（幂等）；确认一个更早的位移也是幂等空操作。
+        ``msg_id`` 从未投递给该订阅者时不做任何事、不报错，返回
+        ``found=false``；目标消息本身尚在待投递队列时 ``found`` 仍为 true
+        （它曾投递过），但本次只确认在途部分。返回的 ``acked_ids`` 是本次
         调用新确认的消息，按 msg_id 字典序。
         """
         self._require_sub(sub_id)
@@ -688,23 +743,16 @@ class MessageBus:
             return {"sub_id": sub_id, "msg_id": msg_id, "found": False, "acked_ids": []}
         prefix = set(order[: order.index(msg_id) + 1])
 
+        inflight = self._inflight[sub_id]
         newly: Set[str] = set()
-        for mid in prefix:
-            if mid in self._inflight[sub_id]:
-                del self._inflight[sub_id][mid]
+        # 只处理当前真实在途的消息；遍历快照以安全删除。
+        for mid in list(inflight):
+            if mid in prefix:
+                del inflight[mid]
                 self._release_ref(mid, sub_id)
+                self._acked[sub_id].add(mid)
                 newly.add(mid)
-            self._acked[sub_id].add(mid)
-
-        q = self._pending[sub_id]
-        kept: List[_Pending] = []
-        for p in q:
-            if p.msg_id in prefix:
-                self._release_ref(p.msg_id, sub_id)
-                newly.add(p.msg_id)  # 集合保证与 in-flight 重复时只算一次
-            else:
-                kept.append(p)
-        self._pending[sub_id] = kept
+        # 注意：刻意不遍历 _pending——待投递队列里尚未投出的消息不能被确认。
 
         for mid in newly:
             self._gc_message(mid)
@@ -761,7 +809,10 @@ class MessageBus:
             "subscribers": len(self._subs),
             "subscriptions": subscribers,
             "dropped_count": self.dropped_count,
+            "unsubscribe_cleanup_count": self.unsubscribe_cleanup_count,
+            "unsubscribe_transfer_count": self.unsubscribe_transfer_count,
             "overflow_policy": self.overflow_policy.value,
+            # 规范序列化为 cleanup；旧快照里的 "drop" 加载时自动归一。
             "unsubscribe_policy": self.unsubscribe_policy.value,
         }
 
@@ -824,6 +875,9 @@ class MessageBus:
                 "dropped": self.dropped_count,
                 "backpressure": dict(self.backpressure_count),
                 "redelivered": dict(self.redelivered_count),
+                # 注销去向累计计数（旧快照缺省时按 0 加载，格式向后兼容）。
+                "unsubscribe_cleanup": self.unsubscribe_cleanup_count,
+                "unsubscribe_transfer": self.unsubscribe_transfer_count,
             },
             "messages": [self._messages[k].to_dict()
                          for k in sorted(self._messages)],
@@ -1099,6 +1153,14 @@ class MessageBus:
                 if not isinstance(val, int) or isinstance(val, bool) or val < 0:
                     raise BusError(f"counter '{name}.{cid}' must be a non-negative integer")
                 target[cid] = val
+
+        # 注销去向累计计数：旧快照缺省按 0 加载。
+        for name, attr in (("unsubscribe_cleanup", "unsubscribe_cleanup_count"),
+                           ("unsubscribe_transfer", "unsubscribe_transfer_count")):
+            val = counters.get(name, 0)
+            if not isinstance(val, int) or isinstance(val, bool) or val < 0:
+                raise BusError(f"counter '{name}' must be a non-negative integer")
+            setattr(bus, attr, val)
 
     @classmethod
     def load(cls, path: str,

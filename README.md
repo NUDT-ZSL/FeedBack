@@ -9,7 +9,7 @@
 - 文件：
   - `bus.py` —— 总线内核（`MessageBus` / `Message` / 策略枚举 / `BusError`）
   - `main.py` —— 命令行入口，stdin 逐行读 JSON 命令，stdout 逐行输出 JSON
-  - `test_bus.py` —— 54 个 unittest 用例
+  - `test_bus.py` —— 69 个 unittest 用例
 
 ---
 
@@ -67,7 +67,7 @@ b.check_timeouts()      # -> ["m1"]，超时未确认回到待投递队列
 ### 命令行
 
 ```bash
-python main.py [--overflow reject|drop_lowest] [--unsubscribe drop|transfer]
+python main.py [--overflow reject|drop_lowest] [--unsubscribe cleanup|transfer|drop]
 ```
 
 stdin 每行一个 JSON 命令，stdout 每行一个 JSON 结果，空行忽略；
@@ -141,10 +141,14 @@ $ printf '%s\n' \
     `acked=false, known=false`。
 - `ack_up_to(sub_id, msg_id)` 按该订阅者的**投递历史**确认从最早一条到
   `msg_id`（含）的前缀：
-  - 分界位置取该消息**第一次**投递的位置。重投按相同顺序再次呈现消息，
-    因此即使掉线后只重新取到了前几条，游标也不会越过它们去误确认
-    后面仍在等待的消息；
-  - 前缀里当前在未确认集合或已回队（待投递）中的消息都会被确认；
+  - 分界位置取该消息**第一次**投递的位置；
+  - **只确认当前真实在途（已投递、未确认，即 inflight）且落在前缀内的
+    消息**。不会触碰待投递队列里还没（重新）投出的消息，也不会把它们
+    标记为已确认——所以掉线重投后，在重新 `deliver` 之前调用 `ack_up_to`
+    不会让队列里的消息“被确认后再也投递不到”。典型用法是先重新取消息、
+    再按游标确认；
+  - 重复确认、确认一个更早的位移都是幂等空操作（`acked_ids=[]`），
+    不报错；
   - 从未投递过的 `msg_id` → 无操作、不报错，返回 `found=false`；
   - 返回本次**新确认**的 `acked_ids`（字典序）。
 - **重投递**触发方式（消息带 `redelivered=true`，`delivery_no` 递增）：
@@ -156,6 +160,12 @@ $ printf '%s\n' \
   - 注销转移（见下）。
 - 回队后再次按同一全序投递，因此**保留原优先级顺序**。已确认集合与
   投递历史在掉线/上线后保留，不丢确认位移。
+- **计数口径**（见 `get_state`）：
+  - `backpressure_count` = `deliver` 因 inflight 打满而被挡下（返回空）
+    的调用次数；离线、`max_messages<=0`、部分容量都不计；
+  - `redelivered_count` = **重投递批次数**：一次掉线（无论回队几条）
+    或一次命中的超时扫描各算 1，不是按消息条数；每条消息是否重投仍看
+    它自己的 `redelivered` 标记。
 
 ---
 
@@ -164,11 +174,12 @@ $ printf '%s\n' \
 ### 背压（消费太慢）
 
 - 达到 `max_inflight` 时 `deliver` 返回空且 `backpressure=true`，
-  同时该订阅者的 `backpressure_count` +1；ack 释放名额后自动恢复。
+  同时该订阅者的 `backpressure_count` +1（**口径：一次被挡下的在线
+  deliver 调用计一次**，与返回多少条无关）；ack 释放名额后自动恢复。
 - `max_inflight=0`：永远背压，一条都拿不到（每次在线 deliver 计一次背压）。
 - 离线期间的 deliver 返回空但**不计**背压（背压统计只针对“想拿但满了”）。
 - 取走部分消息后仍有空位时 `backpressure=false`，只有真正打满后再取
-  才计背压。
+  才计背压；`max_messages<=0` 是调用方明确不取，也不计。
 
 ### 队列溢出（`publish` 时待投递队列达到 `max_queue`）
 
@@ -211,21 +222,30 @@ $ printf '%s\n' \
   `set_online`）。过滤器/阈值的变更只影响**之后新发布**的消息，
   已在队列中的消息仍会投递。调小 `max_queue` / `max_inflight` 不会
   立即裁剪现状，限制在下次入队/投递时生效。
-- `unsubscribe(sub_id, policy=...)` 注销，默认策略可被参数覆盖：
+- `unsubscribe(sub_id, policy=...)` 注销，默认策略可被参数覆盖。
+  注销返回 `{sub_id, policy, transferred, retained, dropped,
+  transferred_count, cleaned_up_count}`（列表按 msg_id 字典序），并把
+  清理/转移条数累计到总线级计数器，**订阅者注销后仍可在 state 中对账**：
 
-#### `unsubscribe = "drop"`（默认）
+#### `unsubscribe = "cleanup"`（默认；旧名 `drop` 等价）
 
-- 丢弃该订阅者持有的待投递/未确认消息；消息若还被其他订阅者持有则
-  本体保留，否则删除——**不会静默泄漏**。
+- 直接清理该订阅者持有的待投递/未确认消息，`cleaned_up_count` 给出条数；
+- 消息若还被其他订阅者持有则本体保留（它们的副本不受影响），否则回收
+  ——**不会静默泄漏**；
+- 旧名 `"drop"` 与旧快照里的 `"drop"` 仍被接受并自动归一为 `"cleanup"`。
 
 #### `unsubscribe = "transfer"`
 
-- 对每条消息，按 sub_id 字典序找一个**在线、过滤器匹配、队列未满、
-  且尚未持有该消息**的其他订阅者，放入其待投递队列并标 `redelivered`；
+- 对每条消息，按 sub_id 字典序找一个**在线、同主题（过滤器匹配）、
+  队列未满、且尚未持有该消息**的其他订阅者放入其待投递队列；
+- 接收方之后按优先级全序取消息，因此**转移保持原优先级顺序**；
+- 标记规则：注销者**曾投递过**的消息（inflight 或回队）转移后带
+  `redelivered`；从未投出的待投递消息保持“首次投递”语义，不打标记、
+  `delivery_no` 从 1 开始；
 - 若其他订阅者本来就持有该消息（待投递/未确认/已确认），记为
-  `retained`（不重复入队）；
-- 没有任何合格接收者才丢弃。
-- 返回 `{transferred, retained, dropped}`。
+  `retained`（不重复入队，**不计**清理/转移计数）；
+- 没有任何合格接收者时落入 `dropped`，按 cleanup 清理并计
+  `cleaned_up_count`；成功转移计 `transferred_count`。
 
 消息本体的回收条件：没有任何订阅者持有（pending/inflight）、确认过、
 或留在投递历史中。例如“无订阅者时发布”的消息会保留以便查询。
@@ -250,10 +270,16 @@ $ printf '%s\n' \
       }
     },
     "dropped_count": 0,
+    "unsubscribe_cleanup_count": 0,
+    "unsubscribe_transfer_count": 0,
     "overflow_policy": "reject",
-    "unsubscribe_policy": "drop"
+    "unsubscribe_policy": "cleanup"
   }
   ```
+
+  其中 `redelivered_count` 是**重投递批次数**（掉线一次 / 一次命中的超时
+  扫描各计 1）；`unsubscribe_*_count` 是注销导致的累计清理/转移条数，
+  订阅者被注销后仍保留在总线上方便对账。
 
 - `get_message(msg_id)`：消息详情，不存在返回 `None`。
 - `list_subscriptions(topic=None)`：订阅某主题的 sub_id
@@ -265,10 +291,15 @@ $ printf '%s\n' \
 ## 8. 持久化（save / load）
 
 `save(path)` 写一个 UTF-8、缩进 2 的 JSON 文件，包含：版本号、逻辑时钟、
-主题注册表、两种策略、计数器（dropped / 每订阅者背压与重投次数）、
-全部仍保留的消息、每个订阅者的配置 / 待投递队列（含 `enqueued_at`、
-`redelivered`）/ 未确认集合（含 `delivered_at`、`delivery_no`）/
-投递历史 / 已确认集合。
+主题注册表、两种策略、计数器（dropped / 每订阅者背压次数与重投递批次数 /
+注销清理与转移累计条数）、全部仍保留的消息、每个订阅者的配置 / 待投递
+队列（含 `enqueued_at`、`redelivered`）/ 未确认集合（含 `delivered_at`、
+`delivery_no`）/ 投递历史 / 已确认集合。
+
+**格式兼容**：不引入新版本号。注销策略序列化为规范值 `"cleanup"` /
+`"transfer"`；加载旧快照里的 `"drop"` 会自动归一为 `"cleanup"`，旧快照
+缺少 `unsubscribe_cleanup` / `unsubscribe_transfer` 两个计数器时按 0 加载，
+旧快照 load 后行为与当前一致。
 
 `load(path)`（或 `from_dict(data)`）重建前做**严格一致性校验**，
 任何问题都抛带明确位置的 `BusError`，绝不静默吞掉：
@@ -306,7 +337,7 @@ $ printf '%s\n' \
 |---|---|---|
 | `publish` | `msg_id,topic,priority,payload?,produced_at?` | 也可整体传 `"message": {...}`；缺省 `produced_at` 取当前时钟 |
 | `subscribe` | `sub_id`；`topics?,min_priority?,max_inflight?,max_queue?,ack_timeout?,online?` | 已存在则更新配置 |
-| `unsubscribe` | `sub_id`；`policy?` | `drop` / `transfer` 覆盖默认 |
+| `unsubscribe` | `sub_id`；`policy?` | `cleanup`（默认，旧名 `drop` 等价）/ `transfer` 覆盖默认 |
 | `deliver` | `sub_id`；`max_messages?`（默认 1） | 拉取投递 |
 | `ack` | `sub_id,msg_id` | 幂等 |
 | `ack_up_to` | `sub_id,msg_id` | 按投递历史确认前缀 |
@@ -353,13 +384,17 @@ $ printf '%s\n' \
 | `max_inflight=0` | 永远背压，deliver 恒空 |
 | `max_queue=0` | 不接收任何新消息（drop_lowest 也无效） |
 | 确认不存在的消息 | 不报错；`ack` 返回 `known=false`，`ack_up_to` 返回 `found=false` |
-| 重复确认 | 不报错（幂等） |
+| 重复确认 / 确认更早位移 | 不报错（幂等空操作） |
 | 掉线后重投顺序 | 与首次投递顺序一致，全部带 `redelivered` |
 | 掉线期间发布 | 正常进入离线订阅者队列，上线即可取 |
+| 掉线后、重投前 `ack_up_to` | 只确认在途前缀；待投递消息不受影响、仍可重投 |
 | 超时 | `check_timeouts()` 或 deliver 时惰性回收，带 `redelivered` |
-| 注销（drop） | 仅删本订阅者副本；最后持有者注销才回收消息本体 |
-| 注销（transfer） | 在线/匹配/未满者接收，否则 retained，否则 dropped |
-| save 后 load | 状态（含时钟、策略、计数器、队列、历史、标记）一致 |
+| 背压计数 | 按被挡下的 deliver 调用次数（离线/不取/部分容量不计） |
+| 重投递计数 | 按批次：掉线一次或一次命中的超时扫描计 1 |
+| 注销（cleanup，旧名 drop） | 清理本订阅者副本并计数；最后持有者注销才回收消息本体 |
+| 注销（transfer） | 在线/同主题/未满者按优先级顺序接收；曾投出的带 redelivered，未投出的不打标记；本就持有算 retained；无处可去算 dropped 并计数 |
+| save 后 load | 状态（含时钟、策略归一、计数器、队列、历史、标记）一致 |
+| 旧快照（`"drop"`、缺新计数器） | 自动归一为 cleanup、新计数器按 0 加载，行为与当前一致 |
 | 坏快照文件 | 抛/返回带行列号或字段位置的清晰错误 |
 
 ---
@@ -370,22 +405,29 @@ $ printf '%s\n' \
 python -m unittest test_bus -v
 ```
 
-覆盖（54 个用例）：
+覆盖（69 个用例）：
 
 - 优先级/时间/msg_id 全序投递、publish 不立即投递、主题与阈值过滤、
   未确认不重复投递、重复 msg_id、非法字段与不可序列化 payload；
-- ack 幂等、确认未知消息、`ack_up_to` 前缀与掉线回队后的游标语义；
-- inflight 背压与计数、`max_inflight=0`、`max_messages=0`、
-  离线不计背压、部分容量不误报背压、部分重投后游标不前移；
+- ack 幂等、确认未知消息、`ack_up_to` 前缀确认、重复/更早位移幂等、
+  以及核心回归：掉线重投**前**与部分重投后 `ack_up_to` 都不会误确认
+  待投递队列里尚未投出的消息；
+- inflight 背压与计数（按被挡下的 deliver 次数）、`max_inflight=0`、
+  `max_messages=0`、离线不计背压、部分容量不误报背压；
+- 重投递计数按**批次**（一次掉线 / 一次命中的超时扫描各计 1，多轮
+  掉线/超时循环既不产生重复队列条目也不重复计数）；
 - reject / drop_lowest（淘汰旧消息、新消息最低、时间与 id 并列裁决、
   淘汰有投递历史的消息后快照仍合法）；
 - 掉线回队顺序与 `redelivered` 标记、离线期间排队、注入时钟的超时
-  回收、外部时钟禁用 tick、离线跳过超时扫描、多轮掉线/超时循环不产生
-  重复队列条目（回归）；
-- 注销 drop/transfer（含离线/满队列/已持有）、消息本体 GC 防泄漏；
+  回收、外部时钟禁用 tick、离线跳过超时扫描；
+- 注销 cleanup（含旧名 drop 别名与旧快照归一）/ transfer（在线同主题
+  未满接收、保持优先级顺序、曾投出/未投出的 redelivered 区分、
+  离线/满队列/已持有 retained、无处可去计入清理）、计数跨注销累计、
+  消息本体 GC 防泄漏；
 - 重复 subscribe 更新配置且保留状态与在线状态；
 - 空总线、无订阅者发布、时钟推进；
-- 快照 dict/file 往返一致、空总线快照、十余种一致性校验错误、
+- 快照 dict/file 往返一致、空总线快照、注销计数持久化、**旧快照
+  （`"drop"`、缺新计数器）兼容加载**、十余种一致性校验错误、
   坏 JSON 行列号、缺文件；
 - CLI 完整会话、错误 JSON 化且不中断、CLI save/load、坏文件 load、
-  非法策略名也以 JSON 错误返回而不崩溃。
+  非法策略名也以 JSON 错误返回而不崩溃、CLI cleanup/transfer 注销。

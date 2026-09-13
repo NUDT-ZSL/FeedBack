@@ -14,7 +14,8 @@ publish       必填 msg_id/topic/priority，可选 payload/produced_at；
               也可用 {"cmd":"publish","message":{...}} 整体传入。
 subscribe     必填 sub_id；可选 topics(字符串数组或 null)、min_priority、
               max_inflight、max_queue、ack_timeout、online。
-unsubscribe   必填 sub_id；可选 policy(drop|transfer) 覆盖总线默认策略。
+unsubscribe   必填 sub_id；可选 policy(cleanup|transfer，旧名 drop 等价
+              cleanup) 覆盖总线默认策略。
 deliver       必填 sub_id；可选 max_messages(默认 1)。
 ack           必填 sub_id, msg_id。
 ack_up_to     必填 sub_id, msg_id。
@@ -72,7 +73,7 @@ class BusSession:
     """持有一个总线实例，逐命令执行并返回可 JSON 化的结果字典。"""
 
     def __init__(self, overflow: str = OverflowPolicy.REJECT.value,
-                 unsubscribe: str = UnsubscribePolicy.DROP.value) -> None:
+                 unsubscribe: str = UnsubscribePolicy.CLEANUP.value) -> None:
         self.bus = MessageBus(overflow_policy=overflow,
                               unsubscribe_policy=unsubscribe)
 
@@ -196,7 +197,7 @@ class BusSession:
 
 def process_lines(lines: Iterable[str],
                   overflow: str = OverflowPolicy.REJECT.value,
-                  unsubscribe: str = UnsubscribePolicy.DROP.value) -> List[str]:
+                  unsubscribe: str = UnsubscribePolicy.CLEANUP.value) -> List[str]:
     """逐行执行命令，返回与输入（非空行）一一对应的 JSON 结果行。
 
     供库调用与测试使用；单行命令的错误不会中断后续命令。
@@ -233,10 +234,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                         default=OverflowPolicy.REJECT.value,
                         help="publish overflow policy when a queue is full "
                              "(default: reject)")
-    parser.add_argument("--unsubscribe", choices=[p.value for p in UnsubscribePolicy],
-                        default=UnsubscribePolicy.DROP.value,
-                        help="message policy when a subscriber unsubscribes "
-                             "(default: drop)")
+    parser.add_argument("--unsubscribe",
+                        choices=["cleanup", "transfer", "drop"],
+                        default=UnsubscribePolicy.CLEANUP.value,
+                        help="message policy when a subscriber unsubscribes: "
+                             "cleanup (default), transfer; 'drop' is an alias "
+                             "of cleanup")
     args = parser.parse_args(argv)
 
     for line in process_lines(sys.stdin, overflow=args.overflow,

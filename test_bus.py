@@ -146,18 +146,92 @@ class AckTests(unittest.TestCase):
         self.assertFalse(r["found"])
         self.assertEqual(r["acked_ids"], [])
 
-    def test_ack_up_to_after_offline_requeue(self):
+    def test_ack_up_to_repeated_and_earlier_offset_idempotent(self):
+        # 重复确认、以及确认一个更早的位移，都是幂等空操作且不报错。
         b = MessageBus()
         b.subscribe("s", max_inflight=10)
         for mid in ["m1", "m2", "m3"]:
             b.publish(make_msg(mid, priority=5, produced_at=0))
         b.deliver("s", 10)
-        b.set_online("s", False)  # 全部回队
-        # 位移仍在：ack_up_to m2 应确认回队中的 m1,m2。
+        r1 = b.ack_up_to("s", "m3")
+        self.assertEqual(r1["acked_ids"], ["m1", "m2", "m3"])
+        # 重复：没有新确认。
+        r2 = b.ack_up_to("s", "m3")
+        self.assertTrue(r2["found"])
+        self.assertEqual(r2["acked_ids"], [])
+        # 更早的位移 m1：也没有新确认、不报错。
+        r3 = b.ack_up_to("s", "m1")
+        self.assertTrue(r3["found"])
+        self.assertEqual(r3["acked_ids"], [])
+        st = b.get_state()["subscriptions"]["s"]
+        self.assertEqual(st["inflight"], 0)
+        self.assertEqual(st["acked"], 3)
+
+    def test_ack_up_to_does_not_touch_unredelivered_after_offline(self):
+        # 核心回归：掉线后部分消息还没重新投出时，ack_up_to 不能误确认它们。
+        b = MessageBus()
+        b.subscribe("s", max_inflight=10)
+        for mid in ["m1", "m2", "m3"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 10)
+        b.ack("s", "m1")          # 先确认掉 m1
+        b.set_online("s", False)  # m2,m3 回队（pending）
+        b.set_online("s", True)
+        # 只重新投出 m2（max_messages=1）。
+        self.assertEqual(ids(b.deliver("s", 1)), ["m2"])
+        # 游标确认到 m2：只能确认在途的 m2；m3 仍在队列，不能被误确认。
+        r = b.ack_up_to("s", "m2")
+        self.assertEqual(r["acked_ids"], ["m2"])
+        st = b.get_state()["subscriptions"]["s"]
+        self.assertEqual(st["pending"], 1)
+        self.assertEqual(st["inflight"], 0)
+        # m3 之后仍能正常投递，且是重投标记。
+        m3 = b.deliver("s", 1)["messages"][0]
+        self.assertEqual(m3["msg_id"], "m3")
+        self.assertTrue(m3["redelivered"])
+
+    def test_ack_up_to_after_offline_requeue(self):
+        # 新语义：ack_up_to 只确认真实在途(inflight)的前缀。掉线回队后，
+        # 在重新投递之前调用 ack_up_to 不得确认仍在待投递队列里的消息。
+        b = MessageBus()
+        b.subscribe("s", max_inflight=10)
+        for mid in ["m1", "m2", "m3"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 10)
+        b.set_online("s", False)  # 全部回队（此时都是 pending）
+        # 还没重新投递：ack_up_to 不应误杀待投递消息。
+        r = b.ack_up_to("s", "m2")
+        self.assertTrue(r["found"])
+        self.assertEqual(r["acked_ids"], [])
+        st = b.get_state()["subscriptions"]["s"]
+        self.assertEqual(st["pending"], 3)
+        self.assertEqual(st["inflight"], 0)
+        # 全部消息仍可重新投递。
+        b.set_online("s", True)
+        self.assertEqual(ids(b.deliver("s", 10)), ["m1", "m2", "m3"])
+        # 重新投递后 ack_up_to 正常确认在途前缀。
+        r2 = b.ack_up_to("s", "m2")
+        self.assertEqual(r2["acked_ids"], ["m1", "m2"])
+        self.assertEqual(ids(b.deliver("s", 10)), [])
+
+    def test_ack_up_to_partial_after_partial_redelivery(self):
+        # 掉线后只重新投递了前两条，ack_up_to 到 m2 只确认这两条在途消息，
+        # 队列里尚未投出的 m3,m4 不受影响。
+        b = MessageBus()
+        b.subscribe("s", max_inflight=2, max_queue=10)
+        for mid in ["m1", "m2", "m3", "m4"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 2)  # m1,m2 inflight；m3,m4 仍在队列（从未投出）
+        b.set_online("s", False)  # m1,m2 回队
+        b.set_online("s", True)
+        # 队列现在 [m3,m4,m1,m2]，按优先级同档 + 同 produced_at 按 msg_id：
+        # 但全序键下 m1<m2<m3<m4，先取到 m1,m2。
+        got = b.deliver("s", 2)["messages"]
+        self.assertEqual([m["msg_id"] for m in got], ["m1", "m2"])
         r = b.ack_up_to("s", "m2")
         self.assertEqual(r["acked_ids"], ["m1", "m2"])
-        b.set_online("s", True)
-        self.assertEqual(ids(b.deliver("s", 10)), ["m3"])
+        # m3,m4 依旧待投递且不会被误确认。
+        self.assertEqual(ids(b.deliver("s", 10)), ["m3", "m4"])
 
 
 class BackpressureTests(unittest.TestCase):
@@ -215,6 +289,57 @@ class BackpressureTests(unittest.TestCase):
         self.assertEqual(ids(r), ["m1", "m2"])
         self.assertFalse(r["backpressure"])
         self.assertEqual(b.get_state()["subscriptions"]["s"]["backpressure_count"], 0)
+
+    def test_backpressure_counts_blocked_deliver_calls(self):
+        # 口径：背压次数 == deliver 因 inflight 打满而被挡下（返回空）的调用次数。
+        b = MessageBus()
+        b.subscribe("s", max_inflight=2, max_queue=10)
+        for mid in ["m1", "m2", "m3", "m4"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 2)  # 打满，不计数（这次取到了消息）
+        b.deliver("s", 2)  # 被挡 #1
+        b.deliver("s", 2)  # 被挡 #2
+        b.deliver("s", 0)  # max_messages=0 不算背压
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["backpressure_count"], 2)
+        b.ack("s", "m1")
+        r = b.deliver("s", 2)  # 恢复，取到 m3，不计背压
+        self.assertEqual(ids(r), ["m3"])
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["backpressure_count"], 2)
+
+    def test_redelivery_batch_count_one_per_offline_cycle(self):
+        # 一次掉线无论回队多少条消息，redelivered_count 只 +1。
+        b = MessageBus()
+        b.subscribe("s", max_inflight=10)
+        for mid in ["m1", "m2", "m3", "m4"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 10)
+        b.set_online("s", False)  # 4 条一起回队 = 1 个批次
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
+        b.set_online("s", True)
+        b.deliver("s", 10)
+        b.set_online("s", False)  # 再来一次 = 2 个批次
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 2)
+        # 取回的每条消息仍各自带 redelivered 标记。
+        b.set_online("s", True)
+        got = b.deliver("s", 10)["messages"]
+        self.assertTrue(all(m["redelivered"] for m in got))
+
+    def test_timeout_batch_count_one_per_scan_with_due(self):
+        # 一次 check_timeouts 命中同一订阅者多条消息只算 1 个批次；
+        # 没有到期消息的扫描不计数。
+        clock = _ManualClock(0)
+        b = MessageBus(clock=clock)
+        b.subscribe("s", max_inflight=10, ack_timeout=5)
+        for mid in ["m1", "m2", "m3"]:
+            b.publish(make_msg(mid, priority=5, produced_at=0))
+        b.deliver("s", 10)
+        clock.advance(4)
+        self.assertEqual(b.check_timeouts(), [])  # 未到期，不计
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 0)
+        clock.advance(1)
+        due = b.check_timeouts()  # 3 条同批到期
+        self.assertEqual(sorted(due), ["m1", "m2", "m3"])
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
 
     def test_ack_up_to_after_partial_redelivery(self):
         # 重投后只取到部分消息，ack_up_to 不应越过游标误确认后面的消息。
@@ -351,7 +476,8 @@ class OfflineRecoveryTests(unittest.TestCase):
                          ["m2", "m4", "m3", "m1"])
         self.assertTrue(all(m["redelivered"] for m in second if m["msg_id"] != "m4"))
         self.assertFalse(next(m for m in second if m["msg_id"] == "m4")["redelivered"])
-        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 3)
+        # 一次掉线 = 一个重投递批次，无论涉及几条消息都只计 1。
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
 
     def test_set_online_same_state_is_noop(self):
         b = MessageBus()
@@ -407,6 +533,8 @@ class OfflineRecoveryTests(unittest.TestCase):
         st = b.get_state()["subscriptions"]["s"]
         self.assertEqual(st["inflight"], 2)
         self.assertEqual(st["pending"], 0)
+        # 3 次掉线 = 3 个重投递批次（不是 3*2 条）。
+        self.assertEqual(st["redelivered_count"], 3)
 
     def test_repeated_timeout_cycles_never_duplicate_queue(self):
         clock = _ManualClock(0)
@@ -420,6 +548,8 @@ class OfflineRecoveryTests(unittest.TestCase):
             due = b.check_timeouts()
             self.assertEqual(sorted(due), ["m1", "m2"])  # 不重复
         self.assertEqual(sorted(ids(b.deliver("s", 10))), ["m1", "m2"])
+        # 3 次超时扫描 = 3 个重投递批次。
+        self.assertEqual(b.get_state()["subscriptions"]["s"]["redelivered_count"], 3)
 
 
 class _ManualClock:
@@ -435,14 +565,16 @@ class _ManualClock:
 
 
 class UnsubscribeTests(unittest.TestCase):
-    def test_drop_policy_keeps_other_subscribers(self):
-        b = MessageBus()
+    def test_cleanup_policy_keeps_other_subscribers(self):
+        b = MessageBus()  # 默认 cleanup
         b.subscribe("a")
         b.subscribe("b")
         b.publish(make_msg("m1"))
         r = b.unsubscribe("a")
-        self.assertEqual(r["policy"], "drop")
+        self.assertEqual(r["policy"], "cleanup")  # 规范名
         self.assertEqual(r["dropped"], ["m1"])
+        self.assertEqual(r["cleaned_up_count"], 1)
+        self.assertEqual(r["transferred_count"], 0)
         # b 仍持有，消息本体还在。
         self.assertIsNotNone(b.get_message("m1"))
         self.assertEqual(ids(b.deliver("b", 5)), ["m1"])
@@ -450,26 +582,68 @@ class UnsubscribeTests(unittest.TestCase):
         with self.assertRaises(BusError):
             b.deliver("a", 1)
         self.assertEqual(b.list_subscriptions(), ["b"])
+        # 注销后计数仍在总线状态中可查。
+        st = b.get_state()
+        self.assertEqual(st["unsubscribe_cleanup_count"], 1)
+        self.assertEqual(st["unsubscribe_transfer_count"], 0)
 
-    def test_drop_gcs_message_when_last_holder(self):
+    def test_drop_alias_equals_cleanup(self):
+        # 旧名 "drop" 仍是合法策略，行为与 cleanup 完全一致。
+        b = MessageBus(unsubscribe_policy="drop")
+        self.assertIs(b.unsubscribe_policy, UnsubscribePolicy.CLEANUP)
+        b.subscribe("a")
+        b.publish(make_msg("m1"))
+        r = b.unsubscribe("a", policy="drop")
+        self.assertEqual(r["policy"], "cleanup")  # 归一到规范值
+        self.assertEqual(r["cleaned_up_count"], 1)
+        self.assertIsNone(b.get_message("m1"))
+
+    def test_cleanup_gcs_message_when_last_holder(self):
         b = MessageBus()
         b.subscribe("a")
         b.publish(make_msg("m1"))
         b.deliver("a")
-        b.unsubscribe("a")
+        r = b.unsubscribe("a")
+        self.assertEqual(r["cleaned_up_count"], 1)
         self.assertIsNone(b.get_message("m1"))  # 没有静默泄漏
 
-    def test_transfer_policy(self):
+    def test_transfer_policy_delivered_message(self):
         b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
         b.subscribe("a", topics=["t"])
         b.publish(make_msg("m1", topic="t"))
-        b.deliver("a")  # m1 在 a 的 inflight
+        b.deliver("a")  # m1 已投递给 a（inflight）
         b.subscribe("b", topics=["t"])  # 发布后才订阅，因此不持有 m1
+        r = b.unsubscribe("a")
+        self.assertEqual(r["transferred"], ["m1"])
+        self.assertEqual(r["transferred_count"], 1)
+        self.assertEqual(r["cleaned_up_count"], 0)
+        self.assertEqual(b.get_state()["unsubscribe_transfer_count"], 1)
+        red = b.deliver("b")["messages"][0]
+        self.assertEqual(red["msg_id"], "m1")
+        self.assertTrue(red["redelivered"])  # 曾投递过 -> 重投标记
+
+    def test_transfer_never_delivered_message_not_flagged(self):
+        # 从未投出的待投递消息转移后保持“首次投递”语义，不打 redelivered。
+        b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
+        b.subscribe("a", topics=["t"])
+        b.publish(make_msg("m1", topic="t"))  # 只入队给 a，未 deliver
+        b.subscribe("b", topics=["t"])        # 发布后才订阅，不持有 m1
         r = b.unsubscribe("a")
         self.assertEqual(r["transferred"], ["m1"])
         red = b.deliver("b")["messages"][0]
         self.assertEqual(red["msg_id"], "m1")
-        self.assertTrue(red["redelivered"])
+        self.assertFalse(red["redelivered"])
+        self.assertEqual(red["delivery_no"], 1)
+
+    def test_transfer_preserves_priority_order(self):
+        # 转移多条不同优先级消息，接收方取消息时仍按全序（优先级降序…）。
+        b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
+        b.subscribe("a", topics=["t"], max_inflight=10)
+        for mid, pri, ts in [("low", 1, 0), ("high", 9, 5), ("mid", 5, 2)]:
+            b.publish(make_msg(mid, topic="t", priority=pri, produced_at=ts))
+        b.subscribe("b", topics=["t"], max_inflight=10)
+        b.unsubscribe("a")
+        self.assertEqual(ids(b.deliver("b", 10)), ["high", "mid", "low"])
 
     def test_transfer_skips_offline_and_full_queue(self):
         b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
@@ -480,6 +654,9 @@ class UnsubscribeTests(unittest.TestCase):
         r = b.unsubscribe("a")
         self.assertEqual(r["dropped"], ["m1"])
         self.assertEqual(r["transferred"], [])
+        # 无处可去 -> 计入清理计数（而非转移计数）。
+        self.assertEqual(r["cleaned_up_count"], 1)
+        self.assertEqual(b.get_state()["unsubscribe_cleanup_count"], 1)
         self.assertIsNone(b.get_message("m1"))
 
     def test_transfer_retained_when_already_held(self):
@@ -491,12 +668,37 @@ class UnsubscribeTests(unittest.TestCase):
         b.deliver("b", 10)  # b 也持有 m1
         r = b.unsubscribe("a")
         self.assertEqual(r["retained"], ["m1"])
+        # retained 既不算转移也不算清理。
+        self.assertEqual(r["transferred_count"], 0)
+        self.assertEqual(r["cleaned_up_count"], 0)
+        st = b.get_state()
+        self.assertEqual(st["unsubscribe_transfer_count"], 0)
+        self.assertEqual(st["unsubscribe_cleanup_count"], 0)
         self.assertIsNotNone(b.get_message("m1"))
+
+    def test_cleanup_counts_accumulate_across_unsubscribes(self):
+        b = MessageBus()
+        b.subscribe("a")
+        b.subscribe("b")
+        b.publish(make_msg("m1"))
+        b.publish(make_msg("m2"))
+        b.unsubscribe("a")  # a 持有 m1,m2 -> 清理 2（b 也持有，本体保留）
+        b.unsubscribe("b")  # b 持有的 m1,m2 成为最后副本 -> 再清理 2
+        st = b.get_state()
+        self.assertEqual(st["unsubscribe_cleanup_count"], 4)
+        self.assertIsNone(b.get_message("m1"))
+        self.assertIsNone(b.get_message("m2"))
 
     def test_unsubscribe_unknown(self):
         b = MessageBus()
         with self.assertRaises(BusError):
             b.unsubscribe("ghost")
+
+    def test_unsubscribe_invalid_policy(self):
+        b = MessageBus()
+        b.subscribe("a")
+        with self.assertRaises(BusError):
+            b.unsubscribe("a", policy="explode")
 
 
 class StateAndQueryTests(unittest.TestCase):
@@ -592,6 +794,42 @@ class SnapshotTests(unittest.TestCase):
             path = os.path.join(d, "e.json")
             b.save(path)
             b2 = MessageBus.load(path)
+        self.assertEqual(b2.get_state(), b.get_state())
+
+    def test_old_snapshot_drop_policy_and_missing_counters_compatible(self):
+        # 旧格式：policies.unsubscribe == "drop"，counters 里没有
+        # unsubscribe_cleanup / unsubscribe_transfer 两个新字段。
+        b = MessageBus()
+        b.subscribe("s", topics=["t"])
+        b.publish(make_msg("m1", topic="t", priority=1))
+        data = b.to_dict()
+        data["policies"]["unsubscribe"] = "drop"  # 旧值
+        for key in ("unsubscribe_cleanup", "unsubscribe_transfer"):
+            self.assertIn(key, data["counters"])
+            del data["counters"][key]
+
+        b2 = MessageBus.from_dict(data)
+        # 旧 "drop" 归一到 cleanup 语义。
+        self.assertIs(b2.unsubscribe_policy, UnsubscribePolicy.CLEANUP)
+        self.assertEqual(b2.get_state()["unsubscribe_policy"], "cleanup")
+        # 缺失的新计数器按 0 加载。
+        self.assertEqual(b2.get_state()["unsubscribe_cleanup_count"], 0)
+        self.assertEqual(b2.get_state()["unsubscribe_transfer_count"], 0)
+        # 功能与 cleanup 一致：注销清理，消息本体回收。
+        b2.unsubscribe("s")
+        self.assertEqual(b2.get_state()["unsubscribe_cleanup_count"], 1)
+        self.assertIsNone(b2.get_message("m1"))
+
+    def test_unsubscribe_counters_persist_across_snapshot(self):
+        b = MessageBus(unsubscribe_policy=UnsubscribePolicy.CLEANUP)
+        b.subscribe("a")
+        b.publish(make_msg("m1"))
+        b.unsubscribe("a")  # cleanup +1
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "u.json")
+            b.save(path)
+            b2 = MessageBus.load(path)
+        self.assertEqual(b2.get_state()["unsubscribe_cleanup_count"], 1)
         self.assertEqual(b2.get_state(), b.get_state())
 
     def _write_and_expect_error(self, data, fragment):
@@ -799,6 +1037,45 @@ class CLITests(unittest.TestCase):
         b.subscribe("s")
         with self.assertRaises(BusError):
             b.unsubscribe("s", policy="nope")
+
+    def test_cli_cleanup_unsubscribe_and_state_counts(self):
+        lines = [
+            '{"cmd":"subscribe","sub_id":"a","topics":["t"]}',
+            '{"cmd":"subscribe","sub_id":"b","topics":["t"]}',
+            '{"cmd":"publish","msg_id":"m1","topic":"t","priority":1,"produced_at":0}',
+            '{"cmd":"unsubscribe","sub_id":"a","policy":"cleanup"}',
+            '{"cmd":"state"}',
+            '{"cmd":"unsubscribe","sub_id":"b","policy":"drop"}',  # 旧别名
+            '{"cmd":"state"}',
+            '{"cmd":"get","msg_id":"m1"}',
+        ]
+        out = [json.loads(x) for x in climain.process_lines(lines)]
+        self.assertTrue(out[3]["ok"])
+        self.assertEqual(out[3]["cleaned_up_count"], 1)
+        self.assertEqual(out[3]["policy"], "cleanup")
+        # a 注销后状态里仍能看到清理计数（b 还持有 m1，本体未回收）。
+        self.assertEqual(out[4]["unsubscribe_cleanup_count"], 1)
+        self.assertIn("b", out[4]["subscriptions"])
+        # b 用旧名 drop 注销，再清理 1 条；m1 成为最后副本被回收。
+        self.assertEqual(out[6]["unsubscribe_cleanup_count"], 2)
+        self.assertFalse(out[7]["exists"])
+
+    def test_cli_transfer_unsubscribe_preserves_order(self):
+        lines = [
+            '{"cmd":"subscribe","sub_id":"a","topics":["t"],"max_inflight":10}',
+            '{"cmd":"publish","msg_id":"lo","topic":"t","priority":1,"produced_at":0}',
+            '{"cmd":"publish","msg_id":"hi","topic":"t","priority":9,"produced_at":0}',
+            '{"cmd":"subscribe","sub_id":"b","topics":["t"]}',
+            '{"cmd":"unsubscribe","sub_id":"a","policy":"transfer"}',
+            '{"cmd":"deliver","sub_id":"b","max_messages":10}',
+            '{"cmd":"state"}',
+        ]
+        out = [json.loads(x) for x in climain.process_lines(lines)]
+        self.assertEqual(out[4]["transferred"], ["hi", "lo"])
+        self.assertEqual([m["msg_id"] for m in out[5]["messages"]], ["hi", "lo"])
+        self.assertEqual(out[6]["unsubscribe_transfer_count"], 2)
+        # 转移的是从未投出的消息，不带 redelivered。
+        self.assertTrue(all(not m["redelivered"] for m in out[5]["messages"]))
 
 
 if __name__ == "__main__":
