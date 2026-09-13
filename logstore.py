@@ -246,7 +246,19 @@ class LogStore:
     # --------------------------------------------------------------- recovery
 
     def _recover(self) -> None:
-        """Validate on-disk state against the manifest and repair crash damage."""
+        """Validate on-disk state against the manifest and repair crash damage.
+
+        Two crash half-states are recognized and healed silently:
+
+        * a manifest entry whose segment file is already gone is the debris of
+          an eviction that crashed between deleting the files and updating the
+          manifest — the eviction is completed (entry dropped, counted);
+        * files the manifest does not reference are the debris of a crashed
+          roll/append/compact/eviction and are discarded.
+
+        Genuine corruption (size/count/ts-range/index mismatches in files that
+        *are* present) still raises :class:`IntegrityError`.
+        """
         data = self._load_manifest()
         config = data["config"]
         self._max_segment_bytes = int(config["max_segment_bytes"])
@@ -258,11 +270,29 @@ class LogStore:
         self._active_id = data.get("active_segment_id")
 
         known_files = set()
+        healed = False
         for entry in data["segments"]:
             meta = _SegmentMeta.from_dict(entry)
+            if not os.path.exists(self._seg_path(meta.segment_id)):
+                if meta.sealed:
+                    # Crashed eviction: the data file is gone but the manifest
+                    # still referenced the segment. Complete the eviction.
+                    self._evicted_count += 1
+                    leftover = self._idx_path(meta.segment_id)
+                    if os.path.exists(leftover):
+                        os.remove(leftover)
+                    healed = True
+                    continue
+                if meta.record_count > 0:
+                    raise IntegrityError(
+                        f"segment {meta.segment_id}: data file is missing")
+                # An empty active segment lost its file: recreate it.
+                open(self._seg_path(meta.segment_id), "wb").close()
+                healed = True
             self._segments[meta.segment_id] = meta
             known_files.add(self._seg_path(meta.segment_id))
-            known_files.add(self._idx_path(meta.segment_id))
+            if meta.sealed:
+                known_files.add(self._idx_path(meta.segment_id))
             self._validate_segment_on_disk(meta)
 
         if self._active_id is not None and self._active_id not in self._segments:
@@ -273,6 +303,9 @@ class LogStore:
         for path in self._list_segment_files():
             if path not in known_files:
                 os.remove(path)
+
+        if healed:
+            self._save_manifest()
 
     def _validate_segment_on_disk(self, meta: _SegmentMeta) -> None:
         """Check one segment file (and its index) against manifest metadata."""
@@ -343,15 +376,21 @@ class LogStore:
         meta.last_ts = prev_ts
 
         if meta.sealed:
-            index = self._read_index_file(meta)
-            if len(index) != len(offsets):
-                raise IntegrityError(
-                    f"segment {sid}: index entry count mismatch "
-                    f"(index {len(index)}, expected {len(offsets)} for "
-                    f"{meta.record_count} records)")
-            if index != offsets:
-                raise IntegrityError(
-                    f"segment {sid}: index entries do not match segment records")
+            if os.path.exists(self._idx_path(sid)):
+                index = self._read_index_file(meta)
+                if len(index) != len(offsets):
+                    raise IntegrityError(
+                        f"segment {sid}: index entry count mismatch "
+                        f"(index {len(index)}, expected {len(offsets)} for "
+                        f"{meta.record_count} records)")
+                if index != offsets:
+                    raise IntegrityError(
+                        f"segment {sid}: index entries do not match segment records")
+            else:
+                # The index is fully derivable from the segment file (e.g. a
+                # crash deleted it after the manifest committed): rebuild it.
+                index = offsets
+                self._write_index_file(sid, offsets)
             self._index_cache[sid] = index
 
     def _read_index_file(self, meta: _SegmentMeta) -> List[Tuple[int, int]]:
@@ -396,6 +435,17 @@ class LogStore:
         self._active_id = meta.segment_id
         return meta
 
+    def _write_index_file(self, segment_id: str,
+                          entries: List[Tuple[int, int]]) -> None:
+        """Atomically write a sparse index file (temp file + rename)."""
+        tmp = self._idx_path(segment_id) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fp:
+            for ts, offset in entries:
+                fp.write(json.dumps([ts, offset]) + "\n")
+            fp.flush()
+            os.fsync(fp.fileno())
+        os.replace(tmp, self._idx_path(segment_id))
+
     def _seal(self, meta: _SegmentMeta) -> None:
         """Seal the active segment: build its sparse index and mark read-only."""
         entries: List[Tuple[int, int]] = []
@@ -412,13 +462,7 @@ class LogStore:
                 prev_ts = ts
                 offset += len(line)
                 count += 1
-        tmp = self._idx_path(meta.segment_id) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fp:
-            for ts, offset in entries:
-                fp.write(json.dumps([ts, offset]) + "\n")
-            fp.flush()
-            os.fsync(fp.fileno())
-        os.replace(tmp, self._idx_path(meta.segment_id))
+        self._write_index_file(meta.segment_id, entries)
         meta.sealed = True
         self._index_cache[meta.segment_id] = entries
 
@@ -547,16 +591,20 @@ class LogStore:
             matches = matches[:limit]
         return matches
 
-    def _scan_segment(self, meta: _SegmentMeta, start: int) -> Iterator[Dict[str, Any]]:
+    def _scan_segment(self, meta: _SegmentMeta,
+                      start: Optional[int] = None) -> Iterator[Dict[str, Any]]:
         """Yield records of a segment, using the sparse index when possible.
 
         The index maps every Nth record's ts to its byte offset. It is only
-        used to skip ahead when the whole segment's ts sequence is monotonic
-        (``meta.ts_sorted``); otherwise the scan starts at the beginning.
-        Per-record filtering happens either way, so results are always exact.
+        used to skip ahead when ``start`` is a real query lower bound *and*
+        the whole segment's ts sequence is monotonic (``meta.ts_sorted``).
+        Callers that need every record (compaction, dump) must pass
+        ``start=None``: ts may be any integer including negatives, so no
+        numeric bound is a safe "read everything" sentinel. Per-record
+        filtering happens either way, so query results are always exact.
         """
         offset = 0
-        if meta.sealed and meta.ts_sorted:
+        if start is not None and meta.sealed and meta.ts_sorted:
             index = self._index_cache.get(meta.segment_id)
             if index is None:
                 index = self._read_index_file(meta)
@@ -698,7 +746,8 @@ class LogStore:
         prev_ts: Optional[int] = None
         with open(tmp_log, "wb") as out:
             for meta in metas:
-                for record in self._scan_segment(meta, 0):
+                # Full scan: start=None, never skip via the sparse index.
+                for record in self._scan_segment(meta):
                     line = _encode_record(record)
                     if new_meta.record_count % new_meta.index_interval == 0:
                         index.append((record["ts"], new_meta.byte_size))
@@ -715,14 +764,8 @@ class LogStore:
                     prev_ts = ts
             out.flush()
             os.fsync(out.fileno())
-        tmp_idx = self._idx_path(new_id) + ".tmp"
-        with open(tmp_idx, "w", encoding="utf-8") as fp:
-            for ts, offset in index:
-                fp.write(json.dumps([ts, offset]) + "\n")
-            fp.flush()
-            os.fsync(fp.fileno())
+        self._write_index_file(new_id, index)
         os.replace(tmp_log, self._seg_path(new_id))
-        os.replace(tmp_idx, self._idx_path(new_id))
 
         for meta in metas:
             del self._segments[meta.segment_id]
@@ -779,7 +822,7 @@ class LogStore:
         records: List[Dict[str, Any]] = []
         for meta in self._sorted_segments():
             if meta.record_count:
-                records.extend(self._scan_segment(meta, 0))
+                records.extend(self._scan_segment(meta))
         records.sort(key=lambda r: (r["ts"], r["record_id"]))
         return records
 

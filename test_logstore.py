@@ -433,6 +433,216 @@ class TestScale(StoreTestCase):
         self.assertEqual(store2.dump(), live)
 
 
+class TestCompactRegression(StoreTestCase):
+    """Regression: compact must never lose records, even for ts-overlapping
+    segments with negative ts that qualify for sparse-index skips."""
+
+    def _read_manifest(self):
+        with open(os.path.join(self.dir, "manifest.json"), encoding="utf-8") as fp:
+            return json.load(fp)
+
+    def test_compact_sorted_segments_with_negative_ts(self):
+        # Records sorted within each segment (so ts_sorted=True and the sparse
+        # index would be used), negative ts, overlapping ranges across segments.
+        store = self.open_store(max_segment_bytes=600, index_interval=2)
+        store.append([make_record(f"a{i}", ts)
+                      for i, ts in enumerate([-100, -80, -60, -40, -20, 50])])
+        store.append([make_record(f"b{i}", ts)
+                      for i, ts in enumerate([-90, -70, -50, -30, -10, 60])])
+        store.append([make_record(f"c{i}", ts)
+                      for i, ts in enumerate([5, 15, 25, 35, 45, 55])])
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        self.assertGreaterEqual(len(sealed), 2)
+        before = store.dump()
+        self.assertEqual(len(before), 18)
+        store.compact(sealed[:2])
+        self.assertEqual(store.dump(), before)
+        self.assertEqual(store.query(-200, 100), before)
+        # Manifest statistics must match the actual merged segment file.
+        store.close()
+        store2 = self.open_store()  # reopen re-validates everything
+        self.assertEqual(store2.dump(), before)
+
+    def test_compact_overlapping_segments_randomized(self):
+        store = self.open_store(max_segment_bytes=400, index_interval=3)
+        rng = random.Random(31337)
+        for i in range(600):
+            store.append([make_record(f"r{i:04d}", rng.randrange(-500, 500),
+                                      level=rng.choice(["INFO", "WARN"]),
+                                      message=f"m {rng.randrange(100)}")])
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        self.assertGreater(len(sealed), 10)
+        before_dump = store.dump()
+        probes = []
+        for _ in range(40):
+            a = rng.randrange(-600, 400)
+            b = a + rng.randrange(0, 300)
+            probes.append((a, b, rng.choice([None, "INFO", "WARN"]),
+                           rng.choice([None, "m 1", "m 5"]), rng.choice([None, 3, 50])))
+        before_queries = [store.query(a, b, level=lv, keyword=kw, limit=lm)
+                          for a, b, lv, kw, lm in probes]
+        store.compact(sealed[: len(sealed) // 2])
+        self.assertEqual(store.dump(), before_dump)
+        after_queries = [store.query(a, b, level=lv, keyword=kw, limit=lm)
+                         for a, b, lv, kw, lm in probes]
+        self.assertEqual(before_queries, after_queries)
+        # Manifest record counts and byte sizes must match the files on disk.
+        manifest = self._read_manifest()
+        for entry in manifest["segments"]:
+            path = os.path.join(self.dir, "segments", entry["segment_id"] + ".log")
+            with open(path, "rb") as fp:
+                lines = fp.readlines()
+            self.assertEqual(len(lines), entry["record_count"])
+            self.assertEqual(sum(len(l) for l in lines), entry["byte_size"])
+        store.close()
+        store2 = self.open_store()
+        self.assertEqual(store2.dump(), before_dump)
+
+    def test_dump_and_save_round_trip_with_negative_ts(self):
+        store = self.open_store(max_segment_bytes=400, index_interval=2)
+        for i, ts in enumerate([-300, -100, -200, 0, -50, 100, -1, 7]):
+            store.append([make_record(f"n{i}", ts)])
+        before = store.dump()
+        self.assertEqual(len(before), 8)
+        snapshot = os.path.join(self.tmp.name, "snap.json")
+        store.save(snapshot)
+        store.load(snapshot)
+        self.assertEqual(store.dump(), before)
+
+
+class TestEvictionAtomicity(StoreTestCase):
+    """Regression: eviction is atomic; recovery heals both crash half-states."""
+
+    def _fill(self, n=20):
+        store = self.open_store(max_segment_bytes=400, index_interval=2)
+        for i in range(n):
+            store.append([make_record(f"r{i}", i)])
+        return store
+
+    def test_recovery_heals_dangling_manifest_entry(self):
+        # Crash after deleting a segment's files but before the manifest
+        # update: the manifest still references the evicted segment.
+        store = self._fill()
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        victim = sealed[0]
+        evicted_before = store.get_state()["evicted_count"]
+        store.close()
+        os.remove(os.path.join(self.dir, "segments", victim + ".log"))
+        os.remove(os.path.join(self.dir, "index", victim + ".idx"))
+        store2 = self.open_store()  # must heal, not raise
+        self.assertNotIn(victim,
+                         [s["segment_id"] for s in store2.list_segments()])
+        self.assertEqual(store2.get_state()["evicted_count"], evicted_before + 1)
+        store2.close()
+        store3 = self.open_store()  # healed state must persist
+        self.assertNotIn(victim,
+                         [s["segment_id"] for s in store3.list_segments()])
+
+    def test_recovery_removes_leftover_index_of_dangling_entry(self):
+        store = self._fill()
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        victim = sealed[0]
+        store.close()
+        # Only the data file got deleted before the crash.
+        os.remove(os.path.join(self.dir, "segments", victim + ".log"))
+        store2 = self.open_store()
+        self.assertFalse(os.path.exists(
+            os.path.join(self.dir, "index", victim + ".idx")))
+        self.assertNotIn(victim,
+                         [s["segment_id"] for s in store2.list_segments()])
+
+    def test_recovery_cleans_orphans_when_manifest_updated_first(self):
+        # Crash after the manifest update but before file deletion: the files
+        # of an already-forgotten segment linger on disk.
+        store = self._fill()
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        victim = sealed[0]
+        store.close()
+        mpath = os.path.join(self.dir, "manifest.json")
+        with open(mpath, encoding="utf-8") as fp:
+            manifest = json.load(fp)
+        manifest["segments"] = [e for e in manifest["segments"]
+                                if e["segment_id"] != victim]
+        with open(mpath, "w", encoding="utf-8") as fp:
+            json.dump(manifest, fp)
+        store2 = self.open_store()
+        self.assertFalse(os.path.exists(
+            os.path.join(self.dir, "segments", victim + ".log")))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.dir, "index", victim + ".idx")))
+
+    def test_enforce_leaves_consistent_on_disk_state(self):
+        store = self._fill()
+        store.register_retention(max_segments=2)
+        evicted = store.enforce_retention()
+        self.assertTrue(evicted)
+        store.close()
+        with open(os.path.join(self.dir, "manifest.json"), encoding="utf-8") as fp:
+            manifest = json.load(fp)
+        referenced = set()
+        for entry in manifest["segments"]:
+            sid = entry["segment_id"]
+            referenced.add(sid + ".log")
+            if entry["sealed"]:
+                referenced.add(sid + ".idx")
+        on_disk = set(os.listdir(os.path.join(self.dir, "segments")))
+        on_disk |= set(os.listdir(os.path.join(self.dir, "index")))
+        self.assertEqual(on_disk, referenced)
+
+    def test_recovery_rebuilds_missing_index(self):
+        store = self._fill()
+        sealed = [s["segment_id"] for s in store.list_segments() if s["sealed"]]
+        victim = sealed[0]
+        before = store.dump()
+        store.close()
+        os.remove(os.path.join(self.dir, "index", victim + ".idx"))
+        store2 = self.open_store()  # rebuilds the index instead of failing
+        self.assertTrue(os.path.exists(
+            os.path.join(self.dir, "index", victim + ".idx")))
+        self.assertEqual(store2.dump(), before)
+
+    def test_missing_active_segment_with_data_still_raises(self):
+        store = self._fill()
+        active = store.get_state()["active_segment_id"]
+        store.close()
+        os.remove(os.path.join(self.dir, "segments", active + ".log"))
+        with self.assertRaises(IntegrityError):
+            LogStore(self.dir)
+
+
+class TestRollIndexConsistency(StoreTestCase):
+    """Regression: rolling must flush before indexing, so index entry count
+    always matches the sealed segment's record count."""
+
+    def test_index_entries_match_records_after_mid_batch_rolls(self):
+        # One large batch with a small segment limit forces several rolls
+        # while the write buffer still holds unflushed records.
+        store = self.open_store(max_segment_bytes=4096, index_interval=7)
+        records = [make_record(f"r{i:05d}", i, message=f"payload-{i}" + "x" * 80)
+                   for i in range(500)]
+        store.append(records)
+        sealed = [s for s in store.list_segments() if s["sealed"]]
+        self.assertGreater(len(sealed), 3)
+        for seg in sealed:
+            sid = seg["segment_id"]
+            with open(os.path.join(self.dir, "segments", sid + ".log"), "rb") as fp:
+                lines = fp.readlines()
+            with open(os.path.join(self.dir, "index", sid + ".idx"),
+                      encoding="utf-8") as fp:
+                entries = [json.loads(l) for l in fp if l.strip()]
+            self.assertEqual(seg["record_count"], len(lines))
+            expected = (len(lines) + 6) // 7
+            self.assertEqual(len(entries), expected)
+            # Every index offset must land on a record with the indexed ts.
+            with open(os.path.join(self.dir, "segments", sid + ".log"), "rb") as fp:
+                for ts, offset in entries:
+                    fp.seek(offset)
+                    record = json.loads(fp.readline())
+                    self.assertEqual(record["ts"], ts)
+        store.close()
+        self.open_store()  # reopen re-validates index against records
+
+
 class TestCli(unittest.TestCase):
     def test_cli_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
