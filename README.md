@@ -16,10 +16,11 @@
 ├── main.py                # 标准输入 JSON 命令行入口
 ├── examples/
 │   └── demo_acceptance.py # 离线端到端演示（故障→中断→续传→坏文件/坏进度）
-└── tests/                 # unittest 测试（88 个用例）
+└── tests/                 # unittest 测试（99 个用例）
     ├── test_layout.py
     ├── test_backend.py
     ├── test_coordinator.py
+    ├── test_regressions.py
     └── test_main_cli.py
 ```
 
@@ -69,6 +70,11 @@ final_etag = coordinator.upload()   # 只传未完成的块
 | `upload_part(upload_id, part_number, data) -> etag` | 上传一个分片，返回服务端 etag |
 | `complete_multipart(upload_id, parts) -> final_etag` | 按 `[(part_number, etag), ...]` 组装对象 |
 | `abort_multipart(upload_id) -> None` | 中止并丢弃已上传分片 |
+| `multipart_exists(upload_id) -> bool` | *可选*：探测多分片会话是否仍然有效（默认乐观返回 `True`） |
+
+`multipart_exists` 用于续传时发现服务端会话已过期；即使后端不实现它
+（沿用乐观默认值），协调器也会在 `upload_part` / `complete_multipart`
+抛出 `UploadNotFoundError` 时**反应式重建**会话。
 
 `InMemoryBackend` 是离线参考实现：分片 etag = 该块字节的 SHA-256 十六进制，
 最终对象 etag = 各分片按编号拼接后整体 SHA-256。它内置故障注入（均为
@@ -126,6 +132,14 @@ backend.queue_lost_part(5)             # 表面成功，实际丢块（complete 
   `file_sha256` 比对；**大小或内容不一致直接抛 `FingerprintMismatchError`
   拒绝续传**，避免把别的文件的块拼进对象。
 - 续传后跳过 `completed` 中的块，只上传缺失块；分块布局始终以快照为准。
+- **服务端会话失效自动重建**：进度文件只证明客户端上次看到的状态，后端的
+  multipart 会话可能已过期或被外部中止。`resume` 会用
+  `multipart_exists(upload_id)` 探测；上传/组装过程中若后端抛
+  `UploadNotFoundError` 也会反应式处理。发现会话已失效时，协调器
+  **重新 `create_multipart` 拿新 upload_id 并写回进度**，保留已完成块的
+  etag 映射；旧会话上的块在 `complete` 时按缺失块重传到新会话（块哈希
+  保证内容一致），最终 etag 与一次性上传完全相同。多线程同时发现会话失效
+  时由会话锁串行化，只创建一个新会话。
 - 快照加载时做强校验（缺字段、版本不符、块大小求和不等于文件大小、etag
   长度非法、块号越界等都抛带具体字段的 `ProgressCorruptError`）。
 - 重试耗尽导致整次上传失败时，**已完成块保留在进度文件里**，修复后端后
@@ -139,6 +153,10 @@ backend.queue_lost_part(5)             # 表面成功，实际丢块（complete 
   一致；接入真实存储时可在后端实现里适配 S3 的 MD5 etag 规则并在协调器
   子类中替换 `part_etag`）。
 - 每块上传后比较后端 etag 与本地哈希；不一致按该块失败处理并重试。
+- 每个剩余分片只提交给线程池一次，该块的全部重试都在**同一个工作线程**内、
+  持有该块的锁完成；下一次重试必须等上一次 `upload_part` 完全返回（或抛错）
+  并结束退避后才开始，任意时刻同一块最多只有一个在途上传。调度器不会在旧
+  任务未结束时把块重新放回待传集合。
 - 单块最多 `max_retries + 1` 次尝试（默认 4 次），重试间隔指数退避
   `backoff_base * 2**attempt`。`UploadConfig(sleep=...)` 可注入假 sleep，
   测试里不真正等待。
@@ -146,8 +164,10 @@ backend.queue_lost_part(5)             # 表面成功，实际丢块（complete 
   （`PartsMissingError.part_numbers`），协调器会重传这些块后再次 complete。
 - 有块最终失败时抛 `UploadFailedError`（含 `failed_parts` 和每块原因），
   进度保留；全部成功才调用 complete 并写入 `final_etag`。
-- `cancel()` 调用 `abort_multipart`、删除进度记录，可协作式中断正在跑的
-  `upload()`；取消不存在的 upload_id 抛 `UploadNotFoundError`。
+- `cancel()` 尽力调用 `abort_multipart`（会话已过期也不报错）、删除进度
+  记录，可协作式中断正在跑的 `upload()`；显式传入的 `upload_id` 与当前
+  不符时抛 `UploadNotFoundError`。
+- `upload()` 不可重入：同一协调器上并发调用第二次会抛 `UploadStateError`。
 
 ## 状态查询
 
@@ -211,21 +231,29 @@ EOF
 | 进度文件 JSON 损坏 | `ProgressCorruptError`（带行列号） |
 | 快照字段缺失/不一致 | `ProgressCorruptError`（带字段名） |
 | resume 时文件被改（同长改内容/变长度） | `FingerprintMismatchError`，拒绝续传 |
+| resume 时后端 multipart 会话已过期 | 自动新建 upload_id，保留 etag 映射，重传缺失块 |
 | 重复 start 同一对象名 | `UploadExistsError`，提示 resume 或换名 |
-| cancel 不存在的 upload_id | `UploadNotFoundError` |
+| 同一协调器并发调用 upload() | `UploadStateError` |
+| cancel 不存在的 upload_id（显式校验时） | `UploadNotFoundError`；会话已自然过期则幂等清理 |
 | cancel 已完成的上传 | `UploadStateError` |
 
 ## 测试
 
-88 个 `unittest` 用例，零第三方依赖：
+99 个 `unittest` 用例，零第三方依赖（退避均通过注入的假 `sleep` 验证，
+不会真正等待）：
 
 - `test_layout.py`：分块计算（空文件/整数倍/短尾/非法参数）、配置校验、
   快照校验、进度文件损坏与往返。
 - `test_backend.py`：etag 规则、complete 校验（缺块/编号空洞/etag 不符）、
-  四类故障注入、四种重复上传策略。
+  四类故障注入、四种重复上传策略、`multipart_exists` 状态判定。
 - `test_coordinator.py`：并发调度（用 Barrier 强制 4 块同时在飞 + 重叠即
   断言失败）、同块单次调度、重试次数与指数退避数值、错误 etag 重试、
   丢块恢复、失败后进度保留、重启后只传剩余块且结果与一次性上传一致、
   指纹不一致/大小变化拒绝续传、坏进度文件、重复 start、cancel（含上传
   途中协作取消）、20 MiB 大文件验收场景。
+- `test_regressions.py`：**失败后 resume 发现会话过期自动换新 upload_id
+  并与一次性上传 etag 一致**、探测乐观但调用报 404 时的反应式重建、
+  **同一块的多次重试严格串行（门控 + 进入/退出次序断言）**、
+  **进度文件截断后 load 报出文件名与行列号、原子写不留临时文件**、
+  **空文件 start/complete/resume**。
 - `test_main_cli.py`：全部 CLI 操作、JSON 错误行、坏参数、缺文件、空文件。

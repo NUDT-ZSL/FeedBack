@@ -160,7 +160,12 @@ class UploadSession:
                 self.backend.abort_multipart(upload_id)
                 return {"cancelled": upload_id}
             target_id = upload_id or snapshot["upload_id"]
-            self.backend.abort_multipart(target_id)
+            # The session may have expired server-side; an unknown id still
+            # means the local progress record should be cleaned up.
+            try:
+                self.backend.abort_multipart(target_id)
+            except UploadNotFoundError:
+                pass
             ProgressStore(path).delete(object_name)
             return {"cancelled": target_id}
         coordinator.cancel(upload_id)

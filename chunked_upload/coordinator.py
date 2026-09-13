@@ -277,11 +277,18 @@ class UploadCoordinator:
 
         self._lock = threading.RLock()
         self._cancel_event = threading.Event()
-        # One lock per part number – defensive guarantee that a part can
+        # One lock per part number – the hard guarantee that a part can
         # never have two in-flight attempts even if this class is extended.
         self._part_locks: Dict[int, threading.Lock] = {
             n: threading.Lock() for n in range(1, self.total_parts + 1)
         }
+        # Serializes "the backend says our upload_id is unknown" handling:
+        # exactly one loser calls create_multipart, the others wait for the
+        # new id to be published instead of racing (and duplicating work).
+        self._session_lock = threading.Lock()
+        self._session_recreations = 0
+        # upload() must not run twice concurrently on one coordinator.
+        self._run_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Factories
@@ -381,7 +388,7 @@ class UploadCoordinator:
                 f"– refusing to resume a different file"
             )
 
-        return cls(
+        coordinator = cls(
             backend,
             upload_id=snapshot["upload_id"],
             object_name=snapshot["object_name"],
@@ -395,6 +402,12 @@ class UploadCoordinator:
             failed=snapshot.get("failed_parts", []),
             final_etag=snapshot.get("final_etag"),
         )
+        # The progress file only proves what the client saw last time; the
+        # backend may have expired/aborted the multipart upload meanwhile.
+        # Completed uploads need no backend session (the result is cached).
+        if coordinator._final_etag is None:
+            coordinator.ensure_backend_session()
+        return coordinator
 
     # ------------------------------------------------------------------
     # Main entry points
@@ -406,53 +419,113 @@ class UploadCoordinator:
         Already-completed parts are skipped.  On failure the progress file is
         kept; build a new coordinator with :meth:`resume` and call
         :meth:`upload` again.
+
+        :raises UploadStateError: if another thread is already running
+            :meth:`upload` on this coordinator.
         """
         if self._final_etag is not None:
             return self._final_etag
         if self._cancel_event.is_set():
             raise UploadCancelledError("upload has been cancelled")
+        if not self._run_lock.acquire(blocking=False):
+            raise UploadStateError("upload() is already running")
 
-        remaining = [
-            n
-            for n in range(1, self.total_parts + 1)
-            if n not in self._completed
-        ]
+        try:
+            remaining = [
+                n
+                for n in range(1, self.total_parts + 1)
+                if n not in self._completed
+            ]
 
-        if remaining:
-            # Each remaining part is submitted exactly once, so at most one
-            # worker thread ever touches a given part number.
-            max_workers = min(self.config.concurrency, len(remaining))
-            with ThreadPoolExecutor(
-                max_workers=max_workers,
-                thread_name_prefix=f"upload-{self.upload_id}",
-            ) as pool:
-                futures = {
-                    pool.submit(self._upload_part_with_retries, n): n
-                    for n in remaining
-                }
-                for future in as_completed(futures):
-                    future.result()  # workers never raise; surface bugs only
-                    part_number = futures[future]
-                    with self._lock:
-                        if part_number in self._completed:
-                            if part_number in self._failed:
-                                self._failed.remove(part_number)
-                                self._fail_reasons.pop(part_number, None)
-                                self._persist_locked()
+            if remaining:
+                # Each remaining part is submitted exactly once. Retries for
+                # a part happen *inside* its single worker, so the scheduler
+                # can never race itself by re-queueing a part whose previous
+                # attempt has not returned; the per-part locks below make the
+                # guarantee structural even for future callers.
+                max_workers = min(self.config.concurrency, len(remaining))
+                with ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix=f"upload-{self.upload_id}",
+                ) as pool:
+                    futures = {
+                        pool.submit(self._upload_part_with_retries, n): n
+                        for n in remaining
+                    }
+                    for future in as_completed(futures):
+                        future.result()  # workers never raise; surface bugs only
+                        part_number = futures[future]
+                        with self._lock:
+                            if part_number in self._completed:
+                                if part_number in self._failed:
+                                    self._failed.remove(part_number)
+                                    self._fail_reasons.pop(part_number, None)
+                                    self._persist_locked()
 
+            if self._cancel_event.is_set():
+                raise UploadCancelledError("upload cancelled by caller")
+            if self._failed:
+                self._raise_failed()
+
+            final_etag = self._complete_with_recovery()
+
+            with self._lock:
+                self._final_etag = final_etag
+                self._failed = []
+                self._fail_reasons.clear()
+                self._persist_locked()
+            return final_etag
+        finally:
+            self._run_lock.release()
+
+    def ensure_backend_session(self) -> str:
+        """Make sure the backend still knows ``self.upload_id``.
+
+        Multipart sessions can expire server-side or be aborted out of band
+        while the progress record survives. If probing shows the session is
+        gone, open a new multipart upload, publish the fresh ``upload_id`` and
+        persist it. The completed-part etag map is deliberately preserved:
+        parts already stored on the dead session are rediscovered and
+        re-uploaded at complete time, so only missing bytes move again.
+
+        Serialized by ``_session_lock``: when several worker threads discover
+        the dead session at once, exactly one of them creates the replacement
+        and the rest observe it instead of racing create_multipart.
+        """
+        with self._session_lock:
+            if self.backend.multipart_exists(self.upload_id):
+                return self.upload_id
+            return self._create_replacement_session_locked()
+
+    def _rebuild_session_if_current(self, stale_id: str) -> str:
+        """Replace the backend session only if ``stale_id`` is still current.
+
+        Called by workers that got an authoritative "unknown upload" error.
+        An explicit :class:`UploadNotFoundError` from upload/complete is
+        definitive (the multipart upload is gone server-side); unlike the
+        best-effort :meth:`ensure_backend_session` probe it is not second-
+        guessed. Holding ``_session_lock`` means that when several workers
+        404 on the same dead session, only the first creates a replacement;
+        the others see the id moved and adopt it.
+        """
+        with self._session_lock:
+            if self.upload_id != stale_id:
+                # Another worker already rebuilt it.
+                return self.upload_id
+            return self._create_replacement_session_locked()
+
+    def _create_replacement_session_locked(self) -> str:
+        """Create + publish a new multipart session. Caller holds session lock."""
         if self._cancel_event.is_set():
-            raise UploadCancelledError("upload cancelled by caller")
-        if self._failed:
-            self._raise_failed()
-
-        final_etag = self._complete_with_recovery()
-
+            raise UploadCancelledError("upload has been cancelled")
+        new_id = self.backend.create_multipart(
+            self.object_name, self.file_size
+        )
         with self._lock:
-            self._final_etag = final_etag
-            self._failed = []
-            self._fail_reasons.clear()
+            self.upload_id = new_id
+            self._session_recreations += 1
             self._persist_locked()
-        return final_etag
+        return new_id
 
     def cancel(self, upload_id: Optional[str] = None) -> None:
         """Abort the multipart upload and delete its progress record.
@@ -478,7 +551,12 @@ class UploadCoordinator:
                 return
             self._cancel_event.set()
 
-        self.backend.abort_multipart(self.upload_id)
+        # The session may already have expired server-side; aborting an
+        # unknown id is still a successful cancellation of local state.
+        try:
+            self.backend.abort_multipart(self.upload_id)
+        except UploadNotFoundError:
+            pass
         self.store.delete(self.object_name)
 
     # ------------------------------------------------------------------
@@ -517,22 +595,35 @@ class UploadCoordinator:
     # ------------------------------------------------------------------
 
     def _upload_part_with_retries(self, part_number: int) -> None:
-        """Worker body: up to ``max_retries + 1`` attempts for one part."""
+        """Worker body: bounded attempts for one part.
+
+        The whole attempt loop for this part runs in exactly one thread
+        (this one) and holds the part lock for its duration, so a retry can
+        never overlap the previous attempt of the same part. A retry is only
+        scheduled from right here, after ``backend.upload_part`` has fully
+        returned (or raised) and any backoff sleep has finished.
+        """
         lock = self._part_locks[part_number]
         if not lock.acquire(blocking=False):
-            # Defensive: impossible given the scheduling above.
+            # Structural guard: the scheduler submits each part once, so
+            # this should be unreachable.
             raise UploadStateError(f"part {part_number} is already in flight")
         try:
             data = self._read_part(part_number)
             expected_etag = part_etag(data)
             last_error: Optional[BaseException] = None
 
-            for attempt in range(self.config.max_retries + 1):
+            attempt = 0
+            session_rebuilds = 0
+            while attempt <= self.config.max_retries:
                 if self._cancel_event.is_set():
                     return
+                # Snapshot the id: a 404 only obliges us to rebuild if no
+                # other worker has already replaced this exact session.
+                session_id = self.upload_id
                 try:
                     etag = self.backend.upload_part(
-                        self.upload_id, part_number, data
+                        session_id, part_number, data
                     )
                     if not isinstance(etag, str) or etag != expected_etag:
                         raise PartChecksumMismatchError(
@@ -544,6 +635,22 @@ class UploadCoordinator:
                         self._fail_reasons.pop(part_number, None)
                         self._persist_locked()
                     return
+                except UploadNotFoundError as exc:
+                    # Authoritative signal: the multipart session expired
+                    # server-side. Rebuild (serialized; one loser rebuilds,
+                    # the rest adopt the fresh id) and retry this attempt
+                    # WITHOUT spending the part's failure/backoff budget –
+                    # the bytes never reached a live session.
+                    last_error = exc
+                    try:
+                        self._rebuild_session_if_current(session_id)
+                    except UploadCancelledError:
+                        return
+                    session_rebuilds += 1
+                    if session_rebuilds > self.config.max_retries + 1:
+                        self._record_failure(part_number, last_error)
+                        return
+                    continue
                 except Exception as exc:  # backend + checksum failures
                     last_error = exc
                     if self._cancel_event.is_set():
@@ -551,6 +658,7 @@ class UploadCoordinator:
                     if attempt < self.config.max_retries:
                         delay = self.config.backoff_base * (2 ** attempt)
                         self.config.sleep(delay)
+                    attempt += 1
                     continue
 
             self._record_failure(part_number, last_error)
@@ -558,36 +666,49 @@ class UploadCoordinator:
             lock.release()
 
     def _complete_with_recovery(self) -> str:
-        """Call complete_multipart, re-uploading parts the server lost.
+        """Call complete_multipart, re-uploading parts the server lacks.
 
-        A flaky backend can acknowledge a part and then drop it (see
-        :meth:`InMemoryBackend.queue_lost_part`).  ``complete_multipart``
-        reports the missing numbers; we resend them with the same retry
-        budget, then try completing again.
+        Two gaps are healed here:
+
+        * a flaky backend acknowledged a part but dropped it
+          (:meth:`InMemoryBackend.queue_lost_part`), or
+        * the whole multipart session was rebuilt after server-side expiry,
+          so every previously "completed" part is missing from the new
+          session – their etags are retained in the progress record and the
+          bytes are simply re-sent (etag check guarantees identity).
+
+        Both surface as :class:`PartsMissingError` carrying the numbers.
         """
         for round_no in range(self.config.max_retries + 1):
             if self._cancel_event.is_set():
                 raise UploadCancelledError("upload cancelled by caller")
-            parts_spec = self._parts_spec()
             try:
+                self.ensure_backend_session()
+                session_id = self.upload_id
+                parts_spec = self._parts_spec()
                 return self.backend.complete_multipart(
-                    self.upload_id, parts_spec
+                    session_id, parts_spec
                 )
+            except UploadNotFoundError:
+                # Authoritative: the session vanished between probe and
+                # complete. Rebuild once; the next round's PartsMissingError
+                # drives the re-upload of every part into the fresh session.
+                self._rebuild_session_if_current(session_id)
+                continue
             except PartsMissingError as exc:
-                missing = sorted(exc.part_numbers)
+                missing = sorted(set(exc.part_numbers))
                 if not missing or round_no == self.config.max_retries:
                     raise UploadFailedError(
                         missing or list(range(1, self.total_parts + 1)),
                         {
-                            n: f"server lost part and recovery exhausted: {exc}"
-                            for n in (missing or range(1, self.total_parts + 1))
+                            n: f"server missing part and recovery exhausted: {exc}"
+                            for n in (
+                                missing or range(1, self.total_parts + 1)
+                            )
                         },
                     ) from exc
                 for part_number in missing:
-                    # The completed-map entry is stale (the server never
-                    # stored the part); drop it before the bounded retry.
-                    with self._lock:
-                        self._completed.pop(part_number, None)
+                    # Re-send; the worker overwrites the stale map entry.
                     self._upload_part_with_retries(part_number)
                     if part_number not in self._completed:
                         self._raise_failed()

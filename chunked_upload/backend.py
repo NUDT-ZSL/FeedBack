@@ -94,6 +94,19 @@ class StorageBackend(ABC):
     def abort_multipart(self, upload_id: str) -> None:
         """Discard the multipart upload and all of its stored parts."""
 
+    def multipart_exists(self, upload_id: str) -> bool:
+        """Return whether an *open* multipart upload with this id exists.
+
+        Used by the coordinator to detect server-side session expiry on
+        resume. The default implementation is optimistic (``True``) so
+        minimal backends keep working; they should override this with a
+        cheap probe (e.g. a list-parts/head request). Independently of this
+        probe, the coordinator recovers reactively when
+        :meth:`upload_part` / :meth:`complete_multipart` raise
+        :class:`UploadNotFoundError`.
+        """
+        return True
+
 
 # Lightweight value type used in complete_multipart signatures.
 class PartSpec(tuple):
@@ -195,6 +208,11 @@ class InMemoryBackend(StorageBackend):
     # -- introspection (test helpers) -------------------------------------
 
     def has_upload(self, upload_id: str) -> bool:
+        with self._lock:
+            return upload_id in self._uploads
+
+    def multipart_exists(self, upload_id: str) -> bool:
+        """True only for an *open* multipart session (not completed/aborted)."""
         with self._lock:
             return upload_id in self._uploads
 

@@ -93,6 +93,14 @@ class ScriptedBackend(StorageBackend):
         self.aborted.append(upload_id)
         self._inner.abort_multipart(upload_id)
 
+    def multipart_exists(self, upload_id: str) -> bool:
+        return self._inner.multipart_exists(upload_id)
+
+    def forget_open_uploads(self) -> None:
+        """Simulate server-side expiry: drop every open multipart session."""
+        with self._inner._lock:
+            self._inner._uploads.clear()
+
     def completed_objects(self) -> Dict[str, str]:
         return self._inner.completed_objects()
 

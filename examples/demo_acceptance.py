@@ -100,6 +100,33 @@ def main() -> int:
     print("etag matches the one-shot upload: OK")
     assert list(newly_sent) == [2, 6]
 
+    # 3b) Server-side expiry: a second upload fails, then the multipart
+    #     session vanishes out of band. resume must open a new upload, keep
+    #     the etag map, re-send everything into the new session and still
+    #     produce the identical final etag.
+    section("3b. resume after the server expired the multipart session")
+    expiring = _ExpiringBackend(failing={3})
+    first = UploadCoordinator.begin(
+        expiring, source, "expiring", config(progress_path=workdir / "exp.json")
+    )
+    dead_id = first.upload_id
+    try:
+        first.upload()
+    except UploadFailedError as exc:
+        print(f"upload stopped: parts {exc.failed_parts}")
+    expiring.expire_open_uploads()
+    expiring.failing.clear()
+    print(f"server forgot upload {dead_id}; resuming...")
+    second = UploadCoordinator.resume(
+        expiring, source, "expiring",
+        config(progress_path=workdir / "exp.json"),
+    )
+    print(f"new upload_id: {second.upload_id} (was {dead_id})")
+    assert second.upload_id != dead_id
+    etag_expiring = second.upload()
+    assert etag_expiring == expected_etag
+    print("rebuilt session completed with the same etag: OK")
+
     # 4) Wrong etag from the backend: coordinator retries, then fails loudly.
     section("4. backend returns wrong etag")
     bad_backend = InMemoryBackend(etag_func=lambda _b: "0" * 64)
@@ -177,6 +204,14 @@ class _FlakyBackend(InMemoryBackend):
         if part_number in self.failing:
             raise ConnectionError(f"simulated network failure on part {part_number}")
         return super().upload_part(upload_id, part_number, data)
+
+
+class _ExpiringBackend(_FlakyBackend):
+    """Flaky backend that can also forget open multipart uploads."""
+
+    def expire_open_uploads(self) -> None:
+        with self._lock:
+            self._uploads.clear()
 
 
 if __name__ == "__main__":
