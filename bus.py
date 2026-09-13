@@ -448,13 +448,19 @@ class MessageBus:
         transferred: List[str] = []
         retained: List[str] = []
         dropped: List[str] = []
+        # 实际接收了转移消息的订阅者；处理完后统一把它们的队列排成全序。
+        transfer_targets: Set[str] = set()
 
         for msg_id in held:
             if pol is UnsubscribePolicy.TRANSFER:
                 redeliver = msg_id in ever_delivered
-                outcome = self._transfer_on_unsubscribe(sub_id, msg_id, now, redeliver)
+                outcome, target = self._transfer_on_unsubscribe(
+                    sub_id, msg_id, now, redeliver
+                )
                 if outcome == "transferred":
                     transferred.append(msg_id)
+                    if target is not None:
+                        transfer_targets.add(target)
                 elif outcome == "retained":
                     retained.append(msg_id)
                 else:
@@ -462,6 +468,13 @@ class MessageBus:
             else:
                 self._release_ref(msg_id, sub_id)
                 dropped.append(msg_id)
+
+        # 关键：转移消息是逐条 append 的；为让接收方队列本身（而非仅靠
+        # deliver 时的惰性排序）严格保持与直接投递一致的全序，统一对每个
+        # 实际接收方的待投递队列做一次稳定排序（同优先级/同 produced_at
+        # 时按 msg_id 字典序）。各条目的 enqueued_at/redelivered 元数据保留。
+        for target in transfer_targets:
+            self._sort_pending(target)
 
         del self._subs[sub_id]
         del self._pending[sub_id]
@@ -506,19 +519,17 @@ class MessageBus:
         return ordered
 
     def _transfer_on_unsubscribe(self, from_sub: str, msg_id: str, now: int,
-                                 redeliver: bool = False) -> str:
+                                 redeliver: bool = False) -> Tuple[str, Optional[str]]:
         """注销转移（只改引用关系，消息本体的 GC 由调用方统一做）。
 
         :param redeliver: 该消息在注销者处是否已真实投递过。投过则标记
             ``redelivered``；从未投出的消息保持“首次投递”语义，不打标记。
-        :returns: "transferred"（放入了新订阅者队列）、
-            "retained"（其他订阅者本来就持有）或 "dropped"（无处可去）。
-
-        消息被追加到接收方队列末尾，接收方 deliver 时按优先级全序排序，
-        因此转移保持原优先级顺序、不依赖追加次序。
+        :returns: ``(outcome, target)``，outcome 为 "transferred"（放入了
+            新订阅者队列，target 为接收方 sub_id）、"retained"（其他订阅者
+            本来就持有）或 "dropped"（无处可去）；后两者 target 为 None。
         """
         if msg_id not in self._messages:
-            return "dropped"
+            return "dropped", None
         msg = self._messages[msg_id]
         for sid in sorted(self._subs):
             if sid == from_sub:
@@ -534,14 +545,24 @@ class MessageBus:
             )
             if already:
                 self._release_ref(msg_id, from_sub)
-                return "retained"
+                return "retained", None
             if len(q) < other_sub.max_queue:
                 q.append(_Pending(msg_id, now, redelivered=redeliver))
                 self._refs.setdefault(msg_id, set()).add(sid)
                 self._release_ref(msg_id, from_sub)
-                return "transferred"
+                return "transferred", sid
         self._release_ref(msg_id, from_sub)
-        return "dropped"
+        return "dropped", None
+
+    def _sort_pending(self, sub_id: str) -> None:
+        """把某订阅者的待投递队列按投递全序原地稳定排序。
+
+        排序键与 :meth:`deliver` 完全一致（priority 降序、produced_at
+        升序、msg_id 字典序），保留每个 :class:`_Pending` 对象本身
+        （enqueued_at / redelivered 元数据不变）。用于注销转移后让接收方
+        队列物理顺序即规范序，而不是仅靠 deliver 时的惰性排序。
+        """
+        self._pending[sub_id].sort(key=lambda p: _delivery_key(self, p.msg_id))
 
     # ------------------------------------------------------------------ #
     # 在线状态、超时与重投递
@@ -563,7 +584,14 @@ class MessageBus:
 
         returned: List[str] = []
         if was_online and not sub.online:
-            returned = self._return_to_queue(sub_id, list(self._inflight[sub_id].keys()))
+            # 一次掉线 = 恰好一个重投递批次：计数在这个显式触发点按订阅者
+            # 加 1（_return_to_queue 内部且仅有在途消息实际回队时才加），
+            # 与回队多少条、跨几个主题无关。注意超时回队是另一个独立事件
+            # （由 check_timeouts / deliver 惰性触发，各自单独计批）；若
+            # 消息此前已被超时回队、此刻没有在途消息，掉线不再另计一批。
+            returned = self._return_to_queue(
+                sub_id, list(self._inflight[sub_id].keys())
+            )
         return {"sub_id": sub_id, "online": sub.online, "returned": returned}
 
     def _return_to_queue(self, sub_id: str, msg_ids: Iterable[str]) -> List[str]:
@@ -572,6 +600,10 @@ class MessageBus:
         仅处理当前确实 in-flight 的 id，顺序按投递历史中**第一次**出现的
         位置（重投会让同一 id 在历史中多次出现，这里必须去重，否则一条
         消息会被重复放回队列）；返回实际回队的 msg_id 列表（去重）。
+
+        当确有消息回队时，给该订阅者的重投递批次计数 +1——一次掉线或一次
+        扫描中某订阅者的一批超时都只调用本方法一次，因此一批只计一次，
+        与消息条数、跨主题数无关；没有在途消息时提前返回、不计数。
         """
         inflight = self._inflight[sub_id]
         wanted = set(msg_ids)
@@ -596,10 +628,8 @@ class MessageBus:
                 q.append(_Pending(mid, now, redelivered=True))
                 queued.add(mid)
             returned.append(mid)
-        if returned:
-            # 重投递按“批次”计数：一次掉线、或一次超时扫描命中该订阅者，
-            # 无论涉及多少条消息都只算 1；每条消息的 redelivered 标记仍保留。
-            self.redelivered_count[sub_id] = self.redelivered_count.get(sub_id, 0) + 1
+        # 一次逻辑事件（掉线 / 一批超时）只调用一次，故这里 +1 即一个批次。
+        self.redelivered_count[sub_id] = self.redelivered_count.get(sub_id, 0) + 1
         return returned
 
     def check_timeouts(self, sub_id: Optional[str] = None) -> List[str]:

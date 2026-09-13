@@ -518,6 +518,72 @@ class OfflineRecoveryTests(unittest.TestCase):
         clock.advance(100)
         self.assertEqual(b.check_timeouts(), [])
 
+    def test_one_offline_multi_topic_multi_message_is_single_batch(self):
+        # 核心：一次掉线，跨多个主题、多条未确认消息，只算 1 个重投递批次。
+        b = MessageBus()
+        b.subscribe("s", topics=["A", "B", "C"], max_inflight=30)
+        stream = [("a1", "A"), ("a2", "A"), ("b1", "B"), ("b2", "B"),
+                  ("c1", "C"), ("c2", "C")]
+        for i, (mid, topic) in enumerate(stream):
+            # 优先级与 produced_at 故意各不相同，确保跨主题混排。
+            b.publish(make_msg(mid, topic=topic, priority=i % 3,
+                               produced_at=100 - i))
+        first = b.deliver("s", 30)
+        self.assertEqual(len(first["messages"]), 6)
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 0)
+
+        r = b.set_online("s", False)
+        self.assertEqual(len(r["returned"]), 6)
+        st = b.get_state()["subscriptions"]["s"]
+        self.assertEqual(st["redelivered_count"], 1)   # 只有一个批次
+        self.assertEqual(st["inflight"], 0)
+        self.assertEqual(st["pending"], 6)
+
+        # 尚未再次掉线，计数不应增长（即使中间查询状态/重新投递）。
+        b.set_online("s", True)
+        b.deliver("s", 30)
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
+
+        # 再次掉线才产生第 2 个批次。
+        b.set_online("s", False)
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 2)
+
+    def test_offline_with_no_inflight_after_timeout_adds_no_batch(self):
+        # 消息已被超时回队（计了一个批次）后再掉线，因无在途消息，不另计批次。
+        clock = _ManualClock(0)
+        b = MessageBus(clock=clock)
+        b.subscribe("s", topics=["A", "B"], max_inflight=20, ack_timeout=5)
+        for mid, topic in [("a1", "A"), ("b1", "B"), ("a2", "A")]:
+            b.publish(make_msg(mid, topic=topic, priority=5, produced_at=0))
+        b.deliver("s", 20)
+        clock.advance(5)
+        due = b.check_timeouts()          # 超时批次 +1
+        self.assertEqual(sorted(due), ["a1", "a2", "b1"])
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
+        # 此刻没有 inflight；掉线不应再产生批次计数。
+        b.set_online("s", False)
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 1)
+
+    def test_timeout_and_offline_are_separate_batches_when_redelivered(self):
+        # 超时回队后又被重新投出（重新在途），随后掉线是第二个独立批次。
+        clock = _ManualClock(0)
+        b = MessageBus(clock=clock)
+        b.subscribe("s", topics=["A", "B"], max_inflight=20, ack_timeout=5)
+        for mid, topic in [("a1", "A"), ("b1", "B")]:
+            b.publish(make_msg(mid, topic=topic, priority=5, produced_at=0))
+        b.deliver("s", 20)
+        clock.advance(5)
+        b.check_timeouts()               # 批次 1：超时
+        b.deliver("s", 20)               # 重新投出 -> 再次在途
+        b.set_online("s", False)         # 批次 2：掉线
+        self.assertEqual(
+            b.get_state()["subscriptions"]["s"]["redelivered_count"], 2)
+
     def test_repeated_offline_cycles_never_duplicate_queue(self):
         # 回归：重投后投递历史含重复 id，再次掉线/超时回队不得重复入队。
         b = MessageBus()
@@ -644,6 +710,57 @@ class UnsubscribeTests(unittest.TestCase):
         b.subscribe("b", topics=["t"], max_inflight=10)
         b.unsubscribe("a")
         self.assertEqual(ids(b.deliver("b", 10)), ["high", "mid", "low"])
+
+    def test_transfer_tie_breaks_stably_by_msg_id(self):
+        # 同优先级、同 produced_at、不同 msg_id，且以非字典序发布：
+        # 转移后接收方必须严格按 msg_id 字典序稳定排列。
+        publish_order = ["m-zebra", "m-alpha", "m-mike", "m-beta", "m-gamma"]
+        b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
+        b.subscribe("x", topics=["t"], max_queue=50)
+        for mid in publish_order:
+            b.publish(make_msg(mid, topic="t", priority=5, produced_at=0))
+        b.subscribe("y", topics=["t"], max_queue=50)
+        b.unsubscribe("x")
+        # 接收方物理待投递队列本身就是规范全序（不仅是 deliver 输出）。
+        physical = [p.msg_id for p in b._pending["y"]]
+        delivered = ids(b.deliver("y", 50))
+        self.assertEqual(physical, sorted(publish_order))
+        self.assertEqual(delivered, sorted(publish_order))
+
+    def test_transfer_order_matches_direct_delivery(self):
+        # 关键对照：同一批消息“直接投递给 b”与“先给 a 再 transfer 给 b”，
+        # 接收方看到的顺序必须完全一致；接收方原有的一条*低优先级*消息要被
+        # 转移进来的高优先级消息正确越过（物理队列与 deliver 输出都校验）。
+        entries = [("x-lo", 1, 9), ("x-hi", 9, 1), ("x-mid", 5, 5),
+                   ("x-tie1", 5, 5), ("x-tie2", 5, 5)]
+        # 全序：x-hi(9,1) > x-mid(5,5)=x-tie1=x-tie2(按id) > b-prelow(1,0) > x-lo(1,9)
+        expected = ["x-hi", "x-mid", "x-tie1", "x-tie2", "b-prelow", "x-lo"]
+
+        def direct():
+            b = MessageBus()
+            b.subscribe("b", topics=["t"], max_queue=50, max_inflight=50)
+            b.publish(make_msg("b-prelow", topic="t", priority=1, produced_at=0))
+            for mid, pri, ts in entries:
+                b.publish(make_msg(mid, topic="t", priority=pri, produced_at=ts))
+            return ids(b.deliver("b", 50))
+
+        def via_transfer():
+            b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
+            b.subscribe("x", topics=["t"], max_queue=50, max_inflight=50)
+            for mid, pri, ts in entries:
+                b.publish(make_msg(mid, topic="t", priority=pri, produced_at=ts))
+            b.subscribe("b", topics=["t"], max_queue=50, max_inflight=50)
+            # b 自己的低优先级消息（x 也匹配 -> 注销 x 时对它判 retained）。
+            b.publish(make_msg("b-prelow", topic="t", priority=1, produced_at=0))
+            b.unsubscribe("x")
+            return b
+
+        self.assertEqual(direct(), expected)
+        tb = via_transfer()
+        # 物理待投递队列本身即规范全序（转移后立即检查，先于 deliver 排序）。
+        self.assertEqual([p.msg_id for p in tb._pending["b"]], expected)
+        # deliver 输出与直接投递完全一致。
+        self.assertEqual(ids(tb.deliver("b", 50)), expected)
 
     def test_transfer_skips_offline_and_full_queue(self):
         b = MessageBus(unsubscribe_policy=UnsubscribePolicy.TRANSFER)
