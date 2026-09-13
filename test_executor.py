@@ -627,6 +627,155 @@ class PersistenceTests(unittest.TestCase):
                 loaded.run()
 
 
+class StealStressRegressionTests(unittest.TestCase):
+    """Regression: AB-BA lock-order inversion between _steal and
+    _enqueue_locked/_requeue_locked could deadlock run() when many workers
+    hit empty local queues while others were (re)enqueuing tasks."""
+
+    def test_run_never_deadlocks_under_steal_contention(self):
+        for round_no in range(3):
+            ex = WorkStealingExecutor(workers=8, cancel_grace=0.05)
+            # Two long tasks occupy the heads of queues 0 and 1; the other
+            # workers drain their own queues almost instantly and must
+            # steal from queues 0 and 1 while retries and dependency
+            # wakeups keep re-enqueuing.
+            ex.submit(Task("long0", lambda: (time.sleep(0.3), 0)[1]))
+            ex.submit(Task("long1", lambda: (time.sleep(0.3), 1)[1]))
+            flaky = {}
+            lock = threading.Lock()
+
+            def make_flaky(name):
+                def payload():
+                    with lock:
+                        seen = flaky.get(name, 0)
+                        flaky[name] = seen + 1
+                    if seen == 0:
+                        raise RuntimeError("retry me")
+                    return name
+
+                return payload
+
+            tasks = [Task(f"t{i}", lambda i=i: i) for i in range(150)]
+            tasks += [Task(f"r{i}", make_flaky(f"r{i}"), max_retries=1) for i in range(20)]
+            tasks += [Task(f"c{i}", _noop, deps=[f"t{i}"]) for i in range(10)]
+            ex.submit_many(tasks)
+
+            done = threading.Event()
+            failure = []
+
+            def target():
+                try:
+                    ex.run()
+                except BaseException as exc:  # noqa: BLE001
+                    failure.append(exc)
+                finally:
+                    done.set()
+
+            runner = threading.Thread(target=target, daemon=True)
+            runner.start()
+            self.assertTrue(
+                done.wait(timeout=30.0),
+                f"run() did not finish within 30s in round {round_no} (possible deadlock)",
+            )
+            self.assertFalse(failure, f"run() raised in round {round_no}: {failure}")
+            state = ex.get_state()
+            self.assertGreater(state["steals"], 0, "expected steals under contention")
+            self.assertEqual(state["succeeded"], 2 + 150 + 20 + 10)
+            self.assertEqual(state["failed"], 0)
+
+    def test_concurrent_submit_during_run(self):
+        ex = WorkStealingExecutor(workers=4)
+        ex.submit(Task("long", lambda: (time.sleep(0.2), "x")[1]))
+        ex.submit_many([Task(f"a{i}", lambda i=i: i) for i in range(40)])
+
+        done = threading.Event()
+        failure = []
+
+        def target():
+            try:
+                ex.run()
+            except BaseException as exc:  # noqa: BLE001
+                failure.append(exc)
+            finally:
+                done.set()
+
+        runner = threading.Thread(target=target, daemon=True)
+        runner.start()
+        # Enqueue more work from another thread while workers are stealing.
+        for wave in range(5):
+            ex.submit_many([Task(f"w{wave}_{i}", _noop) for i in range(10)])
+            time.sleep(0.01)
+        self.assertTrue(done.wait(timeout=30.0), "run() did not finish (possible deadlock)")
+        self.assertFalse(failure, f"run() raised: {failure}")
+        self.assertEqual(ex.get_state()["succeeded"], 1 + 40 + 50)
+
+
+class SubmitAtomicityRegressionTests(unittest.TestCase):
+    """Regression: a failing submit_many must leave existing tasks, counters
+    and queues exactly as they were, and retrying the same batch must fail
+    identically."""
+
+    def test_failed_submit_many_leaves_existing_state_untouched(self):
+        ex = WorkStealingExecutor(workers=2)
+        ex.submit(Task("base", lambda: 1))
+        ex.cancel("base")
+        before_state = ex.get_state()
+        before_result = ex.get_result("base")
+        before_rr = ex._rr
+        before_non_terminal = ex._non_terminal
+        before_queues = [list(q) for q in ex._queues]
+
+        def bad_batch():
+            return [
+                Task("new1", _noop, deps=["base"]),  # dep was cancelled
+                Task("new2", _noop, deps=["ghost"]),  # unknown dep -> batch fails
+            ]
+
+        with self.assertRaises(UnknownTaskError):
+            ex.submit_many(bad_batch())
+        self.assertEqual(ex.get_state(), before_state)
+        self.assertEqual(ex.get_result("base"), before_result)
+        self.assertEqual(ex._rr, before_rr)
+        self.assertEqual(ex._non_terminal, before_non_terminal)
+        self.assertEqual([list(q) for q in ex._queues], before_queues)
+
+        # Retrying the identical batch fails identically.
+        with self.assertRaises(UnknownTaskError):
+            ex.submit_many(bad_batch())
+        self.assertEqual(ex.get_state(), before_state)
+        self.assertEqual(ex._rr, before_rr)
+        self.assertEqual(ex._non_terminal, before_non_terminal)
+
+    def test_failed_submit_many_cycle_leaves_state_untouched(self):
+        ex = WorkStealingExecutor(workers=1)
+        ex.submit(Task("a", _noop))
+        before = ex.get_state()
+        before_rr = ex._rr
+        with self.assertRaises(CycleError):
+            ex.submit_many([Task("x", _noop, deps=["y"]), Task("y", _noop, deps=["x"])])
+        self.assertEqual(ex.get_state(), before)
+        self.assertEqual(ex._rr, before_rr)
+
+    def test_dep_on_cancelled_task_skipped_after_commit(self):
+        ex = WorkStealingExecutor(workers=1)
+        ex.submit(Task("base", _noop))
+        ex.cancel("base")
+        ex.submit_many(
+            [
+                Task("child", _noop, deps=["base"]),
+                Task("grand", _noop, deps=["child"]),
+            ]
+        )
+        child = ex.get_result("child")
+        self.assertEqual(child["state"], "skipped")
+        self.assertEqual(child["skip_reason"], "dependency 'base' was cancelled")
+        self.assertEqual(ex.get_result("grand")["state"], "skipped")
+        ex.run()
+        self.assertTrue(ex.get_state()["finished"])
+        self.assertEqual(ex.get_state()["cancelled"], 1)
+        self.assertEqual(ex.get_state()["skipped"], 2)
+
+
 class CliTests(unittest.TestCase):
     """End-to-end test of the JSON-lines command interface."""
 

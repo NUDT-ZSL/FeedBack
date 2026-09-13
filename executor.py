@@ -417,7 +417,11 @@ class WorkStealingExecutor:
             if cycle:
                 raise CycleError(cycle)
 
-            # --- commit: from here on nothing may fail ---
+            # --- commit: only dict/deque operations below, nothing here
+            # may fail.  All validation happened above, so a raised error
+            # always leaves existing tasks, counters, _rr and queues
+            # completely untouched, and retrying the same batch fails (or
+            # succeeds) identically.
             for task in batch:
                 self._records[task.task_id] = _Record(task)
                 self._dependents[task.task_id] = set()
@@ -426,26 +430,40 @@ class WorkStealingExecutor:
                     self._dependents[dep].add(task.task_id)
             self._non_terminal += len(batch)
 
-            # Resolve dependencies that are already terminal (only possible
-            # for pre-existing tasks, e.g. one cancelled before run()).
+            # Remaining-dependency counts: pure arithmetic on current
+            # states (a dependency that already succeeded does not count).
             for task in batch:
                 rec = self._records[task.task_id]
-                for dep in task.deps:
+                rec.remaining = sum(
+                    1
+                    for dep in task.deps
+                    if self._records[dep].state is not TaskState.SUCCESS
+                )
+
+            # Enqueue tasks whose dependencies are all satisfied.  This is
+            # the only place _rr advances, and it is past every validation
+            # failure path.
+            for task in batch:
+                rec = self._records[task.task_id]
+                if rec.remaining == 0:
+                    rec.state = TaskState.READY
+                    self._enqueue_locked(task.task_id)
+
+            # --- post-commit: cascade skips for dependencies that are
+            # already terminal (e.g. cancelled before this submission).
+            # Only tasks of this batch can be affected: existing tasks
+            # were submitted earlier and can never depend on new ones.
+            for task in batch:
+                rec = self._records[task.task_id]
+                if rec.state is not TaskState.PENDING:
+                    continue
+                for dep in sorted(task.deps):
                     dep_state = self._records[dep].state
-                    if dep_state is TaskState.SUCCESS:
-                        rec.remaining -= 1
-                    elif dep_state in TERMINAL_STATES:
+                    if dep_state in TERMINAL_STATES:
                         self._mark_skipped_locked(
                             rec, f"dependency {dep!r} {_STATE_VERBS[dep_state]}"
                         )
                         break
-
-            # Enqueue tasks whose dependencies are all satisfied.
-            for task in batch:
-                rec = self._records[task.task_id]
-                if rec.state is TaskState.PENDING and rec.remaining == 0:
-                    rec.state = TaskState.READY
-                    self._enqueue_locked(task.task_id)
             self._cond.notify_all()
 
     # ------------------------------------------------------------------
@@ -795,15 +813,24 @@ class WorkStealingExecutor:
         return None
 
     def _steal(self, worker_id: int) -> Optional[str]:
-        """Steal one task from the tail of another worker's queue."""
+        """Steal one task from the tail of another worker's queue.
+
+        Lock-order rule: only the target queue's lock is held while
+        popping; the steals counter is updated under ``self._cond``
+        *after* the queue lock has been released.  Every path in the
+        executor therefore takes locks in the single global order
+        ``_cond`` -> queue lock, so no circular wait is possible.
+        """
         for offset in range(1, self._workers):
             idx = (worker_id + offset) % self._workers
+            task_id: Optional[str] = None
             with self._qlocks[idx]:
                 if self._queues[idx]:
                     task_id = self._queues[idx].pop()
-                    with self._cond:
-                        self._steals += 1
-                    return task_id
+            if task_id is not None:
+                with self._cond:
+                    self._steals += 1
+                return task_id
         return None
 
     # ------------------------------------------------------------------
