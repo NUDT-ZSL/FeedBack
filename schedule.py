@@ -78,13 +78,29 @@ class Adjustment:
 
 @dataclass(frozen=True)
 class BlockedTask:
-    """顺延受阻的任务：尝试落点非法（冲突 / 超出可用区间），已回退原位。"""
+    """顺延受阻任务的记录。
+
+    任务的首选顺延落点（``attempted_*``）不可行（与同资源已确认任务
+    冲突或超出资源可用区间）时，引擎会回退定位到 **resolved_***：
+    即满足该任务全部依赖、保持时长、落在可用区间内、且不与同资源
+    已确认任务冲突的 **最近** 位置。
+
+    - ``resolved`` 为 True：任务已放到 resolved_start/resolved_end，
+      依赖约束与已确认集合内的无冲突性都成立；
+    - ``resolved`` 为 False（等价于 ``unresolved``）：不存在这样的
+      位置，任务保持原位，等待人工处理（见 README 的限制说明）。
+
+    无论是否定位成功，该任务及其下游都不再参与本次联动。
+    """
 
     task_id: str
     attempted_start: int
     attempted_end: int
     reason: str  # "conflict" 或 "out_of_availability"
     conflicts: Tuple[Conflict, ...] = ()
+    resolved: bool = False
+    resolved_start: Optional[int] = None
+    resolved_end: Optional[int] = None
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -93,6 +109,10 @@ class BlockedTask:
             "attempted_end": self.attempted_end,
             "reason": self.reason,
             "conflicts": [c.to_dict() for c in self.conflicts],
+            "resolved": self.resolved,
+            "unresolved": not self.resolved,
+            "resolved_start": self.resolved_start,
+            "resolved_end": self.resolved_end,
         }
 
 
@@ -230,12 +250,20 @@ class ScheduleEngine:
         resource_id: str,
         start: int,
         end: int,
+        ignore: Optional[Set[str]] = None,
     ) -> List[Conflict]:
-        """列出 [start,end) 在该资源上与其他任务的全部冲突。"""
+        """列出 [start,end) 在该资源上与其他任务的全部冲突。
+
+        ``ignore`` 中的任务不计为障碍。级联顺延时用它排除“本次联动
+        中尚未处理任务的旧位置”：这些位置本就要重排，先处理（高优先
+        级 / id 靠前）的任务可以合法占用，实现先到者优先占位。
+        """
 
         result: List[Conflict] = []
         for other in self._tasks.values():
             if other.task_id == task_id or other.resource_id != resource_id:
+                continue
+            if ignore is not None and other.task_id in ignore:
                 continue
             ov = _overlap(start, end, other.start, other.end)
             if ov is not None:
@@ -444,9 +472,17 @@ class ScheduleEngine:
     ) -> Tuple[List[Adjustment], List[BlockedTask]]:
         """对 moved_id 的下游执行级联顺延。
 
-        顺序：分层 Kahn，每轮在“依赖均已处理”的任务中按
-        （优先级降序、task_id 升序）取一个；菱形依赖的任务因此只
-        会被处理一次。blocked 任务及其下游被排除，不再参与联动。
+        处理顺序：分层 Kahn，每轮在“依赖均已处理”的任务中按
+        （优先级降序、task_id 升序）取一个，菱形依赖中的任务只处理
+        一次。占位规则：检测冲突时 **不** 把本次联动中尚未处理任务
+        的旧位置当作障碍，因此同批竞争同一空位时严格先到者优先
+        （高优先级 / 字典序靠前的先占位）。
+
+        某任务的首选顺延落点不可行（超出可用区间或与已确认任务
+        冲突）时记为 blocked，并立即冻结它在下游图中的整条传递
+        子树（冻结任务停在原位、成为后续任务的障碍，本身不产生
+        记录）。blocked 任务会再做一次回退定位，见
+        :meth:`_find_feasible_position`。
         """
 
         downstream = self._collect_downstream(moved_id)
@@ -462,96 +498,163 @@ class ScheduleEngine:
             for d in parents:
                 dependents[d].append(tid)
 
-        # 用 list + min 选择，避免堆中 (-priority, id) 的额外抽象；
-        # 任务规模下完全够用，且选择规则显式可读。
+        def freeze_from(node: str) -> Set[str]:
+            """把 node 及其在 downstream 内的整条传递下游标记为冻结。"""
+
+            frozen: Set[str] = {node}
+            stack = [node]
+            while stack:
+                cur = stack.pop()
+                for nxt in dependents[cur]:
+                    if nxt not in frozen:
+                        frozen.add(nxt)
+                        stack.append(nxt)
+            return frozen
+
         ready = [tid for tid, n in indeg.items() if n == 0]
-        excluded: Set[str] = set()  # blocked 任务及其不参与联动的下游
+        excluded: Set[str] = set()  # 被冻结子树：停在原位、不参与联动
         adjusted: List[Adjustment] = []
         blocked: List[BlockedTask] = []
-        processed: Set[str] = set()
+        processed: Set[str] = set()  # 已落定的下游：adjusted 与 blocked
 
         while ready:
-            cur = min(
-                ready,
-                key=lambda x: (-self._tasks[x].priority, x),
-            )
+            ready = [t for t in ready if t not in excluded]
+            if not ready:
+                break
+            cur = min(ready, key=lambda x: (-self._tasks[x].priority, x))
             ready.remove(cur)
-            processed.add(cur)
             task = self._tasks[cur]
 
-            parents_excluded = any(
-                d in excluded for d in task.deps if d in downstream
-            )
-            if parents_excluded:
-                # 上游被阻塞：本任务不参与联动，直接排除并继续传播。
-                excluded.add(cur)
-            else:
-                required = max(
-                    (self._tasks[d].end for d in task.deps),
-                    default=task.start,
-                )
-                candidate_start = max(task.start, required)
-                duration = task.end - task.start
-                candidate_end = candidate_start + duration
+            if any(d in excluded for d in task.deps if d in downstream):
+                # 上游已被冻结：本任务及其整条下游立即冻结。
+                excluded |= freeze_from(cur)
+                continue
 
-                if candidate_start != task.start:
-                    resource = self._resources[task.resource_id]
-                    if not self._within_availability(
-                        resource, candidate_start, candidate_end
-                    ):
-                        blocked.append(
-                            BlockedTask(
-                                task_id=cur,
-                                attempted_start=candidate_start,
-                                attempted_end=candidate_end,
-                                reason="out_of_availability",
-                            )
-                        )
-                        excluded.add(cur)
-                    else:
-                        # 以当前实时状态为障碍：已顺延任务在新位置，
-                        # 未处理任务与已回退任务都在真实（原）位置，
-                        # 因此任何被接受的落点都保证全局不冲突。
-                        # 处理顺序（优先级、id）决定竞争同一空位时谁先得。
-                        clashes = self._conflicts_against(
-                            cur,
-                            task.resource_id,
-                            candidate_start,
-                            candidate_end,
-                        )
-                        if clashes:
-                            # 回退到原位置（从未改写），记为 blocked。
-                            blocked.append(
-                                BlockedTask(
-                                    task_id=cur,
-                                    attempted_start=candidate_start,
-                                    attempted_end=candidate_end,
-                                    reason="conflict",
-                                    conflicts=tuple(clashes),
-                                )
-                            )
-                            excluded.add(cur)
-                        else:
-                            old_s, old_e = task.start, task.end
-                            task.start, task.end = candidate_start, candidate_end
-                            adjusted.append(
-                                Adjustment(
-                                    task_id=cur,
-                                    old_start=old_s,
-                                    old_end=old_e,
-                                    new_start=candidate_start,
-                                    new_end=candidate_end,
-                                )
-                            )
+            processed.add(cur)
+            required = max(
+                (self._tasks[d].end for d in task.deps),
+                default=task.start,
+            )
+            duration = task.end - task.start
+            candidate_start = max(task.start, required)
+            candidate_end = candidate_start + duration
+            resource = self._resources[task.resource_id]
+
+            # 未处理且未冻结的下游任务，其旧位置会在本轮重排，
+            # 不是障碍；其余任务（外部 / 已顺延 / 已阻塞 / 已冻结）
+            # 的当前位置都是已确认障碍。
+            ignore = downstream - processed - excluded
+            feasible_spot = self._within_availability(
+                resource, candidate_start, candidate_end
+            )
+            clashes: List[Conflict] = []
+            if feasible_spot:
+                clashes = self._conflicts_against(
+                    cur,
+                    task.resource_id,
+                    candidate_start,
+                    candidate_end,
+                    ignore=ignore,
+                )
+                feasible_spot = not clashes
+
+            if candidate_start == task.start and feasible_spot:
+                # 原位仍可行：无需移动。
+                pass
+            elif feasible_spot:
+                old_s, old_e = task.start, task.end
+                task.start, task.end = candidate_start, candidate_end
+                adjusted.append(
+                    Adjustment(
+                        task_id=cur,
+                        old_start=old_s,
+                        old_end=old_e,
+                        new_start=candidate_start,
+                        new_end=candidate_end,
+                    )
+                )
+            else:
+                # 首选落点不可行：先冻结整条下游子树（它们停在原位、
+                # 成为已确认障碍），再做回退定位，保证回退位置不会
+                # 压到即将冻结的下游。
+                in_window = self._within_availability(
+                    resource, candidate_start, candidate_end
+                )
+                reason = "out_of_availability" if not in_window else "conflict"
+                frozen = freeze_from(cur)
+                excluded |= frozen
+                fallback = self._find_feasible_position(
+                    cur, required, downstream - processed - excluded
+                )
+                record = BlockedTask(
+                    task_id=cur,
+                    attempted_start=candidate_start,
+                    attempted_end=candidate_end,
+                    reason=reason,
+                    conflicts=tuple(clashes),
+                    resolved=fallback is not None,
+                    resolved_start=fallback[0] if fallback else None,
+                    resolved_end=fallback[1] if fallback else None,
+                )
+                if fallback is not None:
+                    task.start, task.end = fallback
+                # 找不到（unresolved）则保持原位；无论是否定位成功，
+                # 该任务及其下游都不参与本次联动。
+                blocked.append(record)
 
             for nxt in dependents[cur]:
                 indeg[nxt] -= 1
-                if indeg[nxt] == 0:
+                if indeg[nxt] == 0 and nxt not in excluded:
                     ready.append(nxt)
 
         adjusted.sort(key=lambda a: (a.new_start, a.task_id))
         blocked.sort(key=lambda b: b.task_id)
         return adjusted, blocked
+
+    def _find_feasible_position(
+        self,
+        task_id: str,
+        required_start: int,
+        ignore: Set[str],
+    ) -> Optional[Tuple[int, int]]:
+        """回退定位：满足全部依赖且不与已确认任务冲突的最近落点。
+
+        在任务所属资源的每个可用窗口内，从
+        ``max(原 start, required_start)`` 起做 earliest-fit 贪心
+        （撞上障碍就把起点推到该障碍之后），返回第一个可行窗口中的
+        最小可行起点；所有窗口都放不下时返回 None（调用方据此标注
+        unresolved 并保持原位）。
+        """
+
+        task = self._tasks[task_id]
+        duration = task.end - task.start
+        lower_bound = max(task.start, required_start)
+
+        blockers = [
+            (other.start, other.end)
+            for other in self._tasks.values()
+            if other.resource_id == task.resource_id
+            and other.task_id != task_id
+            and other.task_id not in ignore
+        ]
+        blockers.sort()
+
+        for ws, we in self._resources[task.resource_id].availability:
+            start = max(lower_bound, ws)
+            while start + duration <= we:
+                moved = False
+                for bs, be in blockers:
+                    if be <= start:
+                        continue  # 整个障碍在候选之前
+                    if bs >= start + duration:
+                        break  # blockers 有序，后面的都不重叠
+                    # 与 [start, start+duration) 重叠，推到该障碍之后
+                    start = max(start, be)
+                    moved = True
+                    break
+                if not moved:
+                    return start, start + duration
+        return None
 
     # -- 查询 --------------------------------------------------------------
 
@@ -655,10 +758,58 @@ class ScheduleEngine:
             "deps": list(task.deps),
         }
 
+    # -- 异常态（unresolved 阻塞残留） ------------------------------------
+
+    def _violation_tasks(self) -> Set[str]:
+        """返回当前参与“硬不变量违反”的任务 id 集合。
+
+        两类违反：依赖时序（start 早于某依赖 end）与同资源时间重叠。
+        正常 move 后该集合为空；仅当级联顺延出现 unresolved 任务
+        （找不到可行回退落点、保持原位）时才可能非空，等待用户后续
+        拖拽消解。
+        """
+
+        violating: Set[str] = set()
+        for t in self._tasks.values():
+            for d in t.deps:
+                if t.start < self._tasks[d].end:
+                    violating.add(t.task_id)
+                    break
+        by_resource: Dict[str, List[_Task]] = {}
+        for t in self._tasks.values():
+            by_resource.setdefault(t.resource_id, []).append(t)
+        for group in by_resource.values():
+            for i, a in enumerate(group):
+                for b in group[i + 1:]:
+                    if _overlap(a.start, a.end, b.start, b.end) is not None:
+                        violating.add(a.task_id)
+                        violating.add(b.task_id)
+        return violating
+
     # -- 持久化 ------------------------------------------------------------
 
     def to_dict(self) -> Dict[str, object]:
-        """导出完整可重建状态（与 save 写入的结构一致）。"""
+        """导出完整可重建状态（与 save 写入的结构一致）。
+
+        正常快照只含固定字段；若当前存在 unresolved 残留（依赖时序或
+        同资源冲突），相关任务会带上 ``"unstable": true`` 标记，以便
+        load 时区分“引擎产生的待处理中间态”与“损坏快照”。
+        """
+
+        unstable = self._violation_tasks()
+        task_dicts: List[Dict[str, object]] = []
+        for t in sorted(self._tasks.values(), key=lambda x: x.task_id):
+            entry: Dict[str, object] = {
+                "task_id": t.task_id,
+                "resource_id": t.resource_id,
+                "start": t.start,
+                "end": t.end,
+                "priority": t.priority,
+                "deps": list(t.deps),
+            }
+            if t.task_id in unstable:
+                entry["unstable"] = True
+            task_dicts.append(entry)
 
         return {
             "version": self.SNAPSHOT_VERSION,
@@ -671,17 +822,7 @@ class ScheduleEngine:
                 }
                 for r in sorted(self._resources.values(), key=lambda r: r.resource_id)
             ],
-            "tasks": [
-                {
-                    "task_id": t.task_id,
-                    "resource_id": t.resource_id,
-                    "start": t.start,
-                    "end": t.end,
-                    "priority": t.priority,
-                    "deps": list(t.deps),
-                }
-                for t in sorted(self._tasks.values(), key=lambda t: t.task_id)
-            ],
+            "tasks": task_dicts,
         }
 
     def save(self, path: str) -> None:
@@ -795,10 +936,17 @@ class ScheduleEngine:
             engine._tasks[tid] = _Task(tid, rid, start, end, priority, [])
 
         try:
+            unstable_ids: Set[str] = set()
             for tid, item in raw_tasks.items():
                 deps = item["deps"]
                 if not isinstance(deps, list):
                     raise SnapshotError(f"任务 {tid!r} 的 deps 必须是列表")
+                if "unstable" in item and not isinstance(item["unstable"], bool):
+                    raise SnapshotError(
+                        f"任务 {tid!r} 的 unstable 必须是布尔值"
+                    )
+                if item.get("unstable") is True:
+                    unstable_ids.add(tid)
                 normalized: List[str] = []
                 dep_seen: Set[str] = set()
                 for d in deps:
@@ -823,8 +971,10 @@ class ScheduleEngine:
             if engine._has_cycle():
                 raise SnapshotError("快照依赖图中存在环")
 
-            # 依赖时序约束。
+            # 依赖时序约束：unstable 任务允许暂时违反（unresolved 残留态）。
             for t in engine._tasks.values():
+                if t.task_id in unstable_ids:
+                    continue
                 for d in t.deps:
                     if t.start < engine._tasks[d].end:
                         raise SnapshotError(
@@ -832,16 +982,20 @@ class ScheduleEngine:
                             f" {d!r} 的 end({engine._tasks[d].end})"
                         )
 
-            # 同资源初始冲突。
-            for t in list(engine._tasks.values()):
-                clashes = engine._conflicts_against(
-                    t.task_id, t.resource_id, t.start, t.end
-                )
-                if clashes:
-                    others = ", ".join(c.other_task_id for c in clashes)
+            # 同资源初始冲突：只要求未标记任务之间互不重叠；与 unstable
+            # 任务的重叠是 unresolved 阻塞的合法残留，加载后保留待处理。
+            stable_tasks = [
+                t for t in engine._tasks.values() if t.task_id not in unstable_ids
+            ]
+            for i, t in enumerate(stable_tasks):
+                for other in stable_tasks[i + 1:]:
+                    if other.resource_id != t.resource_id:
+                        continue
+                    if _overlap(t.start, t.end, other.start, other.end) is None:
+                        continue
                     raise SnapshotError(
                         f"资源 {t.resource_id!r} 上任务 {t.task_id!r} 与 "
-                        f"{others} 时间重叠"
+                        f"{other.task_id!r} 时间重叠"
                     )
         except SnapshotError:
             raise

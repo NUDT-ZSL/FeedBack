@@ -313,7 +313,8 @@ class CascadeTests(unittest.TestCase):
 
     def test_cascade_priority_order_with_taskid_tiebreak(self) -> None:
         # a 大幅延后后，b、c 都要顺延到同一空位 [10,12)；
-        # 同优先级按 task_id 字典序，b 先处理先得，c 阻塞并留在原位。
+        # 同优先级按 task_id 字典序，b 先占位，c 的首选落点被占后
+        # 回退定位到紧随其后的 [12,14)。
         engine = make_engine(
             {"r1": [[0, 100]], "r2": [[0, 100]]},
             [
@@ -324,15 +325,25 @@ class CascadeTests(unittest.TestCase):
         )
         result = engine.move("a", 8, 10)
         self.assertTrue(result.success)
-        adjusted = {x.task_id for x in result.adjusted}
-        blocked = {x.task_id for x in result.blocked}
-        self.assertEqual(adjusted, {"b"})
-        self.assertEqual(blocked, {"c"})
-        self.assertEqual(engine.get_task("b")["start"], 10)
-        self.assertEqual((engine.get_task("c")["start"], engine.get_task("c")["end"]), (4, 6))
+        adjusted = {x.task_id: x.new_start for x in result.adjusted}
+        self.assertEqual(adjusted, {"b": 10})  # 先到者 b 占 [10,12)
+        self.assertEqual(len(result.blocked), 1)
+        loser = result.blocked[0]
+        self.assertEqual(loser.task_id, "c")
+        self.assertTrue(loser.resolved)
+        self.assertEqual((loser.attempted_start, loser.attempted_end), (10, 12))
+        self.assertEqual((loser.resolved_start, loser.resolved_end), (12, 14))
+        self.assertEqual(
+            (engine.get_task("b")["start"], engine.get_task("b")["end"]), (10, 12)
+        )
+        self.assertEqual(
+            (engine.get_task("c")["start"], engine.get_task("c")["end"]), (12, 14)
+        )
+        # 两者回退后仍满足对 a 的依赖且互不冲突（端点相接）
+        self.assertGreaterEqual(engine.get_task("c")["start"], engine.get_task("a")["end"])
 
     def test_cascade_higher_priority_wins_slot(self) -> None:
-        # 同样竞争 [10,12)，c 优先级更高，应当 c 得到、b 阻塞。
+        # 同样竞争 [10,12)，c 优先级更高，先占位；b 回退定位到 [12,14)。
         engine = make_engine(
             {"r1": [[0, 100]], "r2": [[0, 100]]},
             [
@@ -343,10 +354,19 @@ class CascadeTests(unittest.TestCase):
         )
         result = engine.move("a", 8, 10)
         self.assertTrue(result.success)
-        self.assertEqual({x.task_id for x in result.adjusted}, {"c"})
-        self.assertEqual({x.task_id for x in result.blocked}, {"b"})
-        self.assertEqual(engine.get_task("c")["start"], 10)
-        self.assertEqual(engine.get_task("b")["start"], 2)
+        self.assertEqual(
+            {x.task_id: x.new_start for x in result.adjusted}, {"c": 10}
+        )
+        loser = result.blocked[0]
+        self.assertEqual(loser.task_id, "b")
+        self.assertTrue(loser.resolved)
+        self.assertEqual((loser.resolved_start, loser.resolved_end), (12, 14))
+        self.assertEqual(
+            (engine.get_task("c")["start"], engine.get_task("c")["end"]), (10, 12)
+        )
+        self.assertEqual(
+            (engine.get_task("b")["start"], engine.get_task("b")["end"]), (12, 14)
+        )
 
     def test_no_unnecessary_shift_when_already_satisfies(self) -> None:
         # b 与 a 之间留有空隙，小幅移动不触及 b。
@@ -385,9 +405,9 @@ class BlockedCascadeTests(unittest.TestCase):
             ],
         )
 
-    def test_blocked_by_conflict_rolls_back_and_cuts_branch(self) -> None:
+    def test_blocked_by_conflict_relocates_and_cuts_branch(self) -> None:
         engine = self._build([[0, 100]])
-        engine.add_task("q", "r2", 6, 7)  # b 顺延后的落点 [6,9) 会撞上 q
+        engine.add_task("q", "r2", 6, 7)  # b 的首选落点 [6,9) 会撞上 q
         result = engine.move("a", 4, 6)
         self.assertTrue(result.success)
         self.assertEqual(len(result.blocked), 1)
@@ -400,15 +420,22 @@ class BlockedCascadeTests(unittest.TestCase):
              for x in blk.conflicts],
             [("q", 6, 7)],
         )
-        # b 回退原位
-        self.assertEqual((engine.get_task("b")["start"], engine.get_task("b")["end"]), (2, 5))
-        # b 的下游 c、d 不参与本次联动
+        # 回退定位到满足依赖、且不与已确认任务冲突的最近位置 [7,10)
+        self.assertTrue(blk.resolved)
+        self.assertFalse(blk.to_dict()["unresolved"])
+        self.assertEqual((blk.resolved_start, blk.resolved_end), (7, 10))
+        self.assertEqual(
+            (engine.get_task("b")["start"], engine.get_task("b")["end"]), (7, 10)
+        )
+        # b 自身回退后依赖约束满足，且与 q 仅端点相接、不冲突
+        self.assertGreaterEqual(engine.get_task("b")["start"], engine.get_task("a")["end"])
+        # b 的下游 c、d 不参与本次联动（冻结在原位）
         self.assertEqual(engine.get_task("c")["start"], 5)
         self.assertEqual(engine.get_task("d")["start"], 7)
         self.assertEqual(result.adjusted, [])
 
-    def test_blocked_by_availability_cuts_branch(self) -> None:
-        engine = self._build([[0, 8]])  # b 想顺延到 [8,11)，超出窗口
+    def test_blocked_by_availability_unresolved_stays_put(self) -> None:
+        engine = self._build([[0, 8]])  # b 首选 [8,11) 超窗；窗口内也无任何可行落点
         result = engine.move("a", 6, 8)
         self.assertTrue(result.success)
         self.assertEqual(len(result.blocked), 1)
@@ -416,8 +443,14 @@ class BlockedCascadeTests(unittest.TestCase):
         self.assertEqual(blk.task_id, "b")
         self.assertEqual(blk.reason, "out_of_availability")
         self.assertEqual((blk.attempted_start, blk.attempted_end), (8, 11))
+        # 找不到满足依赖的可行落点：明确标注 unresolved，保持原位
+        self.assertFalse(blk.resolved)
+        self.assertTrue(blk.to_dict()["unresolved"])
+        self.assertIsNone(blk.resolved_start)
         self.assertEqual(engine.get_task("b")["start"], 2)
+        # 下游冻结
         self.assertEqual(engine.get_task("c")["start"], 5)
+        self.assertEqual(engine.get_task("d")["start"], 7)
 
     def test_blocked_branch_does_not_affect_sibling_branch(self) -> None:
         # 菱形：b 分支被阻塞，c 分支仍正常顺延，汇合点 d 因 b 被排除而不动。
@@ -435,7 +468,7 @@ class BlockedCascadeTests(unittest.TestCase):
                 ("d", "r4", 5, 7, 0, ["b", "c"]),
             ],
         )
-        engine.add_task("q", "r2", 6, 10)  # b 的落点 [6,9) 撞 q
+        engine.add_task("q", "r2", 6, 10)  # b 的首选落点 [6,9) 撞 q
         result = engine.move("a", 4, 6)
         self.assertTrue(result.success)
         blocked_ids = {b.task_id for b in result.blocked}
@@ -443,7 +476,254 @@ class BlockedCascadeTests(unittest.TestCase):
         self.assertEqual(blocked_ids, {"b"})
         self.assertEqual(adjusted_ids, {"c"})  # 兄弟分支照常联动
         self.assertEqual(engine.get_task("c")["start"], 6)
-        self.assertEqual(engine.get_task("d")["start"], 5)  # 汇合点不参与
+        # b 回退定位到 q 之后的最近可行落点 [10,13)
+        blk = next(b for b in result.blocked if b.task_id == "b")
+        self.assertTrue(blk.resolved)
+        self.assertEqual((blk.resolved_start, blk.resolved_end), (10, 13))
+        self.assertEqual(
+            (engine.get_task("b")["start"], engine.get_task("b")["end"]), (10, 13)
+        )
+        self.assertEqual(engine.get_task("d")["start"], 5)  # 汇合点冻结不参与
+
+
+class CascadeFixRegressionTests(unittest.TestCase):
+    """两个修复的回归测试：blocked 回退定位 + 先到者优先占位。"""
+
+    def test_relocated_blocked_task_satisfies_deps_past_multiple_blockers(self) -> None:
+        # b 的首选落点 [6,9) 撞 q1；回退定位必须跳过 q1、q2，
+        # 找到满足依赖且不冲突的最近位置 [11,14)。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 100]], "r3": [[0, 100]]},
+            [
+                ("a", "r1", 0, 2, 0, []),
+                ("b", "r2", 2, 5, 0, ["a"]),
+                ("c", "r3", 5, 7, 0, ["b"]),
+            ],
+        )
+        engine.add_task("q1", "r2", 6, 8)
+        engine.add_task("q2", "r2", 9, 11)
+        result = engine.move("a", 4, 6)
+        self.assertTrue(result.success)
+        blk = result.blocked[0]
+        self.assertEqual(blk.task_id, "b")
+        self.assertTrue(blk.resolved)
+        self.assertEqual((blk.attempted_start, blk.attempted_end), (6, 9))
+        self.assertEqual((blk.resolved_start, blk.resolved_end), (11, 14))
+        b = engine.get_task("b")
+        self.assertEqual((b["start"], b["end"]), (11, 14))
+        self.assertGreaterEqual(b["start"], engine.get_task("a")["end"])
+        # 与所有同资源任务无真实重叠
+        for other in engine.list_tasks("r2"):
+            if other["task_id"] == "b":
+                continue
+            self.assertFalse(b["start"] < other["end"] and other["start"] < b["end"])
+        # 序列化包含新字段
+        payload = blk.to_dict()
+        self.assertTrue(payload["resolved"])
+        self.assertFalse(payload["unresolved"])
+        self.assertEqual(payload["resolved_start"], 11)
+        # 下游冻结
+        self.assertEqual(engine.get_task("c")["start"], 5)
+
+    def test_relocation_searches_later_availability_window(self) -> None:
+        # 首选落点 [10,13) 落在第一窗口之外；第二窗口 [20,30) 才有位置。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 10], [20, 30]]},
+            [("a", "r1", 0, 2, 0, []), ("b", "r2", 2, 5, 0, ["a"])],
+        )
+        result = engine.move("a", 8, 10)
+        self.assertTrue(result.success)
+        blk = result.blocked[0]
+        self.assertEqual(blk.reason, "out_of_availability")
+        self.assertTrue(blk.resolved)
+        self.assertEqual((blk.resolved_start, blk.resolved_end), (20, 23))
+        self.assertEqual(
+            (engine.get_task("b")["start"], engine.get_task("b")["end"]), (20, 23)
+        )
+
+    def test_adjacent_downstream_tasks_high_priority_claims_slot_first(self) -> None:
+        # 同资源上两个原本相邻的下游 lo / hi，root 延后后都指向同一空位；
+        # 忽略未处理任务旧位置后，高优先级 hi 先占位，lo 回退到紧邻其后，
+        # 二者最终都满足依赖且互不冲突（旧实现会让 hi 被 lo 的旧位挡住）。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 100]]},
+            [
+                ("a", "r1", 0, 2, 0, []),
+                ("lo", "r2", 2, 4, 1, ["a"]),
+                ("hi", "r2", 4, 6, 9, ["a"]),
+            ],
+        )
+        result = engine.move("a", 10, 12)
+        self.assertTrue(result.success)
+        self.assertEqual(
+            {x.task_id for x in result.adjusted}, {"hi"}
+        )  # 高优先级先占 [12,14)
+        loser = result.blocked[0]
+        self.assertEqual(loser.task_id, "lo")
+        self.assertTrue(loser.resolved)
+        self.assertEqual((loser.resolved_start, loser.resolved_end), (14, 16))
+        self.assertEqual(
+            (engine.get_task("hi")["start"], engine.get_task("hi")["end"]), (12, 14)
+        )
+        self.assertEqual(
+            (engine.get_task("lo")["start"], engine.get_task("lo")["end"]), (14, 16)
+        )
+        # 两者都仍满足对 a 的依赖，端点相接不冲突
+        for tid in ("lo", "hi"):
+            self.assertGreaterEqual(
+                engine.get_task(tid)["start"], engine.get_task("a")["end"]
+            )
+
+    def test_diamond_dedup_holds_when_branch_is_blocked(self) -> None:
+        engine = make_engine(
+            {f"r{i}": [[0, 100]] for i in range(4)},
+            [
+                ("a", "r0", 0, 2, 0, []),
+                ("b", "r1", 2, 5, 0, ["a"]),
+                ("c", "r2", 2, 4, 0, ["a"]),
+                ("d", "r3", 5, 7, 0, ["b", "c"]),
+            ],
+        )
+        engine.add_task("q", "r1", 6, 10)  # b 首选 [6,9) 撞 q
+        result = engine.move("a", 4, 6)
+        self.assertTrue(result.success)
+        # 菱形去重：adjusted / blocked 各自无重复任务 id
+        adj_ids = [x.task_id for x in result.adjusted]
+        blk_ids = [b.task_id for b in result.blocked]
+        self.assertEqual(len(adj_ids), len(set(adj_ids)))
+        self.assertEqual(len(blk_ids), len(set(blk_ids)))
+        self.assertEqual(adj_ids, ["c"])
+        self.assertEqual(blk_ids, ["b"])
+        # b 回退定位成功后自身依赖满足；c 顺延；d 冻结
+        blk_b = result.blocked[0]
+        self.assertTrue(blk_b.resolved)
+        self.assertEqual((blk_b.resolved_start, blk_b.resolved_end), (10, 13))
+        self.assertGreaterEqual(
+            engine.get_task("b")["start"], engine.get_task("a")["end"]
+        )
+        self.assertEqual(engine.get_task("c")["start"], 6)
+        self.assertEqual(engine.get_task("d")["start"], 5)
+
+    def test_unresolved_snapshot_roundtrip_preserves_state(self) -> None:
+        # 窗口 [0,8)：b 首选 [8,11) 超窗且无任何可行落点 -> unresolved，
+        # 保持原位 [2,5)，此时 b.start(2) < a.end(8) 违反依赖，
+        # 快照必须能往返并明确标注 unstable。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 8]], "r3": [[0, 100]]},
+            [
+                ("a", "r1", 0, 2, 0, []),
+                ("b", "r2", 2, 5, 0, ["a"]),
+                ("c", "r3", 5, 7, 0, ["b"]),
+            ],
+        )
+        result = engine.move("a", 6, 8)
+        self.assertTrue(result.success)
+        blk = result.blocked[0]
+        self.assertFalse(blk.resolved)
+        self.assertTrue(blk.to_dict()["unresolved"])
+        self.assertEqual(engine.get_task("b")["start"], 2)
+
+        data = engine.to_dict()
+        by_id = {t["task_id"]: t for t in data["tasks"]}
+        self.assertTrue(by_id["b"].get("unstable"))  # 残留违反被显式标注
+
+        tmpdir = tempfile.mkdtemp()
+        path = os.path.join(tmpdir, "unresolved.json")
+        engine.save(path)
+        loaded = ScheduleEngine.load(path)  # 不应报损坏
+        self.assertEqual(loaded.to_dict(), data)
+        self.assertEqual(
+            (loaded.get_task("b")["start"], loaded.get_task("b")["end"]), (2, 5)
+        )
+        self.assertEqual(loaded.get_task("c")["start"], 5)
+
+    def test_resolved_relocation_marks_only_frozen_violators_unstable(self) -> None:
+        # b 重定位到很晚的 [11,14)，其冻结下游 c 停在 [5,7) 暂时违反依赖；
+        # b 自身合法（不标 unstable），只有 c 被标注；save/load 一致。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 100]], "r3": [[0, 100]]},
+            [
+                ("a", "r1", 0, 2, 0, []),
+                ("b", "r2", 2, 5, 0, ["a"]),
+                ("c", "r3", 5, 7, 0, ["b"]),
+            ],
+        )
+        engine.add_task("q1", "r2", 6, 8)
+        engine.add_task("q2", "r2", 9, 11)
+        engine.move("a", 4, 6)
+        by_id = {t["task_id"]: t for t in engine.to_dict()["tasks"]}
+        self.assertNotIn("unstable", by_id["b"])
+        self.assertTrue(by_id["c"].get("unstable"))
+        tmpdir = tempfile.mkdtemp()
+        path = os.path.join(tmpdir, "partial.json")
+        engine.save(path)
+        loaded = ScheduleEngine.load(path)
+        self.assertEqual(loaded.to_dict(), engine.to_dict())
+
+    def test_unstable_marker_clears_after_conflict_resolved(self) -> None:
+        # 先制造 unresolved（b 标 unstable），再把 a 拖回让所有约束恢复，
+        # unstable 标记必须动态消失而不是粘滞。
+        engine = make_engine(
+            {"r1": [[0, 100]], "r2": [[0, 8]]},
+            [("a", "r1", 0, 2, 0, []), ("b", "r2", 2, 5, 0, ["a"])],
+        )
+        engine.move("a", 6, 8)  # b unresolved，原位 [2,5) 早于 a.end=8
+        self.assertIn("b", {t["task_id"] for t in engine.to_dict()["tasks"]
+                            if t.get("unstable")})
+        result = engine.move("a", 0, 2)  # 拖回；b 原位 [2,5) 重新满足
+        self.assertTrue(result.success)
+        self.assertFalse(
+            any(t.get("unstable") for t in engine.to_dict()["tasks"])
+        )
+        tmpdir = tempfile.mkdtemp()
+        path = os.path.join(tmpdir, "healed.json")
+        engine.save(path)
+        loaded = ScheduleEngine.load(path)
+        self.assertEqual(loaded.to_dict(), engine.to_dict())
+
+
+    def test_extreme_crowding_frozen_task_may_overlap_earlier_relocation(self) -> None:
+        # README 记载的极端拥挤残留：x 先被阻塞、回退到未处理任务 y
+        # 的旧槽 [14,16)；随后 z 也被阻塞，其下游 y 立即冻结在旧槽，
+        # 于是已落位的 x 与冻结的 y 同槽。回退规则本身符合需求
+        # （只要求与“当时已确认任务”不冲突）；该残留被双方 unstable
+        # 显式标注、快照可往返，不会被静默吞掉。
+        engine = make_engine({"r": [[0, 200]]})
+        engine.add_task("a", "r", 0, 2, 0, [])
+        engine.add_task("p", "r", 13, 14, 0, [])      # 外部障碍
+        engine.add_task("x", "r", 2, 4, 9, ["a"])     # 高优先级，先处理
+        engine.add_task("z", "r", 4, 6, 1, ["a"])     # 后处理，同样被 p 阻塞
+        engine.add_task("y", "r", 14, 16, 0, ["z"])   # z 的下游，旧槽被 x 占
+        result = engine.move("a", 10, 12)
+        self.assertTrue(result.success)
+        blocked = {b.task_id: b for b in result.blocked}
+        self.assertEqual(set(blocked), {"x", "z"})
+        self.assertTrue(blocked["x"].resolved)
+        self.assertEqual(
+            (blocked["x"].attempted_start, blocked["x"].attempted_end), (12, 14)
+        )
+        self.assertEqual(
+            (blocked["x"].resolved_start, blocked["x"].resolved_end), (14, 16)
+        )
+        self.assertTrue(blocked["z"].resolved)
+        self.assertEqual(
+            (blocked["z"].resolved_start, blocked["z"].resolved_end), (16, 18)
+        )
+        # y 被冻结、不产生联动记录，停在旧槽与 x 同槽
+        self.assertEqual(
+            (engine.get_task("y")["start"], engine.get_task("y")["end"]), (14, 16)
+        )
+        self.assertNotIn("y", {a.task_id for a in result.adjusted})
+        unstable = {
+            t["task_id"] for t in engine.to_dict()["tasks"] if t.get("unstable")
+        }
+        self.assertEqual(unstable, {"x", "y"})  # 同槽双方都被显式标注
+        # 快照往返一致、可加载（不被误判为损坏文件）
+        tmpdir = tempfile.mkdtemp()
+        path = os.path.join(tmpdir, "crowded.json")
+        engine.save(path)
+        loaded = ScheduleEngine.load(path)
+        self.assertEqual(loaded.to_dict(), engine.to_dict())
 
 
 # ---------------------------------------------------------------------------
