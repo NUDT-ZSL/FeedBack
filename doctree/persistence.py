@@ -344,11 +344,18 @@ def load(path: str) -> DocumentTree:
             raise ValidationError(f"line {line_no}: missing/invalid 'seq'")
         if seq != expected_seq:
             gap = seq - expected_seq
-            detail = (
-                f"seq {seq} is not consecutive after seq {last_seq} "
-                f"(expected {expected_seq}, {gap:+d}); the journal is missing records "
-                f"or has been truncated/edited"
-            )
+            if gap > 0:
+                detail = (
+                    f"seq {seq} is not consecutive after seq {last_seq} "
+                    f"(expected {expected_seq}, +{gap}); the journal is missing records "
+                    f"or has been truncated/edited"
+                )
+            else:
+                detail = (
+                    f"seq {seq} is not consecutive after seq {last_seq} "
+                    f"(expected {expected_seq}, {gap}); this seq is duplicated or "
+                    f"overlaps an earlier record (a record line was copied/inserted)"
+                )
             rtype = record.get("type")
             if rtype == _RECORD_CHANGE:
                 change = record.get("change") if isinstance(record.get("change"), dict) else {}

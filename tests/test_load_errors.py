@@ -109,6 +109,29 @@ class SeqAndStructureTest(CorruptJournalTestBase):
 
         self.assertLoadFails(InvalidChangeError, check=check)
 
+    def test_duplicated_record_seq_reports_overlap(self) -> None:
+        # 手工归档常见损坏：某条 change 行被复制了一份，导致序号回退/重叠。
+        recs = self._records()
+        duplicate = json.loads(json.dumps(recs[5]))  # 第 4 条变更，seq=6
+        recs.insert(5, duplicate)
+        self._write(recs)
+
+        def check(exc: Exception) -> None:
+            assert isinstance(exc, InvalidChangeError)
+            message = str(exc)
+            self.assertIn("not consecutive", message)
+            self.assertIn("duplicated", message)  # 重叠（而非缺记录）措辞
+
+        self.assertLoadFails(InvalidChangeError, check=check)
+
+    def test_swapped_change_lines_rejected(self) -> None:
+        # 交换相邻两条 change 行：seq 立刻不连续，错误定位到先出现的异常行。
+        recs = self._records()
+        recs[4], recs[5] = recs[5], recs[4]
+        self._write(recs)
+        with self.assertRaises(InvalidChangeError):
+            load(self.path)
+
     def test_deleted_record_detected_as_gap(self) -> None:
         # 删掉倒数第二条记录，重排行尾 seq 也无法掩盖链断裂（base 不匹配）。
         recs = self._records()
