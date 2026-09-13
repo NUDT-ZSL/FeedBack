@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, List, Optional, Tuple, Union
+from typing import Any, Deque, Dict, Iterator, List, Optional, Tuple, Union
 
 __all__ = [
     "FakeClock",
@@ -82,6 +84,15 @@ class FakeClock:
         if not self._is_number(start) or start < 0:
             raise ValueError("时钟起始时间必须是非负数")
         self._now: float = float(start)
+        # 时钟读数 / 推进与内核状态操作使用同一把锁：所有内核方法都在
+        # key 锁内读时钟，tick() 也取这把锁，从而“推进时钟 + 状态惰性
+        # 迁移”在并发下不会与 allow/record 交错。
+        self._lock = threading.RLock()
+
+    @property
+    def lock(self) -> threading.RLock:
+        """时钟内部锁（内核 key 锁内会重入获取，外部一般不需要直接使用）。"""
+        return self._lock
 
     @staticmethod
     def _is_number(value: Any) -> bool:
@@ -89,7 +100,8 @@ class FakeClock:
 
     def now(self) -> float:
         """返回当前逻辑时间（浮点秒）。"""
-        return self._now
+        with self._lock:
+            return self._now
 
     def tick(self, delta: Number = 1) -> float:
         """把时钟向前推进 ``delta`` 个时间单位并返回新的当前时间。
@@ -99,18 +111,133 @@ class FakeClock:
         """
         if not self._is_number(delta) or delta < 0:
             raise ValueError("时钟只能向前推进，delta 必须是非负数")
-        self._now += float(delta)
-        return self._now
+        with self._lock:
+            self._now += float(delta)
+            return self._now
 
     def set_now(self, value: Number) -> None:
         """直接设置绝对时间，仅用于快照恢复；目标时间不得早于当前时间。"""
         if not self._is_number(value) or value < 0:
             raise ValueError("时钟时间必须是非负数")
-        if value < self._now:
-            raise ValueError(
-                f"逻辑时钟不能回退：当前 {self._now}，目标 {value}"
-            )
-        self._now = float(value)
+        with self._lock:
+            if value < self._now:
+                raise ValueError(
+                    f"逻辑时钟不能回退：当前 {self._now}，目标 {value}"
+                )
+            self._now = float(value)
+
+
+# ---------------------------------------------------------------------------
+# 按 key 划分的锁注册表
+# ---------------------------------------------------------------------------
+
+
+class _KeyLockRegistry:
+    """为每个 key 维护一把可重入锁，并提供“锁住全部 key”的快照能力。
+
+    并发模型：
+
+    * 单个 key 的公开操作持有该 key 的 :class:`threading.RLock`，
+      因此同一 key 上 allow / record_* / get_state / reset 串行化，
+      不同 key 使用不同锁、互不阻塞；
+    * ``_meta`` 元锁只在“获取/创建 key 锁”以及快照开始/结束时短暂持有，
+      不覆盖业务临界区，避免不同 key 被串行化；
+    * :meth:`acquire_all` 先取元锁（阻塞新 key 的创建），再按 key 排序
+      依次取全部 key 锁，得到某个时刻所有 key 的一致性视图。
+      锁序固定为 **元锁 → key 锁 → 时钟锁**，全局唯一，不会死锁。
+    """
+
+    def __init__(self) -> None:
+        self._meta = threading.RLock()
+        self._locks: Dict[str, threading.RLock] = {}
+        # 每线程：key -> [重入深度, 锁对象]。同 key 重入时直接复用已缓存的
+        # 锁，不再触碰元锁，从而杜绝“持 key 锁等元锁、快照持元锁等 key 锁”
+        # 的锁序环（Guard 的复合临界区会在同一把 key 锁上多次重入）。
+        self._local = threading.local()
+
+    def _held(self) -> Dict[str, List[Any]]:
+        held = getattr(self._local, "held", None)
+        if held is None:
+            held = {}
+            self._local.held = held
+        return held
+
+    def key_lock(self, key: str) -> threading.RLock:
+        """返回（必要时创建）``key`` 对应的锁。"""
+        with self._meta:
+            lock = self._locks.get(key)
+            if lock is None:
+                lock = threading.RLock()
+                self._locks[key] = lock
+            return lock
+
+    @contextmanager
+    def locked(self, key: str) -> Iterator[None]:
+        """在 ``key`` 的锁上下文中执行（同线程同 key 可任意重入）。"""
+        held = self._held()
+        entry = held.get(key)
+        if entry is not None:
+            # 本线程已持有该 key 锁：纯重入，不经过元锁、不查全局表。
+            entry[0] += 1
+            lock = entry[1]
+            lock.acquire()
+            try:
+                yield
+            finally:
+                lock.release()
+                entry[0] -= 1
+                if entry[0] == 0:
+                    del held[key]
+            return
+
+        # 首次获取：经元锁创建/查到锁，随后业务临界区只持 key 锁。
+        lock = self.key_lock(key)
+        lock.acquire()
+        held[key] = [1, lock]
+        try:
+            yield
+        finally:
+            lock.release()
+            del held[key]
+
+    @contextmanager
+    def acquire_all(self, keys: Optional[List[str]] = None) -> Iterator[List[str]]:
+        """获取全部 key 锁的一致性临界区。
+
+        进入时持有元锁（阻塞新 key 的创建），再按字典序获取所有 key 锁
+        （``keys`` 给定时锁定给定集合与现存 key 的并集），退出时反序释放。
+        持锁期间其他线程无法创建新 key，也无法进入任何已有 key 的业务
+        临界区。获取到的锁同样登记进线程持锁表，因此快照临界区内再调用
+        同 key 的业务方法（重入）不会去抢元锁。
+        """
+        held = self._held()
+        self._meta.acquire()
+        try:
+            if keys is None:
+                targets = sorted(self._locks)
+            else:
+                targets = sorted(set(self._locks) | set(keys))
+            acquired: List[Tuple[str, threading.RLock]] = []
+            for name in targets:
+                lock = self.key_lock(name)  # 在元锁内创建缺失的锁
+                lock.acquire()
+                entry = held.get(name)
+                if entry is None:
+                    held[name] = [1, lock]
+                else:
+                    entry[0] += 1
+                acquired.append((name, lock))
+            try:
+                yield targets
+            finally:
+                for name, lock in reversed(acquired):
+                    lock.release()
+                    entry = held[name]
+                    entry[0] -= 1
+                    if entry[0] == 0:
+                        del held[name]
+        finally:
+            self._meta.release()
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +273,7 @@ class SlidingWindowRateLimiter:
         window_length: Number,
         rate_limit: int,
         clock: FakeClock,
+        lock_registry: Optional["_KeyLockRegistry"] = None,
     ) -> None:
         if not FakeClock._is_number(window_length) or window_length <= 0:
             raise ValueError("window_length 必须是正数，不能为 0 或负数")
@@ -157,6 +285,9 @@ class SlidingWindowRateLimiter:
         self.rate_limit: int = int(rate_limit)
         self._clock = clock
         self._states: Dict[str, _LimiterState] = {}
+        # 独立使用时自建注册表；被 Guard 组合时传入共享注册表，
+        # 这样限流 + 熔断的复合操作可以在同一把 key 锁内完成。
+        self._locks = lock_registry or _KeyLockRegistry()
 
     # -- 内部工具 -----------------------------------------------------------
 
@@ -175,6 +306,7 @@ class SlidingWindowRateLimiter:
         return int(cost)
 
     def _state(self, key: str) -> _LimiterState:
+        """返回（必要时创建）key 状态。调用方必须持有该 key 的锁。"""
         st = self._states.get(key)
         if st is None:
             st = _LimiterState(events=deque())
@@ -187,10 +319,28 @@ class SlidingWindowRateLimiter:
         while st.events and st.events[0][0] <= boundary:
             st.events.popleft()
 
-    def _current_usage(self, key: str) -> int:
+    def _stats_locked(self, key: str, now: Optional[float] = None) -> Dict[str, Any]:
+        """组装单个 key 的限流统计；调用方必须持有该 key 的锁。"""
+        if now is None:
+            now = self._clock.now()
         st = self._state(key)
-        self._evict(st, self._clock.now())
-        return sum(cost for _, cost in st.events)
+        self._evict(st, now)
+        used = sum(c for _, c in st.events)
+        return {
+            "window_length": self.window_length,
+            "limit": self.rate_limit,
+            "current": used,
+            "remaining": max(0, self.rate_limit - used),
+            "events": len(st.events),
+            "oldest": st.events[0][0] if st.events else None,
+            "now": now,
+        }
+
+    def _current_usage(self, key: str) -> int:
+        with self._locks.locked(key):
+            st = self._state(key)
+            self._evict(st, self._clock.now())
+            return sum(cost for _, cost in st.events)
 
     # -- 对外 API -----------------------------------------------------------
 
@@ -199,83 +349,93 @@ class SlidingWindowRateLimiter:
 
         供 :class:`Guard` 在“限流通过但熔断拒绝”时回滚使用，从而保证
         熔断拒绝不消耗限流配额。返回结构与 :meth:`allow` 一致，
-        放行时额外携带 ``"_commit": [时间戳, cost]`` 供 :meth:`commit` 使用。
+        放行时额外携带 ``"_commit": (时间戳, cost)`` 供 :meth:`commit` 使用。
+
+        本方法持有 ``key`` 锁直到检查结束；在 Guard 内与熔断检查处于
+        同一把（共享的）可重入 key 锁临界区中。
         """
         key = self._validate_key(key)
         cost = self._validate_cost(cost)
-        now = self._clock.now()
-        st = self._state(key)
-        self._evict(st, now)
+        with self._locks.locked(key):
+            now = self._clock.now()
+            st = self._state(key)
+            self._evict(st, now)
 
-        used = sum(c for _, c in st.events)
-        if cost > self.rate_limit:
+            used = sum(c for _, c in st.events)
+            if cost > self.rate_limit:
+                return {
+                    "allowed": False,
+                    "key": key,
+                    "reason": "cost_exceeds_limit",
+                    "rejected_by": "rate_limiter",
+                    "retry_after": None,
+                    "message": (
+                        f"单次 cost={cost} 超过窗口阈值 {self.rate_limit}，永远无法放行"
+                    ),
+                    "window_length": self.window_length,
+                    "limit": self.rate_limit,
+                    "current": used,
+                    "now": now,
+                }
+
+            if used + cost > self.rate_limit:
+                # 等待最老的若干个事件逐个过期，直到腾出 cost 个容量。
+                need = used + cost - self.rate_limit
+                freed = 0
+                retry_at: Optional[float] = None
+                for ts, c in st.events:
+                    freed += c
+                    if freed >= need:
+                        retry_at = ts + self.window_length
+                        break
+                retry_after: Optional[float] = (
+                    max(0.0, retry_at - now) if retry_at is not None else None
+                )
+                return {
+                    "allowed": False,
+                    "key": key,
+                    "reason": "rate_limited",
+                    "rejected_by": "rate_limiter",
+                    "retry_after": retry_after,
+                    "message": (
+                        f"窗口内已用 {used}/{self.rate_limit}，"
+                        f"至少等待 {retry_after} 时间单位"
+                    ),
+                    "window_length": self.window_length,
+                    "limit": self.rate_limit,
+                    "current": used,
+                    "now": now,
+                }
+
             return {
-                "allowed": False,
+                "allowed": True,
                 "key": key,
-                "reason": "cost_exceeds_limit",
-                "rejected_by": "rate_limiter",
-                "retry_after": None,
-                "message": (
-                    f"单次 cost={cost} 超过窗口阈值 {self.rate_limit}，永远无法放行"
-                ),
+                "rejected_by": None,
+                "current": used + cost,
+                "remaining": self.rate_limit - used - cost,
                 "window_length": self.window_length,
                 "limit": self.rate_limit,
-                "current": used,
                 "now": now,
+                "_commit": (now, cost),
             }
-
-        if used + cost > self.rate_limit:
-            # 等待最老的若干个事件逐个过期，直到腾出 cost 个容量。
-            need = used + cost - self.rate_limit
-            freed = 0
-            retry_at: Optional[float] = None
-            for ts, c in st.events:
-                freed += c
-                if freed >= need:
-                    retry_at = ts + self.window_length
-                    break
-            retry_after: Optional[float] = (
-                max(0.0, retry_at - now) if retry_at is not None else None
-            )
-            return {
-                "allowed": False,
-                "key": key,
-                "reason": "rate_limited",
-                "rejected_by": "rate_limiter",
-                "retry_after": retry_after,
-                "message": (
-                    f"窗口内已用 {used}/{self.rate_limit}，"
-                    f"至少等待 {retry_after} 时间单位"
-                ),
-                "window_length": self.window_length,
-                "limit": self.rate_limit,
-                "current": used,
-                "now": now,
-            }
-
-        return {
-            "allowed": True,
-            "key": key,
-            "rejected_by": None,
-            "current": used + cost,
-            "remaining": self.rate_limit - used - cost,
-            "window_length": self.window_length,
-            "limit": self.rate_limit,
-            "now": now,
-            "_commit": (now, cost),
-        }
 
     def commit(self, key: str, cost: int, timestamp: Number) -> None:
-        """把一次此前通过 :meth:`reserve` 检查的请求正式计入窗口。"""
+        """把一次此前通过 :meth:`reserve` 检查的请求正式计入窗口。
+
+        与 :meth:`reserve` 使用同一把 key 锁；Guard 在更大的复合临界区
+        里调用时依靠锁的可重入性与检查保持原子。
+        """
         key = self._validate_key(key)
         cost = self._validate_cost(cost)
         if not FakeClock._is_number(timestamp) or timestamp < 0:
             raise ValueError("timestamp 必须是非负数")
-        self._state(key).events.append((float(timestamp), cost))
+        with self._locks.locked(key):
+            self._state(key).events.append((float(timestamp), cost))
 
     def allow(self, key: str, cost: int = 1) -> Dict[str, Any]:
         """判断 ``key`` 的一次请求（权重 ``cost``）能否放行并计入窗口。
 
+        “检查 + 扣减”在同一把 key 锁内原子完成，并发下不会超额扣减。
         放行时把本次请求计入窗口；超限时不计数。返回字典：
 
         * 放行：``{"allowed": True, "current": 窗口内已用量, ...}``
@@ -283,49 +443,48 @@ class SlidingWindowRateLimiter:
           "retry_after": 最早多久后有足够容量, "rejected_by":
           "rate_limiter"}``
         """
-        decision = self.reserve(key, cost)
-        if decision.get("allowed"):
-            ts, c = decision.pop("_commit")
-            self.commit(key, c, ts)
-        return decision
+        key = self._validate_key(key)
+        cost = self._validate_cost(cost)
+        with self._locks.locked(key):
+            decision = self.reserve(key, cost)
+            if decision.get("allowed"):
+                ts, c = decision.pop("_commit")
+                self.commit(key, c, ts)
+            return decision
 
     def reset(self, key: str) -> None:
         """清空 ``key`` 的窗口计数。"""
         key = self._validate_key(key)
-        self._states.pop(key, None)
+        with self._locks.locked(key):
+            self._states.pop(key, None)
 
     def keys(self) -> List[str]:
-        """返回当前有计数的 key 列表。"""
-        return list(self._states.keys())
+        """返回当前有计数的 key 列表（快照副本）。"""
+        with self._locks.acquire_all():
+            return list(self._states.keys())
 
     def get_stats(self, key: Optional[str] = None) -> Dict[str, Any]:
         """返回限流统计。
 
-        传入 ``key`` 时直接返回该 key 的统计字典；不传时返回
-        ``{key: stats}`` 的全量字典。
+        传入 ``key`` 时直接返回该 key 的统计字典；不传时在全部 key 锁的
+        一致性临界区内返回 ``{key: stats}`` 的全量字典。
         """
         single = key is not None
         if key is not None:
             key = self._validate_key(key)
-            keys = [key]
+            targets = [key]
         else:
-            keys = list(self._states.keys())
-        result: Dict[str, Any] = {}
-        now = self._clock.now()
-        for k in keys:
-            st = self._state(k)
-            self._evict(st, now)
-            used = sum(c for _, c in st.events)
-            result[k] = {
-                "window_length": self.window_length,
-                "limit": self.rate_limit,
-                "current": used,
-                "remaining": max(0, self.rate_limit - used),
-                "events": len(st.events),
-                "oldest": st.events[0][0] if st.events else None,
-                "now": now,
-            }
-        return result[key] if single else result
+            targets = None
+        with self._locks.acquire_all(targets):
+            if single:
+                keys = [key]
+            else:
+                keys = list(self._states.keys())
+            result: Dict[str, Any] = {}
+            now = self._clock.now()
+            for k in keys:
+                result[k] = self._stats_locked(k, now)
+            return result[key] if single else result
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +557,7 @@ class CircuitBreaker:
         max_cooldown: Number = 60.0,
         observation_window: Number = 30.0,
         fast_open_multiplier: float = 0.5,
+        lock_registry: Optional["_KeyLockRegistry"] = None,
     ) -> None:
         self._clock = clock
         self._validate_config(
@@ -427,6 +587,9 @@ class CircuitBreaker:
         self.observation_window: float = float(observation_window)
         self.fast_open_multiplier: float = float(fast_open_multiplier)
         self._states: Dict[str, _BreakerState] = {}
+        # 与限流器共享同一注册表时，Guard 的“限流 + 熔断”复合操作持有
+        # 同一把 key 锁；独立使用时自建。
+        self._locks = lock_registry or _KeyLockRegistry()
 
     # -- 校验 ---------------------------------------------------------------
 
@@ -492,6 +655,7 @@ class CircuitBreaker:
     # -- 状态存取 -----------------------------------------------------------
 
     def _state(self, key: str) -> _BreakerState:
+        """返回（必要时创建）key 状态。调用方必须持有该 key 的锁。"""
         st = self._states.get(key)
         if st is None:
             st = _BreakerState(
@@ -577,8 +741,8 @@ class CircuitBreaker:
 
     # -- 对外 API -----------------------------------------------------------
 
-    def allow(self, key: str, cost: int = 1) -> Dict[str, Any]:
-        """判断 ``key`` 的一次调用能否通过熔断闸门。
+    def _allow_locked(self, key: str, cost: int = 1) -> Dict[str, Any]:
+        """判断 ``key`` 的一次调用能否通过熔断闸门（调用方持有 key 锁）。
 
         * closed：放行；
         * open：直接拒绝（不真正执行），冷却到期时惰性切到 half_open；
@@ -648,8 +812,8 @@ class CircuitBreaker:
             "now": now,
         }
 
-    def record_success(self, key: str) -> Dict[str, Any]:
-        """记录 ``key`` 的一次调用成功。
+    def _record_success_locked(self, key: str) -> Dict[str, Any]:
+        """记录 ``key`` 的一次调用成功（调用方持有 key 锁）。
 
         * closed：计入统计窗口并把连续失败数清零；
         * half_open：计一次探测成功；全部探测成功才关闭熔断并清零统计；
@@ -705,8 +869,8 @@ class CircuitBreaker:
                 "successes": succ, "failures": fail, "failure_rate": rate,
                 "now": now}
 
-    def record_failure(self, key: str) -> Dict[str, Any]:
-        """记录 ``key`` 的一次调用失败。
+    def _record_failure_locked(self, key: str) -> Dict[str, Any]:
+        """记录 ``key`` 的一次调用失败（调用方持有 key 锁）。
 
         * closed：计入窗口，按连续失败数 / 失败率评估是否打开；
           观察期内超标时按 ``fast_open_multiplier`` 缩短冷却；
@@ -806,8 +970,8 @@ class CircuitBreaker:
             "now": now,
         }
 
-    def get_state(self, key: str) -> Dict[str, Any]:
-        """返回 ``key`` 的完整状态快照。
+    def _get_state_locked(self, key: str) -> Dict[str, Any]:
+        """返回 ``key`` 的完整状态快照（调用方持有 key 锁）。
 
         包含：``state``、窗口内 ``successes`` / ``failures`` 数、
         ``failure_rate``、``next_probe_at``（下一次可探测时间，
@@ -849,20 +1013,60 @@ class CircuitBreaker:
             "now": now,
         }
 
-    def reset(self, key: str) -> None:
-        """重置 ``key``：回到 closed 并清空全部统计与冷却状态。"""
+    def _reset_locked(self, key: str) -> None:
+        """重置 ``key``（调用方持有 key 锁）：回 closed 并清空统计。"""
         key = self._validate_key(key)
         self._states.pop(key, None)
 
+    # -- 对外加锁 API -------------------------------------------------------
+
+    def allow(self, key: str, cost: int = 1) -> Dict[str, Any]:
+        """持 key 锁执行熔断检查（语义见 :meth:`_allow_locked`）。"""
+        key = self._validate_key(key)
+        self._validate_cost(cost)
+        with self._locks.locked(key):
+            return self._allow_locked(key, cost)
+
+    def record_success(self, key: str) -> Dict[str, Any]:
+        """持 key 锁记录成功（语义见 :meth:`_record_success_locked`）。"""
+        key = self._validate_key(key)
+        with self._locks.locked(key):
+            return self._record_success_locked(key)
+
+    def record_failure(self, key: str) -> Dict[str, Any]:
+        """持 key 锁记录失败（语义见 :meth:`_record_failure_locked`）。"""
+        key = self._validate_key(key)
+        with self._locks.locked(key):
+            return self._record_failure_locked(key)
+
+    def get_state(self, key: str) -> Dict[str, Any]:
+        """持 key 锁返回状态（语义见 :meth:`_get_state_locked`）。"""
+        key = self._validate_key(key)
+        with self._locks.locked(key):
+            return self._get_state_locked(key)
+
+    def reset(self, key: str) -> None:
+        """持 key 锁重置（语义见 :meth:`_reset_locked`）。"""
+        key = self._validate_key(key)
+        with self._locks.locked(key):
+            self._reset_locked(key)
+
     def keys(self) -> List[str]:
-        """返回所有出现过的 key。"""
-        return list(self._states.keys())
+        """返回所有出现过的 key（快照副本）。"""
+        with self._locks.acquire_all():
+            return list(self._states.keys())
 
     def get_stats(self, key: Optional[str] = None) -> Dict[str, Any]:
-        """返回一个或全部 key 的状态（结构同 :meth:`get_state`）。"""
+        """返回一个或全部 key 的状态（结构同 :meth:`get_state`）。
+
+        不传 key 时在全部 key 锁的一致性临界区内组装快照。
+        """
         if key is not None:
             return self.get_state(key)
-        return {k: self.get_state(k) for k in list(self._states.keys())}
+        with self._locks.acquire_all():
+            return {
+                k: self._get_state_locked(k) for k in list(self._states.keys())
+            }
 
     # -- 快照 ---------------------------------------------------------------
 
@@ -901,23 +1105,34 @@ class CircuitBreaker:
         }
 
     def to_dict(self) -> Dict[str, Any]:
-        """导出熔断器（含时钟读数）的完整快照。"""
-        return {
-            "config": self.config_dict(),
-            "clock_now": self._clock.now(),
-            "keys": {k: self._state_dict(st) for k, st in self._states.items()},
-        }
+        """导出熔断器（含时钟读数）的完整快照。
+
+        在全部 key 锁的一致性临界区内拷贝数据；临界区只做内存拷贝，
+        文件 IO 由调用方（save）在锁外完成。
+        """
+        with self._locks.acquire_all():
+            return {
+                "config": self.config_dict(),
+                "clock_now": self._clock.now(),
+                "keys": {
+                    k: self._state_dict(st) for k, st in self._states.items()
+                },
+            }
 
     @classmethod
     def from_dict(
         cls,
         data: Dict[str, Any],
         clock: Optional[FakeClock] = None,
+        lock_registry: Optional["_KeyLockRegistry"] = None,
     ) -> "CircuitBreaker":
         """从快照字典重建熔断器并做一致性校验。
 
         校验内容：字段完整、状态取值合法、计数非负、冷却期非负且不超
         上限、时间戳不晚于逻辑时钟、半开探测数不超过配置等。
+
+        整个重建过程先在临时时钟上完成，**全部校验通过后**才推进外部
+        注入时钟，因此加载失败不会对外部时钟或任何已发布实例产生影响。
         """
         if not isinstance(data, dict):
             raise SnapshotError("熔断快照必须是 JSON 对象")
@@ -937,21 +1152,28 @@ class CircuitBreaker:
         if extra:
             raise SnapshotError(f"熔断配置存在未知字段: {', '.join(extra)}")
         try:
-            breaker = cls(clock=FakeClock(float(clock_now)), **cfg)
+            # 先用与外界隔离的临时时钟完整构建，校验失败不影响任何外部对象。
+            breaker = cls(
+                clock=FakeClock(float(clock_now)),
+                lock_registry=lock_registry,
+                **cfg,
+            )
         except TypeError as exc:
             raise SnapshotError(f"熔断配置字段非法: {exc}") from exc
         except ValueError as exc:
             raise SnapshotError(f"熔断配置非法: {exc}") from exc
+
+        now = float(clock_now)
+        for key, raw in data["keys"].items():
+            cls._load_one_state(breaker, key, raw, now)
+
+        # 所有 key 状态校验通过后，才把外部时钟推进到快照时间并换接。
         if clock is not None:
             try:
                 clock.set_now(float(clock_now))
             except ValueError as exc:
                 raise SnapshotError(str(exc)) from exc
             breaker._clock = clock
-
-        now = breaker._clock.now()
-        for key, raw in data["keys"].items():
-            cls._load_one_state(breaker, key, raw, now)
         return breaker
 
     @classmethod
@@ -1106,18 +1328,21 @@ class CircuitBreaker:
 
 
 class Guard:
-    """限流 + 熔断组合闸门。
+    """限流 + 熔断组合闸门（线程安全）。
 
     请求先过限流器、再过熔断器：
 
     * 限流拒绝：直接返回，**不**触碰熔断统计；
-    * 熔断拒绝：限流器此前已计数（请求确实申请了配额），但熔断器
-      拒绝的调用不会产生 success/failure，因此**不**计入熔断统计；
-    * :meth:`record_success` / :meth:`record_failure` 只写给熔断器，
-      **不**触碰限流窗口。
+    * 熔断拒绝：只做了限流容量预检、未提交配额，因此**不**消耗限流窗口，
+      熔断器也不产生 success/failure，**不**计入熔断统计；
+    * 双重通过：在同一把 key 锁临界区的末尾提交限流配额。
 
-    两条统计链路因此完全独立、互不污染。``rate_limiter`` 可为 None，
-    此时 Guard 退化为纯熔断闸门。
+    并发模型：限流器与熔断器共享同一个 :class:`_KeyLockRegistry`。
+    :meth:`allow` 的“限流预检 → 熔断检查/状态迁移 → 配额提交（或拒绝）”
+    整体处于该 key 的一把可重入锁内，因此既不会超额扣减，也不会出现
+    配额漏还 / 还两次；不同 key 使用不同锁，互不阻塞。
+
+    ``rate_limiter`` 可为 None，此时 Guard 退化为纯熔断闸门。
     """
 
     SNAPSHOT_VERSION = 1
@@ -1133,130 +1358,174 @@ class Guard:
             raise ValueError("限流器与熔断器必须共用同一个逻辑时钟实例")
         if circuit_breaker is not None and circuit_breaker._clock is not self.clock:
             raise ValueError("限流器与熔断器必须共用同一个逻辑时钟实例")
+
+        # 统一锁注册表：两个子组件都必须用它，Guard 的复合操作才能在
+        # 同一把 key 锁内原子完成。构造期尚无并发，直接对齐即可。
+        if circuit_breaker is not None:
+            shared_locks = circuit_breaker._locks
+        elif rate_limiter is not None:
+            shared_locks = rate_limiter._locks
+        else:
+            shared_locks = _KeyLockRegistry()
+        self._locks: _KeyLockRegistry = shared_locks
+
+        if circuit_breaker is None:
+            circuit_breaker = CircuitBreaker(
+                self.clock, lock_registry=shared_locks
+            )
+        else:
+            circuit_breaker._locks = shared_locks
+        if rate_limiter is not None:
+            rate_limiter._locks = shared_locks
+
         self.rate_limiter: Optional[SlidingWindowRateLimiter] = rate_limiter
-        self.circuit_breaker: CircuitBreaker = (
-            circuit_breaker or CircuitBreaker(self.clock)
-        )
+        self.circuit_breaker: CircuitBreaker = circuit_breaker
 
     # -- 对外 API -----------------------------------------------------------
 
     def allow(self, key: str, cost: int = 1) -> Dict[str, Any]:
         """先限流后熔断；返回闸门决策（字段含义同各子组件）。
 
-        计数独立性：
+        整个“限流预检 → 熔断检查/迁移 → 配额提交/拒绝”在同一把 key 锁内
+        原子完成。计数独立性：
 
-        * 限流拒绝：直接返回，既不提交限流配额，也不触碰熔断器；
-        * 熔断拒绝：此前只做了限流容量预检，此处不提交配额，因此
-          **不**消耗限流窗口；熔断器不产生 success/failure，
-          也**不**计入熔断统计；
-        * 双重通过：此刻才把请求提交进限流窗口。
+        * 限流拒绝：直接返回，既不提交配额，也不触碰熔断器；
+        * 熔断拒绝：预检保留不提交，限流窗口用量不变；
+        * 双重通过：临界区末尾提交一次配额，恰好一次。
         """
-        # 先做参数校验，保证两个组件拿到的输入一致。
-        SlidingWindowRateLimiter._validate_key(key)
-        SlidingWindowRateLimiter._validate_cost(cost)
+        # 参数校验是纯函数，放锁外即可；非法输入不改变任何状态。
+        key = SlidingWindowRateLimiter._validate_key(key)
+        cost = SlidingWindowRateLimiter._validate_cost(cost)
 
-        reservation: Optional[Dict[str, Any]] = None
-        if self.rate_limiter is not None:
-            reservation = self.rate_limiter.reserve(key, cost)
-            if not reservation["allowed"]:
-                # 限流拒绝：完全不触碰熔断器（也不创建其 key 状态）。
-                existing = self.circuit_breaker._states.get(key)
-                reservation["state"] = (
-                    existing.state if existing is not None else STATE_CLOSED
-                )
-                return reservation
+        with self._locks.locked(key):
+            reservation: Optional[Dict[str, Any]] = None
+            if self.rate_limiter is not None:
+                # reserve 重入同一把 key 锁。
+                reservation = self.rate_limiter.reserve(key, cost)
+                if not reservation["allowed"]:
+                    # 限流拒绝：完全不触碰熔断器（也不创建其 key 状态）。
+                    existing = self.circuit_breaker._states.get(key)
+                    reservation["state"] = (
+                        existing.state if existing is not None else STATE_CLOSED
+                    )
+                    return reservation
 
-        decision = self.circuit_breaker.allow(key, cost)
-        if not decision["allowed"]:
-            # 熔断拒绝：预检保留不提交，限流窗口用量不变。
+            decision = self.circuit_breaker._allow_locked(key, cost)
+            if not decision["allowed"]:
+                # 熔断拒绝：预检保留不提交，限流窗口用量不变（无需归还）。
+                decision["rate_limited"] = False
+                return decision
+
+            if self.rate_limiter is not None and reservation is not None:
+                ts, c = reservation.pop("_commit")
+                # commit 重入同一把 key 锁；与上面的检查同属一个临界区。
+                self.rate_limiter.commit(key, c, ts)
+                decision["current"] = reservation["current"]
+                decision["remaining"] = reservation["remaining"]
+                decision["limit"] = reservation["limit"]
+                decision["window_length"] = reservation["window_length"]
             decision["rate_limited"] = False
             return decision
 
-        if self.rate_limiter is not None and reservation is not None:
-            ts, c = reservation["_commit"]
-            self.rate_limiter.commit(key, c, ts)
-            decision["current"] = reservation["current"]
-            decision["remaining"] = reservation["remaining"]
-            decision["limit"] = reservation["limit"]
-            decision["window_length"] = reservation["window_length"]
-        decision["rate_limited"] = False
-        return decision
-
     def record_success(self, key: str) -> Dict[str, Any]:
-        """只记录到熔断器，不影响限流窗口。"""
-        return self.circuit_breaker.record_success(key)
+        """只记录到熔断器，不影响限流窗口（持 key 锁）。"""
+        key = SlidingWindowRateLimiter._validate_key(key)
+        with self._locks.locked(key):
+            return self.circuit_breaker._record_success_locked(key)
 
     def record_failure(self, key: str) -> Dict[str, Any]:
-        """只记录到熔断器，不影响限流窗口。"""
-        return self.circuit_breaker.record_failure(key)
+        """只记录到熔断器，不影响限流窗口（持 key 锁）。"""
+        key = SlidingWindowRateLimiter._validate_key(key)
+        with self._locks.locked(key):
+            return self.circuit_breaker._record_failure_locked(key)
 
     def get_state(self, key: str) -> Dict[str, Any]:
-        """返回熔断状态，并附带限流窗口当前用量。"""
-        state = self.circuit_breaker.get_state(key)
-        if self.rate_limiter is not None:
-            stats = self.rate_limiter.get_stats(key)
-            state["rate_limit"] = stats
-        return state
+        """返回熔断状态，并在同一把 key 锁内附带限流窗口当前用量。"""
+        key = SlidingWindowRateLimiter._validate_key(key)
+        with self._locks.locked(key):
+            state = self.circuit_breaker._get_state_locked(key)
+            if self.rate_limiter is not None:
+                state["rate_limit"] = self.rate_limiter._stats_locked(key)
+            return state
 
     def reset(self, key: str) -> Dict[str, Any]:
-        """同时重置某个 key 的限流与熔断状态。"""
-        SlidingWindowRateLimiter._validate_key(key)
-        if self.rate_limiter is not None:
-            self.rate_limiter.reset(key)
-        self.circuit_breaker.reset(key)
-        return {"key": key, "reset": True, "now": self.clock.now()}
+        """在同一把 key 锁内同时重置限流与熔断状态。"""
+        key = SlidingWindowRateLimiter._validate_key(key)
+        with self._locks.locked(key):
+            if self.rate_limiter is not None:
+                self.rate_limiter._states.pop(key, None)
+            self.circuit_breaker._reset_locked(key)
+            return {"key": key, "reset": True, "now": self.clock.now()}
 
     def tick(self, delta: Number = 1) -> float:
-        """推进逻辑时钟，返回推进后的时间。"""
+        """推进逻辑时钟，返回推进后的时间。
+
+        时钟推进本身持时钟锁；随后每个 key 的惰性状态迁移在各自的
+        key 锁临界区内随下一次 allow/get_state 原子发生。
+        """
         return self.clock.tick(delta)
 
     def get_stats(self) -> Dict[str, Any]:
-        """返回全部 key 的限流 + 熔断统计。"""
-        result: Dict[str, Any] = {}
-        keys = set(self.circuit_breaker.keys())
-        if self.rate_limiter is not None:
-            keys.update(self.rate_limiter.keys())
-        for key in keys:
-            result[key] = self.get_state(key)
-        return result
+        """在全部 key 锁的一致性临界区内返回全量限流 + 熔断统计。"""
+        with self._locks.acquire_all():
+            result: Dict[str, Any] = {}
+            keys = set(self.circuit_breaker._states.keys())
+            if self.rate_limiter is not None:
+                keys.update(self.rate_limiter._states.keys())
+            now = self.clock.now()
+            for key in keys:
+                state = self.circuit_breaker._get_state_locked(key)
+                if self.rate_limiter is not None:
+                    state["rate_limit"] = self.rate_limiter._stats_locked(key)
+                state.setdefault("now", now)
+                result[key] = state
+            return result
 
     # -- 快照 ---------------------------------------------------------------
 
     def to_dict(self) -> Dict[str, Any]:
-        """导出整道闸门（时钟、配置、每个 key 的窗口计数与熔断状态）。"""
-        limiter_part: Optional[Dict[str, Any]] = None
-        limiter_keys: Dict[str, Any] = {}
-        if self.rate_limiter is not None:
-            rl = self.rate_limiter
-            limiter_part = {
-                "window_length": rl.window_length,
-                "rate_limit": rl.rate_limit,
-            }
-            limiter_keys = {
-                k: rl._states[k].to_dict() for k in rl._states
-            }
+        """导出整道闸门的一致性快照（时钟、配置、每 key 窗口计数与状态）。
 
-        breaker_data = self.circuit_breaker.to_dict()
-        all_keys = set(breaker_data["keys"].keys()) | set(limiter_keys.keys())
-        keys_out: Dict[str, Any] = {}
-        for key in all_keys:
-            keys_out[key] = {
-                "limiter": limiter_keys.get(key, {"events": []}),
-                "breaker": breaker_data["keys"].get(key),
-            }
-        # 只在熔断器里出现、而该 key 没有任何实际数据时补上默认空状态。
-        for key, part in keys_out.items():
-            if part["breaker"] is None:
-                st = self.circuit_breaker._state(key)
-                part["breaker"] = self.circuit_breaker._state_dict(st)
+        在全部 key 锁的临界区内拷贝内存数据（不可能读到写了一半的状态），
+        JSON 序列化与文件写入由调用方在锁外完成。
+        """
+        with self._locks.acquire_all():
+            limiter_part: Optional[Dict[str, Any]] = None
+            limiter_keys: Dict[str, Any] = {}
+            if self.rate_limiter is not None:
+                rl = self.rate_limiter
+                limiter_part = {
+                    "window_length": rl.window_length,
+                    "rate_limit": rl.rate_limit,
+                }
+                limiter_keys = {
+                    k: rl._states[k].to_dict() for k in rl._states
+                }
 
-        return {
-            "version": self.SNAPSHOT_VERSION,
-            "clock_now": self.clock.now(),
-            "limiter": limiter_part,
-            "breaker_config": breaker_data["config"],
-            "keys": keys_out,
-        }
+            cb = self.circuit_breaker
+            breaker_cfg = cb.config_dict()
+            breaker_keys = {
+                k: cb._state_dict(st) for k, st in cb._states.items()
+            }
+            all_keys = set(breaker_keys) | set(limiter_keys)
+            keys_out: Dict[str, Any] = {}
+            for name in sorted(all_keys):
+                breaker_part = breaker_keys.get(name)
+                if breaker_part is None:
+                    # 只有限流数据的 key，熔断部分补一份默认 closed 空状态。
+                    breaker_part = cb._state_dict(cb._state(name))
+                keys_out[name] = {
+                    "limiter": limiter_keys.get(name, {"events": []}),
+                    "breaker": breaker_part,
+                }
+
+            return {
+                "version": self.SNAPSHOT_VERSION,
+                "clock_now": self.clock.now(),
+                "limiter": limiter_part,
+                "breaker_config": breaker_cfg,
+                "keys": keys_out,
+            }
 
     @classmethod
     def from_dict(
@@ -1264,7 +1533,12 @@ class Guard:
         data: Dict[str, Any],
         clock: Optional[FakeClock] = None,
     ) -> "Guard":
-        """从快照字典重建闸门并做一致性校验。"""
+        """从快照字典重建闸门并做一致性校验。
+
+        整个重建先在与外界隔离的临时时钟上完成；只有所有 key 状态校验
+        通过后，才推进外部注入时钟并发布返回的 Guard。因此加载失败不会
+        推进时钟，也不会产生半成品对象。
+        """
         if not isinstance(data, dict):
             raise SnapshotError("快照必须是 JSON 对象")
         version = data.get("version")
@@ -1286,12 +1560,9 @@ class Guard:
         if not isinstance(keys, dict):
             raise SnapshotError("快照缺少 keys 字段")
 
-        the_clock = clock or FakeClock(float(clock_now))
-        if clock is not None:
-            try:
-                clock.set_now(float(clock_now))
-            except ValueError as exc:
-                raise SnapshotError(str(exc)) from exc
+        # 离线构建：独立时钟 + 全新锁注册表，期间不影响任何外部对象。
+        build_clock = FakeClock(float(clock_now))
+        registry = _KeyLockRegistry()
 
         rl: Optional[SlidingWindowRateLimiter] = None
         if limiter_cfg is not None:
@@ -1306,86 +1577,110 @@ class Guard:
                 rl = SlidingWindowRateLimiter(
                     window_length=limiter_cfg["window_length"],
                     rate_limit=limiter_cfg["rate_limit"],
-                    clock=the_clock,
+                    clock=build_clock,
+                    lock_registry=registry,
                 )
-            except KeyError as exc:
-                raise SnapshotError(f"限流配置缺少字段: {exc}") from exc
             except ValueError as exc:
                 raise SnapshotError(f"限流配置非法: {exc}") from exc
 
-        cfg_missing = [
-            k for k in _BREAKER_CONFIG_KEYS if k not in breaker_cfg
-        ]
+        cfg_missing = [k for k in _BREAKER_CONFIG_KEYS if k not in breaker_cfg]
         if cfg_missing:
-            raise SnapshotError(
-                f"熔断配置缺少字段: {', '.join(cfg_missing)}"
-            )
+            raise SnapshotError(f"熔断配置缺少字段: {', '.join(cfg_missing)}")
         try:
-            breaker = CircuitBreaker(clock=the_clock, **breaker_cfg)
+            breaker = CircuitBreaker(
+                clock=build_clock, lock_registry=registry, **breaker_cfg
+            )
         except TypeError as exc:
             raise SnapshotError(f"熔断配置字段非法: {exc}") from exc
         except ValueError as exc:
             raise SnapshotError(f"熔断配置非法: {exc}") from exc
 
-        guard = cls(clock=the_clock, rate_limiter=rl, circuit_breaker=breaker)
-        now = the_clock.now()
-
+        now = float(clock_now)
         for key, part in keys.items():
-            if not isinstance(key, str) or key == "":
-                raise SnapshotError("快照中存在空 key 或非字符串 key")
-            if not isinstance(part, dict):
-                raise SnapshotError(f"key {key!r} 的条目必须是对象")
-            if "limiter" not in part or "breaker" not in part:
-                raise SnapshotError(f"key {key!r} 的条目缺少 limiter/breaker 部分")
+            cls._load_one_key(rl, breaker, key, part, now)
 
+        # 全部校验通过后才发布：构造 Guard（不再触发任何状态变更）。
+        guard = cls.__new__(cls)
+        guard.clock = build_clock
+        guard._locks = registry
+        guard.rate_limiter = rl
+        guard.circuit_breaker = breaker
+
+        # 最后一步：换接到外部时钟（可能因时钟回退失败）。
+        if clock is not None:
+            try:
+                clock.set_now(now)
+            except ValueError as exc:
+                raise SnapshotError(str(exc)) from exc
+            guard.clock = clock
             if rl is not None:
-                lim_raw = part["limiter"]
-                if not isinstance(lim_raw, dict) or not isinstance(
-                    lim_raw.get("events"), list
-                ):
-                    raise SnapshotError(
-                        f"key {key!r} 的 limiter 部分必须含 events 数组"
-                    )
-                st = _LimiterState(events=deque())
-                prev: Optional[float] = None
-                for ev in lim_raw["events"]:
-                    if not isinstance(ev, dict) or "t" not in ev or "cost" not in ev:
-                        raise SnapshotError(
-                            f"key {key!r} 的限流事件必须含 t 和 cost"
-                        )
-                    t, cost = ev["t"], ev["cost"]
-                    if not FakeClock._is_number(t) or t < 0 or t > now + 1e-9:
-                        raise SnapshotError(
-                            f"key {key!r} 存在非法限流事件时间戳 {t!r}"
-                        )
-                    if prev is not None and t < prev:
-                        raise SnapshotError(
-                            f"key {key!r} 的限流事件时间戳必须单调不减"
-                        )
-                    if (not isinstance(cost, int) or isinstance(cost, bool)
-                            or cost <= 0):
-                        raise SnapshotError(
-                            f"key {key!r} 的限流事件 cost={cost!r} 必须是正整数"
-                        )
-                    st.events.append((float(t), int(cost)))
-                    prev = float(t)
-                # 只统计仍落在窗口内的事件，超窗的历史事件不构成超额。
-                boundary = now - rl.window_length
-                used = sum(c for ts, c in st.events if ts > boundary)
-                if used > rl.rate_limit:
-                    raise SnapshotError(
-                        f"key {key!r} 快照窗口内用量 {used} 超过阈值 "
-                        f"{rl.rate_limit}，状态不一致"
-                    )
-                rl._states[key] = st
-
-            CircuitBreaker._load_one_state(breaker, key, part["breaker"], now)
-
+                rl._clock = clock
+            breaker._clock = clock
         return guard
 
+    @staticmethod
+    def _load_one_key(
+        rl: Optional[SlidingWindowRateLimiter],
+        breaker: CircuitBreaker,
+        key: Any,
+        part: Any,
+        now: float,
+    ) -> None:
+        """载入并校验单个 key 的限流 + 熔断数据（仅供 from_dict 调用）。"""
+        if not isinstance(key, str) or key == "":
+            raise SnapshotError("快照中存在空 key 或非字符串 key")
+        if not isinstance(part, dict):
+            raise SnapshotError(f"key {key!r} 的条目必须是对象")
+        if "limiter" not in part or "breaker" not in part:
+            raise SnapshotError(f"key {key!r} 的条目缺少 limiter/breaker 部分")
+
+        if rl is not None:
+            lim_raw = part["limiter"]
+            if not isinstance(lim_raw, dict) or not isinstance(
+                lim_raw.get("events"), list
+            ):
+                raise SnapshotError(
+                    f"key {key!r} 的 limiter 部分必须含 events 数组"
+                )
+            st = _LimiterState(events=deque())
+            prev: Optional[float] = None
+            for ev in lim_raw["events"]:
+                if not isinstance(ev, dict) or "t" not in ev or "cost" not in ev:
+                    raise SnapshotError(
+                        f"key {key!r} 的限流事件必须含 t 和 cost"
+                    )
+                t, cost = ev["t"], ev["cost"]
+                if not FakeClock._is_number(t) or t < 0 or t > now + 1e-9:
+                    raise SnapshotError(
+                        f"key {key!r} 存在非法限流事件时间戳 {t!r}"
+                    )
+                if prev is not None and t < prev:
+                    raise SnapshotError(
+                        f"key {key!r} 的限流事件时间戳必须单调不减"
+                    )
+                if (not isinstance(cost, int) or isinstance(cost, bool)
+                        or cost <= 0):
+                    raise SnapshotError(
+                        f"key {key!r} 的限流事件 cost={cost!r} 必须是正整数"
+                    )
+                st.events.append((float(t), int(cost)))
+                prev = float(t)
+            # 只统计仍落在窗口内的事件，超窗的历史事件不构成超额。
+            boundary = now - rl.window_length
+            used = sum(c for ts, c in st.events if ts > boundary)
+            if used > rl.rate_limit:
+                raise SnapshotError(
+                    f"key {key!r} 快照窗口内用量 {used} 超过阈值 "
+                    f"{rl.rate_limit}，状态不一致"
+                )
+            rl._states[key] = st
+
+        CircuitBreaker._load_one_state(breaker, key, part["breaker"], now)
+
     def save(self, path: Union[str, os.PathLike[str]]) -> None:
-        """把整个闸门的状态（窗口计数、熔断状态、配置、时钟）写成 JSON。"""
-        _write_json(path, self.to_dict())
+        """把整个闸门的一致性快照写成 JSON（锁内拷贝、锁外写文件）。"""
+        data = self.to_dict()
+        _write_json(path, data)
 
     @classmethod
     def load(
@@ -1393,24 +1688,72 @@ class Guard:
         path: Union[str, os.PathLike[str]],
         clock: Optional[FakeClock] = None,
     ) -> "Guard":
-        """从 JSON 文件重建闸门；损坏或字段缺失抛出 :class:`SnapshotError`。"""
+        """从 JSON 文件重建闸门；损坏或字段缺失抛出 :class:`SnapshotError`。
+
+        返回一个全新的 Guard，加载失败不影响任何已有实例。
+        """
         return cls.from_dict(_read_json(path), clock=clock)
 
     def restore(self, path: Union[str, os.PathLike[str]]) -> "Guard":
-        """从快照就地恢复到当前闸门；快照时钟早于当前时钟会报错（不回退）。"""
+        """就地从快照恢复（可与业务调用并发）。
+
+        两阶段：
+
+        1. **离线构建**：在独立时钟和独立锁注册表上完整重建并校验，
+           任何失败（坏文件、字段缺失、时钟回退等）都发生在当前实例
+           之外，当前实例、时钟、在途调用全部不受影响——即加载失败回滚。
+        2. **持锁发布**：持有“当前注册表全部 key 锁”（并持有元锁，使
+           新 key 无法创建），一次性把离线构建好的 ``_states`` 数据与
+           配置搬进当前组件并推进时钟。
+
+        关键：Guard 终生使用**同一个锁注册表**，restore 只换数据不换锁，
+        因此在发布临界区外等待同一把 key 锁的线程，被放行后持有的仍是
+        保护新数据的那把锁，不会出现“拿旧锁操作新组件”的缝隙。
+        """
         data = _read_json(path)
         if not isinstance(data, dict) or not FakeClock._is_number(
             data.get("clock_now")
         ):
             raise SnapshotError("快照缺少合法的 clock_now")
-        if data["clock_now"] + 1e-9 < self.clock.now():
+        snapshot_now = float(data["clock_now"])
+        if snapshot_now + 1e-9 < self.clock.now():
             raise SnapshotError(
                 f"逻辑时钟不能回退：当前 {self.clock.now()}，"
-                f"快照时钟 {data['clock_now']}"
+                f"快照时钟 {snapshot_now}"
             )
-        restored = Guard.from_dict(data, clock=self.clock)
-        self.rate_limiter = restored.rate_limiter
-        self.circuit_breaker = restored.circuit_breaker
+        # 阶段 1：离线完整构建 + 校验；失败不影响 self。
+        restored = Guard.from_dict(data)
+        new_rl = restored.rate_limiter
+        new_cb = restored.circuit_breaker
+
+        # 阶段 2：在当前注册表的全锁临界区内发布数据。
+        with self._locks.acquire_all():
+            # 先推进时钟：若失败则在任何数据替换之前抛出。
+            self.clock.set_now(snapshot_now)
+
+            # 熔断器恒存在：整体替换状态表与全部配置标量。
+            self.circuit_breaker._states = new_cb._states
+            for attr in (
+                "window_length", "failure_rate_threshold", "min_samples",
+                "consecutive_failure_threshold", "cooldown_duration",
+                "half_open_max_calls", "backoff_strategy",
+                "backoff_multiplier", "max_cooldown",
+                "observation_window", "fast_open_multiplier",
+            ):
+                setattr(self.circuit_breaker, attr, getattr(new_cb, attr))
+
+            # 限流器可能存在 / 缺失；对齐其有无、配置与状态。
+            if self.rate_limiter is not None and new_rl is not None:
+                self.rate_limiter._states = new_rl._states
+                self.rate_limiter.window_length = new_rl.window_length
+                self.rate_limiter.rate_limit = new_rl.rate_limit
+            elif new_rl is not None:
+                # 当前没有限流器：把离线构建的限流器接到当前时钟/锁上。
+                new_rl._clock = self.clock
+                new_rl._locks = self._locks
+                self.rate_limiter = new_rl
+            else:
+                self.rate_limiter = None
         return self
 
 

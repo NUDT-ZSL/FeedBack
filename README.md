@@ -10,7 +10,8 @@
 | --- | --- |
 | `kernel.py` | 核心：`FakeClock`、`SlidingWindowRateLimiter`、`CircuitBreaker`、`Guard`、快照读写 |
 | `main.py` | 命令行入口，stdin 逐行 JSON 命令 / stdout 逐行 JSON 结果 |
-| `test_kernel.py` | unittest 测试（74 个） |
+| `test_kernel.py` | 单线程功能 unittest（76 个） |
+| `test_concurrency.py` | 线程安全并发回归 unittest（17 个，`Barrier/Event` 控制交错，无 sleep、不 flaky） |
 | `acceptance.py` | 端到端验收脚本（73 项断言，含 CLI 子进程） |
 
 ## 快速开始
@@ -61,6 +62,27 @@ guard.record_success("user-service") # 探测成功 -> closed
   “先预检后提交”，不消耗限流配额；`record_success/failure` 只写给熔断器。
 - **时钟单调**：逻辑时钟只进不退；载入更早的快照会被拒绝。
 
+## 线程安全模型
+
+三个公开类（`SlidingWindowRateLimiter` / `CircuitBreaker` / `Guard`）都可被
+多线程并发调用；对外方法签名与返回结构与单线程版本完全一致。
+
+- **按 key 分锁**：每个 key 一把可重入锁（`RLock`），同一 key 的
+  `allow / record_success / record_failure / get_state / reset` 串行化；
+  不同 key 用不同锁，互不阻塞。
+- **复合操作原子**：Guard 的限流器与熔断器共享同一个锁注册表，
+  `allow` 的“限流预检 → 熔断检查/状态迁移 → 配额提交（或拒绝）”整体在
+  同一把 key 锁临界区内。熔断拒绝不扣配额，因而不存在归还两次/漏还。
+- **半开名额**：探测名额的发放（`allow`）与回收（`record_*`）都在 key 锁内，
+  并发下放行探测数绝不超过配置，同一探测的结果不会被重复计数。
+- **一致性快照**：`save` 先在“元锁 + 全部 key 锁”的临界区内拷贝内存一致性
+  视图（按 key 字典序取锁，锁序固定、无死锁），再在锁外做文件 IO；
+  不可能读到写了一半的状态。
+- **原子加载**：`load`/`from_dict` 先在隔离的临时时钟与锁注册表上完整重建
+  并校验，全部通过后才发布；失败不产生半成品、不推进外部时钟。
+  `restore` 终生复用同一把锁注册表，只在全锁临界区内替换数据与配置
+  （不换锁），坏文件/时钟回退时当前实例与在途调用完全不受影响。
+
 ## 快照
 
 ```python
@@ -102,6 +124,9 @@ python main.py --rate-window 10 --rate-limit 100 \
 ## 测试
 
 ```bash
-python -m unittest -v test_kernel   # 74 个单元测试
+python -m unittest -v test_kernel test_concurrency   # 93 个单元/并发测试
 python acceptance.py                # 73 项端到端验收（含 CLI 子进程）
 ```
+
+并发测试用 `threading.Barrier/Event` 精确控制线程交错、配合假时钟，
+不使用真实 sleep 制造竞态，可重复运行而不 flaky。
