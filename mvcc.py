@@ -286,8 +286,14 @@ class MVCCDatabase:
         校验内容：格式标识、字段类型、txn_id 唯一、commit_ts 单调、
         版本链按 commit_ts 严格升序、墓碑不带值（value 只能是字符串或
         null）、版本引用的 txn_id 存在且已提交、active 事务的 snapshot_ts
-        不超过 commit_ts 计数器。任何损坏都抛 StorageFormatError，
-        不静默吞掉。
+        落在 [0, commit_ts_counter] 内、且每个 active 事务在其 snapshot_ts
+        处对每个键都能找到可见版本或墓碑（快照不能落在版本链的空隙里）。
+        任何损坏都抛 StorageFormatError，不静默吞掉。
+
+        注意最后一条校验的推论：若文件中某 active 事务的快照早于某键的
+        首个版本（例如先 begin 一个长事务、再创建新键、再 save），该文件
+        会被拒绝加载。这与 gc 保持的纪律一致——gc 会为每个键保留不超过
+        最老 active 快照的最新可见版本。
         """
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -347,8 +353,8 @@ class MVCCDatabase:
                 write_set[k] = v
             if state == ACTIVE and snapshot_ts > commit_ts_counter:
                 raise StorageFormatError(
-                    f"{where}: active txn snapshot_ts {snapshot_ts} exceeds "
-                    f"commit_ts_counter {commit_ts_counter}"
+                    f"{where}: active txn {txn_id!r} snapshot_ts {snapshot_ts} "
+                    f"exceeds commit_ts_counter {commit_ts_counter}"
                 )
             txns[txn_id] = Transaction(
                 txn_id=txn_id,
@@ -415,6 +421,27 @@ class MVCCDatabase:
                 f"commit_ts_counter {commit_ts_counter} is behind the max "
                 f"version commit_ts {max_seen_ts} (counter must be monotone)"
             )
+
+        # ---- active 事务的快照可见性 ----
+        # 每个 active 事务在其 snapshot_ts 处，对每个键都必须能找到至少一个
+        # 可见版本（含墓碑）。版本链按 commit_ts 升序，因此只要链上最老的
+        # 版本比 snapshot_ts 还新，就说明快照落在了该键版本链的空隙里
+        # （文件被裁剪或手工篡改过）——若放行，该事务之后 get 这个键会静默
+        # 返回 None，看起来像数据丢了。这里直接拒绝加载，并指出具体的
+        # txn_id、snapshot_ts 和键。
+        for txn in txns.values():
+            if txn.state != ACTIVE:
+                continue
+            for key, chain in versions.items():
+                oldest_ts = chain[0].commit_ts
+                if oldest_ts > txn.snapshot_ts:
+                    raise StorageFormatError(
+                        f"active txn {txn.txn_id!r} (snapshot_ts="
+                        f"{txn.snapshot_ts}) has no visible version for key "
+                        f"{key!r}: oldest version commit_ts={oldest_ts} is "
+                        f"newer than the snapshot; snapshot_ts falls in a gap "
+                        f"of the version chain (file corrupted or tampered)"
+                    )
 
         db = cls()
         db._versions = versions

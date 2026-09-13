@@ -633,5 +633,171 @@ class CliTest(unittest.TestCase):
             self.assertIn("format", results[0]["error"])
 
 
+class SnapshotGapValidationTest(unittest.TestCase):
+    """load 对 active 事务快照可见性的严格校验。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "db.json")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _load_json(self) -> dict:
+        with open(self.path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def _save_json(self, data: dict) -> None:
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def _tamper_reader_snapshot(self, new_ts: int) -> None:
+        data = self._load_json()
+        for t in data["transactions"]:
+            if t["txn_id"] == "reader":
+                t["snapshot_ts"] = new_ts
+        self._save_json(data)
+
+    def test_snapshot_ts_in_version_chain_gap_rejected(self) -> None:
+        db = MVCCDatabase()
+        db.begin("w1")
+        db.put("w1", "a", "1")
+        db.commit("w1")  # ts=1
+        db.begin("w2")
+        db.put("w2", "b", "1")
+        db.commit("w2")  # ts=2
+        db.begin("w3")
+        db.delete("w3", "b")
+        db.commit("w3")  # ts=3，b 的墓碑
+        db.begin("reader")  # snapshot_ts = 3
+        db.gc()  # 清掉 b 的 ts=2 版本，b 链只剩 [3]
+        db.save(self.path)
+        # 正对照：未篡改的文件正常加载
+        MVCCDatabase.load(self.path)
+        # 篡改：reader 的 snapshot_ts 改成 2，落在 b 版本链（最老版本 ts=3）的空隙里
+        self._tamper_reader_snapshot(2)
+        with self.assertRaises(StorageFormatError) as ctx:
+            MVCCDatabase.load(self.path)
+        msg = str(ctx.exception)
+        self.assertIn("reader", msg)  # 指出 txn_id
+        self.assertIn("snapshot_ts=2", msg)  # 指出 snapshot_ts
+        self.assertIn("'b'", msg)  # 指出找不到可见版本的键
+
+    def test_version_deleted_under_active_snapshot_rejected(self) -> None:
+        db = MVCCDatabase()
+        db.begin("w1")
+        db.put("w1", "a", "1")
+        db.commit("w1")  # ts=1
+        db.begin("w2")
+        db.put("w2", "b", "1")
+        db.commit("w2")  # ts=2
+        db.begin("reader")  # snapshot_ts = 2
+        db.begin("w3")
+        db.put("w3", "b", "2")
+        db.commit("w3")  # ts=3
+        db.save(self.path)
+        MVCCDatabase.load(self.path)  # 原件正常
+        # 篡改：删掉 commit_ts=2 的版本，reader 在 s=2 处对 b 再无可见版本
+        data = self._load_json()
+        data["versions"]["b"] = [
+            v for v in data["versions"]["b"] if v["commit_ts"] != 2
+        ]
+        self._save_json(data)
+        with self.assertRaises(StorageFormatError) as ctx:
+            MVCCDatabase.load(self.path)
+        msg = str(ctx.exception)
+        self.assertIn("reader", msg)
+        self.assertIn("'b'", msg)
+
+    def test_snapshot_ts_beyond_counter_rejected(self) -> None:
+        db = MVCCDatabase()
+        db.begin("w1")
+        db.put("w1", "a", "1")
+        db.commit("w1")  # ts=1
+        db.begin("reader")  # snapshot_ts = 1
+        db.save(self.path)
+        self._tamper_reader_snapshot(99)
+        with self.assertRaises(StorageFormatError) as ctx:
+            MVCCDatabase.load(self.path)
+        self.assertIn("exceeds", str(ctx.exception))
+
+    def test_negative_snapshot_ts_rejected(self) -> None:
+        db = MVCCDatabase()
+        db.begin("w1")
+        db.put("w1", "a", "1")
+        db.commit("w1")
+        db.begin("reader")
+        db.save(self.path)
+        self._tamper_reader_snapshot(-1)
+        with self.assertRaises(StorageFormatError) as ctx:
+            MVCCDatabase.load(self.path)
+        self.assertIn("snapshot_ts", str(ctx.exception))
+
+    def test_active_txn_on_empty_db_loads_fine(self) -> None:
+        # 空库上 begin 的 active 事务没有版本链可查，不应误报
+        db = MVCCDatabase()
+        db.begin("reader")
+        db.save(self.path)
+        loaded = MVCCDatabase.load(self.path)
+        self.assertIsNone(loaded.get("reader", "anything"))
+
+
+class GcReloadConflictTest(unittest.TestCase):
+    """gc 后 save/load 的往返一致性，以及重载后冲突判定与 gc 前一致。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "db.json")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _build(self) -> MVCCDatabase:
+        db = MVCCDatabase()
+        db.begin("w0")
+        db.put("w0", "c", "x")
+        db.commit("w0")  # ts=1
+        db.begin("w1")
+        db.put("w1", "a", "1")
+        db.put("w1", "c", "1")
+        db.commit("w1")  # ts=2
+        db.begin("reader")  # snapshot_ts = 2
+        db.begin("w2")
+        db.put("w2", "a", "2")
+        db.put("w2", "c", "2")
+        db.commit("w2")  # ts=3
+        return db
+
+    def test_gc_then_save_load_roundtrip(self) -> None:
+        db = self._build()
+        self.assertEqual(db.gc(), 1)  # 回收 c 的 ts=1 版本
+        db.save(self.path)
+        loaded = MVCCDatabase.load(self.path)
+        # 状态完全一致：gc 删掉的旧版本不影响 load 校验，不误报
+        self.assertEqual(db.dump(), loaded.dump())
+        # active 事务在重载后读到的值不变
+        self.assertEqual(loaded.get("reader", "a"), "1")
+        self.assertEqual(loaded.get("reader", "c"), "1")
+
+    def test_conflict_detection_parity_after_gc_and_reload(self) -> None:
+        ref = self._build()  # 参照组：不 gc、不持久化
+        db = self._build()
+        self.assertEqual(db.gc(), 1)
+        db.save(self.path)
+        reloaded = MVCCDatabase.load(self.path)
+        for d in (ref, reloaded):
+            # reader (s=2) 写 c：w2 已在 ts=3 写过 c，两组都必须判冲突
+            d.put("reader", "c", "mine")
+            r = d.commit("reader")
+            self.assertFalse(r.committed)
+            self.assertEqual(r.conflicts, ["c"])
+            # 新事务 (s=3) 写 a：快照之后无人写过 a，两组都必须提交成功
+            d.begin("late")
+            d.put("late", "a", "3")
+            r2 = d.commit("late")
+            self.assertTrue(r2.committed)
+            self.assertEqual(r2.commit_ts, 4)
+
+
 if __name__ == "__main__":
     unittest.main()

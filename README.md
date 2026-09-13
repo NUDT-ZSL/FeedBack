@@ -58,7 +58,19 @@
 文件；`load(path)` 重建并校验：格式标识、字段类型、`txn_id` 唯一、
 `commit_ts` 单调（计数器不落后于任何版本）、版本链严格升序、值只能是字符串
 或 null（墓碑）、版本引用的 `txn_id` 存在且已提交、active 事务的
-`snapshot_ts` 不超过计数器。任何损坏抛 `StorageFormatError`，不静默吞掉。
+`snapshot_ts` 不越界（`0 <= snapshot_ts <= commit_ts` 计数器）、以及
+**快照可见性**：每个 active 事务在其 `snapshot_ts` 处，对每个键都必须能
+找到至少一个可见版本或墓碑（即每个键最老版本的 `commit_ts` 不大于该
+`snapshot_ts`）。最后一条用于拦截被裁剪或手工篡改的快照文件——若快照落在
+某键版本链的空隙里却放行，该事务之后读这个键会静默返回 `None`，看起来像
+数据丢了。任何损坏抛 `StorageFormatError`（指明 txn_id、snapshot_ts 和
+键），不静默吞掉。
+
+注意这条严格校验的推论：如果 save 时某个 active 事务的快照早于某键的
+首个版本（先 begin 一个长事务、再由别的事务创建新键、再 save），这样的
+文件会被 load 拒绝。gc 的保留策略（每键保留不超过最老 active 快照的最新
+版本）与该校验一致：gc 后 save 再 load 可以正常重建，且版本回收不影响
+写写冲突判定（冲突只看链尾版本，gc 从不回收链尾）。
 
 ## 命令行用法
 
