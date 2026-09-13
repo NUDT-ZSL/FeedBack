@@ -12,8 +12,10 @@ import io
 import json
 import os
 import random
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from timeseries_index import (
@@ -29,6 +31,8 @@ from timeseries_index import (
 )
 
 import main as cli
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def make_points(specs):
@@ -192,8 +196,22 @@ class RangeDeleteTest(unittest.TestCase):
         self.assertEqual(self.idx.total_points, 4)
 
     def test_start_greater_than_end_rejected(self):
+        before = self.idx.get_state()
         with self.assertRaises(InvalidRangeError):
             self.idx.range_delete("s", 3, 2)
+        # 报错不能有任何副作用：整桶仍在、点数不变
+        self.assertEqual(self.idx.get_state(), before)
+        self.assertEqual(self.idx.total_points, 4)
+        self.assertEqual(
+            [p.point_id for p in self.idx.range_query("s", 0, 100)],
+            ["a", "b", "c", "d"],
+        )
+
+    def test_non_integer_bounds_rejected_without_side_effects(self):
+        for bad_start, bad_end in ((1.5, 3), (1, "3"), (True, 3)):
+            with self.assertRaises(InvalidRangeError):
+                self.idx.range_delete("s", bad_start, bad_end)
+        self.assertEqual(self.idx.total_points, 4)
 
     def test_delete_half_open_and_query_afterwards(self):
         deleted = self.idx.range_delete("s", 2, 3)
@@ -400,6 +418,141 @@ class SnapshotRollbackTest(unittest.TestCase):
         self.assertEqual(len(idx.range_query("s", 0, 20)), 20)
 
 
+class PersistentSnapshotTest(unittest.TestCase):
+    """结构共享快照：O(1) 开销、分支隔离、根引用共享。"""
+
+    @staticmethod
+    def _build(n):
+        idx = TimeSeriesIndex()
+        idx.insert_many(
+            Point(f"p{i:06d}", f"s{i % 4}", i % 500, float(i))
+            for i in range(n)
+        )
+        return idx
+
+    def test_snapshot_cost_does_not_scale_with_total_points(self):
+        """1 万 / 5 万两档：单次 snapshot 耗时不随总点数线性增长。"""
+        results = {}
+        build_seconds = {}
+        for n in (10_000, 50_000):
+            start = time.perf_counter()
+            idx = self._build(n)
+            build_seconds[n] = time.perf_counter() - start
+
+            # 预热，避免首次计时包含一次性开销
+            idx.snapshot("warmup")
+            idx.delete_snapshot("warmup")
+
+            start = time.perf_counter()
+            for k in range(20):
+                idx.snapshot(f"s{k}")
+            elapsed = time.perf_counter() - start
+            results[n] = elapsed / 20
+
+        t10k, t50k = results[10_000], results[50_000]
+        # O(1) 操作：5 倍数据量下单次快照耗时不应同比例增长
+        self.assertLess(
+            t50k / max(t10k, 1e-9), 3.0,
+            f"snapshot 耗时疑似随点数线性增长: 10k={t10k*1e6:.1f}us, "
+            f"50k={t50k*1e6:.1f}us",
+        )
+        # 绝对上限也远低于建索引耗时（旧实现整树拷贝会到秒级）
+        self.assertLess(results[50_000] * 20, build_seconds[50_000])
+        self.assertLess(results[50_000], 0.005)
+
+    def test_snapshots_share_root_references(self):
+        """快照不复制数据：保存的根与当前根是同一对象。"""
+        idx = self._build(1000)
+        idx.snapshot("a")
+        idx.snapshot("b")  # 无变更时连打两次
+        root_a = idx._snapshots["a"]  # noqa: SLF001
+        root_b = idx._snapshots["b"]  # noqa: SLF001
+        self.assertIs(root_a[0], root_b[0])
+        self.assertIs(root_a[1], root_b[1])
+        self.assertIs(root_a[0], idx._series_root)  # noqa: SLF001
+
+        idx.insert(Point("new", "s0", 999_999, 1.0))
+        # 修改后当前根换了，但快照根仍是旧对象、旧状态
+        self.assertIsNot(root_a[0], idx._series_root)  # noqa: SLF001
+        self.assertEqual(root_a[2], 1000)
+        self.assertEqual(idx.total_points, 1001)
+        idx.rollback("a")
+        self.assertEqual(idx.total_points, 1000)
+        self.assertIsNone(idx.get_point("new"))
+
+    def test_branch_isolation_after_rollback(self):
+        """题目第 2 条场景：A 快照 -> 插 C 打 B -> 回滚 A -> 开新分支 ->
+        回滚 B 必须是 A+C，不能带入回滚期间新插的点。"""
+        idx = TimeSeriesIndex()
+        idx.insert(Point("A", "s", 1, 1.0))
+        idx.snapshot("snapA")
+
+        idx.insert(Point("C", "s", 3, 3.0))
+        idx.snapshot("snapB")
+
+        # 回到 A，随后在 A 这条分支上又删又插
+        idx.rollback("snapA")
+        idx.insert(Point("D", "s", 4, 4.0))
+        idx.insert(Point("E", "s", 5, 5.0))
+        idx.snapshot("snapBranch")
+        idx.range_delete("s", 0, 2)  # 删掉 A
+        self.assertEqual(idx.total_points, 2)
+
+        # 跳回 B：世界应为 A+C，与新分支完全无关
+        idx.rollback("snapB")
+        ids = [p.point_id for p in idx.range_query("s", 0, 100)]
+        self.assertEqual(ids, ["A", "C"])
+        self.assertIsNone(idx.get_point("D"))
+        self.assertIsNone(idx.get_point("E"))
+
+        # 再跳回新分支，然后跳回 A，反复来回都精确
+        idx.rollback("snapBranch")
+        self.assertEqual(
+            sorted(p.point_id for p in idx.range_query("s", 0, 100)),
+            ["A", "D", "E"],
+        )
+        idx.rollback("snapA")
+        self.assertEqual(
+            [p.point_id for p in idx.range_query("s", 0, 100)], ["A"]
+        )
+        idx.rollback("snapB")
+        self.assertEqual(
+            [p.point_id for p in idx.range_query("s", 0, 100)], ["A", "C"]
+        )
+
+    def test_many_snapshots_with_edits_rollback_each_exact(self):
+        """连打 20 个快照、每个之间都有删插，逐个回滚状态必须精确。"""
+        idx = TimeSeriesIndex()
+        idx.insert_many(
+            Point(f"base{i}", "s", i, 1.0) for i in range(100)
+        )
+        expected = {}
+        for k in range(20):
+            idx.snapshot(f"snap{k}")
+            expected[f"snap{k}"] = (
+                idx.total_points,
+                sorted(
+                    (p.ts, p.point_id)
+                    for p in idx.range_query("s", -10**9, 10**9)
+                ),
+            )
+            # 每个快照后删一批、插一批
+            idx.range_delete("s", 5 * k, 5 * k + 5)
+            idx.insert(Point(f"new{k}", "s2", k, float(k)))
+
+        for k in reversed(range(20)):
+            idx.rollback(f"snap{k}")
+            total, keys = expected[f"snap{k}"]
+            self.assertEqual(idx.total_points, total)
+            self.assertEqual(
+                sorted(
+                    (p.ts, p.point_id)
+                    for p in idx.range_query("s", -10**9, 10**9)
+                ),
+                keys,
+            )
+
+
 class PersistenceTest(unittest.TestCase):
     def _build_index(self):
         idx = TimeSeriesIndex()
@@ -494,11 +647,43 @@ class PersistenceTest(unittest.TestCase):
             with self.assertRaisesRegex(IndexFormatError, "format"):
                 TimeSeriesIndex.load(p)
 
+            # schema_version 不支持 / 类型错误
             bad_ver = dict(good)
-            bad_ver["version"] = 99
+            bad_ver["schema_version"] = 99
             p = write("bad_version.json", json.dumps(bad_ver))
-            with self.assertRaisesRegex(IndexFormatError, "version"):
+            with self.assertRaisesRegex(IndexFormatError, "schema_version=99"):
                 TimeSeriesIndex.load(p)
+
+            bad_ver_type = dict(good)
+            bad_ver_type["schema_version"] = "1"
+            p = write("bad_version_type.json", json.dumps(bad_ver_type))
+            with self.assertRaisesRegex(IndexFormatError, "schema_version 必须是整数"):
+                TimeSeriesIndex.load(p)
+
+            # 缺少 schema_version（包括只有旧版 version 字段的旧文件）
+            for name_, payload in (
+                ("missing_version.json", {k: v for k, v in good.items()
+                                          if k != "schema_version"}),
+                ("legacy_version.json", {**{k: v for k, v in good.items()
+                                            if k != "schema_version"},
+                                         "version": 1}),
+            ):
+                p = write(name_, json.dumps(payload))
+                with self.assertRaisesRegex(
+                    IndexFormatError, "缺少顶层字段: schema_version"
+                ):
+                    TimeSeriesIndex.load(p)
+
+            # 其它必填顶层字段缺失时也要点名缺了哪个
+            for missing_key in ("format", "series", "snapshots"):
+                p = write(
+                    f"missing_{missing_key}.json",
+                    json.dumps({k: v for k, v in good.items() if k != missing_key}),
+                )
+                with self.assertRaisesRegex(
+                    IndexFormatError, f"缺少顶层字段: {missing_key}"
+                ):
+                    TimeSeriesIndex.load(p)
 
             bad_points = json.loads(json.dumps(good))
             bad_points["series"]["s1"][0]["ts"] = 1.5
@@ -650,8 +835,15 @@ class ScaleTest(unittest.TestCase):
         for i in range(n):
             idx.insert(Point(f"p{i:06d}", "s", i, 1.0))
 
-        # 通过私有结构测高（实现细节，仅用于防回归）
-        root = idx._series["s"]  # noqa: SLF001
+        # 新结构：series Treap 的键为 s，值为 (数据树根, 点数)
+        series_entry = None
+        cur = idx._series_root  # noqa: SLF001
+        while cur is not None:
+            if cur.key == "s":
+                series_entry = cur.value
+                break
+            cur = cur.left if "s" < cur.key else cur.right
+        root = series_entry[0]
         max_depth = 0
         stack = [(root, 1)]
         while stack:
@@ -753,6 +945,33 @@ class CliTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0)
         self.assertEqual(out, [{"series": []}])
+
+    def test_utf8_bom_first_line_via_subprocess(self):
+        """Windows 管道下首行可能带 UTF-8 BOM：必须按 utf-8-sig 解码。"""
+        lines = "\n".join(
+            [
+                json.dumps({"cmd": "insert", "point": {
+                    "point_id": "a", "series": "s", "ts": 1, "value": 1.0}}),
+                json.dumps({"cmd": "state"}),
+            ]
+        )
+        # 模拟 PowerShell/记事本写出的带 BOM 输入
+        payload = b"\xef\xbb\xbf" + lines.encode("utf-8")
+        proc = subprocess.run(
+            [sys.executable, os.path.join(HERE, "main.py")],
+            input=payload,
+            capture_output=True,
+            timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        out = [
+            json.loads(line)
+            for line in proc.stdout.decode("utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertTrue(out[0]["ok"])
+        self.assertEqual(out[1]["total_points"], 1)
+        self.assertNotIn("error", out[0])
 
 
 if __name__ == "__main__":
