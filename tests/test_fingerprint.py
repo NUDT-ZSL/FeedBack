@@ -144,6 +144,29 @@ class FingerprintSerializationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Fingerprint.from_dict(doc2)
 
+    def test_tampered_digest_rejected_and_names_both_digests(self) -> None:
+        """整文件指纹必须由块指纹重算合并得到；伪造一个语法合法的
+        摘要无法通过校验，错误信息同时给出记录值与重算值。"""
+        f = fingerprint(_pseudo_bytes(24, 30000))
+        doc = f.to_dict()
+        genuine = f.digest
+        forged = ("f" if genuine[0] != "f" else "0") + genuine[1:]
+        self.assertNotEqual(forged, genuine)
+        doc["digest"] = forged
+        with self.assertRaises(ValueError) as ctx:
+            Fingerprint.from_dict(doc)
+        message = str(ctx.exception)
+        self.assertIn(forged, message)
+        self.assertIn(genuine, message)
+        self.assertIn("recomputed", message)
+
+    def test_empty_content_tampered_digest_rejected(self) -> None:
+        # 空内容没有块，伪造摘要同样必须被重算合并校验拦下。
+        doc = fingerprint(b"").to_dict()
+        doc["digest"] = "0" * 64
+        with self.assertRaises(ValueError):
+            Fingerprint.from_dict(doc)
+
     def test_size_mismatch_rejected(self) -> None:
         doc = fingerprint(_pseudo_bytes(20, 5000)).to_dict()
         doc["size"] += 1

@@ -194,7 +194,8 @@ class Fingerprint:
         recomputed = merge_chunk_digests([c.digest for c in chunks], size)
         if recomputed != digest:
             raise ValueError(
-                "file digest does not match the merge of chunk digests"
+                "file digest does not match the merge of chunk digests: "
+                "recorded=%s recomputed=%s" % (digest, recomputed)
             )
         config = ChunkConfig.from_dict(obj.get("config", {}))
         return cls(

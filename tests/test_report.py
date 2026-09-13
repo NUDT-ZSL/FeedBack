@@ -31,10 +31,30 @@ class SimilarityTests(unittest.TestCase):
     def test_both_empty_is_one(self) -> None:
         report = compare(b"", b"", CFG)
         self.assertEqual(report.similarity, 1.0)
+        self.assertIsInstance(report.similarity, float)
         self.assertEqual(
             (report.common_bytes, report.added_bytes, report.deleted_bytes),
             (0, 0, 0),
         )
+        self.assertEqual(report.changed_chunks, 0)
+        self.assertEqual((report.old_size, report.new_size), (0, 0))
+
+    def test_convention_both_empty_similarity_pinned_to_one(self) -> None:
+        """固定约定（见 README）：old 与 new 均为空时，
+
+        ``2*common/(old+new)`` 数学上是 0/0，实现必须显式钉死为
+        ``1.0``（两份空内容视为完全相同），任何一侧非空则按公式为 0。
+        该用例锁定行为，防止以后“顺手修复”成 0.0 或 NaN。
+        """
+        self.assertEqual(compare(b"", b"", CFG).similarity, 1.0)
+        # 默认配置和自定义配置下约定都成立。
+        self.assertEqual(compare(b"", b"").similarity, 1.0)
+        fine = ChunkConfig(avg_size=64, min_size=16, max_size=256)
+        self.assertEqual(compare(b"", b"", fine).similarity, 1.0)
+        # 只有恰好两侧都空才走约定；任一侧非空即为 0.0。
+        self.assertEqual(compare(b"", b"x", CFG).similarity, 0.0)
+        self.assertEqual(compare(b"x", b"", CFG).similarity, 0.0)
+        self.assertTrue(compare(b"", b"", CFG).similarity == 1.0)
 
     def test_completely_different_is_zero(self) -> None:
         old = _pseudo_bytes(61, 50000)

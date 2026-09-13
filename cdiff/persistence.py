@@ -13,12 +13,27 @@ import base64
 import json
 import os
 
+from .chunking import ChunkConfig
 from .delta import Delta
-from .errors import CorruptPatchError
+from .errors import CorruptPatchError, InvalidConfigError
 
 #: 持久化文件格式。
 DOC_FORMAT = "cdiff-patch"
 DOC_VERSION = 1
+
+
+def _validate_config(raw: object, where: str) -> ChunkConfig:
+    """重建并校验一处分块配置，非法时统一抛 :class:`CorruptPatchError`。
+
+    :param raw: JSON 中的 config 对象。
+    :param where: 配置所在位置（用于错误信息），如 ``"top-level"``。
+    """
+    try:
+        return ChunkConfig.from_dict(raw)
+    except InvalidConfigError as exc:
+        raise CorruptPatchError(
+            "invalid chunk config in patch (%s): %s" % (where, exc)
+        ) from exc
 
 
 def save_delta(path: os.PathLike | str, delta: Delta) -> None:
@@ -85,9 +100,16 @@ def delta_from_dict(doc: object) -> Delta:
 
     除 :meth:`Delta.from_dict` 的全部校验外，还会校验
 
-    - 顶层 ``format`` / ``version``；
+    - 顶层 ``format`` / ``version``，以及 ``stats`` / ``ops_binary_b64``
+      等全部必需字段存在；
+    - ``stats`` 逐字段与由指令、指纹重算出的统计完全一致
+      （无缺失、无多余、无篡改）；
+    - 顶层 ``config`` 与指纹内嵌分块配置一致；
     - ``ops_binary_b64`` 可解码、解出的指令与 ``ops`` 列表逐条一致
       （防止文件被局部篡改或截断）。
+
+    因此 save 写出的每个字段 load 后都能原样取回，非法分块配置也会
+    在重建阶段直接被拒绝。
     """
     if not isinstance(doc, dict):
         raise CorruptPatchError("patch document must be a JSON object")
@@ -98,11 +120,70 @@ def delta_from_dict(doc: object) -> Delta:
     version = doc.get("version")
     if not isinstance(version, int) or version != DOC_VERSION:
         raise CorruptPatchError("unsupported patch version: %r" % (version,))
-    for field_name in ("ops", "old_fingerprint", "new_fingerprint", "config"):
+    for field_name in (
+        "ops",
+        "old_fingerprint",
+        "new_fingerprint",
+        "config",
+        "stats",
+        "ops_binary_b64",
+    ):
         if field_name not in doc:
             raise CorruptPatchError("missing field in patch document: %s" % field_name)
 
-    delta = Delta.from_dict(doc)
+    # 分块配置在进入重建流程之前就显式校验：顶层 config 以及新旧
+    # 指纹内嵌的 config 都必须是合法配置（avg_size>0、min<=max 等），
+    # 且三处完全一致。非法配置在这里被拒绝，不会拖到下一次 diff。
+    top_cfg = _validate_config(doc["config"], "top-level")
+    old_fp_obj = doc["old_fingerprint"]
+    new_fp_obj = doc["new_fingerprint"]
+    old_embedded = _validate_config(
+        old_fp_obj.get("config") if isinstance(old_fp_obj, dict) else None,
+        "old_fingerprint",
+    )
+    new_embedded = _validate_config(
+        new_fp_obj.get("config") if isinstance(new_fp_obj, dict) else None,
+        "new_fingerprint",
+    )
+    if top_cfg != old_embedded:
+        raise CorruptPatchError(
+            "top-level chunk config does not match old fingerprint config"
+        )
+    if top_cfg != new_embedded:
+        raise CorruptPatchError(
+            "top-level chunk config does not match new fingerprint config"
+        )
+
+    try:
+        delta = Delta.from_dict(doc)
+    except InvalidConfigError as exc:
+        # 兜底：确保任何遗漏的配置问题在重建阶段也表现为补丁损坏。
+        raise CorruptPatchError("invalid chunk config in patch: %s" % exc) from exc
+
+    # 统计信息逐字段核对：save 写下的每个统计值 load 后都必须与
+    # 从指令/指纹重算出的值一致，杜绝字段被默认值顶替或局部篡改。
+    stats_raw = doc["stats"]
+    if not isinstance(stats_raw, dict):
+        raise CorruptPatchError("stats must be a JSON object")
+    expected_stats = delta.stats()
+    for key, expected in expected_stats.items():
+        if key not in stats_raw:
+            raise CorruptPatchError("missing stats field: %s" % key)
+        if stats_raw[key] != expected:
+            raise CorruptPatchError(
+                "stats field %r mismatch: recorded=%r recomputed=%r"
+                % (key, stats_raw[key], expected)
+            )
+    extra = set(stats_raw) - set(expected_stats)
+    if extra:
+        raise CorruptPatchError("unknown stats fields: %s" % ", ".join(sorted(extra)))
+
+    # 顶层 config 必须与旧指纹内嵌的配置完全一致（Delta.from_dict
+    # 已做过一次；这里针对快照文档再显式确认，保证写什么读回什么）。
+    if doc["config"] != delta.config.to_dict():
+        raise CorruptPatchError(
+            "top-level config does not match fingerprint config after reload"
+        )
 
     blob_b64 = doc.get("ops_binary_b64")
     if blob_b64 is None:

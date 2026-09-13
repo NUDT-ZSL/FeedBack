@@ -136,29 +136,46 @@ print(compare(old, new))
 similarity = 2 * common_bytes / (len(old) + len(new))
 ```
 
-- 完全相同（含两份空内容）：`1.0`；
+- 完全相同（含 old 与 new **均为空**）：`1.0`；
 - 完全不同（没有任何可复用块）：`0.0`；
 - 其余落在 `(0, 1)`，结果被夹在 `[0, 1]`。
+
+边界约定（由测试固定，不允许漂移）：`len(old) == len(new) == 0` 时
+公式数学上是 `0/0`，实现显式约定两份空内容完全相同，相似度钉死为
+`1.0`；只要任一侧非空就照常按公式计算（空对非空为 `0.0`）。
 
 `common_bytes` 直接取自补丁里 `COPY` 长度之和，报告与补丁严格一致。
 
 ### 5. JSON 持久化（`cdiff/persistence.py`）
 
-`save_delta(path, delta)` 写出一个 JSON 文件，包含：补丁指令、
-旧/新指纹、分块配置、统计信息，以及指令序列紧凑二进制编码的 base64
-快照。`load_delta(path)` 读回时严格校验：
+`save_delta(path, delta)` 的 `path` 是**目标文件路径**（补丁写入处，
+已存在则覆盖），不是补丁来源。写出的 JSON 包含：补丁指令、旧/新
+指纹（各自内嵌分块配置）、顶层分块配置、统计信息，以及指令序列
+紧凑二进制编码的 base64 快照。**save 写出的每个字段 load 后都原样
+可取回**——`load_delta(path)` 读回时严格校验：
 
-- 文件可读且为合法 JSON，顶层 `format`/`version` 正确，必需字段齐全；
+- 文件可读且为合法 JSON，顶层 `format`/`version` 正确，必需字段
+  （`ops`、`old_fingerprint`、`new_fingerprint`、`config`、`stats`、
+  `ops_binary_b64`）齐全；
 - 每条指令类型合法；`COPY` 的 offset/length 非负且不超出旧内容；
   `ADD` 的 base64 可解码；
 - 指纹格式合法（64 位十六进制）、块偏移连续、长度求和自洽，并且
-  **整文件指纹必须能由块指纹重新合并得到**（防篡改）；
+  **重算块指纹的顺序合并结果，与快照里的整文件指纹逐字节比对**，
+  不一致即报错，错误信息同时给出 `recorded=...` 与 `recomputed=...`
+  两个指纹（语法合法但被篡改的摘要也无法通过）；
+- 分块配置在**重建阶段**就重新构造并校验：`avg_size<=0`、
+  `min_size>max_size` 等非法配置直接抛错，不会拖到下一次 diff；
+  顶层 `config` 必须与新旧指纹内嵌的配置完全一致（杜绝默认值顶替）；
+- `stats` 必须存在且逐字段等于由指令/指纹重算出的值
+  （`patch_size`、`copy_ops`、`add_ops`、`copied_bytes`、
+  `added_bytes`、`old_size`、`new_size`），无缺失也无多余字段；
 - 指令产出的总长度等于新指纹记录的大小；
 - 二进制快照与 JSON 指令列表逐条一致（防局部篡改/截断）；
 - 记录的 `patch_size` 与实际编码长度一致。
 
 任何不符都抛带明确说明的 `CorruptPatchError`，不会静默吞掉异常。
-save 后 load 得到的补丁可直接再次 `patch()` 应用。
+save 后 load 得到的补丁可直接再次 `patch()` 应用；用 load 取回的
+配置对同一对 old/new 重新 diff，得到的补丁与保存前逐字节一致。
 
 ## 命令行 `main.py`
 
@@ -174,9 +191,9 @@ save 后 load 得到的补丁可直接再次 `patch()` 应用。
 | `diff` | `old_b64`+`new_b64`（或 hex） |
 | `patch` | `old_b64` + `delta`（内联补丁）或 `path`（补丁文件） |
 | `compare` | `old_b64` + `new_b64` |
-| `save` | `path` +（`delta` / `delta_path` / 直接给 old、new） |
-| `load` | `path` |
-| `dump` | `delta` 或 `path`：输出指令、指纹、配置、统计摘要 |
+| `save` | `path`（**目标**写入路径）+（`delta` / `delta_path` / 直接给 old、new） |
+| `load` | `path`（补丁文件来源路径） |
+| `dump` | `delta` 或 `path`（补丁来源）：输出指令、指纹、配置、统计摘要 |
 
 `config` 形如 `{"avg_size":1024,"min_size":256,"max_size":4096}`。
 

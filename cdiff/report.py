@@ -85,6 +85,8 @@ def compare(
     # 理论不变量：COPY 总量不超过旧内容大小，COPY+ADD 恰好等于新内容大小。
     deleted = old_size - common
     total = old_size + new_size
+    # 固定约定：两份空内容视为完全相同，相似度为 1.0（0/0 没有数学
+    # 定义，这里显式钉死以避免行为漂移；由测试 test_both_empty_is_one 锁定）。
     similarity = 1.0 if total == 0 else (2.0 * common) / total
     # 浮点兜底，夹到 [0, 1]。
     similarity = max(0.0, min(1.0, similarity))
