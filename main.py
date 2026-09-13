@@ -169,9 +169,15 @@ def handle(ws: Workspace, cmd: Dict[str, Any]) -> Dict[str, Any]:
             down=result.down,
             cutoff_normalized=result.cutoff_normalized,
             cutoff_hz=result.cutoff_hz,
-            group_delay_samples=result.group_delay_samples,
-            group_delay_seconds=result.group_delay_seconds,
+            group_delay_samples=result.filter_group_delay_samples,
+            group_delay_seconds=result.filter_group_delay_seconds,
             filter_taps=result.filter_taps,
+            stages=result.stages,
+            time_offset_samples=result.time_offset_samples,
+            time_offset_seconds=result.time_offset_seconds,
+            aliasing_detected=result.aliasing_detected,
+            aliased_band=result.aliased_band,
+            aliased_energy_ratio=result.aliased_energy_ratio,
         )
         return {
             "ok": True,
@@ -181,8 +187,14 @@ def handle(ws: Workspace, cmd: Dict[str, Any]) -> Dict[str, Any]:
             "length": len(result.signal),
             "cutoff_normalized": result.cutoff_normalized,
             "cutoff_hz": result.cutoff_hz,
-            "group_delay_samples": result.group_delay_samples,
-            "group_delay_seconds": result.group_delay_seconds,
+            "stages": [s.to_dict() for s in result.stages],
+            "filter_group_delay_samples": result.filter_group_delay_samples,
+            "filter_group_delay_seconds": result.filter_group_delay_seconds,
+            "time_offset_samples": result.time_offset_samples,
+            "time_offset_seconds": result.time_offset_seconds,
+            "aliasing_detected": result.aliasing_detected,
+            "aliased_band": list(result.aliased_band) if result.aliased_band else None,
+            "aliased_energy_ratio": result.aliased_energy_ratio,
         }
 
     if op == "align":
@@ -200,6 +212,7 @@ def handle(ws: Workspace, cmd: Dict[str, Any]) -> Dict[str, Any]:
             "start": alignment.start,
             "end": alignment.end,
             "signals": alignment.signal_ids(),
+            "aliasing": alignment.aliasing,
         }
 
     if op == "interp":

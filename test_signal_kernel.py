@@ -178,6 +178,48 @@ class TestFilterDesign(unittest.TestCase):
         self.assertEqual(f.taps, 52)
         self.assertAlmostEqual(f.response(0.05), 1.0, delta=0.1)
 
+    def test_passband_center_gain_is_unity_all_kinds(self):
+        # Unified convention: gain is 1 at the passband center, for every
+        # kind and across cutoff choices.
+        cases = [
+            ("lowpass", 0.2, [0.05, 0.1, 0.15]),
+            ("lowpass", 0.35, [0.1, 0.2, 0.3]),
+            ("highpass", 0.2, [0.3, 0.4, 0.45]),
+            ("highpass", 0.1, [0.2, 0.3, 0.45]),
+            ("bandpass", (0.1, 0.2), [0.12, 0.15, 0.18]),
+            ("bandpass", (0.15, 0.35), [0.2, 0.25, 0.3]),
+            # Bandstop has two passbands; both ends are checked separately.
+            ("bandstop", (0.1, 0.2), [0.0, 0.05, 0.3, 0.4]),
+            ("bandstop", (0.2, 0.3), [0.0, 0.1, 0.4, 0.45]),
+        ]
+        for kind, cutoff, passband_points in cases:
+            f = design_filter(kind, 101, cutoff, "hamming")
+            for p in passband_points:
+                self.assertAlmostEqual(
+                    f.response(p), 1.0, delta=0.02,
+                    msg=f"{kind} cutoff={cutoff} at f={p}",
+                )
+
+    def test_stopband_near_zero_all_kinds(self):
+        cases = [
+            ("lowpass", 0.2, [0.3, 0.4]),
+            ("highpass", 0.2, [0.05, 0.1]),
+            ("bandpass", (0.1, 0.2), [0.02, 0.4]),
+            ("bandstop", (0.1, 0.2), [0.14, 0.15, 0.16]),
+        ]
+        for kind, cutoff, stopband_points in cases:
+            f = design_filter(kind, 101, cutoff, "hamming")
+            for p in stopband_points:
+                self.assertLess(
+                    f.response(p), 0.01, msg=f"{kind} cutoff={cutoff} at f={p}"
+                )
+
+    def test_even_taps_structural_zero_at_nyquist(self):
+        # Documented behavior: odd order -> even tap count -> H(0.5) == 0.
+        for kind, cutoff in (("highpass", 0.2), ("bandstop", (0.1, 0.2))):
+            f = design_filter(kind, 101, cutoff, "hamming")
+            self.assertLess(f.response(0.5), 1e-10, msg=kind)
+
 
 # ---------------------------------------------------------------------------
 # Filtering
@@ -197,11 +239,12 @@ class TestFiltering(unittest.TestCase):
         self.assertAlmostEqual(r.filtered.sample_rate, s.sample_rate)
 
     def test_zero_padded_edges(self):
-        # Constant signal: interior stays 1, edges droop due to zero padding.
+        # Constant signal: interior stays ~1 (passband-center normalization
+        # leaves DC within passband ripple), edges droop due to zero padding.
         s = Signal("c", 100.0, [1.0] * 40)
         f = design_filter("lowpass", 21, 0.2)
         r = apply_filter(s, f)
-        self.assertAlmostEqual(r.filtered.samples[20], 1.0, places=9)
+        self.assertAlmostEqual(r.filtered.samples[20], 1.0, delta=0.01)
         self.assertLess(r.filtered.samples[0], 0.9)
         # Explicit zero-padding check: out[0] equals the partial tap sum.
         start = (f.taps - 1) // 2
@@ -400,10 +443,70 @@ class TestResample(unittest.TestCase):
         r = resample(s, 1, 4)
         self.assertAlmostEqual(r.cutoff_normalized, 0.5 / 4)
         self.assertAlmostEqual(r.cutoff_hz, 0.125 * 100.0)
-        self.assertEqual(r.filter_taps % 2, 1)
-        expected_delay = (r.filter_taps - 1) / 2
-        self.assertAlmostEqual(r.group_delay_seconds, expected_delay / 100.0)
-        self.assertAlmostEqual(r.group_delay_samples, expected_delay / 4)
+        self.assertEqual(len(r.stages), 1)
+        self.assertEqual(r.stages[0].kind, "decimation")
+        self.assertEqual(r.stages[0].taps % 2, 1)
+        expected_delay = (r.stages[0].taps - 1) / 2
+        self.assertAlmostEqual(r.filter_group_delay_seconds, expected_delay / 100.0)
+        self.assertAlmostEqual(r.filter_group_delay_samples, expected_delay / 4)
+        # Backward-compatible aliases still work.
+        self.assertEqual(r.group_delay_seconds, r.filter_group_delay_seconds)
+        self.assertEqual(r.group_delay_samples, r.filter_group_delay_samples)
+        self.assertEqual(r.filter_taps, r.stages[0].taps)
+        # The filter delay is compensated, so the net time-axis shift is 0.
+        self.assertEqual(r.time_offset_samples, 0.0)
+        self.assertEqual(r.time_offset_seconds, 0.0)
+
+    def test_group_delay_report_matches_impulse_peak(self):
+        sr, n, i0 = 100.0, 64, 6
+        samples = [0.0] * n
+        samples[i0] = 1.0
+        s = Signal("imp", sr, samples)
+        for up, down in ((1, 2), (2, 1), (2, 3), (3, 2)):
+            r = resample(s, up, down)
+            # The reported filter delay accumulates the actual stage taps.
+            delay_intermediate = sum((st.taps - 1) / 2 for st in r.stages)
+            self.assertAlmostEqual(
+                r.filter_group_delay_seconds,
+                delay_intermediate / (sr * up),
+                msg=f"up={up} down={down}",
+            )
+            self.assertAlmostEqual(
+                r.filter_group_delay_samples,
+                delay_intermediate / down,
+                msg=f"up={up} down={down}",
+            )
+            # Net time-axis offset is zero: the impulse peak lands exactly on
+            # the output grid point matching the input impulse time.
+            self.assertEqual(r.time_offset_seconds, 0.0)
+            self.assertEqual(r.time_offset_samples, 0.0)
+            self.assertEqual((i0 * up) % down, 0)  # test premise: on-grid peak
+            peak = max(range(len(r.signal)), key=lambda k: r.signal.samples[k])
+            self.assertEqual(peak, (i0 * up) // down, msg=f"up={up} down={down}")
+            self.assertAlmostEqual(
+                r.signal.start_time + peak / r.signal.sample_rate,
+                s.start_time + i0 / sr,
+                msg=f"up={up} down={down}",
+            )
+
+    def test_aliasing_detected_when_content_above_new_nyquist(self):
+        s = sine_signal("hf", 40.0, 200.0, 400)  # 40 Hz content
+        r = resample(s, 1, 4)  # new rate 50 Hz, new Nyquist 25 Hz < 40 Hz
+        self.assertTrue(r.aliasing_detected)
+        self.assertEqual(r.aliased_band, (25.0, 100.0))
+        self.assertGreater(r.aliased_energy_ratio, 0.9)
+
+    def test_no_aliasing_flag_when_content_fits(self):
+        s = sine_signal("lf", 10.0, 200.0, 400)
+        r = resample(s, 1, 2)  # new Nyquist 50 Hz > 10 Hz
+        self.assertFalse(r.aliasing_detected)
+        self.assertIsNone(r.aliased_band)
+        self.assertLess(r.aliased_energy_ratio, 0.01)
+
+    def test_aliasing_threshold_validation(self):
+        s = Signal("s", 100.0, [1.0, 2.0, 3.0])
+        with self.assertRaises(ResampleError):
+            resample(s, 1, 2, alias_threshold=1.5)
 
     def test_identity_resample(self):
         s = Signal("s", 100.0, [1.0, 2.0, 3.0])
@@ -489,11 +592,24 @@ class TestAlign(unittest.TestCase):
                 align([s], bad)
 
     def test_target_rate_below_signal_content_is_antialiased(self):
-        # 40 Hz content, target rate 50 Hz (Nyquist 25 Hz): must not alias.
+        # 40 Hz content, target rate 50 Hz (Nyquist 25 Hz): must not alias,
+        # and the loss must be flagged in the alignment's aliasing report.
         s = sine_signal("a", 40.0, 200.0, 400)
         al = align([s], 50.0)
         sp = spectrum(al.get("a"))
         self.assertLess(max(sp.magnitudes), 0.05)
+        info = al.aliasing["a"]
+        self.assertTrue(info["detected"])
+        self.assertEqual(info["aliased_band"], [25.0, 100.0])
+        self.assertGreater(info["energy_ratio"], 0.9)
+        self.assertIn("fold into [0, 25.0]", info["note"])
+
+    def test_align_marks_no_aliasing_when_content_fits(self):
+        s = sine_signal("a", 5.0, 100.0, 200)
+        al = align([s], 80.0)
+        self.assertFalse(al.aliasing["a"]["detected"])
+        self.assertIsNone(al.aliasing["a"]["aliased_band"])
+        self.assertIsNone(al.aliasing["a"]["note"])
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +640,14 @@ class TestPersistence(unittest.TestCase):
         ws.resamples["r1"] = ResampleRecord(
             "r1", "s1", "s1_rs", 3, 2,
             r.cutoff_normalized, r.cutoff_hz,
-            r.group_delay_samples, r.group_delay_seconds, r.filter_taps,
+            r.filter_group_delay_samples, r.filter_group_delay_seconds,
+            r.filter_taps,
+            stages=r.stages,
+            time_offset_samples=r.time_offset_samples,
+            time_offset_seconds=r.time_offset_seconds,
+            aliasing_detected=r.aliasing_detected,
+            aliased_band=r.aliased_band,
+            aliased_energy_ratio=r.aliased_energy_ratio,
         )
         s2 = sine_signal("s2", 8.0, 100.0, 150, start_time=0.1)
         ws.add_signal(s2)
@@ -546,7 +669,15 @@ class TestPersistence(unittest.TestCase):
         self.assertEqual(loaded.spectra["sp1"].phases, ws.spectra["sp1"].phases)
         self.assertEqual(loaded.resamples["r1"].up, 3)
         self.assertEqual(loaded.resamples["r1"].down, 2)
+        self.assertEqual(len(loaded.resamples["r1"].stages), 2)
+        self.assertEqual(loaded.resamples["r1"].stages[0].kind, "interpolation")
+        self.assertEqual(loaded.resamples["r1"].stages[1].kind, "decimation")
+        self.assertEqual(loaded.resamples["r1"].time_offset_seconds, 0.0)
+        self.assertFalse(loaded.resamples["r1"].aliasing_detected)
         self.assertAlmostEqual(loaded.alignments["al1"].start, ws.alignments["al1"].start)
+        self.assertEqual(
+            set(loaded.alignments["al1"].aliasing), set(ws.alignments["al1"].aliasing)
+        )
         value, reason = loaded.alignments["al1"].interp("s1", 0.5)
         self.assertIsNone(reason)
         self.assertIsNotNone(value)
@@ -664,6 +795,35 @@ class TestPersistence(unittest.TestCase):
         with self.assertRaises(PersistenceError) as ctx:
             Workspace.load(self.path)
         self.assertIn("coprime", str(ctx.exception))
+
+    def test_old_format_resample_record_loads_with_defaults(self):
+        # Records written before stages/aliasing existed must still load.
+        data = self._minimal()
+        data["signals"] = [
+            {"signal_id": "a", "sample_rate": 100.0, "samples": [1.0], "start_time": 0.0},
+            {"signal_id": "b", "sample_rate": 50.0, "samples": [1.0], "start_time": 0.0},
+        ]
+        data["resamples"] = [
+            {
+                "record_id": "r",
+                "source_id": "a",
+                "result_id": "b",
+                "up": 1,
+                "down": 2,
+                "cutoff_normalized": 0.25,
+                "cutoff_hz": 25.0,
+                "group_delay_samples": 16.0,
+                "group_delay_seconds": 0.16,
+                "filter_taps": 33,
+            }
+        ]
+        self._write(data)
+        ws = Workspace.load(self.path)
+        rec = ws.resamples["r"]
+        self.assertEqual(rec.stages, [])
+        self.assertEqual(rec.time_offset_seconds, 0.0)
+        self.assertFalse(rec.aliasing_detected)
+        self.assertIsNone(rec.aliased_band)
 
     def test_nan_token_rejected(self):
         with open(self.path, "w", encoding="utf-8") as fh:

@@ -30,7 +30,7 @@ from __future__ import annotations
 import cmath
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -45,6 +45,7 @@ __all__ = [
     "FIRFilter",
     "FilterResult",
     "Spectrum",
+    "ResampleStage",
     "ResampleResult",
     "Alignment",
     "Workspace",
@@ -356,8 +357,22 @@ def design_filter(
         window: "rectangular" or "hamming".
 
     Returns:
-        The designed :class:`FIRFilter`, gain-normalized to ~1 in the
-        passband.
+        The designed :class:`FIRFilter`.
+
+    Normalization convention (uniform across all four kinds): **the gain at
+    the center of the passband is 1**.  The reference point is
+
+    * lowpass: ``cutoff / 2``
+    * highpass: ``(cutoff + 0.5) / 2``
+    * bandpass: ``(low + high) / 2``
+    * bandstop: both passband centers ``low / 2`` and ``(high + 0.5) / 2``
+      are considered; the coefficients are scaled so the mean of the two
+      gains is 1, keeping both ends of the passband equally close to 1.
+
+    Note: with an odd order the tap count is even, and any symmetric
+    even-tap FIR has a structural zero at f = 0.5, so a bandstop's upper
+    passband rolls to 0 exactly at Nyquist; everywhere below that the
+    passband stays within a few 1e-3 of 1.
 
     Raises:
         FilterDesignError: on any invalid parameter.
@@ -392,28 +407,33 @@ def design_filter(
     lp_low = _ideal_lowpass(cutoffs[0], taps)
     if kind == "lowpass":
         h = lp_low
-        ref_freq = 0.0
+        ref_freqs = (cutoffs[0] / 2.0,)
     elif kind == "highpass":
         delta = _fractional_delta(taps)
         h = [delta[n] - lp_low[n] for n in range(taps)]
         # Even tap counts force H(0.5) = 0, so normalize mid-passband.
-        ref_freq = 0.5 * (cutoffs[0] + 0.5)
+        ref_freqs = ((cutoffs[0] + 0.5) / 2.0,)
     else:
         lp_high = _ideal_lowpass(cutoffs[1], taps)
         band = [lp_high[n] - lp_low[n] for n in range(taps)]
         if kind == "bandpass":
             h = band
-            ref_freq = 0.5 * (cutoffs[0] + cutoffs[1])
-        else:  # bandstop
+            ref_freqs = ((cutoffs[0] + cutoffs[1]) / 2.0,)
+        else:  # bandstop: two passbands, normalize on both centers
             delta = _fractional_delta(taps)
             h = [delta[n] - band[n] for n in range(taps)]
-            ref_freq = 0.0
+            ref_freqs = (cutoffs[0] / 2.0, (cutoffs[1] + 0.5) / 2.0)
 
     h = [h[n] * w[n] for n in range(taps)]
 
-    # Normalize gain to 1 at a reference frequency inside the passband.
+    # Normalize so the mean gain at the passband-center reference point(s)
+    # is exactly 1 (see the convention in the docstring above).
     c = (taps - 1) / 2.0
-    gain = sum(h[n] * math.cos(2.0 * math.pi * ref_freq * (n - c)) for n in range(taps))
+    gains = [
+        sum(h[n] * math.cos(2.0 * math.pi * f0 * (n - c)) for n in range(taps))
+        for f0 in ref_freqs
+    ]
+    gain = sum(gains) / len(gains)
     if abs(gain) > 1e-12:
         h = [v / gain for v in h]
 
@@ -683,19 +703,108 @@ def _design_lowpass_taps(fc: float, taps: int, window: str = "hamming") -> List[
 
 
 @dataclass
+class ResampleStage:
+    """One stage of a rational resampling chain.
+
+    Attributes:
+        kind: "interpolation" (zero-stuffing + lowpass) or "decimation"
+            (anti-aliasing lowpass before decimation).
+        factor: The stage's up/down factor.
+        taps: Actual tap count of the stage's filter.
+        cutoff_normalized: Filter cutoff as a fraction of the intermediate
+            (upsampled) rate.
+        cutoff_hz: Same cutoff in Hz of the intermediate rate.
+        group_delay_samples: The stage filter's group delay, in
+            intermediate-rate samples (``(taps - 1) / 2``).
+    """
+
+    kind: str
+    factor: int
+    taps: int
+    cutoff_normalized: float
+    cutoff_hz: float
+    group_delay_samples: float
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "factor": self.factor,
+            "taps": self.taps,
+            "cutoff_normalized": self.cutoff_normalized,
+            "cutoff_hz": self.cutoff_hz,
+            "group_delay_samples": self.group_delay_samples,
+        }
+
+    @staticmethod
+    def from_dict(data: object, where: str) -> "ResampleStage":
+        if not isinstance(data, dict):
+            raise PersistenceError(
+                f"{where}: expected an object, got {type(data).__name__}"
+            )
+        required = (
+            "kind",
+            "factor",
+            "taps",
+            "cutoff_normalized",
+            "cutoff_hz",
+            "group_delay_samples",
+        )
+        missing = [k for k in required if k not in data]
+        if missing:
+            raise PersistenceError(f"{where}: missing field(s) {', '.join(missing)}")
+        return ResampleStage(
+            kind=str(data["kind"]),
+            factor=int(data["factor"]),
+            taps=int(data["taps"]),
+            cutoff_normalized=float(data["cutoff_normalized"]),
+            cutoff_hz=float(data["cutoff_hz"]),
+            group_delay_samples=float(data["group_delay_samples"]),
+        )
+
+
+@dataclass
 class ResampleResult:
     """Outcome of a resampling operation.
+
+    Two different delay quantities are reported, and they must not be
+    confused:
+
+    * ``filter_group_delay_*`` — the delay the anti-aliasing filter chain
+      itself introduces, accumulated from the actual tap counts of every
+      stage (``sum((taps-1)/2)`` in intermediate-rate samples, divided by
+      ``down`` for output samples).  Informational: it describes the
+      filters, not the output time axis.
+    * ``time_offset_*`` — the net shift of the output time axis relative to
+      the input time axis.  This implementation compensates the filter
+      delay exactly when slicing the decimated output, so the offset is
+      0.0 and output sample ``k`` sits at
+      ``signal.start_time + k / new_rate``.  Use *this* value (not the
+      filter group delay) to align the resampled signal on a time axis.
 
     Attributes:
         signal: The resampled signal (rate ``old_rate * up / down``).
         up: Upsampling factor.
         down: Downsampling factor.
-        cutoff_normalized: Anti-aliasing filter cutoff as a fraction of the
-            intermediate (upsampled) rate; None for a 1:1 copy.
+        cutoff_normalized: Effective anti-aliasing cutoff (the minimum of
+            the stage cutoffs) as a fraction of the intermediate rate;
+            None for a 1:1 copy.
         cutoff_hz: Same cutoff in Hz of the intermediate rate.
-        group_delay_samples: Filter group delay in output samples.
-        group_delay_seconds: Filter group delay in seconds.
-        filter_taps: Length of the anti-aliasing filter.
+        stages: Per-stage filter details; delays accumulate over these.
+        filter_group_delay_samples: Total filter chain delay in output
+            samples.
+        filter_group_delay_seconds: Total filter chain delay in seconds.
+        time_offset_samples: Net output time-axis shift in output samples
+            (0.0 — the filter delay is compensated).
+        time_offset_seconds: Net output time-axis shift in seconds (0.0).
+        aliasing_detected: True when the input carried significant energy
+            (more than ``alias_threshold`` of the total) above the output
+            Nyquist frequency.  That content is *removed* by the
+            anti-aliasing filter; without filtering it would fold into
+            ``[0, new_nyquist]``.
+        aliased_band: ``(new_nyquist, old_nyquist)`` — the input band that
+            was removed — when detected, else None.
+        aliased_energy_ratio: Fraction of input spectral energy above the
+            output Nyquist frequency (0 when not downsampling).
     """
 
     signal: Signal
@@ -703,9 +812,36 @@ class ResampleResult:
     down: int
     cutoff_normalized: Optional[float]
     cutoff_hz: Optional[float]
-    group_delay_samples: float
-    group_delay_seconds: float
-    filter_taps: int
+    stages: List[ResampleStage]
+    filter_group_delay_samples: float
+    filter_group_delay_seconds: float
+    time_offset_samples: float
+    time_offset_seconds: float
+    aliasing_detected: bool
+    aliased_band: Optional[Tuple[float, float]]
+    aliased_energy_ratio: float
+
+    @property
+    def group_delay_samples(self) -> float:
+        """Backward-compatible alias for ``filter_group_delay_samples``."""
+        return self.filter_group_delay_samples
+
+    @property
+    def group_delay_seconds(self) -> float:
+        """Backward-compatible alias for ``filter_group_delay_seconds``."""
+        return self.filter_group_delay_seconds
+
+    @property
+    def filter_taps(self) -> int:
+        """Total tap count across all stages."""
+        return sum(s.taps for s in self.stages)
+
+
+def _odd_taps(taps: int) -> int:
+    """Coerce to a positive odd tap count (odd taps -> integer group delay)."""
+    if isinstance(taps, bool) or not isinstance(taps, int) or taps < 1:
+        raise ResampleError(f"taps must be a positive integer, got {taps!r}")
+    return taps if taps % 2 == 1 else taps + 1
 
 
 def resample(
@@ -714,17 +850,30 @@ def resample(
     down: int,
     new_id: Optional[str] = None,
     taps: Optional[int] = None,
+    alias_threshold: float = 0.01,
 ) -> ResampleResult:
     """Resample ``signal`` by the rational factor ``up / down``.
 
-    ``up`` and ``down`` must be positive coprime integers.  The signal is
-    zero-stuffed by ``up``, lowpass-filtered (cutoff ``0.5 / max(up, down)``
-    of the intermediate rate, gain ``up``) and decimated by ``down``.  The
-    output rate is ``signal.sample_rate * up / down``; the time axis is
-    preserved exactly (the filter's integer group delay is compensated).
+    ``up`` and ``down`` must be positive coprime integers.  The chain runs
+    as explicit stages at the intermediate rate ``sample_rate * up``:
 
-    The returned :class:`ResampleResult` reports the anti-aliasing cutoff
-    and the group delay the filter introduces.
+    1. interpolation (only when ``up > 1``): zero-stuffing plus a lowpass
+       at ``0.5 / up`` with gain ``up``;
+    2. decimation (only when ``down > 1``): an anti-aliasing lowpass at
+       ``0.5 / down``, then taking every ``down``-th sample.
+
+    The output rate is ``signal.sample_rate * up / down``.  The stages'
+    combined group delay is compensated exactly when slicing the output,
+    so the output time axis stays aligned with the input (see
+    :class:`ResampleResult` for the reported delay and offset values).
+
+    When the output Nyquist frequency is below the input's, spectral
+    energy above it is removed by the anti-aliasing filter; if that
+    removed energy exceeds ``alias_threshold`` of the total, the result
+    carries ``aliasing_detected=True`` and the removed band.
+
+    Raises:
+        ResampleError: non-positive or non-coprime factors, bad taps.
     """
     _validate_factor(up, "up")
     _validate_factor(down, "down")
@@ -733,6 +882,10 @@ def resample(
         raise ResampleError(
             f"up and down must be coprime, got up={up}, down={down} (gcd={common})"
         )
+    if not _is_finite_number(alias_threshold) or not 0.0 <= alias_threshold <= 1.0:
+        raise ResampleError(
+            f"alias_threshold must lie in [0, 1], got {alias_threshold!r}"
+        )
     if up == 1 and down == 1:
         copied = Signal(
             new_id or f"{signal.signal_id}_rs",
@@ -740,42 +893,103 @@ def resample(
             list(signal.samples),
             signal.start_time,
         )
-        return ResampleResult(copied, 1, 1, None, None, 0.0, 0.0, 0)
+        return ResampleResult(
+            signal=copied,
+            up=1,
+            down=1,
+            cutoff_normalized=None,
+            cutoff_hz=None,
+            stages=[],
+            filter_group_delay_samples=0.0,
+            filter_group_delay_seconds=0.0,
+            time_offset_samples=0.0,
+            time_offset_seconds=0.0,
+            aliasing_detected=False,
+            aliased_band=None,
+            aliased_energy_ratio=0.0,
+        )
 
-    factor = max(up, down)
-    cutoff = 0.5 / factor  # of the intermediate (upsampled) rate
-    if taps is None:
-        taps = 16 * factor + 1
-    elif isinstance(taps, bool) or not isinstance(taps, int) or taps < 1:
-        raise ResampleError(f"taps must be a positive integer, got {taps!r}")
-    if taps % 2 == 0:
-        taps += 1  # odd tap count -> integer group delay
-
-    h = _design_lowpass_taps(cutoff, taps)
-    h = [up * v for v in h]  # compensate zero-stuffing energy loss
-
+    intermediate_rate = signal.sample_rate * up
     n = len(signal.samples)
-    x_up = [0.0] * ((n - 1) * up + 1)
-    x_up[::up] = signal.samples
-    y = convolve_full(x_up, h)
-    delay = (taps - 1) // 2  # integer, in intermediate-rate samples
+    stages: List[ResampleStage] = []
+    total_delay = 0  # in intermediate-rate samples
+
+    # Stage 1: zero-stuffing + interpolation lowpass.
+    if up > 1:
+        x_up = [0.0] * ((n - 1) * up + 1)
+        x_up[::up] = signal.samples
+        cutoff_a = 0.5 / up
+        taps_a = _odd_taps(taps if taps is not None else 16 * up + 1)
+        h = [up * v for v in _design_lowpass_taps(cutoff_a, taps_a)]
+        y = convolve_full(x_up, h)
+        delay_a = (taps_a - 1) // 2
+        total_delay += delay_a
+        stages.append(
+            ResampleStage(
+                "interpolation", up, taps_a, cutoff_a,
+                cutoff_a * intermediate_rate, float(delay_a),
+            )
+        )
+    else:
+        y = list(signal.samples)
+
+    # Stage 2: anti-aliasing lowpass before decimation.
+    if down > 1:
+        cutoff_b = 0.5 / down
+        taps_b = _odd_taps(taps if taps is not None else 16 * down + 1)
+        y = convolve_full(y, _design_lowpass_taps(cutoff_b, taps_b))
+        delay_b = (taps_b - 1) // 2
+        total_delay += delay_b
+        stages.append(
+            ResampleStage(
+                "decimation", down, taps_b, cutoff_b,
+                cutoff_b * intermediate_rate, float(delay_b),
+            )
+        )
+
+    # Decimate, compensating the accumulated filter delay exactly: output
+    # sample k is intermediate sample k*down + total_delay, whose
+    # delay-corrected time is k*down/intermediate_rate = k/new_rate.
     count = ((n - 1) * up) // down + 1
-    out = [y[k * down + delay] for k in range(count)]
+    out = [y[k * down + total_delay] for k in range(count)]
 
     new_rate = signal.sample_rate * up / down
     result = Signal(
         new_id or f"{signal.signal_id}_rs", new_rate, out, signal.start_time
     )
-    intermediate_rate = signal.sample_rate * up
+    effective_cutoff = min(s.cutoff_normalized for s in stages)
+
+    # Aliasing detection: measure input energy above the output Nyquist.
+    aliasing_detected = False
+    aliased_band: Optional[Tuple[float, float]] = None
+    energy_ratio = 0.0
+    new_nyquist = new_rate / 2.0
+    old_nyquist = signal.sample_rate / 2.0
+    if new_nyquist < old_nyquist:
+        sp = spectrum(signal)
+        total_energy = sum(m * m for m in sp.magnitudes)
+        above_energy = sum(
+            m * m for f, m in zip(sp.frequencies, sp.magnitudes) if f > new_nyquist
+        )
+        energy_ratio = above_energy / total_energy if total_energy > 0.0 else 0.0
+        if energy_ratio > alias_threshold:
+            aliasing_detected = True
+            aliased_band = (new_nyquist, old_nyquist)
+
     return ResampleResult(
         signal=result,
         up=up,
         down=down,
-        cutoff_normalized=cutoff,
-        cutoff_hz=cutoff * intermediate_rate,
-        group_delay_samples=delay / down,
-        group_delay_seconds=delay / intermediate_rate,
-        filter_taps=taps,
+        cutoff_normalized=effective_cutoff,
+        cutoff_hz=effective_cutoff * intermediate_rate,
+        stages=stages,
+        filter_group_delay_samples=total_delay / down,
+        filter_group_delay_seconds=total_delay / intermediate_rate,
+        time_offset_samples=0.0,
+        time_offset_seconds=0.0,
+        aliasing_detected=aliasing_detected,
+        aliased_band=aliased_band,
+        aliased_energy_ratio=energy_ratio,
     )
 
 
@@ -812,12 +1026,19 @@ class Alignment:
         target_rate: Common sampling rate in Hz.
         start: Start of the common time range (seconds).
         end: End of the common time range (seconds).
+        aliasing: Per-signal dict ``{signal_id: {"detected": bool,
+            "aliased_band": [low, high] | None, "energy_ratio": float,
+            "note": str | None}}`` reporting whether resampling to
+            ``target_rate`` had to remove energy above the new Nyquist
+            frequency (that content is attenuated by the anti-aliasing
+            filter; unfiltered it would fold into ``[0, target_rate/2]``).
     """
 
     signals: List[Signal]
     target_rate: float
     start: float
     end: float
+    aliasing: Dict[str, dict] = field(default_factory=dict)
 
     def signal_ids(self) -> List[str]:
         """Ids of the aligned signals, in order."""
@@ -862,7 +1083,10 @@ class Alignment:
 
 
 def align(
-    signals: Sequence[Signal], target_rate: float, max_ratio: int = 1000
+    signals: Sequence[Signal],
+    target_rate: float,
+    max_ratio: int = 1000,
+    alias_threshold: float = 0.01,
 ) -> Alignment:
     """Resample ``signals`` to ``target_rate`` and align them on a common
     time axis.
@@ -870,8 +1094,10 @@ def align(
     Each signal is rationally resampled (its own ``start_time`` is kept),
     then all are trimmed to the overlapping time range.  Content above the
     target Nyquist frequency is removed by the resampling anti-aliasing
-    filter, so a ``target_rate`` below a signal's highest frequency is
-    handled gracefully (that content is attenuated, not aliased).
+    filter; when a signal loses more than ``alias_threshold`` of its
+    spectral energy that way, the returned ``Alignment.aliasing`` marks it
+    with ``detected=True`` and names the removed band (which would
+    otherwise fold into ``[0, target_rate / 2]``).
 
     Raises:
         AlignmentError: empty input, duplicate ids, invalid target rate, an
@@ -890,6 +1116,7 @@ def align(
     target = Fraction(target_rate).limit_denominator(10**6)
 
     resampled: List[Signal] = []
+    aliasing: Dict[str, dict] = {}
     for s in signals:
         ratio = target / Fraction(s.sample_rate).limit_denominator(10**6)
         up, down = ratio.numerator, ratio.denominator
@@ -898,7 +1125,21 @@ def align(
                 f"resampling ratio {up}/{down} for signal {s.signal_id!r} is too "
                 f"extreme (limit {max_ratio})"
             )
-        resampled.append(resample(s, up, down, new_id=s.signal_id).signal)
+        r = resample(s, up, down, new_id=s.signal_id, alias_threshold=alias_threshold)
+        resampled.append(r.signal)
+        new_nyquist = r.signal.sample_rate / 2.0
+        aliasing[s.signal_id] = {
+            "detected": r.aliasing_detected,
+            "aliased_band": list(r.aliased_band) if r.aliased_band else None,
+            "energy_ratio": r.aliased_energy_ratio,
+            "note": (
+                f"input energy above the new Nyquist frequency {new_nyquist} Hz "
+                f"was removed by the anti-aliasing filter; unfiltered it would "
+                f"fold into [0, {new_nyquist}] Hz"
+                if r.aliasing_detected
+                else None
+            ),
+        }
 
     t0 = max(s.start_time for s in resampled)
     t1 = min(s.end_time for s in resampled)
@@ -925,7 +1166,13 @@ def align(
 
     start = max(s.start_time for s in trimmed)
     end = min(s.end_time for s in trimmed)
-    return Alignment(signals=trimmed, target_rate=float(target_rate), start=start, end=end)
+    return Alignment(
+        signals=trimmed,
+        target_rate=float(target_rate),
+        start=start,
+        end=end,
+        aliasing=aliasing,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1088,7 +1335,13 @@ def _spectrum_from_dict(data: object, where: str) -> Tuple[str, Spectrum]:
 
 @dataclass
 class ResampleRecord:
-    """Persisted configuration and outcome metadata of a resample call."""
+    """Persisted configuration and outcome metadata of a resample call.
+
+    The delay fields keep the same distinction as :class:`ResampleResult`:
+    ``group_delay_*`` is what the filter chain introduces, while
+    ``time_offset_*`` is the net output time-axis shift (0.0 here, since
+    the delay is compensated) that callers use for alignment.
+    """
 
     record_id: str
     source_id: str
@@ -1100,6 +1353,12 @@ class ResampleRecord:
     group_delay_samples: float
     group_delay_seconds: float
     filter_taps: int
+    stages: List[ResampleStage] = field(default_factory=list)
+    time_offset_samples: float = 0.0
+    time_offset_seconds: float = 0.0
+    aliasing_detected: bool = False
+    aliased_band: Optional[Tuple[float, float]] = None
+    aliased_energy_ratio: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -1113,6 +1372,12 @@ class ResampleRecord:
             "group_delay_samples": self.group_delay_samples,
             "group_delay_seconds": self.group_delay_seconds,
             "filter_taps": self.filter_taps,
+            "stages": [s.to_dict() for s in self.stages],
+            "time_offset_samples": self.time_offset_samples,
+            "time_offset_seconds": self.time_offset_seconds,
+            "aliasing_detected": self.aliasing_detected,
+            "aliased_band": list(self.aliased_band) if self.aliased_band else None,
+            "aliased_energy_ratio": self.aliased_energy_ratio,
         }
 
     @staticmethod
@@ -1153,6 +1418,22 @@ class ResampleRecord:
                     f"{where}: cutoff_normalized must be in (0, 0.5) or null, "
                     f"got {cutoff_norm!r}"
                 )
+        # Newer fields are optional so older workspace files still load.
+        stages = [
+            ResampleStage.from_dict(item, f"{where}.stages[{i}]")
+            for i, item in enumerate(data.get("stages", []))
+        ]
+        aliased_band = data.get("aliased_band")
+        if aliased_band is not None:
+            if (
+                not isinstance(aliased_band, list)
+                or len(aliased_band) != 2
+                or not all(_is_finite_number(v) for v in aliased_band)
+            ):
+                raise PersistenceError(
+                    f"{where}: aliased_band must be null or a [low, high] pair"
+                )
+            aliased_band = (float(aliased_band[0]), float(aliased_band[1]))
         return ResampleRecord(
             record_id=str(data["record_id"]),
             source_id=str(data["source_id"]),
@@ -1164,6 +1445,12 @@ class ResampleRecord:
             group_delay_samples=float(data["group_delay_samples"]),
             group_delay_seconds=float(data["group_delay_seconds"]),
             filter_taps=int(data["filter_taps"]),
+            stages=stages,
+            time_offset_samples=float(data.get("time_offset_samples", 0.0)),
+            time_offset_seconds=float(data.get("time_offset_seconds", 0.0)),
+            aliasing_detected=bool(data.get("aliasing_detected", False)),
+            aliased_band=aliased_band,
+            aliased_energy_ratio=float(data.get("aliased_energy_ratio", 0.0)),
         )
 
 
@@ -1174,6 +1461,7 @@ def _alignment_to_dict(align_id: str, al: Alignment) -> dict:
         "start": al.start,
         "end": al.end,
         "signals": [_signal_to_dict(s) for s in al.signals],
+        "aliasing": al.aliasing,
     }
 
 
@@ -1207,11 +1495,27 @@ def _alignment_from_dict(data: object, where: str) -> Tuple[str, Alignment]:
     ids = [s.signal_id for s in sigs]
     if len(set(ids)) != len(ids):
         raise PersistenceError(f"{where}: duplicate signal ids {ids}")
+    aliasing_raw = data.get("aliasing", {})
+    if not isinstance(aliasing_raw, dict):
+        raise PersistenceError(f"{where}: aliasing must be an object")
+    aliasing: Dict[str, dict] = {}
+    for sid, entry in aliasing_raw.items():
+        if not isinstance(entry, dict) or "detected" not in entry:
+            raise PersistenceError(
+                f"{where}.aliasing[{sid!r}]: expected an object with a 'detected' field"
+            )
+        aliasing[str(sid)] = {
+            "detected": bool(entry["detected"]),
+            "aliased_band": entry.get("aliased_band"),
+            "energy_ratio": float(entry.get("energy_ratio", 0.0)),
+            "note": entry.get("note"),
+        }
     return align_id, Alignment(
         signals=sigs,
         target_rate=float(data["target_rate"]),
         start=float(data["start"]),
         end=float(data["end"]),
+        aliasing=aliasing,
     )
 
 
@@ -1416,6 +1720,7 @@ class Workspace:
                     "start": al.start,
                     "end": al.end,
                     "signals": al.signal_ids(),
+                    "aliasing": al.aliasing,
                 }
                 for aid, al in self.alignments.items()
             },
