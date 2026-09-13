@@ -27,6 +27,7 @@ from btree_index import (
     MAX_KEY_BYTES,
     MAX_VALUE_BYTES,
     MIN_PAGE_SIZE,
+    OverflowRef,
     Page,
     RecoveryError,
     WAL,
@@ -644,6 +645,225 @@ class TestCLI(unittest.TestCase):
         ])
         self.assertTrue(results[1]["ok"])
         self.assertEqual(results[2]["value"], "v")
+
+
+# --------------------------------------------------------------- overflow pages
+class TestOverflowPages(_TempDirTestCase):
+    def test_value_larger_than_page_uses_overflow(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("k", "A" * 2000)
+        stats = idx.stats()
+        self.assertGreater(stats["overflow_pages"], 1)
+        self.assertEqual(stats["overflow_entries"], 1)
+        self.assertEqual(idx.get("k"), "A" * 2000)
+        # The leaf stores a reference, not the 2000-char value.
+        leaf = idx._find_leaf("k")
+        ref = dict(leaf.items)["k"]
+        self.assertIsInstance(ref, OverflowRef)
+        self.assertEqual(ref.length, 2000)
+        self.assertEqual(ref.chunks, stats["overflow_pages"])
+
+    def test_one_mib_at_minimum_page_size_roundtrips(self) -> None:
+        # The headline requirement: 1 MiB value at a 128-byte page, byte
+        # exact after reassembly, with the overflow chain visible in stats.
+        idx = self.open(page_size=MIN_PAGE_SIZE)
+        raw = bytes(1 + (i * 73) % 126 for i in range(MAX_VALUE_BYTES))
+        value = raw.decode("ascii")
+        idx.put("big", value)
+        idx.put("a", "1")
+        idx.put("z", "2")
+        stats = idx.stats()
+        self.assertGreater(stats["overflow_pages"], 10_000)
+        self.assertEqual(stats["overflow_entries"], 1)
+        self.assertEqual(idx.get("big"), value)
+        self.assertEqual([k for k, _ in idx.scan()], ["a", "big", "z"])
+        # The scan result is byte-exact UTF-8 too.
+        self.assertEqual(len(dict(idx.scan())["big"].encode("utf-8")), MAX_VALUE_BYTES)
+
+    def test_overflow_survives_checkpoint_and_reopen(self) -> None:
+        idx = self.open(page_size=256)
+        value = "V" * 8000 + "TAIL"
+        idx.put("big", value)
+        for i in range(100):
+            idx.put(f"k{i:04d}", "v")
+        idx.checkpoint()
+        idx.close()
+        idx2 = self.reopen(page_size=256)
+        self.assertEqual(idx2.get("big"), value)
+        stats = idx2.stats()
+        self.assertGreater(stats["overflow_pages"], 1)
+        self.assertEqual(stats["overflow_entries"], 1)
+
+    def test_overflow_replayed_from_wal_after_crash(self) -> None:
+        idx = self.open(page_size=256)
+        for i in range(100):
+            idx.put(f"k{i:04d}", "v")
+        idx.checkpoint()
+        value = "Z" * 5000 + "end"
+        idx.put("big", value)  # no checkpoint: crash
+        idx.close()
+        idx2 = self.reopen(page_size=256)
+        self.assertEqual(idx2.get("big"), value)
+        self.assertEqual(len(idx2.scan()), 101)
+
+    def test_overwrite_reclaims_old_overflow_chain(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("k", "A" * 5000)
+        first = idx.stats()["overflow_pages"]
+        self.assertGreater(first, 1)
+        idx.put("k", "B" * 5000)
+        self.assertEqual(idx.stats()["overflow_pages"], first)  # old chain freed
+        self.assertEqual(idx.get("k"), "B" * 5000)
+        idx.put("k", "small")
+        self.assertEqual(idx.stats()["overflow_pages"], 0)
+        self.assertEqual(idx.stats()["overflow_entries"], 0)
+        self.assertGreater(idx.stats()["free_pages"], 1)
+        self.assertEqual(idx.get("k"), "small")
+
+    def test_delete_reclaims_overflow_chain_and_reuses_ids(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("big", "C" * 6000)
+        self.assertGreater(idx.stats()["overflow_pages"], 1)
+        self.assertTrue(idx.delete("big"))
+        self.assertEqual(idx.stats()["overflow_pages"], 0)
+        self.assertGreater(idx.stats()["free_pages"], 1)
+        idx.checkpoint()
+        # Free ids are reused: many small inserts must not allocate new ids
+        # past the reclaimed range.
+        for i in range(300):
+            idx.put(f"r{i:04d}", "s")
+        self.assertEqual(len(idx.scan()), 300)
+        max_id = max(int(pid[2:], 16) for pid in idx.pages)
+        self.assertLess(max_id, 200)
+
+    def test_utf8_value_reassembles_byte_exact(self) -> None:
+        idx = self.open(page_size=256)
+        value = "值€" * 400  # multibyte UTF-8
+        idx.put("uni", value)
+        self.assertEqual(idx.get("uni"), value)
+        ref = dict(idx._find_leaf("uni").items)["uni"]
+        self.assertIsInstance(ref, OverflowRef)
+        self.assertEqual(ref.length, len(value.encode("utf-8")))
+        total = sum(len(p.overflow_data) for p in idx.overflow.values())
+        self.assertEqual(total, ref.length)
+
+    def test_corrupted_overflow_page_reports_page_id(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("big", "D" * 5000)
+        idx.checkpoint()
+        victim = sorted(idx.overflow)[len(idx.overflow) // 2]
+        idx.close()
+        with open(os.path.join(self.path, victim), "r+b") as fh:
+            fh.seek(-4, os.SEEK_END)
+            fh.write(b"\x00\x00\x00\x00")
+        with self.assertRaises(ChecksumMismatchError) as ctx:
+            self.reopen(page_size=256)
+        self.assertEqual(ctx.exception.page_id, victim)
+
+    def test_overflow_reference_to_tree_page_rejected(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("a", "1")
+        leaf = idx._find_leaf("a")
+        tree_id = leaf.page_id
+        # Forge a leaf reference that points at a tree page.
+        leaf.items.append(("bad", OverflowRef(head=tree_id, length=1, chunks=1)))
+        idx._mark_dirty(leaf)
+        idx.checkpoint()
+        idx.close()
+        with self.assertRaises(RecoveryError):
+            self.reopen(page_size=256)
+
+    def test_dump_includes_overflow_pages(self) -> None:
+        idx = self.open(page_size=256)
+        idx.put("big", "E" * 1000)
+        dump = idx.dump()
+        ovf = [p for p in dump["pages"] if p.get("is_overflow")]
+        self.assertTrue(ovf)
+        self.assertTrue(all("chunk_bytes" in p and "next_overflow" in p for p in ovf))
+        leaf_entries = [
+            e for p in dump["pages"] if p.get("is_leaf") for e in p["items"]
+        ]
+        ref_entries = [e for e in leaf_entries if isinstance(e[1], dict)]
+        self.assertTrue(any("@overflow" in e[1] for e in ref_entries))
+
+
+# ------------------------------------------------------ separator / split rules
+class TestSeparatorAndBalancedSplit(_TempDirTestCase):
+    def test_delete_ancestor_separator_then_reopen_validates(self) -> None:
+        # Deleting keys that are copied-up separators must refresh every
+        # ancestor separator; reopening (which strictly validates separators
+        # against right-subtree minima) must not raise.
+        for seed in range(6):
+            shutil.rmtree(self.path, ignore_errors=True)
+            idx = BTreeIndex(self.path, page_size=256)
+            self._handles.append(idx)
+            keys = [f"k{i:05d}" for i in range(1200)]
+            random.Random(90 + seed).shuffle(keys)
+            for k in keys:
+                idx.put(k, "value-" + k)
+            # Keep a sparse survivor set so many separators are deleted.
+            survivors = set(keys[::17])
+            for k in keys:
+                if k not in survivors:
+                    self.assertTrue(idx.delete(k))
+            idx.checkpoint()
+            idx.close()
+            idx = self.reopen(page_size=256)  # strict structural validation
+            self.assertEqual([k for k, _ in idx.scan()], sorted(survivors))
+            idx.close()
+            self._handles.clear()
+
+    def test_splits_are_balanced_no_31_plus_1(self) -> None:
+        idx = self.open(page_size=4096)
+        keys = [f"key-{i:06d}" for i in range(10_000)]
+        random.Random(1).shuffle(keys)
+        for k in keys:
+            idx.put(k, "v" * 100)
+        counts = sorted(len(p.items) for p in idx.pages.values() if p.is_leaf)
+        # The old greedy bug produced a long tail of single-entry leaves;
+        # a balanced partition keeps the smallest leaf reasonably full.
+        self.assertGreaterEqual(counts[0], 8, counts[:5])
+        self.assertLessEqual(counts[-1] // max(counts[0], 1), 4)
+
+    def test_inner_split_promotes_boundary_separator(self) -> None:
+        # After heavy random insert/delete churn every inner separator must
+        # equal the minimum key of its right subtree even without reopen.
+        idx = self.open(page_size=220)
+        rng = random.Random(321)
+        keys = [f"item-{i:04d}" for i in range(300)]
+        ref = {}
+        for _ in range(2500):
+            k = rng.choice(keys)
+            if rng.random() < 0.7:
+                v = "x" * rng.randint(0, 35)
+                idx.put(k, v)
+                ref[k] = v
+            else:
+                idx.delete(k)
+                ref.pop(k, None)
+
+        def extreme(pid: str, smallest: bool):
+            p = idx.pages[pid]
+            while not p.is_leaf:
+                p = idx.pages[p.children[0 if smallest else -1]]
+            return p.items[0][0] if p.items else None
+
+        for p in idx.pages.values():
+            if not p.is_leaf:
+                for i, sep in enumerate(p.keys):
+                    self.assertEqual(sep, extreme(p.children[i + 1], True), p.page_id)
+        self.assertEqual(idx.scan(), sorted(ref.items()))
+
+    def test_stored_page_size_is_authoritative_on_reopen(self) -> None:
+        idx = self.open(page_size=192)
+        idx.put("big", "Z" * 400)
+        idx.close()
+        # Reopen with the DEFAULT page size argument; it must not override
+        # the stored 192 bytes.
+        idx2 = self.reopen(page_size=4096)
+        self.assertEqual(idx2.page_size, 192)
+        self.assertEqual(idx2.get("big"), "Z" * 400)
+        self.assertGreater(idx2.stats()["overflow_pages"], 0)
 
 
 if __name__ == "__main__":

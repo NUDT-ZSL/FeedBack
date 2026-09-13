@@ -106,6 +106,22 @@ def main() -> int:
         check(idx.delete("key/after_recovery") is True, "tree is writable after recovery")
         idx.checkpoint()
 
+        # ------------------------------------------------------- overflow
+        print("[3b] oversized values use overflow pages...")
+        big_value = "".join(chr(65 + (i % 26)) for i in range(100_000))
+        idx.put("key/big", big_value)
+        ovf_stats = idx.stats()
+        check(ovf_stats["overflow_entries"] == 1, "one overflow entry reported in stats")
+        check(ovf_stats["overflow_pages"] > 20, "value spans many overflow pages")
+        check(idx.get("key/big") == big_value, "100 KB value reassembled byte-exact")
+        rng = idx.scan("key/a", "key/c")
+        check(dict(rng)["key/big"] == big_value, "overflow value visible in range scan")
+        check(idx.delete("key/big") is True, "overflow entry deleted")
+        after = idx.stats()
+        check(after["overflow_pages"] == 0, "overflow chain fully reclaimed")
+        check(after["free_pages"] >= ovf_stats["overflow_pages"], "reclaimed pages enter free list")
+        idx.checkpoint()
+
         # ------------------------------------------------------------ phase 4
         print("[4/5] corrupting a page file...")
         page_files = sorted(n for n in os.listdir(path) if n.startswith("p-"))
