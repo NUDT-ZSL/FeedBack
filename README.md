@@ -114,22 +114,23 @@ proof 结构：
 
 ### 签名链
 
-- `register_signer(signer_id, signer)`：注册签名器，纯函数 `bytes -> bytes`（如 HMAC、Ed25519 的包装）。
+- `register_signer(signer_id, signer, spec=None)`：注册签名器，纯函数 `bytes -> bytes`。可选 `spec` 是可 JSON 序列化的重建描述（如 `{"type": "hmac-sha256", "key": "..."}`），会写入快照供 load 恢复；签名器同时记入进程级注册表（按 signer_id）。
 - `sign_anchor(anchor_obj) -> sig_obj`：对锚点哈希签名并追加到签名历史；未注册签名器或锚点无效抛错。
-- `verify_signature(anchor_obj, sig_obj) -> {"ok","reason"}`：依次检查签名器已注册、signer_id 匹配、锚点哈希匹配、签名 hex 合法、签名长度与签名器输出一致、签名字节一致、`sig_hash` 自洽。
-- `verify_signatures() -> {"ok","index","reason","checked"}`：校验整条签名历史——每条引用存在的锚点、`prev_sig_hash` 链连续、`sig_hash` 正确、（若已注册签名器）签名字节正确。篡改历史可检出。
+- `verify_signature(anchor_obj, sig_obj) -> {"ok","reason"}`：依次检查签名器可用、signer_id 匹配、锚点哈希匹配、签名 hex 合法、签名长度与签名器输出一致、签名字节一致、`sig_hash` 自洽。失败原因明确区分三类：**签名器缺失**（`signer unavailable` / `no signer registered`）、**签名器标识不匹配**（`signer_id mismatch`）、**签名内容被改**（`signature mismatch`）。
+- `verify_signatures() -> {"ok","index","reason","checked"}`：校验整条签名历史——每条引用存在的锚点、`prev_sig_hash` 链连续、`sig_hash` 正确、（若签名器可用）签名字节正确。篡改历史可检出。
+- **load 后签名器自动恢复**：快照中的 `signer_spec` 可跨进程重建签名器；否则回退到进程级注册表（同进程先注册过即可）。恢复结果看 `get_state()["signer_registered"]`；无法恢复时 load 仍成功，但 `verify_signature` 返回 `signer unavailable` 而非笼统的 False。
 
 ### 查询与状态
 
 - `get_record(seq)` / `get_record_by_id(record_id)`：返回记录副本，不存在返回 `None`。
-- `range_records(start, end)`：`[start, end)` 内记录按 seq 升序（end 超出自动截断）。
-- `get_state()`：`record_count`、`latest_seq`、`latest_record_hash`、`anchor_count`、`signature_count`、`chain_valid`、`signer_id`。
+- `range_records(start, end)`：`[start, end)` 内记录按 seq 升序。**非法区间直接报错**（`start < 0`、`start > end` 抛 `AuditLogError`，与 `prove` 越界行为一致）；`end` 超过最大 seq 合法但截断，返回字典带实际生效区间：`{"records", "start", "end"(生效), "requested_end", "truncated", "count"}`，调用方可区分"合法但为空"与"参数非法"。
+- `get_state()`：`record_count`、`latest_seq`、`latest_record_hash`、`anchor_count`、`signature_count`、`chain_valid`、`signer_id`、`signer_registered`（签名器是否已恢复/可用）。
 - `get_log()`：追加/锚点/签名/注册/load 操作的时间顺序日志（带单调 `op_index`）。
 
 ### 持久化
 
-- `save(path)`：把记录链、锚点、签名历史、签名器标识、操作日志写成单个 JSON 文件。
-- `AuditLog.load(path)`：重建并**严格校验**——seq 从 0 连续、record_id 唯一、`record_hash` 与内容匹配、`prev_hash` 链接正确、锚点区间合法且哈希匹配、签名引用的锚点存在、签名历史链完整。任何不一致都抛 `AuditLogError` 并说明位置与原因，不会静默吞错或返回断裂的链。签名器函数本身不可序列化，load 后需重新 `register_signer` 才能做签名字节级校验。
+- `save(path)`：把记录链、锚点、签名历史、签名器标识与可恢复的 `signer_spec`、操作日志写成单个 JSON 文件。
+- `AuditLog.load(path)`：重建并**严格校验**——seq 从 0 连续、record_id 唯一、`record_hash` 与内容匹配、`prev_hash` 链接正确、锚点区间合法且哈希匹配、签名引用的锚点存在、签名历史链完整。任何不一致都抛 `AuditLogError` 并说明位置与原因，不会静默吞错或返回断裂的链。加载后按 `signer_spec`（跨进程）或进程级注册表（同进程）自动恢复签名器；恢复结果见 `get_state()["signer_registered"]`。注意：`signer_spec` 含 HMAC 密钥材料，仅适用于离线验收场景，不要把快照当作保密边界。
 
 ## 4. 命令行接口（main.py）
 
@@ -143,12 +144,12 @@ proof 结构：
 | `verify_proof` | `record, proof, anchor_hash` | 校验证明 |
 | `anchor` | `start, end` | 创建锚点 |
 | `verify_anchor` | `anchor` 或 `anchor_index` | 校验锚点 |
-| `register_signer` | `signer_id[, key]` | 注册内置 HMAC-SHA256 签名器（key 默认为 signer_id） |
+| `register_signer` | `signer_id[, key]` | 注册内置 HMAC-SHA256 签名器（key 默认为 signer_id），key 作为 `signer_spec` 写入快照，load 后自动恢复 |
 | `sign` | `anchor` 或 `anchor_index` | 签名锚点 |
 | `verify_sig` | `anchor, signature` | 校验签名 |
 | `verify_sigs` | — | 校验整条签名历史 |
 | `get` | `seq` 或 `record_id` | 查询记录 |
-| `range` | `start, end` | 区间查询 |
+| `range` | `start, end` | 区间查询；`start<0` 或 `start>end` 报错，`end` 越界截断并返回 `end`/`requested_end`/`truncated` |
 | `state` | — | 状态摘要 |
 | `log` | — | 操作日志 |
 | `save` / `load` | `path` | 快照存取 |

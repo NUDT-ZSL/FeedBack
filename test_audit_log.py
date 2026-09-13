@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import audit_log as audit_module
 from audit_log import (
     GENESIS_HASH,
     SIG_GENESIS_HASH,
@@ -48,7 +49,9 @@ class TestHashDeterminism(unittest.TestCase):
     def test_same_record_same_hash_across_instances(self):
         a = make_log(5)
         b = make_log(5)
-        for ra, rb in zip(a.range_records(0, 5), b.range_records(0, 5)):
+        recs_a = a.range_records(0, 5)["records"]
+        recs_b = b.range_records(0, 5)["records"]
+        for ra, rb in zip(recs_a, recs_b):
             self.assertEqual(ra["record_hash"], rb["record_hash"])
 
     def test_hash_matches_manual_computation(self):
@@ -203,7 +206,7 @@ class TestProofs(unittest.TestCase):
     def setUp(self):
         self.log = make_log(17)
         self.tip_root = merkle_root(
-            [r["record_hash"] for r in self.log.range_records(0, 17)]
+            [r["record_hash"] for r in self.log.range_records(0, 17)["records"]]
         )
 
     def test_proof_roundtrip_all_records(self):
@@ -458,6 +461,87 @@ class TestSignatures(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# 5b. Signer restoration across save/load
+# ---------------------------------------------------------------------------
+
+class TestSignerRestore(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "snap.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        # keep the process-level registry clean for other tests
+        for signer_id in ("restore-s1", "restore-s2", "restore-spec"):
+            audit_module._SIGNER_REGISTRY.pop(signer_id, None)
+
+    def _signed_snapshot(self, signer_id="restore-s1", key="k1", spec=None):
+        log = make_log(6)
+        log.register_signer(signer_id, hmac_signer(key), spec=spec)
+        anchor = log.anchor(0, 6)
+        sig = log.sign_anchor(anchor)
+        log.save(self.path)
+        return anchor, sig
+
+    def test_load_restores_signer_via_registry(self):
+        # same process, signer registered before save -> load restores it
+        anchor, sig = self._signed_snapshot()
+        loaded = AuditLog.load(self.path)
+        self.assertTrue(loaded.get_state()["signer_registered"])
+        self.assertEqual(loaded.get_state()["signer_id"], "restore-s1")
+        result = loaded.verify_signature(anchor, sig)
+        self.assertTrue(result["ok"], result["reason"])
+        self.assertTrue(loaded.verify_signatures()["ok"])
+
+    def test_load_restores_signer_via_spec_without_registry(self):
+        # simulate a fresh process: spec is in the snapshot but the
+        # process-level registry does not know the signer_id
+        anchor, sig = self._signed_snapshot(
+            signer_id="restore-spec", key="kk",
+            spec={"type": "hmac-sha256", "key": "kk"},
+        )
+        audit_module._SIGNER_REGISTRY.pop("restore-spec", None)
+        loaded = AuditLog.load(self.path)
+        self.assertTrue(loaded.get_state()["signer_registered"])
+        result = loaded.verify_signature(anchor, sig)
+        self.assertTrue(result["ok"], result["reason"])
+
+    def test_mismatched_signer_id_reported_as_mismatch_not_bad_signature(self):
+        anchor, sig = self._signed_snapshot()
+        loaded = AuditLog.load(self.path)
+        loaded.register_signer("restore-s2", hmac_signer("k2"))
+        result = loaded.verify_signature(anchor, sig)
+        self.assertFalse(result["ok"])
+        self.assertIn("signer_id mismatch", result["reason"])
+        self.assertNotIn("signature mismatch", result["reason"])
+
+    def test_unrestorable_signer_reported_as_unavailable(self):
+        anchor, sig = self._signed_snapshot()
+        # rewrite the snapshot so its signer_id matches nothing restorable
+        with open(self.path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["signer_id"] = "ghost-signer"
+        data["signer_spec"] = None
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        loaded = AuditLog.load(self.path)
+        self.assertFalse(loaded.get_state()["signer_registered"])
+        self.assertEqual(loaded.get_state()["signer_id"], "ghost-signer")
+        result = loaded.verify_signature(anchor, sig)
+        self.assertFalse(result["ok"])
+        self.assertIn("signer unavailable", result["reason"])
+        self.assertNotIn("signature mismatch", result["reason"])
+
+    def test_tampered_signature_still_reported_as_content_tampered(self):
+        anchor, sig = self._signed_snapshot()
+        loaded = AuditLog.load(self.path)  # signer restored
+        sig["signature"] = ("0" if sig["signature"][0] != "0" else "1") + sig["signature"][1:]
+        result = loaded.verify_signature(anchor, sig)
+        self.assertFalse(result["ok"])
+        self.assertIn("signature mismatch", result["reason"])
+
+
+# ---------------------------------------------------------------------------
 # 6. Queries and state
 # ---------------------------------------------------------------------------
 
@@ -476,12 +560,59 @@ class TestQueries(unittest.TestCase):
 
     def test_range_records(self):
         log = make_log(10)
-        recs = log.range_records(3, 7)
-        self.assertEqual([r["seq"] for r in recs], [3, 4, 5, 6])
-        self.assertEqual(len(log.range_records(8, 100)), 2)  # clamped
-        self.assertEqual(log.range_records(0, 0), [])
+        result = log.range_records(3, 7)
+        self.assertEqual([r["seq"] for r in result["records"]], [3, 4, 5, 6])
+        self.assertEqual(result["start"], 3)
+        self.assertEqual(result["end"], 7)
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["count"], 4)
+
+    def test_range_records_empty_is_legal(self):
+        log = make_log(10)
+        result = log.range_records(4, 4)
+        self.assertEqual(result["records"], [])
+        self.assertEqual(result["count"], 0)
+        self.assertFalse(result["truncated"])
+
+    def test_range_records_negative_start_rejected(self):
+        log = make_log(10)
+        with self.assertRaises(AuditLogError) as ctx:
+            log.range_records(-1, 5)
+        self.assertIn(">= 0", str(ctx.exception))
+
+    def test_range_records_start_after_end_rejected(self):
+        log = make_log(10)
+        with self.assertRaises(AuditLogError) as ctx:
+            log.range_records(7, 5)
+        self.assertIn("start 7 > end 5", str(ctx.exception))
+
+    def test_range_records_end_beyond_tip_is_truncated_and_reported(self):
+        log = make_log(10)
+        result = log.range_records(8, 100)
+        self.assertEqual([r["seq"] for r in result["records"]], [8, 9])
+        self.assertEqual(result["end"], 10)            # effective end
+        self.assertEqual(result["requested_end"], 100)  # what was asked
+        self.assertTrue(result["truncated"])
+
+    def test_range_records_non_integer_rejected(self):
+        log = make_log(10)
+        for bad in ("0", 1.5, True, None):
+            with self.assertRaises(AuditLogError):
+                log.range_records(bad, 5)
+            with self.assertRaises(AuditLogError):
+                log.range_records(0, bad)
+
+    def test_prove_out_of_range_raises_like_range_records(self):
+        # prove and range_records share the same contract: illegal
+        # coordinates are loud errors, never silent empty results
+        log = make_log(10)
+        for bad_seq in (-1, 10, 100):
+            with self.assertRaises(AuditLogError, msg=f"seq={bad_seq}"):
+                log.prove(bad_seq)
         with self.assertRaises(AuditLogError):
-            log.range_records(5, 2)
+            log.prove("3")
+        with self.assertRaises(AuditLogError):
+            AuditLog().prove(0)
 
     def test_get_state(self):
         log = make_log(4)
@@ -495,6 +626,7 @@ class TestQueries(unittest.TestCase):
         self.assertEqual(state["anchor_count"], 1)
         self.assertEqual(state["signature_count"], 1)
         self.assertTrue(state["chain_valid"])
+        self.assertTrue(state["signer_registered"])
 
     def test_get_state_empty(self):
         state = AuditLog().get_state()
@@ -502,6 +634,7 @@ class TestQueries(unittest.TestCase):
         self.assertEqual(state["latest_seq"], -1)
         self.assertIsNone(state["latest_record_hash"])
         self.assertTrue(state["chain_valid"])
+        self.assertFalse(state["signer_registered"])
 
     def test_get_log_order(self):
         log = make_log(3)
@@ -750,18 +883,41 @@ class TestCli(unittest.TestCase):
             proof = results[15]["proof"]
             record = results[16]["record"]
             self.assertEqual(results[17]["count"], 3)                # range
+            self.assertEqual(results[17]["end"], 5)
+            self.assertFalse(results[17]["truncated"])
             self.assertEqual(results[20]["state"]["record_count"], 10)  # after load
+            # load restored the signer from the snapshot's signer spec
+            self.assertTrue(results[20]["state"]["signer_registered"])
             # cross-check proof against anchor, offline
             check = AuditLog.verify_proof(record, proof, anchor["anchor_hash"])
             self.assertTrue(check["ok"], check["reason"])
-            # verify_sig via CLI needs a new session with the same key
+            # a brand-new CLI session: load restores the signer from the
+            # snapshot spec, so verify_sig works WITHOUT re-registering
             sig = results[13]["signature"]
             results2 = self.run_cli([
                 {"op": "load", "path": path},
-                {"op": "register_signer", "signer_id": "cli", "key": "k"},
                 {"op": "verify_sig", "anchor": anchor, "signature": sig},
             ])
-            self.assertTrue(results2[2]["ok"], results2[2])
+            self.assertTrue(results2[0]["state"]["signer_registered"])
+            self.assertTrue(results2[1]["ok"], results2[1])
+
+    def test_cli_range_truncation_and_errors(self):
+        results = self.run_cli([
+            *[{"op": "append", "record_id": f"r{i}", "ts": i, "payload": {}}
+              for i in range(4)],
+            {"op": "range", "start": 1, "end": 100},
+            {"op": "range", "start": -1, "end": 2},
+            {"op": "range", "start": 3, "end": 2},
+        ])
+        truncated = results[4]
+        self.assertTrue(truncated["ok"])
+        self.assertEqual(truncated["end"], 4)
+        self.assertEqual(truncated["requested_end"], 100)
+        self.assertTrue(truncated["truncated"])
+        self.assertEqual([r["seq"] for r in truncated["records"]], [1, 2, 3])
+        for res in results[5:]:
+            self.assertFalse(res["ok"])
+            self.assertIn("error", res)
 
     def test_handle_command_load_replaces_log(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -23,28 +23,23 @@ Supported commands (the "op" field):
   dump            {"op":"dump"}
 
 The built-in CLI signer is HMAC-SHA256 keyed with the given "key"
-(default: the signer_id itself) — deterministic and offline.
+(default: the signer_id itself) — deterministic and offline. The key is
+stored in snapshots as a restorable signer spec, so "load" brings the
+signer back and verify_sig works without re-registering (see
+get_state()["signer_registered"]).
+
+"range" never silently hides bad arguments: start < 0 or start > end is an
+error; an end past the last record is truncated and the result carries the
+effective range ("end", "requested_end", "truncated").
 """
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import sys
 from typing import Any, Dict, Tuple
 
-from audit_log import AuditLog, AuditLogError
-
-
-def make_hmac_signer(key: str):
-    """Build a deterministic pure-function signer: HMAC-SHA256(key, data)."""
-    key_bytes = key.encode("utf-8")
-
-    def signer(data: bytes) -> bytes:
-        return hmac.new(key_bytes, data, hashlib.sha256).digest()
-
-    return signer
+from audit_log import AuditLog, AuditLogError, make_hmac_signer
 
 
 def _resolve_anchor(log: AuditLog, cmd: Dict[str, Any]) -> Dict[str, Any]:
@@ -108,7 +103,11 @@ def handle_command(log: AuditLog, cmd: Dict[str, Any]) -> Tuple[AuditLog, Dict[s
         if op == "register_signer":
             signer_id = cmd.get("signer_id")
             key = cmd.get("key", signer_id if isinstance(signer_id, str) else "")
-            log.register_signer(signer_id, make_hmac_signer(key))
+            log.register_signer(
+                signer_id,
+                make_hmac_signer(key),
+                spec={"type": "hmac-sha256", "key": key},
+            )
             return log, {"ok": True, "signer_id": signer_id}
 
         if op == "sign":
@@ -134,8 +133,9 @@ def handle_command(log: AuditLog, cmd: Dict[str, Any]) -> Tuple[AuditLog, Dict[s
             return log, {"ok": True, "record": record}
 
         if op == "range":
-            records = log.range_records(cmd.get("start"), cmd.get("end"))
-            return log, {"ok": True, "records": records, "count": len(records)}
+            result = log.range_records(cmd.get("start"), cmd.get("end"))
+            result["ok"] = True
+            return log, result
 
         if op == "state":
             return log, {"ok": True, "state": log.get_state()}

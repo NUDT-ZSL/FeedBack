@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -40,6 +41,37 @@ _HEX64 = set("0123456789abcdef")
 
 class AuditLogError(Exception):
     """Raised for invalid operations, invalid ranges, or corrupt snapshots."""
+
+
+# ---------------------------------------------------------------------------
+# Signer registry and built-in signer factories
+# ---------------------------------------------------------------------------
+
+#: Process-level registry of signers, keyed by signer_id. register_signer()
+#: writes here so that AuditLog.load() can restore a signer by the identifier
+#: stored in the snapshot, without the caller re-registering it.
+_SIGNER_REGISTRY: Dict[str, Callable[[bytes], bytes]] = {}
+
+
+def make_hmac_signer(key: str) -> Callable[[bytes], bytes]:
+    """Deterministic pure-function signer: HMAC-SHA256(key, data)."""
+    key_bytes = key.encode("utf-8")
+
+    def signer(data: bytes) -> bytes:
+        return hmac.new(key_bytes, data, hashlib.sha256).digest()
+
+    return signer
+
+
+def _hmac_factory(spec: Dict[str, Any]) -> Callable[[bytes], bytes]:
+    return make_hmac_signer(str(spec["key"]))
+
+
+#: Factories that rebuild a signer from its JSON-serializable spec, used by
+#: AuditLog.load() when the snapshot carries a "signer_spec".
+_SIGNER_FACTORIES: Dict[str, Callable[[Dict[str, Any]], Callable[[bytes], bytes]]] = {
+    "hmac-sha256": _hmac_factory,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +247,7 @@ class AuditLog:
         self._op_counter: int = 0
         self._signer: Optional[Callable[[bytes], bytes]] = None
         self._signer_id: Optional[str] = None
+        self._signer_spec: Optional[Dict[str, Any]] = None
 
     # ------------------------------------------------------------------
     # internal helpers
@@ -534,15 +567,32 @@ class AuditLog:
     # ------------------------------------------------------------------
 
     def register_signer(
-        self, signer_id: str, signer: Callable[[bytes], bytes]
+        self,
+        signer_id: str,
+        signer: Callable[[bytes], bytes],
+        spec: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Register a pure-function signer: bytes in, signature bytes out."""
+        """Register a pure-function signer: bytes in, signature bytes out.
+
+        ``spec`` is an optional JSON-serializable dict describing how to
+        rebuild the signer (e.g. {"type": "hmac-sha256", "key": "..."}); when
+        present it is stored in snapshots so load() can restore the signer in
+        a fresh process. The signer is also recorded in a process-level
+        registry keyed by signer_id, so load() in the same process can
+        restore it even without a spec.
+        """
         if not isinstance(signer_id, str) or not signer_id:
             raise AuditLogError("signer_id must be a non-empty string")
         if not callable(signer):
             raise AuditLogError("signer must be callable")
+        if spec is not None:
+            if not isinstance(spec, dict) or "type" not in spec:
+                raise AuditLogError("signer spec must be a dict with a 'type' field")
+            canonical_bytes(spec)  # must be JSON-serializable to be snapshotted
         self._signer = signer
         self._signer_id = signer_id
+        self._signer_spec = copy.deepcopy(spec) if spec is not None else None
+        _SIGNER_REGISTRY[signer_id] = signer
         self._log_op("register_signer", signer_id=signer_id)
 
     def sign_anchor(self, anchor_obj: Dict[str, Any]) -> Dict[str, Any]:
@@ -581,6 +631,11 @@ class AuditLog:
             return {"ok": False, "reason": reason}
 
         if self._signer is None:
+            if self._signer_id is not None:
+                return fail(
+                    f"signer unavailable: snapshot signer {self._signer_id!r} was not "
+                    "restored (no matching registered signer or signer spec)"
+                )
             return fail("no signer registered")
         if not isinstance(sig_obj, dict):
             return fail("signature object must be a dict")
@@ -689,13 +744,34 @@ class AuditLog:
             return None
         return copy.deepcopy(self._records[seq])
 
-    def range_records(self, start: int, end: int) -> List[Dict[str, Any]]:
-        """Return records with seq in [start, end), ascending by seq."""
+    def range_records(self, start: int, end: int) -> Dict[str, Any]:
+        """Return records with seq in [start, end), ascending by seq.
+
+        Illegal ranges are errors, never silently truncated: ``start < 0``
+        and ``start > end`` raise AuditLogError. An ``end`` past the last
+        record is legal and truncated to the chain length; the result then
+        reports the effective range so callers can tell "legally empty"
+        apart from "clipped":
+
+        {"records": [...], "start": start, "end": <effective end>,
+         "requested_end": end, "truncated": bool, "count": len(records)}
+        """
         start = _check_int(start, "start")
         end = _check_int(end, "end")
-        if start < 0 or end < start:
-            raise AuditLogError(f"invalid range [{start}, {end})")
-        return copy.deepcopy(self._records[start:min(end, len(self._records))])
+        if start < 0:
+            raise AuditLogError(f"range start must be >= 0, got {start}")
+        if start > end:
+            raise AuditLogError(f"invalid range: start {start} > end {end}")
+        effective_end = min(end, len(self._records))
+        records = copy.deepcopy(self._records[start:effective_end])
+        return {
+            "records": records,
+            "start": start,
+            "end": effective_end,
+            "requested_end": end,
+            "truncated": effective_end < end,
+            "count": len(records),
+        }
 
     def get_state(self) -> Dict[str, Any]:
         """Summary: counts, tip, and chain-validity flag."""
@@ -707,6 +783,7 @@ class AuditLog:
             "signature_count": len(self._signatures),
             "chain_valid": bool(self.verify_chain()["ok"]),
             "signer_id": self._signer_id,
+            "signer_registered": self._signer is not None,
         }
 
     def get_log(self) -> List[Dict[str, Any]]:
@@ -722,6 +799,7 @@ class AuditLog:
         return {
             "version": FORMAT_VERSION,
             "signer_id": self._signer_id,
+            "signer_spec": copy.deepcopy(self._signer_spec),
             "records": copy.deepcopy(self._records),
             "anchors": copy.deepcopy(self._anchors),
             "signatures": copy.deepcopy(self._signatures),
@@ -873,5 +951,21 @@ class AuditLog:
             else len(log._log)
         )
         log._signer_id = data.get("signer_id")
+        # Restore the signer so verify_signature works right after load:
+        # prefer the serialized spec (works across processes), then the
+        # process-level registry (works when the signer was registered in
+        # this process before the load). If neither matches, the log still
+        # loads — get_state()["signer_registered"] is False and verify_
+        # signature reports "signer unavailable", distinct from a bad
+        # signature.
+        spec = data.get("signer_spec")
+        restored: Optional[Callable[[bytes], bytes]] = None
+        if isinstance(spec, dict) and spec.get("type") in _SIGNER_FACTORIES:
+            restored = _SIGNER_FACTORIES[spec["type"]](spec)
+            log._signer_spec = copy.deepcopy(spec)
+        elif isinstance(log._signer_id, str) and log._signer_id in _SIGNER_REGISTRY:
+            restored = _SIGNER_REGISTRY[log._signer_id]
+        if restored is not None:
+            log._signer = restored
         log._log_op("load", path=path, record_count=len(records))
         return log
