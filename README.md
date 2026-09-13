@@ -15,12 +15,15 @@
 │   ├── tree.py           # DocumentTree：增删改、拖拽、引用、查询、分段历史、回滚
 │   └── persistence.py    # 增量日志保存/加载/重放校验、VersionDiff
 ├── main.py               # 命令行入口（stdin 逐行 JSON -> stdout 逐行 JSON）
-└── tests/                # unittest 测试（130 个用例）
+└── tests/                # unittest 测试
     ├── test_model.py
     ├── test_tree.py
     ├── test_persistence.py
-    ├── test_cli.py
-    └── test_integration.py
+    ├── test_cli.py            # 进程内 CLI 会话测试
+    ├── test_cli_blackbox.py   # 子进程黑盒：真实喂坏文件/坏命令，断言不崩溃
+    ├── test_integration.py
+    ├── test_load_errors.py    # 坏文件/断序号/成环等 load 错误定位与原子性
+    └── test_rollback_boundaries.py  # save 边界回滚、查询交错、跨回滚点 diff
 ```
 
 要求 Python 3.8+（仅用标准库）。
@@ -166,15 +169,37 @@ t.move(node_id, new_parent_id, index)
 `ref_add`、`ref_remove`、`policy`。级联删除在日志里展开为
 多条 `ref_remove` 后接一条 `remove`，因此删除本身可直接重放。
 
-`load` 对以下情况一律报错（绝不静默跳过），错误信息带**行号 / 第几条变更**：
+### 加载原子性与错误定位
 
-- 非 JSON 行、空行、缺字段、字段类型错误；
-- `seq` 不连续；
-- 快照 `version` 与记录 `base_version` 不匹配；分段引用未知历史版本；
+`load` 是**原子**的：解析与重放全部发生在新建对象上，只有文件里每条记录
+都合法、最终树通过 `validate()` 时才返回；任何一步失败都只抛异常、不返回
+半成品。CLI 会话在 load 失败时保持**加载前状态**，后续命令照常工作。
+
+`load` 对以下情况一律报错（绝不静默跳过），错误信息定位到
+**文件行号 / 第几条变更 / op / node_id / 被破坏的约束**：
+
+- 非 JSON 行（带列号）、空行、记录缺字段或字段类型错误；
+- `seq` 不连续（消息给出上一序号、实际序号与期望序号，提示文件被截断/编辑）；
+- 快照 `version` 与记录 `base_version` 不匹配；分段 checkpoint 引用未知历史版本；
+- 变更在其所属分段的快照之前出现、分段记录交错（分段必须顺序写完再开下一段）；
 - 变更引用不存在的节点（cascade/strict 下）、自引用、重复引用；
 - `move` 形成环、父不存在、index 越界；
-- 变更 `base_version` 与重放状态不衔接、版本号重复；
+- 变更 `base_version` 与重放状态不衔接、版本号重复或不严格递增；
+- 快照内父子关系不双向一致、有孤儿/环、cascade/strict 快照含悬空 refs；
 - 重放结束后整棵树不满足任一不变量。
+
+`InvalidChangeError` 除消息外还结构化暴露 `change_no`（1 基“第几条变更”，
+跨全文件计数）、`change_index`（0 基）、`line_no`、`op`、`node_id`，
+其 `to_dict()`（即 CLI 错误输出）也带这些字段，便于程序化定位：
+
+```json
+{"code":"invalid_change",
+ "error":"change #5 (index 4) at line 7: constraint violated while replaying 'move': move change: moving 'a' into its own subtree creates a cycle [op='move', node_id='a']",
+ "change_no":5,"change_index":4,"line_no":7,"op":"move","node_id":"a"}
+```
+
+文件尾部被截断但剩余记录序号连续、链完整时，会重建到最后一个一致状态
+（不跳过任何仍在文件中的记录）；链一旦断裂，从断裂点起报错。
 
 ## 版本、diff 与回滚
 
@@ -190,15 +215,23 @@ t.move(node_id, new_parent_id, index)
     节点/边；新增节点携带的引用只体现在 `added` 里。
 - `state_at_version(v)`：从日志重放出任意历史版本的树（不影响当前状态）。
 - `rollback(v)`：把内存状态恢复到版本 `v`（内部就是重放）；
-  版本不存在抛 `VersionNotFoundError`。
+  版本不存在抛 `VersionNotFoundError`。回滚到**当前版本**是空操作
+  （不新增分段、不占版本号）；回滚点恰好是某次 save 边界、以及回滚后
+  只做查询再编辑，都不影响一致性——只读操作（`get_path` / `get_subtree` /
+  `find_by_kind` / `resolve_refs` / `get_dangling_refs` / `history` /
+  `diff_versions` / `state_at_version` / `dump_state`）不产生变更、不涨版本。
 
 ### 回滚后再编辑：版本号单调、历史不覆盖
 
 回滚会开启一个新的**分段（segment）**：起点是目标版本的 checkpoint 快照，
 之后新变更的版本号从“本会话曾分配过的最大版本号 + 1”继续分配，
 **不复用被回滚分支的版本号**（因此版本号可能跳号），旧分段原样保留——
-加载后仍可 `diff_versions` / `state_at_version` 到任何旧版本。
-回滚后对同一文件 `save` 时，只追加新分段的 checkpoint 快照与新变更记录。
+加载后仍可 `diff_versions` / `state_at_version` 到任何旧版本。回滚本身
+不是变更：它不占版本号，同一版本不会在 `history()` 里出现两次。
+回滚后对同一文件 `save` 时，只追加新分段的 checkpoint 快照与新变更记录
+（回滚点恰好等于已落盘版本时只追加 checkpoint）。跨回滚点 `diff_versions`
+比较的是两个**版本状态**而非变更序列，因此旧分支与新分支之间的增删、
+移动、内容与引用差异都按实际状态计算，回滚动作不会被误当成一次变更。
 
 ## CLI 命令一览
 
@@ -231,13 +264,20 @@ t.move(node_id, new_parent_id, index)
 
 错误码：`invalid_json`、`invalid_command`、`unknown_op`、`missing_field`、
 `validation_error`、`node_not_found`、`dangling_reference`、
-`invalid_change`（带第几条变更）、`version_not_found`、`internal_error`。
+`invalid_change`（结构化带 `change_no` / `change_index` / `line_no` / `op` /
+`node_id` 字段，见“加载原子性与错误定位”一节）、`version_not_found`、
+`file_not_found`、`internal_error`。每个错误响应都保证包含 `error`（人类可读
+消息）与 `code`（机器可读码），进程**不会**因单条坏命令退出，始终退出码 0。
 
 ## 边界情况覆盖（已在测试中）
 
 空树、单节点树、第二根节点拒绝、移到自身、移进后代、index 越界（含同父
 重排边界）、删除带入边引用的子树（三种策略）、悬空引用策略来回切换、
 悬空目标重建后自动恢复、删根后重建、变更序号不连续、基准版本错配、
-快照字段缺失 / 孤儿 / 环、回滚到不存在版本、回滚后直接 save、
-回滚后再编辑再 save/load、save 后 load 状态逐字段一致、加载后继续
-编辑追加日志、坏文件带行号报错。
+快照字段缺失 / 孤儿 / 环 / 父子不双向一致、分段交错写入、回滚到不存在版本、
+回滚到当前版本（空操作）、回滚点恰好落在 save 边界、回滚后只查询再编辑、
+连续回滚、回滚到 v0 后重建、回滚后直接 save、回滚后再编辑再 save/load、
+跨回滚点 diff（增删 / 移动 / 引用）、save 后 load 状态逐字段一致、
+加载后继续编辑追加日志、坏文件带行号与第几条变更报错、load 失败后会话
+保持加载前状态——其中坏文件与 CLI 错误契约同时由 `tests/test_cli_blackbox.py`
+用真实子进程黑盒验证。

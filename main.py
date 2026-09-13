@@ -265,6 +265,9 @@ def run(instream, outstream) -> int:
             else:
                 try:
                     result = session.handle(cmd)
+                except FileNotFoundError as exc:
+                    result = {"error": f"file not found: {exc.filename}", "code": "file_not_found",
+                              "path": exc.filename}
                 except DocumentTreeError as exc:
                     result = exc.to_dict()
                 except Exception as exc:  # 防御：内核未预期错误也不中断会话

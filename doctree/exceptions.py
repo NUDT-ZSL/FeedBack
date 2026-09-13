@@ -60,7 +60,9 @@ class DanglingReferenceError(DocumentTreeError):
 class InvalidChangeError(DocumentTreeError):
     """重放变更记录时某条变更非法。
 
-    :attr:`change_index` 为 0 基的变更下标，:attr:`change_no` 为记录里的 1 基序号。
+    :attr:`change_index` 为 0 基的变更下标（跨全文件计数），
+    :attr:`change_no` 为 1 基“第几条变更”；:attr:`line_no` 为文件行号；
+    :attr:`op` / :attr:`node_id` 为出错记录涉及的操作与节点（若可知）。
     """
 
     code = "invalid_change"
@@ -71,13 +73,46 @@ class InvalidChangeError(DocumentTreeError):
         change_index: Optional[int] = None,
         *,
         change_no: Optional[int] = None,
+        line_no: Optional[int] = None,
+        op: Optional[str] = None,
+        node_id: Optional[str] = None,
     ) -> None:
         if change_index is not None:
             no = change_no if change_no is not None else change_index + 1
-            message = f"change #{no} (index {change_index}): {message}"
+            location = f"change #{no} (index {change_index})"
+            if line_no is not None:
+                location += f" at line {line_no}"
+            message = f"{location}: {message}"
+        elif line_no is not None:
+            message = f"line {line_no}: {message}"
+        details = []
+        if op is not None:
+            details.append(f"op={op!r}")
+        if node_id is not None:
+            details.append(f"node_id={node_id!r}")
+        if details:
+            message = f"{message} [{', '.join(details)}]"
         super().__init__(message)
         self.change_index = change_index
         self.change_no = change_no if change_index is None else (change_no or change_index + 1)
+        self.line_no = line_no
+        self.op = op
+        self.node_id = node_id
+
+    def to_dict(self) -> dict:
+        """序列化为 ``{"error", "code", ...}``，错误定位字段全部带上。"""
+        data = super().to_dict()
+        if self.change_no is not None:
+            data["change_no"] = self.change_no
+        if self.change_index is not None:
+            data["change_index"] = self.change_index
+        if self.line_no is not None:
+            data["line_no"] = self.line_no
+        if self.op is not None:
+            data["op"] = self.op
+        if self.node_id is not None:
+            data["node_id"] = self.node_id
+        return data
 
 
 class VersionNotFoundError(DocumentTreeError):

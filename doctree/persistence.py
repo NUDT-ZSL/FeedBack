@@ -293,10 +293,17 @@ def _atomic_write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
 def load(path: str) -> DocumentTree:
     """从日志文件重建 :class:`DocumentTree`，全量校验后返回。
 
+    加载是**原子**的：解析、重放、校验全部在新建对象上进行，任何一步失败
+    都只抛异常、不返回半成品；调用方传入/持有的树不会被污染（CLI 会话在
+    加载失败时保持加载前状态）。
+
     任何损坏（非 JSON、缺字段、seq 不连续、基准版本不匹配、变更引用不存在
     的节点、移动成环、index 越界、最终树不一致等）都抛
     :class:`~doctree.exceptions.InvalidChangeError` 或
-    :class:`~doctree.exceptions.ValidationError`，错误信息带行号 / 第几条。
+    :class:`~doctree.exceptions.ValidationError`。错误信息尽量定位到
+    “第几条变更 / 文件行号 / op / node_id / 被破坏的约束”，
+    :class:`~doctree.exceptions.InvalidChangeError` 上还可直接读取
+    ``change_no``、``line_no``、``op``、``node_id`` 字段。
     """
     if not isinstance(path, str) or not path:
         raise ValidationError("load path must be a non-empty string")
@@ -310,12 +317,14 @@ def load(path: str) -> DocumentTree:
     if not lines:
         raise ValidationError(f"journal {path!r} is empty")
 
+    # 全部解析/重放都发生在局部变量里；只有走到函数末尾成功时才构造返回对象。
     segments: List[Dict[str, Any]] = []
     max_version = 0
     change_seq_seen = 0
     last_seq = 0
     expected_seq = 1
     established_versions: set = set()  # type: ignore[assignment]
+    prev_record_type = _RECORD_HEADER
 
     for line_no, raw in enumerate(lines, start=1):
         text = raw.strip()
@@ -324,18 +333,34 @@ def load(path: str) -> DocumentTree:
         try:
             record = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ValidationError(f"line {line_no}: invalid JSON: {exc.msg}") from exc
+            raise ValidationError(
+                f"line {line_no}: invalid JSON: {exc.msg} "
+                f"(at column {exc.colno})"
+            ) from exc
         if not isinstance(record, dict) or "type" not in record:
             raise ValidationError(f"line {line_no}: record must be an object with 'type'")
         seq = record.get("seq")
         if not isinstance(seq, int) or isinstance(seq, bool):
             raise ValidationError(f"line {line_no}: missing/invalid 'seq'")
         if seq != expected_seq:
-            raise InvalidChangeError(
-                f"seq {seq} is not consecutive (expected {expected_seq}) "
-                f"at line {line_no}",
-                change_index=expected_seq - 1,
+            gap = seq - expected_seq
+            detail = (
+                f"seq {seq} is not consecutive after seq {last_seq} "
+                f"(expected {expected_seq}, {gap:+d}); the journal is missing records "
+                f"or has been truncated/edited"
             )
+            rtype = record.get("type")
+            if rtype == _RECORD_CHANGE:
+                change = record.get("change") if isinstance(record.get("change"), dict) else {}
+                op, node_id = _change_context(change)
+                raise InvalidChangeError(
+                    detail,
+                    change_index=change_seq_seen,
+                    line_no=line_no,
+                    op=op,
+                    node_id=node_id,
+                )
+            raise ValidationError(f"line {line_no}: {detail}")
         expected_seq += 1
         last_seq = seq
         rtype = record["type"]
@@ -358,7 +383,7 @@ def load(path: str) -> DocumentTree:
             if seg_idx != len(segments):
                 raise ValidationError(
                     f"line {line_no}: snapshot segment {seg_idx} out of order "
-                    f"(expected {len(segments)})"
+                    f"(expected {len(segments)}); segments must appear in ascending order"
                 )
             snapshot = record.get("snapshot")
             if not isinstance(snapshot, dict):
@@ -366,20 +391,25 @@ def load(path: str) -> DocumentTree:
             base = record.get("base_version")
             if not isinstance(base, int) or isinstance(base, bool) or base < 0:
                 raise ValidationError(f"line {line_no}: invalid base_version")
-            if snapshot.get("version") != base:
+            snap_inner_version = snapshot.get("version")
+            if snap_inner_version != base:
                 raise ValidationError(
-                    f"line {line_no}: snapshot version {snapshot.get('version')} does not "
-                    f"match record base_version {base}"
+                    f"line {line_no}: snapshot base_version mismatch: record declares "
+                    f"base_version {base} but snapshot.version is {snap_inner_version!r} "
+                    f"(constraint: the two must be equal)"
                 )
-            # 快照本身必须是一棵合法树。
+            # 快照本身必须是一棵合法树（错误带行号与内层约束说明）。
             live = _build_tree_from_snapshot(snapshot, line_no)
             if seg_idx > 0 and base not in established_versions:
                 raise ValidationError(
-                    f"line {line_no}: segment {seg_idx} branches from unknown version {base}"
+                    f"line {line_no}: segment {seg_idx} checkpoint branches from version "
+                    f"{base}, which is not reachable from earlier segments "
+                    f"(known versions: {sorted(established_versions)})"
                 )
             segments.append({"snapshot": copy.deepcopy(snapshot), "changes": [], "_live": live})
             established_versions.add(base)
             max_version = max(max_version, base)
+            prev_record_type = _RECORD_SNAPSHOT
 
         elif rtype == _RECORD_CHANGE:
             change_seq_seen += 1
@@ -388,18 +418,46 @@ def load(path: str) -> DocumentTree:
                 raise ValidationError(f"line {line_no}: invalid segment index")
             if seg_idx >= len(segments):
                 raise ValidationError(
-                    f"line {line_no}: change for segment {seg_idx} before its snapshot"
+                    f"line {line_no}: change #{change_seq_seen} for segment {seg_idx} appears "
+                    f"before that segment's snapshot (only {len(segments)} snapshot(s) seen)"
+                )
+            if seg_idx != len(segments) - 1:
+                raise ValidationError(
+                    f"line {line_no}: change #{change_seq_seen} targets closed segment "
+                    f"{seg_idx}; records of different segments must not interleave "
+                    f"(current segment is {len(segments) - 1})"
                 )
             seg = segments[seg_idx]
             live: DocumentTree = seg["_live"]
             base_version = record.get("base_version")
             version = record.get("version")
-            if not isinstance(base_version, int) or not isinstance(version, int):
-                raise ValidationError(f"line {line_no}: base_version/version must be ints")
+            if (
+                not isinstance(base_version, int)
+                or isinstance(base_version, bool)
+                or not isinstance(version, int)
+                or isinstance(version, bool)
+            ):
+                raise InvalidChangeError(
+                    "base_version/version must be integers",
+                    change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                )
+            change = record.get("change")
+            if not isinstance(change, dict):
+                raise InvalidChangeError(
+                    "change record missing a change object",
+                    change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                )
+            op, node_id = _change_context(change)
             if version in established_versions:
                 raise InvalidChangeError(
-                    f"duplicate version number {version}",
+                    f"duplicate version number {version}: every change must allocate a new, "
+                    f"strictly increasing version (constraint: unique versions)",
                     change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                    op=op,
+                    node_id=node_id,
                 )
             expected_base = (
                 seg["snapshot"]["version"]
@@ -408,33 +466,45 @@ def load(path: str) -> DocumentTree:
             )
             if base_version != expected_base:
                 raise InvalidChangeError(
-                    f"base_version {base_version} does not match replayed state "
-                    f"version {expected_base}",
+                    f"base_version {base_version} does not match the replayed state version "
+                    f"{expected_base} (constraint: changes must chain consecutively from the "
+                    f"segment snapshot)",
                     change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                    op=op,
+                    node_id=node_id,
                 )
             if version <= base_version:
                 raise InvalidChangeError(
-                    f"version {version} must be greater than base_version {base_version}",
+                    f"version {version} must be greater than base_version {base_version} "
+                    f"(constraint: version == base_version + 1 on a linear branch)",
                     change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                    op=op,
+                    node_id=node_id,
                 )
-            change = record.get("change")
-            if not isinstance(change, dict):
-                raise ValidationError(f"line {line_no}: change record missing change object")
             try:
                 live.apply_change(change)
                 live.validate()
             except Exception as exc:
                 raise InvalidChangeError(
-                    f"{exc}",
+                    f"constraint violated while replaying {op!r}: {exc}",
                     change_index=change_seq_seen - 1,
+                    line_no=line_no,
+                    op=op,
+                    node_id=node_id,
                 ) from exc
             seg["changes"].append(
                 {"base_version": base_version, "version": version, "change": copy.deepcopy(change)}
             )
             established_versions.add(version)
             max_version = max(max_version, version)
+            prev_record_type = _RECORD_CHANGE
         else:
-            raise ValidationError(f"line {line_no}: unknown record type {rtype!r}")
+            raise ValidationError(
+                f"line {line_no}: unknown record type {rtype!r} "
+                f"(previous record was {prev_record_type!r})"
+            )
 
     if len(lines) == 1:
         # 只有 header：视为空树 version 0（容错；下次 append save 会补写快照）。
@@ -485,3 +555,25 @@ def _build_tree_from_snapshot(snapshot: Dict[str, Any], line_no: int) -> Documen
         return DocumentTree._from_snapshot(snapshot)
     except Exception as exc:
         raise ValidationError(f"line {line_no}: invalid snapshot: {exc}") from exc
+
+
+def _change_context(change: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """从变更体提取 ``(op, node_id)`` 用于错误定位。
+
+    不同 op 的节点字段位置不同（``add`` 在 ``node.node_id`` 里，
+    引用类操作只有 owner/target），这里尽量给出最相关的那个 id。
+    """
+    op = change.get("op") if isinstance(change, dict) else None
+    if not isinstance(change, dict):
+        return op if isinstance(op, str) else None, None
+    node_id = change.get("node_id")
+    if not isinstance(node_id, str):
+        nested = change.get("node")
+        if isinstance(nested, dict):
+            node_id = nested.get("node_id")
+    if not isinstance(node_id, str):
+        # 引用类操作：owner 是操作的主体节点。
+        owner = change.get("owner")
+        if isinstance(owner, str):
+            node_id = owner
+    return op if isinstance(op, str) else None, node_id if isinstance(node_id, str) else None

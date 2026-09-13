@@ -953,13 +953,18 @@ class DocumentTree:
             tree._nodes[nid] = node
             for target in node.refs:
                 tree._referrers.setdefault(target, set()).add(nid)
+        # 第二阶段：只**校验**父子关系，不做任何静默修复——parent_id 与
+        # children 必须在快照数据里就双向一致，不一致即损坏，交给 validate 报错。
         for nid, node in tree._nodes.items():
             if node.parent_id is not None:
                 parent = tree._nodes.get(node.parent_id)
                 if parent is None:
                     raise ValidationError(f"snapshot node {nid!r}: missing parent")
                 if nid not in parent.children:
-                    parent.children.append(nid)
+                    raise ValidationError(
+                        f"snapshot node {nid!r}: parent {node.parent_id!r} exists but does "
+                        f"not list it in children (parent_id/children must match bidirectionally)"
+                    )
         tree.validate()
         return tree
 
