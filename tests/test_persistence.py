@@ -111,31 +111,118 @@ class RoundTripTests(unittest.TestCase):
         parse_snapshot(snapshot)
 
     def test_short_missing_block_roundtrip_preserves_padding(self) -> None:
-        """不等长数据块右侧补零；短块缺失时导出/导入后仍逐字节重建。"""
-        engine = StorageEngine()
-        engine.create_stripe("short", k=3, m=2,
-                             data_blocks=[b"A", b"BB", b"CCC"])
-        stripe = engine.get_stripe("short")
-        self.assertEqual(stripe.block(0).pad_length, 2)
-        engine.mark_missing("short", 0)
-        export_engine(engine, os.path.join(self.temp_dir, "short.json"))
+        """短块缺失的导出/导入往返：结构、补零、记录、指纹与逻辑内容一致。"""
+        import hashlib
+
+        def build() -> StorageEngine:
+            engine = StorageEngine()
+            engine.create_stripe(
+                "short", k=3, m=2, data_blocks=[b"A", b"BB", b"CCC"]
+            )
+            # 两个短数据块同时缺失（位置 0 pad=2、位置 1 pad=1）。
+            engine.mark_missing("short", 0)
+            engine.mark_missing("short", 1)
+            return engine
+
+        engine = build()
+        path = os.path.join(self.temp_dir, "short.json")
+        export_engine(engine, path)
 
         imported = StorageEngine()
-        import_file(
-            imported, os.path.join(self.temp_dir, "short.json")
+        import_file(imported, path)
+
+        # 1) 往返后缺失状态与“缺失块带的填充长度”都保留。
+        for pos, pad in ((0, 2), (1, 1)):
+            block = imported.get_stripe("short").block(pos)
+            self.assertEqual(block.status, BlockStatus.MISSING)
+            self.assertIsNone(block.content)
+            self.assertEqual(block.pad_length, pad)
+        # 结构（含 block_length、全部补零数）逐字段一致。
+        self.assertEqual(
+            imported.get_stripe("short").to_dict(),
+            engine.get_stripe("short").to_dict(),
+        )
+
+        # 2) 在导出前状态与导入后状态上分别修复，记录必须完全一致。
+        before_record = engine.repair_stripe("short").to_dict()
+        after_record = imported.repair_stripe("short").to_dict()
+        self.assertEqual(after_record, before_record)
+
+        # 3) 重建内容被截回逻辑长度（不含补零），指纹对应逻辑内容。
+        self.assertEqual(imported.get_stripe("short").block(0).content, b"A")
+        self.assertEqual(imported.get_stripe("short").block(1).content, b"BB")
+        self.assertEqual(imported.get_stripe("short").block(2).content, b"CCC")
+        self.assertEqual(
+            after_record["adopted_fingerprints"]["0"],
+            hashlib.sha256(b"A").hexdigest(),
         )
         self.assertEqual(
-            imported.get_stripe("short").block(0).status,
-            BlockStatus.MISSING,
+            after_record["adopted_fingerprints"]["1"],
+            hashlib.sha256(b"BB").hexdigest(),
         )
-        record = imported.repair_stripe("short")
+        # 修复后补零数恢复，验证报告往返一致。
+        self.assertEqual(
+            imported.get_stripe("short").block(0).pad_length, 2
+        )
+        repaired_path = os.path.join(self.temp_dir, "short_repaired.json")
+        export_engine(imported, repaired_path)
+        re_repaired = StorageEngine()
+        import_file(re_repaired, repaired_path)
+        self.assertEqual(
+            re_repaired.get_stripe("short").to_dict(),
+            imported.get_stripe("short").to_dict(),
+        )
+        self.assertEqual(
+            re_repaired.verify_stripe("short").to_dict(),
+            imported.verify_stripe("short").to_dict(),
+        )
+
+    def test_candidate_consistent_with_parity_roundtrip(self) -> None:
+        """多数候选恰与校验推导一致：采纳一致那份并记录依据，往返保持。
+
+        位置 0 缺失后登记 3 份候选：2 份与其余块推导出的校验值一致、
+        1 份不一致。按写死的候选规则取严格多数（即与校验一致的那份），
+        used_positions 为空（依据是候选来源而非校验块）。该结论与导出
+        前完全一致。
+        """
+        data = [b"AAAA", b"BBBB", b"CCCC"]
+
+        def build() -> StorageEngine:
+            engine = StorageEngine()
+            engine.create_stripe("cand", k=3, m=2, data_blocks=data)
+            engine.mark_missing("cand", 0)
+            engine.add_candidate("cand", 0, "good-a", data[0])
+            engine.add_candidate("cand", 0, "good-b", data[0])
+            engine.add_candidate("cand", 0, "bad-x", b"ZZZZ")
+            return engine
+
+        engine = build()
+        record = engine.repair_stripe("cand")
         self.assertTrue(record.success, record.reason)
+        self.assertEqual(engine.get_stripe("cand").block(0).content, data[0])
+        self.assertEqual(record.candidate_sources, {0: "good-a"})
+        self.assertEqual(record.used_positions, [])
+
+        path = os.path.join(self.temp_dir, "cand.json")
+        export_engine(engine, path)
+        imported = StorageEngine()
+        import_file(imported, path)
+
+        # 条带结构（修复后候选已清空）、修复历史、验证报告全部一致。
         self.assertEqual(
-            imported.get_stripe("short").block(0).content, b"A"
+            imported.get_stripe("cand").to_dict(),
+            engine.get_stripe("cand").to_dict(),
         )
         self.assertEqual(
-            imported.get_stripe("short").block(2).content, b"CCC"
+            [r.to_dict() for r in imported.repair_history("cand")],
+            [r.to_dict() for r in engine.repair_history("cand")],
         )
+        self.assertEqual(
+            imported.verify_stripe("cand").to_dict(),
+            engine.verify_stripe("cand").to_dict(),
+        )
+        self.assertTrue(imported.verify_stripe("cand").reconstructable)
+
 
 
 class CorruptFileTests(unittest.TestCase):
