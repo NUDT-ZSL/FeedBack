@@ -322,6 +322,8 @@ class CircuitBreaker:
         if unit.state is State.HALF_OPEN:
             self._consume_probe(unit, "成功")
             unit.consecutive_failures = 0
+            # 半开探测期结束，释放剩余探测配额，在途计数不留残值。
+            unit.probes_in_flight = 0
             self._transition(unit, State.CLOSED, "半开探测成功，恢复关闭")
         else:
             unit.consecutive_failures = 0
@@ -620,7 +622,7 @@ class CircuitBreaker:
         history: List[_Transition] = []
         max_seq = -1
         for index, raw_record in enumerate(data["history"]):
-            record = self._validate_transition(raw_record, index, units)
+            record = self._validate_transition(raw_record, index, units, clock)
             max_seq = max(max_seq, record.seq)
             history.append(record)
         return float(clock), units, history, max_seq + 1
@@ -684,6 +686,11 @@ class CircuitBreaker:
 
         config = UnitConfig.from_dict(raw["config"], ctx)
 
+        if state is State.CLOSED and consecutive_failures >= config.failure_threshold:
+            raise ImportValidationError(
+                f"{ctx}: 连续失败计数 {consecutive_failures} 已达到失败阈值 "
+                f"{config.failure_threshold}，状态却仍为 closed，数据自相矛盾"
+            )
         if probes_in_flight > config.half_open_probe_quota:
             raise ImportValidationError(
                 f"{ctx}: 在途探测数 {probes_in_flight} 超过探测配额 "
@@ -728,7 +735,7 @@ class CircuitBreaker:
 
     @staticmethod
     def _validate_transition(
-        raw: Any, index: int, units: Dict[str, _Unit]
+        raw: Any, index: int, units: Dict[str, _Unit], clock: float
     ) -> _Transition:
         ctx = f"history[{index}]"
         if not isinstance(raw, dict):
@@ -750,6 +757,11 @@ class CircuitBreaker:
         at = raw["at"]
         if not _is_number(at) or at < 0:
             raise ImportValidationError(f"{ctx}: at 必须为非负数值")
+        if at > clock:
+            raise ImportValidationError(
+                f"{ctx}: 单元 '{unit_id}' 的迁移时刻 {at} 晚于逻辑时钟 "
+                f"{clock}，数据自相矛盾"
+            )
         reason = raw["reason"]
         if not isinstance(reason, str):
             raise ImportValidationError(f"{ctx}: reason 必须为字符串")

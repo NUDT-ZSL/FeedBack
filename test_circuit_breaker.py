@@ -212,6 +212,41 @@ class TestHalfOpen(unittest.TestCase):
         cb.advance_clock(1000.0)
         self.assertEqual(cb.query("a")["state"], "half_open")  # 不会自动恢复
 
+    def test_quota_enforced_with_inflight_and_released_on_report(self):
+        """配额大于 1 时，在途探测达到配额后再放行必须被拒；
+        上报结果后配额正确释放，在途数任何时刻不超过配额。"""
+        cb = CircuitBreaker()
+        self._open_unit(cb, half_open_probe_quota=2)
+        cb.advance_clock(10.0)
+        self.assertEqual(cb.query("a")["state"], "half_open")
+        self.assertTrue(cb.allow("a"))   # 在途 1
+        self.assertTrue(cb.allow("a"))   # 在途 2，达到配额
+        # 结果尚未上报：必须拒绝新请求，在途数不得超过配额
+        self.assertFalse(cb.allow("a"))
+        self.assertFalse(cb.allow("a"))
+        snap = cb.query("a")
+        self.assertEqual(snap["probes_in_flight"], 2)
+        self.assertEqual(snap["probe_quota_remaining"], 0)
+        self.assertEqual(snap["state"], "half_open")
+        # 上报结果后配额释放，在途计数清零不留残值
+        cb.report_success("a")
+        after = cb.query("a")
+        self.assertEqual(after["state"], "closed")
+        self.assertEqual(after["probes_in_flight"], 0)
+        # 释放后的状态可正常导出再载入（在途计数无残值，不自相矛盾）
+        cb2 = CircuitBreaker()
+        cb2.import_dict(cb.export_dict())
+        self.assertEqual(cb2.inspect(), cb.inspect())
+        # 再次熔断并进入半开后，配额从 0 重新计数，不受上一期影响
+        for _ in range(3):
+            cb.report_failure("a")
+        cb.advance_clock(cb.query("a")["cooldown_remaining"])
+        self.assertEqual(cb.query("a")["state"], "half_open")
+        self.assertEqual(cb.query("a")["probes_in_flight"], 0)
+        self.assertTrue(cb.allow("a"))
+        self.assertTrue(cb.allow("a"))
+        self.assertFalse(cb.allow("a"))
+
 
 class TestFlappingAcceleration(unittest.TestCase):
     """需求 5：恢复抖动识别、加速策略、冷却期上限。"""
@@ -438,6 +473,31 @@ class TestPersistence(unittest.TestCase):
         with self.assertRaises(ImportValidationError) as ctx:
             cb.import_dict(data)
         self.assertIn("'b'", str(ctx.exception))
+
+    def test_import_rejects_contradictory_count_and_future_history(self):
+        """计数达到阈值却仍为 closed、迁移时刻晚于逻辑时钟，两种自相矛盾
+        的导入内容都必须被拒绝，且失败后内存状态与载入前完全一致。"""
+        cb = self._populated()
+        before = cb.inspect()
+
+        # 连续失败计数已达到失败阈值，状态却仍为 closed
+        data = cb.export_dict()
+        for unit in data["units"]:
+            if unit["unit_id"] == "b":
+                unit["consecutive_failures"] = unit["config"]["failure_threshold"]
+        with self.assertRaises(ImportValidationError) as ctx:
+            cb.import_dict(data)
+        self.assertIn("'b'", str(ctx.exception))
+        self.assertEqual(cb.inspect(), before)
+
+        # 迁移记录的时刻晚于顶层逻辑时钟
+        data = cb.export_dict()
+        data["history"][0]["at"] = data["clock"] + 1.0
+        with self.assertRaises(ImportValidationError) as ctx:
+            cb.import_dict(data)
+        self.assertIn("'" + data["history"][0]["unit_id"] + "'",
+                      str(ctx.exception))
+        self.assertEqual(cb.inspect(), before)
 
 
 class TestEdgeCasesAndOps(unittest.TestCase):
