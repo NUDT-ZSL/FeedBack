@@ -535,6 +535,101 @@ class ApplyOperationTests(unittest.TestCase):
         self.assertIn("ghost", str(ctx.exception))
 
 
+class CrossBatchOrderingRegressionTests(unittest.TestCase):
+    """回归：同一计划分多批、批内乱序、批间排序键范围交错时，
+
+    可见序列必须严格按 (排序键, 结果项标识) 升序排列，与批次到达
+    顺序无关；换几种到达顺序重放，结果必须完全一样。
+    """
+
+    # 三批，批内乱序，排序键范围互相交错，含跨批次重复项。
+    BATCHES = [
+        [("i09", 9), ("i01", 1), ("i05", 5)],
+        [("i03", 3), ("i07", 7), ("i01", 1)],  # i01 跨批次重复
+        [("i02", 2), ("i08", 8), ("i05", 5)],  # i05 跨批次重复
+    ]
+    EXPECTED_IDS = ["i01", "i02", "i03", "i05", "i07", "i08", "i09"]
+
+    @staticmethod
+    def _feed(kernel: ResultStreamKernel, plan_id: str, batches) -> None:
+        for batch in batches:
+            kernel.receive_batch(
+                plan_id, [item(item_id, key) for item_id, key in batch])
+
+    def test_three_batches_interleaved_sort_key_ranges(self):
+        kernel = ResultStreamKernel()
+        kernel.register_plan("A", "q")
+        self._feed(kernel, "A", self.BATCHES)
+        got = kernel.get_plan_results("A")
+        self.assertEqual(ids(got), self.EXPECTED_IDS)
+        # 与独立计算的参考结果逐项一致：先按“先到达者胜出”去重，
+        # 再按 (排序键, 标识) 全排序。
+        first_wins = {}
+        for batch in self.BATCHES:
+            for item_id, key in batch:
+                first_wins.setdefault(item_id, key)
+        expected = sorted((key, item_id)
+                          for item_id, key in first_wins.items())
+        self.assertEqual([(it.sort_key, it.item_id) for it in got], expected)
+
+    def test_reported_scenario_switch_away_and_backfill(self):
+        """用户报告场景：喂 A → 切到 B → 回头补 A 一批排序键更靠前的结果。"""
+        kernel = ResultStreamKernel()
+        kernel.register_plan("A", "qa")
+        kernel.register_plan("B", "qb")
+        kernel.receive_batch("A", [item("a4", 4), item("a5", 5)])
+        kernel.switch_current_plan("B")
+        kernel.receive_batch("B", [item("b1", 1)])
+        kernel.receive_batch("A", [item("a1", 1), item("a2", 2), item("a3", 3)])
+        self.assertEqual(ids(kernel.get_plan_results("A")),
+                         ["a1", "a2", "a3", "a4", "a5"])
+        # 反向（先大后小）同样正确。
+        kernel2 = ResultStreamKernel()
+        kernel2.register_plan("A", "qa")
+        kernel2.receive_batch("A", [item("a1", 1), item("a2", 2)])
+        kernel2.receive_batch("A", [item("a4", 4), item("a3", 3)])
+        self.assertEqual(ids(kernel2.get_plan_results("A")),
+                         ["a1", "a2", "a3", "a4"])
+
+    def test_arrival_order_replays_are_identical(self):
+        """同样的批次换全部 6 种到达顺序重放，可见序列与统计完全一致。"""
+        import itertools
+
+        outcomes = []
+        for perm in itertools.permutations(range(len(self.BATCHES))):
+            kernel = ResultStreamKernel()
+            kernel.register_plan("A", "q")
+            self._feed(kernel, "A", [self.BATCHES[i] for i in perm])
+            outcomes.append((
+                [(it.item_id, it.sort_key, it.payload)
+                 for it in kernel.get_plan_results("A")],
+                kernel.plan_stats("A")["duplicates_dropped"],
+                kernel.plan_stats("A")["batches_received"],
+            ))
+        for outcome in outcomes[1:]:
+            self.assertEqual(outcome, outcomes[0])
+        self.assertEqual(outcomes[0][1], 2)   # 两个跨批次重复项
+        self.assertEqual(outcomes[0][2], 3)   # 三个批次
+
+    def test_isolation_preserved_with_interleaved_backfill(self):
+        """交错补批次的场景下，计划隔离不被破坏。"""
+        kernel = ResultStreamKernel()
+        kernel.register_plan("A", "qa")
+        kernel.register_plan("B", "qb")
+        kernel.switch_current_plan("B")
+        kernel.receive_batch("B", [item("shared", 5), item("b1", 1)])
+        # 非当前计划 A 继续收批次，含与 B 相同标识的结果项。
+        kernel.receive_batch("A", [item("shared", 3), item("a9", 9)])
+        kernel.receive_batch("A", [item("a0", 0)])
+        # A 的序列自身有序，且不漏进 B 的当前可见序列。
+        self.assertEqual(ids(kernel.get_plan_results("A")),
+                         ["a0", "shared", "a9"])
+        self.assertEqual(ids(kernel.get_current_results()), ["b1", "shared"])
+        # 同标识各自独立计数：两边都算首次出现，无去重。
+        self.assertEqual(kernel.plan_stats("A")["duplicates_dropped"], 0)
+        self.assertEqual(kernel.plan_stats("B")["duplicates_dropped"], 0)
+
+
 class InterleavedAcceptanceTests(unittest.TestCase):
     """验收场景：多计划交错接收乱序批次、重复项与迟到批次。
 
