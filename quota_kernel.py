@@ -20,14 +20,19 @@
      专门用于短时超过稳态速率的应急消耗；突发容量为 0 表示无突发能力。
    - 节点被禁用期间稳态桶冻结（不补充），突发桶本来就只减不增。
 
-3. 分层扣账与借用
-   - 请求 n 个令牌时沿路径**自叶向根**逐层判定，每一层都要为整笔 n
-     独立记账：本层先把直接子节点的借入需求用自己的**稳态**桶全额垫付
-     （突发桶不外借），剩余的 n-垫付额 再依次用本层稳态桶、突发桶支付，
-     仍不足才向直接父节点借入。根无父可借，凑不齐即整笔拒绝。
-   - 借入的令牌"即借即耗"，不进入借入方稳态桶，且**不得转贷**：父节点
-     只能借出自己稳态桶里真实存在的令牌，因此同一份令牌不可能被重复
-     借出；借出使父节点 ``steady`` 减少、未还借出总额 ``out`` 增加，
+3. 分层扣账与借用（字面容量约束）
+   - 请求 n 个令牌时沿路径**自根向叶**逐层判定，每一层都必须独立为整笔
+     n 持有足够令牌：本层先付自己的稳态份额 n；非根层稳态不足时，只能向
+     **直接父节点**借父节点*付完自身份额之后*剩余的稳态令牌。父节点为一
+     笔请求实际支出 "自身份额 + 借给子节点" 两份，但都出自同一个稳态桶，
+     因而绝不超过自己的容量。
+   - 突发桶只对请求到达的**目标节点**开放；祖先层只能用稳态为子孙流量
+     记账，突发永远不会为跨层流量提供额度。
+   - 借入的令牌"即借即耗"，不进入借入方稳态桶，且**不得转贷**：中间层
+     绝不可能把从上游借来的令牌再借给下游。由此，任何时刻任一父节点名下
+     "所有子级已用额度之和 <= 父级容量" 按字面成立，跨级借用与突发场景
+     都不例外；同一份令牌也不可能被重复借出。
+   - 借出使父节点 ``steady`` 减少、未还借出总额 ``out`` 增加，
      ``steady + out`` 守恒，天然满足
      ``steady + out <= capacity``（剩余加借出不超过容量）。
    - 每笔借用记录借出方、借入方、数量和逻辑时刻，编号单调递增。
@@ -203,10 +208,13 @@ class Node:
 class LayerDecision:
     """请求在一层上的判定明细，用于成功审计与拒绝原因链。
 
-    每层都必须为整笔请求记账 ``required``，其构成为：借给直接子节点的
-    ``lent_to_child``（只能出自本层稳态桶）、本层自身消耗的稳态/突发令牌
-    ``steady_paid``/``burst_paid``，以及仍不足而向直接父节点借入的
-    ``borrowed``（借入即耗，不得转贷）。
+    判定自根向叶进行，每层都要独立为整笔 ``required`` 持有令牌：
+    ``steady_paid``/``burst_paid`` 是本层自身份额的支付（突发桶只对请求
+    到达的目标节点开放，祖先层不能用突发为子孙流量记账），``lent_to_child``
+    是本层在付完自身份额后、从剩余稳态桶里借给直接子节点的数量，
+    ``borrowed`` 是本层自身份额不足时向直接父节点借入的数量。借入即耗、
+    不得转贷，因此任一层的 ``自身份额支付 + 借给子节点`` 不会超过它自己
+    的稳态桶余额。
     """
 
     node_id: str
@@ -451,9 +459,21 @@ class QuotaKernel:
         supply = node.rate * elapsed
         leftover = self._pay_upstream(node, supply, from_bucket=False)
         if leftover > 0:
+            # 自身水位不变量：steady + out <= capacity（注桶只补自己份额，
+            # 子级占用由准入检查独立约束，见 request_tokens）。
             room = node.capacity - node.borrowed_out - node.steady
             if room > 0:
                 node.steady += min(leftover, room)
+
+    def _occupied(self, node: Node) -> float:
+        """节点该层当前被占用的额度：稳态净消耗 + 突发已耗 + 借入即耗。"""
+        return (
+            node.capacity
+            - node.steady
+            - node.borrowed_out
+            + node.burst_used
+            + node.borrowed_in
+        )
 
     def _pay_upstream(self, payer: Node, cash: float, from_bucket: bool) -> float:
         """让 ``payer`` 用一笔现金按 FIFO 沿借用链（父→祖父→…）偿还。
@@ -688,20 +708,21 @@ class QuotaKernel:
     def request_tokens(self, node_id: str, amount: Any, t: Any = None) -> Decision:
         """申请令牌；成功才落账，拒绝返回原因链且不改变任何状态。
 
-        每一层都必须为整笔 ``amount`` 独立记账，判定自请求节点（叶）沿
-        路径向上到根：
+        判定沿路径**自根向叶**进行，每一层都必须独立为整笔 ``amount`` 持有
+        足够令牌（题面"它到根路径上所有祖先节点都有足够令牌"）：
 
-        1. 本层首先要替直接子节点垫付 ``lend``（只准用本层**稳态**桶，
-           子节点的这笔短缺在下层已经确定）；垫付后再承担本层自身的消耗，
-           依次使用剩余稳态桶、本层突发桶；
-        2. 仍不足的部分作为本层对直接父节点的**借入需求**向上传递，借入
-           即耗、不得转贷（因此同一份令牌不可能被重复借出）；
-        3. 根节点没有父节点，无法借入；它（以及中间任一无父可借而仍短缺
-           的层）凑不齐即整笔拒绝。最先暴露短缺的层沿自根向叶的提交顺序
-           确定，拒绝原因链自请求节点向根排列。
+        1. 本层先用自己的**稳态桶**支付本层份额 ``amount``；根层到此为止，
+           不足即拒绝（根没有父节点，也不允许用突发为子孙流量兜底）；
+        2. 非根层稳态不足时，只允许向**直接父节点**借入——且只能借父节点
+           *付完自身份额之后*剩余的稳态令牌。借入即耗，**不得转贷**：所以
+           中间层绝不可能把从上游借来的令牌再借给下游，任意父节点名下
+           "子级已用之和"在任何时刻都不可能越过该父节点的容量；
+        3. 只有请求到达的**目标节点**可以在稳态与借入之后使用自己的突发桶
+           兜底；祖先层的突发桶不参与子孙请求，因此跨级借用与突发场景下
+           字面约束（子级已用之和 ≤ 父级容量）都成立。
 
         目标节点或任一祖先被禁用时，在对应层拒绝。整个判定先在临时账本
-        上完成，全部层可行后才一次性提交。
+        上完成，全部层可行后才按自根向叶的确定顺序一次性提交。
 
         :param amount: 正整数令牌数。
         :param t: 可选逻辑时刻，先推进时钟再判定。
@@ -712,124 +733,185 @@ class QuotaKernel:
         amount = _positive_int_amount(amount)
         self._get(node_id)
         path_up = self._path_to_root(node_id)  # [请求节点, ..., 根]
+        top_down = list(reversed(path_up))     # [根, ..., 请求节点]
 
-        # 临时账本：只包含路径上的节点；borrow_need[node] 是它向直接父
-        # 节点的借入需求（在下一层被父节点用稳态桶全额垫付或拒绝）。
+        # 临时账本，仅含路径节点：
+        #   work_steady   各层在本轮假设扣账后的稳态余额
+        #   borrowed[x]   x 自身份额不足、向直接父节点借入的数量
         work_steady = {n.node_id: n.steady for n in path_up}
-        work_burst = {n.node_id: n.burst for n in path_up}
-        borrow_need: dict[str, float] = {n.node_id: 0.0 for n in path_up}
+        borrowed: dict[str, float] = {n.node_id: 0.0 for n in path_up}
         entries: dict[str, LayerDecision] = {}
-        disabled_layer: Optional[str] = None
-        insufficient_layer: Optional[str] = None
+        plans: list[tuple[Node, float, float, float]] = []
+        failing_id: Optional[str] = None
+        reason_code = ""
+        message = ""
         shortfall_left = 0.0
 
-        for depth, current in enumerate(path_up):
-            need = float(amount)
+        for index, current in enumerate(top_down):
+            depth = len(top_down) - 1 - index
             entry = LayerDecision(
                 node_id=current.node_id,
                 depth=depth,
-                required=need,
+                required=float(amount),
                 steady_before=work_steady[current.node_id],
-                burst_before=work_burst[current.node_id],
-                borrowable=0.0,  # 父节点能借给本层的额度，提交前回填
+                burst_before=current.burst,
+                borrowable=0.0,
             )
             if not current.enabled:
                 entry.status = "disabled"
                 entry.reason = "节点被禁用，链路上该层不可用"
                 entries[current.node_id] = entry
-                disabled_layer = current.node_id
-                break
-
-            # 1) 先全额满足直接子节点的借入需求：只能用本层稳态桶，突发桶
-            #    不外借，借入的令牌更不能转贷。凑不齐子节点借款 → 本层拒绝。
-            child_id: Optional[str] = path_up[depth - 1].node_id if depth > 0 else None
-            child_need = borrow_need[child_id] if child_id is not None else 0.0
-            if child_need > work_steady[current.node_id] + _EPS:
-                entry.lent_to_child = work_steady[current.node_id]
-                entry.status = "insufficient"
-                entry.reason = (
-                    f"子节点 {child_id!r} 需借入 {_num(child_need)}，本层稳态桶仅 "
-                    f"{_num(work_steady[current.node_id])} 可借（突发与借入令牌不得转贷），"
-                    f"尚缺 {_num(child_need - work_steady[current.node_id])}"
+                failing_id = current.node_id
+                reason_code = (
+                    "node_disabled" if current.node_id == node_id
+                    else "ancestor_disabled"
                 )
-                entries[current.node_id] = entry
-                insufficient_layer = current.node_id
-                shortfall_left = child_need - work_steady[current.node_id]
+                message = f"节点 {current.node_id!r} 被禁用，请求被拒绝"
                 break
-            work_steady[current.node_id] -= child_need
-            entry.lent_to_child = child_need
 
-            # 2) 垫付之后，本层还要为同一笔请求记账 n - 垫付额，依次使用
-            #    本层剩余稳态桶与突发桶。
-            own_need = need - child_need
-            s_pay = min(work_steady[current.node_id], own_need)
+            is_target = current.node_id == node_id
+            need = float(amount)
+
+            # 1) 本层先用稳态桶支付自身份额。
+            s_pay = min(work_steady[current.node_id], need)
             work_steady[current.node_id] -= s_pay
-            own_need -= s_pay
-            b_pay = min(work_burst[current.node_id], own_need)
-            work_burst[current.node_id] -= b_pay
-            own_need -= b_pay
+            need -= s_pay
+
+            # 2) 仅目标节点可以动用**自己的**突发桶（本地应急储备优先于
+            #    借用兄弟共享的父池）；祖先层突发桶永不参与子孙请求。
+            b_pay = 0.0
+            if need > _EPS and is_target:
+                b_pay = min(current.burst, need)
+                need -= b_pay
+
+            # 3) 仍不足时向直接父节点借入父节点付完自身份额后的稳态剩余。
+            #    借入即耗、不入本层临时桶，因此本层之后绝不可能把这笔钱
+            #    再转借给它的子节点（同一份令牌不可能被借出两次）。
+            borrow = 0.0
+            if need > _EPS and current.parent_id is not None:
+                parent = top_down[index - 1]
+                parent_available = work_steady[parent.node_id]
+                entry.borrowable = parent_available
+                borrow = min(need, parent_available)
+                work_steady[parent.node_id] -= borrow
+                need -= borrow
             entry.steady_paid = s_pay
             entry.burst_paid = b_pay
+            entry.borrowed = borrow
+            borrowed[current.node_id] = borrow
 
-            # 3) 仍不足 → 向直接父节点借入（借入即耗，不进本层桶）。
-            if own_need > 0:
-                if current.parent_id is None:
-                    entry.status = "insufficient"
-                    entry.reason = (
-                        f"根层垫付子节点 {_num(child_need)}、自身稳态 {_num(s_pay)}、"
-                        f"突发 {_num(b_pay)} 后仍缺 {_num(own_need)}，根无父可借"
-                    )
-                    entries[current.node_id] = entry
-                    insufficient_layer = current.node_id
-                    shortfall_left = own_need
-                    break
-                borrow_need[current.node_id] = own_need
-                entry.borrowed = own_need
-            entries[current.node_id] = entry
-
-        # 回填每层 borrowable（父节点最终稳态剩余，仅供审计展示）。
-        if disabled_layer is None and insufficient_layer is None:
-            for depth, current in enumerate(path_up):
-                if current.parent_id is not None:
-                    entries[current.node_id].borrowable = work_steady[current.parent_id]
+            if need > _EPS:
+                entry.status = "insufficient"
+                shortfall_left = need
+                if is_target:
+                    if current.parent_id is None:
+                        entry.reason = (
+                            f"目标节点为根，稳态 {_num(s_pay)}、突发 {_num(b_pay)} "
+                            f"后仍缺 {_num(need)}，无父可借"
+                        )
+                    else:
+                        entry.reason = (
+                            f"本层稳态 {_num(s_pay)}、突发 {_num(b_pay)}、"
+                            f"可向父节点借 {_num(borrow)} 后仍缺 {_num(need)}"
+                        )
+                    reason_code = "self_insufficient"
                 else:
-                    entries[current.node_id].borrowable = 0.0
+                    entry.reason = (
+                        f"祖先层自身份额需要 {_num(amount)}，稳态仅付 {_num(s_pay)}"
+                        + ("" if current.parent_id is None else
+                           f"，付完自身份额后仅可借出 {_num(borrow)}")
+                        + "（祖先层不得用突发为子孙流量兜底，借入令牌不得转贷），"
+                        f"尚缺 {_num(need)}"
+                    )
+                    reason_code = "ancestor_insufficient"
+                message = (
+                    f"节点 {current.node_id!r} 层令牌不足，尚缺 {_num(shortfall_left)}"
+                )
+                entries[current.node_id] = entry
+                failing_id = current.node_id
+                break
 
-        # 组装原因链：请求节点 → 根；未评估层显式标注。
+            entries[current.node_id] = entry
+            plans.append((current, s_pay, b_pay, borrow))
+
+        # 子节点的每笔借入，就是父节点稳态桶在自身份额之外的借出；在组装
+        # 原因链前回填到父层明细。
+        lent_by_parent: dict[str, float] = {}
+        for current in path_up:
+            if borrowed[current.node_id] > 0 and current.parent_id is not None:
+                lent_by_parent[current.parent_id] = (
+                    lent_by_parent.get(current.parent_id, 0.0)
+                    + borrowed[current.node_id]
+                )
+        for parent_id, lent in lent_by_parent.items():
+            entries[parent_id].lent_to_child = lent
+
+        # 显式准入检查（题面字面约束）：自根向叶逐对父子校验请求落账后
+        # 「同一父节点下所有子级已用额度之和 <= 父级容量」，报告最靠近根
+        # 的第一道瓶颈。这道检查独立于逐层令牌检查：突发桶一次性、不恢复，
+        # 突发伤疤永久计入子级已用，即便父桶随速率补充到满，子级累计占用
+        # 仍可能已超过父容量，因此不能只靠父桶水位拦阻。
+        guard_failure_depth: Optional[int] = None
+        if failing_id is None:
+            for depth in range(len(path_up) - 1, 0, -1):
+                child = path_up[depth - 1]
+                parent_node = self._nodes[child.parent_id]  # type: ignore[arg-type]
+                # 路径上每层支付恒等式 self_pay + borrow (+burst，仅目标)
+                # = n，因此无论稳态/借入/突发如何构成，该子级占用增量恒为 n。
+                growth = float(amount)
+                current_sum = sum(
+                    self._occupied(self._nodes[cid])
+                    for cid in self._children[parent_node.node_id]
+                )
+                if current_sum + growth > parent_node.capacity + _EPS:
+                    parent_entry = entries[parent_node.node_id]
+                    parent_entry.status = "insufficient"
+                    parent_entry.reason = (
+                        f"本层容量 {_num(parent_node.capacity)} 已被子级占用 "
+                        f"{_num(current_sum)}，子节点 {child.node_id!r} 本笔将再占用 "
+                        f"{_num(growth)}，子级已用之和将达到 "
+                        f"{_num(current_sum + growth)}，超过父级容量"
+                        "（子级总额度约束，不能靠跨层借用或突发绕过）"
+                    )
+                    failing_id = parent_node.node_id
+                    reason_code = (
+                        "self_insufficient" if parent_node.node_id == node_id
+                        else "ancestor_insufficient"
+                    )
+                    shortfall_left = current_sum + growth - parent_node.capacity
+                    message = (
+                        f"节点 {parent_node.node_id!r} 层子级已用之和将超过其容量，"
+                        f"尚缺额度 {_num(shortfall_left)}"
+                    )
+                    guard_failure_depth = depth
+                    break
+
+        # 组装原因链：请求节点 → 根；因自根向叶判定而未评估到的层显式标注。
         chain: list[LayerDecision] = []
-        evaluation_done = disabled_layer is not None or insufficient_layer is not None
         for depth, current in enumerate(path_up):
-            if current.node_id in entries:
+            if current.node_id in entries and not (
+                guard_failure_depth is not None and depth < guard_failure_depth
+            ):
                 chain.append(entries[current.node_id])
-            elif evaluation_done:
+            else:
                 chain.append(
                     LayerDecision(
                         node_id=current.node_id,
                         depth=depth,
                         required=float(amount),
                         steady_before=work_steady[current.node_id],
-                        burst_before=work_burst[current.node_id],
+                        burst_before=current.burst,
                         borrowable=0.0,
                         status="not_evaluated",
-                        reason="本层已拒绝，更靠近根的祖先层未参与扣账",
+                        reason=(
+                            "更靠近根的祖先层因子级总额度约束已拒绝，本层未参与扣账"
+                            if guard_failure_depth is not None
+                            else "更靠近根的祖先层已拒绝，本层未参与扣账"
+                        ),
                     )
                 )
 
-        failing_id = disabled_layer or insufficient_layer
         if failing_id is not None:
-            if disabled_layer is not None:
-                reason_code = (
-                    "node_disabled" if failing_id == node_id else "ancestor_disabled"
-                )
-                message = f"节点 {failing_id!r} 被禁用，请求被拒绝"
-            else:
-                reason_code = (
-                    "self_insufficient" if failing_id == node_id
-                    else "ancestor_insufficient"
-                )
-                message = (
-                    f"节点 {failing_id!r} 层令牌不足，尚缺 {_num(shortfall_left)}"
-                )
             decision = Decision(
                 ok=False,
                 node_id=node_id,
@@ -844,19 +926,20 @@ class QuotaKernel:
             return decision
 
         # 全部层可行 → 自根向叶提交（顺序确定、可重放）。
+        # 每个节点本笔请求实际稳态支出 = 自身份额稳态支付 + 借给直接子节点
+        # 的数量（子节点的借入正是对父节点稳态的扣除，此处只记一次）。
         created_loans: list[str] = []
-        for current in reversed(path_up):
-            entry = entries[current.node_id]
-            current.steady -= entry.steady_paid + entry.lent_to_child
-            current.burst -= entry.burst_paid
-            if entry.borrowed > 0:
+        for current, s_pay, b_pay, child_borrow in plans:
+            current.steady -= s_pay + entries[current.node_id].lent_to_child
+            current.burst -= b_pay
+            if child_borrow > 0:
                 parent = self._nodes[current.parent_id]  # type: ignore[index]
                 self._loan_seq += 1
                 loan = Loan(
                     loan_id=f"L{self._loan_seq}",
                     lender_id=parent.node_id,
                     borrower_id=current.node_id,
-                    amount=entry.borrowed,
+                    amount=child_borrow,
                     created_at=self._clock,
                 )
                 parent.loans_out.append(loan)

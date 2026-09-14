@@ -82,17 +82,17 @@ def assert_invariants(testcase: unittest.TestCase, kernel: QuotaKernel) -> None:
             st["burst_remaining"], st["burst_capacity"] + 1e-9, nid
         )
 
-    # 2) 任一父节点：所有直接子节点该层已用之和 <= 父容量+父突发（核心
-    #    验收不变量：子级总和不能打穿父级总额度；父突发也是父级可承担的
-    #    一部分，且只可能被链路上的请求用掉）。
+    # 2) 任一父节点：所有直接子节点该层已用之和 <= 父级【容量】（题面
+    #    字面不变量；祖先突发不为子孙流量兜底，跨级借用不得转贷，因此
+    #    不允许放宽成容量+突发）。
     for nid, st in statuses.items():
         kids = st["children"]
         child_used_sum = sum(layer_used(statuses[c]) for c in kids)
         testcase.assertLessEqual(
             child_used_sum,
-            st["capacity"] + st["burst_capacity"] + 1e-9,
-            f"父节点 {nid} 的子级已用之和 {child_used_sum} 超过父级总额度 "
-            f"{st['capacity'] + st['burst_capacity']}",
+            st["capacity"] + 1e-9,
+            f"父节点 {nid} 的子级已用之和 {child_used_sum} 超过父级容量 "
+            f"{st['capacity']}",
         )
 
     # 3) 借出总额 == 借入总额；每笔贷款余额为正。
@@ -139,6 +139,27 @@ class TestHierarchy(unittest.TestCase):
         self.assertEqual(k.children("root"), ["a", "b"])  # 字典序
         self.assertEqual(k.children("a"), ["a1"])
         self.assertEqual(k.descendants("root"), ["a", "a1", "b"])
+
+    def test_children_order_stable_under_changes(self) -> None:
+        # 同父节点下的子节点无论创建顺序如何，都按标识字典序稳定返回；
+        # 重复查询、新增、删除后顺序仍然确定。
+        k = QuotaKernel()
+        k.create_node("root", 100, 0)
+        for name in ("d", "a", "c", "b"):
+            k.create_node(name, 1, 0, parent_id="root")
+        expected = ["a", "b", "c", "d"]
+        for _ in range(3):
+            self.assertEqual(k.children("root"), expected)
+        k.create_node("aa", 1, 0, parent_id="root")
+        self.assertEqual(k.children("root"), ["a", "aa", "b", "c", "d"])
+        k.delete_node("c")
+        self.assertEqual(k.children("root"), ["a", "aa", "b", "d"])
+        # internal_state / 导出中的顺序同样按字典序。
+        state = k.internal_state()
+        root_node = next(n for n in state["nodes"] if n["id"] == "root")
+        self.assertEqual(root_node["children"], ["a", "aa", "b", "d"])
+        ids = [n["id"] for n in k.to_dict()["nodes"]]
+        self.assertEqual(ids, sorted(ids))
 
     def test_duplicate_and_empty_id(self) -> None:
         k = QuotaKernel()
@@ -252,9 +273,9 @@ class TestTokenBucket(unittest.TestCase):
         self.assertEqual(d.loans_created, ["L1"])
         self.assertEqual(k.node_status("z")["borrowed_in"], 3)
         self.assertEqual(k.node_status("root")["borrowed_out"], 3)
-        # 模型 B：root 只出一份钱（借出 3），自身无需再扣 3。
-        self.assertEqual(k.node_status("root")["available"], 7)
-        # root 只剩 7：再借 8 必然在 root 层被拒。
+        # 模型 A：root 为这笔请求出两份——自身份额 3 + 借给 z 的 3。
+        self.assertEqual(k.node_status("root")["available"], 4)
+        # root 只剩稳态 4：再借 8 时根层自身份额都凑不齐，必拒在 root。
         d = k.request_tokens("z", 8)
         self.assertFalse(d.ok)
         self.assertEqual(d.failing_node_id, "root")
@@ -263,39 +284,42 @@ class TestTokenBucket(unittest.TestCase):
     def test_root_exactly_exhausted(self) -> None:
         k = QuotaKernel()
         k.create_node("root", 10, 0)
-        k.create_node("a", 10, 0, parent_id="root")
-        k.create_node("a1", 0, 0, parent_id="a")
-        # a1 借 10：a 全额垫付 10，root 自身记账 10 恰好付清，全部打满。
-        d = k.request_tokens("a1", 10)
-        self.assertTrue(d.ok)
+        k.create_node("c1", 10, 0, parent_id="root")
+        k.create_node("c2", 10, 0, parent_id="root")
+        # 两子各请 5：root 每层各付自身份额 5，恰好耗尽；子级已用之和
+        # 恰好等于根容量 10（字面边界）。
+        self.assertTrue(k.request_tokens("c1", 5).ok)
+        self.assertTrue(k.request_tokens("c2", 5).ok)
         self.assertEqual(k.node_status("root")["available"], 0)
-        self.assertEqual(k.node_status("a")["available"], 0)
-        self.assertEqual(k.node_status("a")["borrowed_out"], 10)
-        self.assertEqual(k.node_status("a1")["borrowed_in"], 10)
-        # 父级恰好耗尽：多 1 个都不行，瓶颈在直接父节点 a（它已无钱可借）。
-        d = k.request_tokens("a1", 1)
+        self.assertEqual(
+            sum(layer_used(k.node_status(c)) for c in ("c1", "c2")), 10
+        )
+        # 父级恰好耗尽：再多 1 个都拒在根层，且拒绝不落账。
+        before = k.node_status("c1")["available"]
+        d = k.request_tokens("c1", 1)
         self.assertFalse(d.ok)
-        self.assertEqual(d.failing_node_id, "a")
-        # 根节点自己再请 1 同样被拒。
+        self.assertEqual(d.failing_node_id, "root")
+        self.assertEqual(k.node_status("c1")["available"], before)
         d = k.request_tokens("root", 1)
         self.assertFalse(d.ok)
         self.assertEqual(d.failing_node_id, "root")
 
     def test_refill_order_independent_of_ids(self) -> None:
-        # 两棵同构树：第二棵把父子 ID 的字典序颠倒。补充若依赖 ID 遍历
-        # 顺序，两棵树推进时钟后的结果会不同；拓扑序（叶→根）下必须一致。
+        # 两棵同构树：第二棵把父子 ID 的字典序相对顺序颠倒。补充若依赖
+        # ID 遍历顺序，两棵树推进时钟后的结果会不同；拓扑序（叶→根）下
+        # 必须得到按角色对齐的同一结果。场景本身满足放行条件：
+        # 子请 5（<= 根容量 10），根付自身份额 5 后仍有 1 可借给子。
         def build(root_name: str, child_name: str) -> QuotaKernel:
             k = QuotaKernel()
-            k.create_node(root_name, 10, 10, burst_capacity=4)
-            k.create_node(child_name, 10, 10, parent_id=root_name)
-            # 子请 14：自付 10 借 4；根垫付 4 后自付 10（稳态 6 + 突发 4）。
-            d = k.request_tokens(child_name, 14)
-            assert d.ok, d.message
-            k.advance_clock(1)  # 子补 10 先还 4；根收回后补 10 回到满稳态
+            k.create_node(root_name, 10, 10)
+            k.create_node(child_name, 4, 10, parent_id=root_name)
+            d = k.request_tokens(child_name, 5)
+            assert d.ok, d.message  # 根份额 5 付得起，子自付 4 + 借 1
+            k.advance_clock(1)     # 子先补、先还 1；根收回后补满
             return k
 
-        k1 = build("root", "aaa-child")   # 子 ID 排在父前面
-        k2 = build("aaa-root", "zzz-child")  # 父 ID 排在子前面
+        k1 = build("root", "aaa-child")       # 子 ID 字典序排在父前面
+        k2 = build("aaa-root", "zzz-child")   # 父 ID 字典序排在子前面
         snap1 = {"root": k1.node_status("root"),
                  "child": k1.node_status("aaa-child")}
         snap2 = {"root": k2.node_status("aaa-root"),
@@ -304,9 +328,11 @@ class TestTokenBucket(unittest.TestCase):
             for key in ("available", "borrowed_out", "borrowed_in",
                         "burst_remaining"):
                 self.assertEqual(snap1[role][key], snap2[role][key])
+        # 子还 1 后补满自己 4；根收回 1 并补满 10，无在途借款。
+        self.assertEqual(k1.node_status("aaa-child")["available"], 4)
         self.assertEqual(k1.node_status("root")["available"], 10)
-        self.assertEqual(k1.node_status("root")["burst_remaining"], 0)  # 突发不恢复
-        self.assertEqual(k1.node_status("aaa-child")["available"], 6)
+        self.assertEqual(k1.node_status("root")["borrowed_out"], 0)
+        self.assertEqual(k1.internal_state()["loans"], [])
 
     def test_request_amount_validation(self) -> None:
         k = build_tree()
@@ -368,14 +394,87 @@ class TestContention(unittest.TestCase):
                 accepted += 1
             assert_invariants(self, k)
         self.assertLessEqual(accepted, len(schedule))
-        # 不补充时所有子级已用之和不可能超过根容量 12（+根自己的突发）。
+        # 不补充时所有子级已用之和不可能超过根容量 12（字面约束，
+        # 祖先突发不为子孙流量兜底）。
         kids_used = sum(
             layer_used(k.node_status(c)) for c in k.children("root")
         )
         root = k.node_status("root")
-        self.assertLessEqual(
-            kids_used, root["capacity"] + root["burst_capacity"] + 1e-9
+        self.assertLessEqual(kids_used, root["capacity"] + 1e-9)
+
+    def test_literal_capacity_guard_two_children_same_instant(self) -> None:
+        # 本轮回归：根容量 10、无突发，两个子节点在同一逻辑时刻各自申请
+        # 5 以上。字面约束「所有子级已用之和 <= 父级容量」必须成立，不能
+        # 因为跨级记账被放行；每一步落账后都要成立。
+        k = QuotaKernel()
+        k.create_node("root", 10, 0)
+        k.create_node("c1", 10, 0, parent_id="root")
+        k.create_node("c2", 10, 0, parent_id="root")
+
+        d1 = k.request_tokens("c1", 5)
+        self.assertTrue(d1.ok)
+        self.assertEqual(
+            sum(layer_used(k.node_status(c)) for c in ("c1", "c2")), 5
         )
+        # 第二笔 6：5+6=11 > 10，必须拒绝，且拒绝层是 root（父级容量约束）。
+        d2 = k.request_tokens("c2", 6)
+        self.assertFalse(d2.ok)
+        self.assertEqual(d2.failing_node_id, "root")
+        self.assertEqual(d2.reason_code, "ancestor_insufficient")
+        # 拒绝不落账：子级已用之和仍是 5。
+        self.assertEqual(
+            sum(layer_used(k.node_status(c)) for c in ("c1", "c2")), 5
+        )
+        # 恰好到边界的 5 可以放行；再任意 1 个都不行。
+        self.assertTrue(k.request_tokens("c2", 5).ok)
+        self.assertEqual(
+            sum(layer_used(k.node_status(c)) for c in ("c1", "c2")), 10
+        )
+        d3 = k.request_tokens("c1", 1)
+        self.assertFalse(d3.ok)
+        self.assertEqual(d3.failing_node_id, "root")
+
+    def test_literal_guard_blocks_cascade_borrow(self) -> None:
+        # 跨级借用路径：leaf 容量为 0、mid 容量刚好只够自身份额。mid 付完
+        # 自身份额后没有剩余可借给 leaf，令牌检查阶段即在 leaf 层拒绝；
+        # root 容量再大也不能替 mid 向 leaf 转贷。
+        k = QuotaKernel()
+        k.create_node("root", 20, 0)
+        k.create_node("mid", 4, 0, parent_id="root")
+        k.create_node("leaf", 0, 0, parent_id="mid")
+        d = k.request_tokens("leaf", 4)
+        self.assertFalse(d.ok)
+        self.assertEqual(layer_used(k.node_status("leaf")), 0)
+        self.assertEqual(k.node_status("mid")["available"], 4)  # 拒绝不落账
+        # mid 自己只用 4 是可以的（root 容量充足）。
+        self.assertTrue(k.request_tokens("mid", 4).ok)
+        self.assertEqual(layer_used(k.node_status("mid")), 4)
+        assert_invariants(self, k)
+
+    def test_literal_guard_independent_of_parent_waterline(self) -> None:
+        # 关键区分场景：父桶已被高速率重新补满（当下有令牌），但子级突发
+        # 伤疤已占满父容量。此时仅靠父桶水位拦不住，必须由显式的
+        # 「子级已用之和 <= 父容量」准入检查拒绝。
+        k = QuotaKernel()
+        k.create_node("root", 6, 100)            # 容量 6，高速补充
+        k.create_node("c1", 0, 0, parent_id="root", burst_capacity=100)
+        k.create_node("c2", 0, 0, parent_id="root")
+        # c1 请 6：root 付自身份额 6，c1 全部用自己的突发（伤疤=6）。
+        self.assertTrue(k.request_tokens("c1", 6).ok)
+        self.assertEqual(layer_used(k.node_status("c1")), 6)
+        k.advance_clock(1)  # root 重新补满 6（c1 突发不恢复）
+        self.assertEqual(k.node_status("root")["available"], 6)
+        # c2 请 1：逐桶看 root 当下有钱可借，令牌检查通过；但子级已用之和
+        # 6+1=7 > root 容量 6 → 必须由准入检查拒在 root。
+        d = k.request_tokens("c2", 1)
+        self.assertFalse(d.ok)
+        self.assertEqual(d.failing_node_id, "root")
+        self.assertEqual(d.reason_code, "ancestor_insufficient")
+        # 拒绝不落账：c2 占用为 0，root 令牌未被借出。
+        self.assertEqual(layer_used(k.node_status("c2")), 0)
+        self.assertEqual(k.node_status("root")["available"], 6)
+        self.assertEqual(k.node_status("root")["borrowed_out"], 0)
+        assert_invariants(self, k)
 
     def test_permutation_invariants(self) -> None:
         # 不同到达顺序下结果可以不同，但不变量始终成立、且无异常。
@@ -404,8 +503,10 @@ class TestBorrowAndRepay(unittest.TestCase):
     """借用记录、FIFO 偿还、部分偿还、链式传播、即借即还。"""
 
     def setUp(self) -> None:
+        # root 容量 24：a/b 各请 8 时 root 才能同时承担
+        # "自身份额 8 + 借给子节点 4" 两份支出。
         self.k = QuotaKernel()
-        self.k.create_node("root", 20, 2)
+        self.k.create_node("root", 24, 2)
         self.k.create_node("a", 4, 1, parent_id="root")
         self.k.create_node("b", 4, 1, parent_id="root")
 
@@ -419,7 +520,7 @@ class TestBorrowAndRepay(unittest.TestCase):
         self.assertEqual(loan["borrower_id"], "a")
         self.assertEqual(loan["amount"], 4)
         self.assertEqual(loan["time"], 0)
-        # root 只出一份钱：借出 4 + 自身记账 4 = 8。
+        # root 出两份：自身份额 8 + 借出 4 = 12。
         self.assertEqual(k.node_status("root")["available"], 12)
         self.assertEqual(k.node_status("root")["borrowed_out"], 4)
         self.assertEqual(k.node_status("a")["borrowed_in"], 4)
@@ -427,12 +528,11 @@ class TestBorrowAndRepay(unittest.TestCase):
 
     def test_no_double_lending_near_exhaustion(self) -> None:
         k = self.k
-        self.assertTrue(k.request_tokens("a", 8).ok)  # root: 借4+自记4 → 12
-        # b 自身付 4 借 4；root 借 4 + 自记 4 → 4。
-        self.assertTrue(k.request_tokens("b", 8).ok)
-        self.assertEqual(k.node_status("root")["available"], 4)
+        self.assertTrue(k.request_tokens("a", 8).ok)  # root: 自身8+借4 → 12
+        self.assertTrue(k.request_tokens("b", 8).ok)  # root: 自身8+借4 → 0
+        self.assertEqual(k.node_status("root")["available"], 0)
         self.assertEqual(k.node_status("root")["borrowed_out"], 8)
-        # root 实际只剩 4，超额借用必被拒，且同一份令牌不可能借出两次。
+        # root 已空：任何新请求都在 root 层被拒，同一份令牌不可能借出两次。
         d = k.request_tokens("a", 5)
         self.assertFalse(d.ok)
         self.assertEqual(d.failing_node_id, "root")
@@ -468,27 +568,35 @@ class TestBorrowAndRepay(unittest.TestCase):
         self.assertEqual(ids, ["L2"])
 
     def test_repayment_propagates_to_grandparent(self) -> None:
+        # 严格模型下沿单条成功路径最多只有一条借用边（祖先必须独立持有
+        # 整笔自身份额，不能把向上借来的令牌转贷）；多级债务链只能由不同
+        # 请求在同一中间节点叠加形成：
+        #   请求1 leaf→6 产生 leaf 欠 mid 2；请求2 mid 自己→4 产生
+        #   mid 欠 root 4（此时 mid 稳态桶已空）。
         k = QuotaKernel()
         k.create_node("root", 30, 0)
-        k.create_node("mid", 8, 0, parent_id="root")
+        k.create_node("mid", 8, 10, parent_id="root")
         k.create_node("leaf", 4, 10, parent_id="mid")
-        # leaf 请 10：root/mid/leaf 各记账 10。
-        # leaf 自付 4 借 6；mid 垫付 6 后自付 2 借 2；root 垫付 2 后自付 8。
-        d = k.request_tokens("leaf", 10)
-        self.assertTrue(d.ok)
-        self.assertEqual(k.node_status("mid")["borrowed_in"], 2)
-        self.assertEqual(k.node_status("mid")["borrowed_out"], 6)
-        self.assertEqual(k.node_status("leaf")["borrowed_in"], 6)
-        self.assertEqual(k.node_status("root")["available"], 20)
-        # leaf 补充 10：6 还给 mid；mid 收回的 6 中 2 继续还给 root，
-        # 剩 4 成为 mid 的稳态余额；leaf 余 4 注满自己的稳态桶。
+        # 请求1：root 付自身份额 6（30→24）；mid 自身付 6（8→2），
+        # leaf 自付 4 后借 2，mid 把仅剩的 2 借出（→0）。
+        self.assertTrue(k.request_tokens("leaf", 6).ok)
+        # 请求2（mid 自己为目标）：root 付自身份额 4、再借出 4（24→16）；
+        # mid 桶空，自身 4 全额向 root 借入。mid 同时是借入方与借出方。
+        self.assertTrue(k.request_tokens("mid", 4).ok)
+        self.assertEqual(k.node_status("mid")["borrowed_in"], 4)
+        self.assertEqual(k.node_status("mid")["borrowed_out"], 2)
+        self.assertEqual(k.node_status("leaf")["borrowed_in"], 2)
+        self.assertEqual(k.node_status("root")["available"], 16)
+        assert_invariants(self, k)
+        # 推进 1：leaf 补 10 先还 mid 2（余 8 注满自己 4）；mid 收回 2，
+        # 连同自身补充先向上还清欠 root 的 4（2+自身补充2），再注满稳态桶。
         k.advance_clock(1)
         self.assertEqual(k.node_status("leaf")["borrowed_in"], 0)
         self.assertEqual(k.node_status("leaf")["available"], 4)
         self.assertEqual(k.node_status("mid")["borrowed_in"], 0)
         self.assertEqual(k.node_status("mid")["borrowed_out"], 0)
-        self.assertEqual(k.node_status("mid")["available"], 4)
-        self.assertEqual(k.node_status("root")["available"], 22)
+        self.assertEqual(k.node_status("mid")["available"], 8)
+        self.assertEqual(k.node_status("root")["available"], 20)
         assert_invariants(self, k)
 
     def test_immediate_repay_on_disable(self) -> None:
@@ -634,16 +742,19 @@ class TestDisableDelete(unittest.TestCase):
         k.create_node("root", 30, 0)
         k.create_node("mid", 8, 0, parent_id="root")
         k.create_node("leaf", 4, 10, parent_id="mid")
-        # 同跨级传播场景：leaf 借 6、mid 借 2。
-        self.assertTrue(k.request_tokens("leaf", 10).ok)
-        k.disable_node("mid")
-        # leaf 仍启用：补充 10 后还债，还款穿过被禁用的 mid 继续还给 root。
+        # 同跨级传播：先让 leaf 欠 mid 2，再让 mid 欠 root 4。
+        self.assertTrue(k.request_tokens("leaf", 6).ok)
+        self.assertTrue(k.request_tokens("mid", 4).ok)
+        result = k.disable_node("mid")  # mid 桶空，4 成为冻结债务
+        self.assertEqual(result["frozen_debt"], 4)
+        # leaf 仍启用：补充 10 后还 mid 2；还款穿过被禁用的 mid，继续
+        # 向上还给 root（mid 冻结债务由 4 降至 2）。
         k.advance_clock(1)
         self.assertEqual(k.node_status("leaf")["borrowed_in"], 0)
-        self.assertEqual(k.node_status("mid")["borrowed_in"], 0)
+        self.assertEqual(k.node_status("mid")["borrowed_in"], 2)
         self.assertEqual(k.node_status("mid")["borrowed_out"], 0)
-        self.assertEqual(k.node_status("mid")["available"], 4)
-        self.assertEqual(k.node_status("root")["available"], 22)
+        self.assertEqual(k.node_status("mid")["available"], 0)
+        self.assertEqual(k.node_status("root")["available"], 18)
 
     def test_delete_repays_and_forgives_others_unaffected(self) -> None:
         k = QuotaKernel()
@@ -816,6 +927,51 @@ class TestSerialization(unittest.TestCase):
                 k.import_data(payload)
             self.assertEqual(k.to_dict(), before)
 
+    def test_import_replays_contention_with_identical_chain(self) -> None:
+        # 导出一个含在途借用、突发伤疤、部分占用的中途状态；同一个内核
+        # 继续跑竞争序列得到 A，把快照导入全新内核跑同一序列得到 B。
+        # A/B 的判定结果（ok/拒绝层/reason_code/完整原因链）必须逐条一致，
+        # 跑完后的完整状态也必须一致。
+        contention = [
+            ("c1", 5), ("c2", 6), ("c1", 1), ("c3", 3), ("c2", 2),
+            ("c3", 4), ("c1", 2),
+        ]
+
+        def seed() -> QuotaKernel:
+            k = QuotaKernel()
+            k.create_node("root", 10, 2, burst_capacity=1)
+            k.create_node("c1", 6, 1, parent_id="root", burst_capacity=2)
+            k.create_node("c2", 6, 1, parent_id="root")
+            k.create_node("c3", 4, 1, parent_id="root")
+            # 制造“中途”状态：部分消耗 + 在途借用 + 突发伤疤。
+            k.request_tokens("c1", 8)
+            k.request_tokens("c2", 5)
+            k.advance_clock(1)
+            return k
+
+        def run(k: QuotaKernel) -> list[dict]:
+            return [k.request_tokens(nid, amount).to_dict()
+                    for nid, amount in contention]
+
+        original = seed()
+        snapshot = original.to_dict()
+        results_a = run(original)                       # 原内核继续跑
+        rebuilt = QuotaKernel.from_dict(snapshot)       # 导入快照
+        results_b = run(rebuilt)                        # 新内核跑同一序列
+
+        for ra, rb in zip(results_a, results_b):
+            self.assertEqual(ra["ok"], rb["ok"])
+            self.assertEqual(ra["failing_node_id"], rb["failing_node_id"])
+            self.assertEqual(ra["reason_code"], rb["reason_code"])
+            self.assertEqual(ra["message"], rb["message"])
+            self.assertEqual(ra["reason_chain"], rb["reason_chain"])
+        # 跑完后两边完整状态一致，且还能再次导出往返。
+        self.assertEqual(rebuilt.to_dict(), original.to_dict())
+        self.assertEqual(
+            QuotaKernel.from_dict(rebuilt.to_dict()).to_dict(),
+            rebuilt.to_dict(),
+        )
+
     def test_broken_json_file(self) -> None:
         k = QuotaKernel()
         with tempfile.TemporaryDirectory() as tmp:
@@ -838,23 +994,29 @@ class TestReasonChain(unittest.TestCase):
     """原因链顺序、层级状态与最近拒绝查询。"""
 
     def test_chain_order_and_not_evaluated(self) -> None:
-        k = build_tree()
-        # a1 请 11：a1 自付 4 需借 7；a 的稳态桶只有 6，突发与借入令牌
-        # 不得转贷 → a 层凑不齐 7，拒绝；root 未评估。
-        d = k.request_tokens("a1", 11)
+        k = QuotaKernel()
+        k.create_node("root", 10, 0)
+        k.create_node("a", 6, 0, parent_id="root")
+        k.create_node("a1", 4, 0, parent_id="a")
+        # a1 请 9：root 自身份额 9 付得起（余 1）；a 自身份额 9 只有稳态 6，
+        # 最多再向 root 借它付完自身份额后的剩余 1，合计 7 < 9 → 拒在 a，
+        # a1 未参与评估。
+        d = k.request_tokens("a1", 9)
         self.assertFalse(d.ok)
+        self.assertEqual(d.failing_node_id, "a")
+        self.assertEqual(d.reason_code, "ancestor_insufficient")
         chain = d.to_dict()["reason_chain"]
         self.assertEqual([layer["node_id"] for layer in chain], ["a1", "a", "root"])
         statuses = {layer["node_id"]: layer["status"] for layer in chain}
         self.assertEqual(statuses["a"], "insufficient")
-        self.assertEqual(statuses["a1"], "ok")  # 叶层自身记账成功（含 7 的借入需求）
-        self.assertEqual(statuses["root"], "not_evaluated")
+        self.assertEqual(statuses["root"], "ok")
+        self.assertEqual(statuses["a1"], "not_evaluated")
         self.assertEqual(chain[0]["depth_from_request"], 0)
         self.assertEqual(chain[2]["depth_from_request"], 2)
         # 拒绝不落任何账。
-        self.assertEqual(k.node_status("a1")["available"], 4)
-        self.assertEqual(k.node_status("a")["available"], 6)
         self.assertEqual(k.node_status("root")["available"], 10)
+        self.assertEqual(k.node_status("a")["available"], 6)
+        self.assertEqual(k.node_status("a1")["available"], 4)
 
     def test_rejection_query_cleared_on_success(self) -> None:
         k = build_tree()
