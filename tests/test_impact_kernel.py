@@ -8,6 +8,7 @@ import unittest
 from impact_kernel import (
     Clause,
     Condition,
+    DiffKind,
     Effect,
     ExplainStatus,
     FlipType,
@@ -314,6 +315,141 @@ class TestFlipClassification(unittest.TestCase):
 
 
 # ----------------------------------------------------------------------
+# 默认效果变化的归因（独立用例）
+# ----------------------------------------------------------------------
+class TestDefaultEffectAttribution(unittest.TestCase):
+    """两侧都无规则命中、仅默认效果不同时，翻转必须归因到默认效果差异。"""
+
+    def setUp(self):
+        self.k = ImpactKernel(SCHEMA, default_effect=Effect.ALLOW)
+        self.k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
+        self.k.add_request("r2", {"user": "b", "age": 30, "vip": True, "score": 2.0})
+        # 两套策略规则完全相同且都不命中任何请求，仅默认效果 ALLOW → DENY
+        rules = [rule("R-nomatch", 1, Effect.DENY, [eq("user", "nobody")])]
+        self.k.load_policy("old", rules)
+        self.k.load_policy("new", rules, default_effect=Effect.DENY)
+
+    def test_flip_attributed_to_default_change(self):
+        for rid in ("r1", "r2"):
+            exp = self.k.explain_flip(rid)
+            self.assertEqual(exp.status, ExplainStatus.ATTRIBUTED)
+            self.assertTrue(exp.unique)
+            self.assertEqual(len(exp.minimal_diffs), 1)
+            diff = exp.minimal_diffs[0]
+            self.assertEqual(diff.kind, DiffKind.DEFAULT_CHANGED)
+            self.assertIsNone(diff.rule_id)
+            self.assertIn("默认效果", exp.reason)
+            # 不能报无法归因或歧义
+            self.assertNotEqual(exp.status, ExplainStatus.UNATTRIBUTABLE)
+            self.assertNotEqual(exp.status, ExplainStatus.AMBIGUOUS)
+
+    def test_reason_does_not_claim_phantom_rule(self):
+        exp = self.k.explain_flip("r1")
+        self.assertNotIn("None", exp.reason)  # 生效规则不能显示为 'None'
+        self.assertIn("无规则命中", exp.reason)
+
+    def test_replay_consistent_with_default_change(self):
+        result = self.k.replay()
+        self.assertEqual(result.stats.flipped, 2)
+        self.assertEqual(result.stats.new_deny, 2)
+        for comp in result.comparisons:
+            self.assertTrue(comp.old_decision.used_default)
+            self.assertTrue(comp.new_decision.used_default)
+            self.assertEqual(comp.old_decision.effect, Effect.ALLOW)
+            self.assertEqual(comp.new_decision.effect, Effect.DENY)
+
+
+# ----------------------------------------------------------------------
+# 规则停用 / 启用导致的翻转归因（独立用例）
+# ----------------------------------------------------------------------
+class TestEnableDisableAttribution(unittest.TestCase):
+    def test_disable_rule_falls_back_to_default(self):
+        """停用唯一命中的规则 → 请求改走默认效果，归因到该规则的启用状态差异。"""
+        k = make_kernel()
+        k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
+        k.load_policy("old", [rule("R-allow", 10, Effect.ALLOW)])
+        k.load_policy("new", [rule("R-allow", 10, Effect.ALLOW, enabled=False)])
+        exp = k.explain_flip("r1")
+        self.assertEqual(exp.status, ExplainStatus.ATTRIBUTED)
+        self.assertTrue(exp.unique)
+        self.assertEqual(len(exp.minimal_diffs), 1)
+        diff = exp.minimal_diffs[0]
+        self.assertEqual(diff.kind, DiffKind.MODIFIED)
+        self.assertEqual(diff.rule_id, "R-allow")
+        self.assertTrue(diff.before.enabled)
+        self.assertFalse(diff.after.enabled)
+        self.assertIn("停用", exp.reason)
+        self.assertIn("默认效果", exp.reason)  # 说明替换后的去向
+        comp = k.replay().comparisons[0]
+        self.assertEqual(comp.flip_type, FlipType.NEW_DENY)
+
+    def test_disable_rule_falls_back_to_other_rule(self):
+        """停用高优先级规则 → 请求改走另一条规则，说明替换后的生效规则。"""
+        k = make_kernel()
+        k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
+        k.load_policy("old", [
+            rule("R-deny", 10, Effect.DENY),
+            rule("R-audit", 5, Effect.AUDIT),
+        ])
+        k.load_policy("new", [
+            rule("R-deny", 10, Effect.DENY, enabled=False),
+            rule("R-audit", 5, Effect.AUDIT),
+        ])
+        exp = k.explain_flip("r1")
+        self.assertEqual(exp.status, ExplainStatus.ATTRIBUTED)
+        self.assertEqual(len(exp.minimal_diffs), 1)
+        self.assertEqual(exp.minimal_diffs[0].rule_id, "R-deny")
+        self.assertIn("停用", exp.reason)
+        self.assertIn("R-audit", exp.reason)  # 替换后的生效规则
+        comp = k.replay().comparisons[0]
+        self.assertEqual(comp.flip_type, FlipType.NEW_ALLOW)
+        self.assertEqual(comp.new_decision.effective_rule_id, "R-audit")
+
+    def test_enable_rule_takes_over(self):
+        """启用原本停用的规则 → 请求从默认效果改由该规则命中。"""
+        k = make_kernel()
+        k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
+        k.load_policy("old", [rule("R-allow", 10, Effect.ALLOW, enabled=False)])
+        k.load_policy("new", [rule("R-allow", 10, Effect.ALLOW, enabled=True)])
+        exp = k.explain_flip("r1")
+        self.assertEqual(exp.status, ExplainStatus.ATTRIBUTED)
+        self.assertEqual(len(exp.minimal_diffs), 1)
+        diff = exp.minimal_diffs[0]
+        self.assertEqual(diff.rule_id, "R-allow")
+        self.assertFalse(diff.before.enabled)
+        self.assertTrue(diff.after.enabled)
+        self.assertIn("启用", exp.reason)
+        self.assertIn("R-allow", exp.reason)
+        comp = k.replay().comparisons[0]
+        self.assertEqual(comp.flip_type, FlipType.NEW_ALLOW)
+
+    def test_enable_disable_does_not_change_unaffected_requests(self):
+        """启停不命中的规则不影响其他请求的重放与查询结果。"""
+        k = make_kernel()
+        k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
+        k.add_request("r2", {"user": "b", "age": 30, "vip": True, "score": 1.0})
+        k.load_policy("old", [
+            rule("R-vip", 10, Effect.AUDIT, [eq("vip", True)]),
+            rule("R-all", 1, Effect.ALLOW),
+        ])
+        k.load_policy("new", [
+            rule("R-vip", 10, Effect.AUDIT, [eq("vip", True)], enabled=False),
+            rule("R-all", 1, Effect.ALLOW),
+        ])
+        result = k.replay()
+        by_id = {c.request_id: c for c in result.comparisons}
+        # r1 不被 R-vip 命中，决策不变
+        self.assertFalse(by_id["r1"].flipped)
+        self.assertEqual(by_id["r1"].old_decision, by_id["r1"].new_decision)
+        # r2 从 AUDIT 变为 ALLOW → 仅审计变化
+        self.assertEqual(by_id["r2"].flip_type, FlipType.AUDIT_ONLY)
+        # 规则命中查询不受另一套策略影响
+        hits_old = k.rule_hits("R-vip", "old")
+        self.assertEqual([h.request_id for h in hits_old], ["r2"])
+        self.assertEqual(k.rule_hits("R-vip", "new"), ())
+
+
+# ----------------------------------------------------------------------
 # 需求 7：无法归因与归因歧义
 # ----------------------------------------------------------------------
 class TestAttributionEdgeCases(unittest.TestCase):
@@ -359,9 +495,25 @@ class TestAttributionEdgeCases(unittest.TestCase):
         exp = k.explain_flip("r1")
         self.assertEqual(exp.status, ExplainStatus.AMBIGUOUS)
         self.assertFalse(exp.unique)
-        self.assertEqual(len(exp.candidates), 2)
         self.assertEqual(exp.minimal_diffs, ())  # 不随便挑一条
         self.assertIn("无法唯一归因", exp.reason)
+        # 候选集合内容断言：恰为两个互斥的单元素集合
+        self.assertEqual(len(exp.candidates), 2)
+        for candidate in exp.candidates:
+            self.assertEqual(len(candidate), 1)
+        by_rule = {c[0].rule_id: c[0] for c in exp.candidates}
+        self.assertEqual(set(by_rule), {"R-allow", "R-deny"})
+        # 候选一：删除 R-allow（旧优先级 10 的放行规则）
+        self.assertEqual(by_rule["R-allow"].kind, DiffKind.REMOVED)
+        self.assertEqual(by_rule["R-allow"].before.priority, 10)
+        self.assertIsNone(by_rule["R-allow"].after)
+        # 候选二：抬高 R-deny 优先级 5 → 20
+        self.assertEqual(by_rule["R-deny"].kind, DiffKind.MODIFIED)
+        self.assertEqual(by_rule["R-deny"].before.priority, 5)
+        self.assertEqual(by_rule["R-deny"].after.priority, 20)
+        # 每个候选都必须能独立复现新决策（最小性由枚举保证，此处验证语义）
+        for candidate in exp.candidates:
+            self.assertIn(candidate[0].describe(), exp.reason)
 
 
 # ----------------------------------------------------------------------

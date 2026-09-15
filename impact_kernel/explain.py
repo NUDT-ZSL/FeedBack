@@ -166,6 +166,12 @@ def _greedy_reduce(diffs, reproduces) -> Tuple[RuleDiff, ...]:
 def _effective_change_sentence(old_trace: DecisionTrace, new_trace: DecisionTrace) -> str:
     old_eff = old_trace.decision.effective_rule_id
     new_eff = new_trace.decision.effective_rule_id
+    if old_eff is None and new_eff is None:
+        # 两侧都无规则命中：翻转只能来自默认效果差异
+        return (
+            f"两套策略下均无规则命中，请求始终走默认效果："
+            f"{old_trace.decision.effect.value} → {new_trace.decision.effect.value}。"
+        )
     old_part = (
         f"规则 '{old_eff}'" if old_eff is not None else "默认效果（无规则命中）"
     )
@@ -173,7 +179,7 @@ def _effective_change_sentence(old_trace: DecisionTrace, new_trace: DecisionTrac
         f"规则 '{new_eff}'" if new_eff is not None else "默认效果（无规则命中）"
     )
     if old_eff == new_eff:
-        return f"生效规则仍为 '{old_eff}'，但其效果或审计口径被差异直接修改。"
+        return f"生效规则仍为 '{old_eff}'，但其效果被差异直接修改。"
     return f"生效规则由 {old_part} 变为 {new_part}。"
 
 
