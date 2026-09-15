@@ -1,0 +1,109 @@
+# table_kernel — 离线大型表格视窗内核
+
+仅依赖 Python 3.10+ 标准库、无第三方包、可完全离线运行与单元测试的
+表格视窗内核，面向百万行级数据的滚动浏览与命中定位。
+
+## 解决的问题
+
+* 窗口每次移动都全量重排 → 窗口移动只做一次 `O(log n + 窗口行数)`
+  的区间截取，不触碰任何行的顺序；
+* 排序键相同 / 行被过滤 / 窗口跨边界时可见顺序和命中对不上 →
+  排序键元组末位恒定为行标识，严格稳定排序；可见序列始终与
+  「全量排序+筛选后取同一区间」逐行一致，并有差分随机测试持续验证。
+
+## 核心结构
+
+| 组件 | 文件 | 职责 |
+| --- | --- | --- |
+| Treap | `treap.py` | 比较器驱动的通用有序树堆：单点增删 `O(log n)`、排名/按排名访问、区间截取、`O(n)` 线性批量构建、不变量校验 |
+| Schema | `schema.py` | `int/float/str/bool` 四类强类型字段校验（`bool` 不混入 `int`） |
+| 内核 | `kernel.py` | 双 Treap（全量排序树 + 可见行树）、稳定排序、筛选、窗口、增量更新、查询、统计 |
+| 快照 | `serde.py` | JSON 导出 / 原子文件写入 / 全量校验后整体载入 |
+
+### 为什么是双 Treap
+
+* **全量树**：全部行按当前排序规则形成的稳定全序；
+* **可见树**：通过筛选的行（同一排序键）。
+
+排序键是元组 `(字段1值, 字段2值, …, 行id)`，降序字段用 `_Rev`
+包装反转比较方向；末位行 id 保证键全局唯一且平局按字典序打破。
+窗口只是可见树上的排名区间，因此：
+
+* 移动 / 缩放窗口 → 只读区间；
+* 增删一行 → 两棵树各一次单点插入/删除；
+* 改筛选 → 只重建可见树（全量树不动）；
+* 改排序 → 两棵树线性重建。
+
+规则与数据变化后窗口自动收回到合法范围：保持起点优先，只在尾部
+越界时整体回退；不会让窗口内已可见行发生非预期跳动。
+
+## 快速上手
+
+```python
+from table_kernel import TableKernel, WindowError
+
+k = TableKernel(
+    {"age": "int", "name": "str", "score": "float"},
+    rows=[{"id": "r1", "fields": {"age": 10, "name": "a", "score": 1.5}}],
+    sort=[("age", False), ("name", True)],          # 先按 age 降序，再 name 升序
+    filters=[{"field": "age", "op": "ge", "value": 0}],
+    window_size=50,
+)
+
+k.set_window(100, 50)          # 显式设置窗口（越界/零尺寸会拒绝）
+k.move_to(200)                 # 平移（保持尺寸）
+k.scroll(-20)                  # 相对滚动
+k.resize(60)                   # 改尺寸（保持起点）
+k.visible_ids()                # 窗口内可见行标识（稳定顺序）
+k.window_at(0, 10)             # 查询任意窗口，不改变当前窗口状态
+k.position_of("r1")            # 当前排序+筛选下的 0 基位置
+k.full_position_of("r1")       # 忽略筛选的位置
+k.is_visible("r1")             # 是否通过筛选
+k.in_window("r1")              # 是否命中当前窗口
+k.add_rows([...])              # 增量插入（整批校验，失败零改动）
+k.remove_rows(["r1"])          # 增量删除
+k.set_sort([("score", True)])  # 改排序
+k.set_filters([...])           # 改筛选
+k.stats()                      # 增量统计
+```
+
+### 筛选操作符
+
+`eq` `ne` `lt` `le` `gt` `ge` `in` `not_in`（值为列表）
+`contains`（仅字符串子串）。多条件之间为逻辑与。
+
+### 错误体系
+
+`ValidationError`（带 `index`/`path` 定位）、`BatchValidationError`
+（一次返回全部错误）、`UnknownRowError`、`WindowError`、
+`RuleError`、`RowFilteredError`、`SerializationError`。
+所有失败操作先校验后提交，**失败不改变当前可见序列与窗口**。
+
+### 导入导出
+
+```python
+from table_kernel import export_snapshot, load_snapshot, save_snapshot, load_snapshot_file
+
+snap = export_snapshot(k)     # 纯 JSON 数据（行、规则、窗口、统计）
+save_snapshot(k, "k.json")    # 写临时文件后原子替换
+k2 = load_snapshot(snap)      # 或 JSON 字符串；先全量校验再构造
+k2 = load_snapshot_file("k.json")
+```
+
+载入校验标识唯一、字段类型、排序键字段存在、筛选值类型自洽、
+窗口合法；任何错误抛 `SerializationError` 且不影响调用方已有对象。
+
+## 运行测试（完全离线）
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+测试包含：
+
+* 功能单元测试（校验拒绝、稳定排序、筛选、窗口边界、原子失败、
+  位置/命中查询、快照往返与损坏拒绝）；
+* 差分随机测试：大量随机增删/改规则/移窗口，窗口结果逐行对比
+  朴素全量参考实现；
+* Treap 不变量压力测试；
+* 10 万行性能测试（构建、滚动、增删、位置查询的耗时上限）。
