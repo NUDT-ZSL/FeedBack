@@ -345,8 +345,9 @@ class ConfigKernel:
             pre_state = snapshot_from.states_by_name.get(new)
             if pre_state is not None and pre_state.alive:
                 raise ValidationError(
-                    f"规则 {v_from} -> {v_to} 的改名目标 {new!r} 在版本 {v_from} "
-                    "已是独立存活字段，改名会合并两个字段身份，拒绝登记"
+                    f"规则 {v_from} -> {v_to} 的改名冲突：源字段 {old!r} 与目标名 "
+                    f"{new!r} 在版本 {v_from} 都是独立存活字段，改名会合并两个字段"
+                    "身份，拒绝登记"
                 )
             new_state = snapshot_to.states_by_name.get(new)
             if new_state is None or not new_state.alive:

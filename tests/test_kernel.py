@@ -128,19 +128,26 @@ class FieldRegistrationTests(unittest.TestCase):
         k.register_field("note", "string", "1.0", default=None, has_default=False)
         self.assertFalse(k.get_field("note").has_default)
 
-    def test_rename_target_must_be_defined_field(self):
-        # 改名目标必须是已登记字段；反过来，目标字段一旦在规则中被引用，
-        # 再登记同名字段也会被拒绝（重复定义）。
+    def test_rename_into_existing_independent_field_is_rejected(self):
+        # 收紧点一：改名目标若在起始版本已是独立存活字段，属于身份合并，
+        # 必须拒绝并指出冲突的名字。
         k = ConfigKernel()
         k.register_field("a", "int", "1.0")
-        with self.assertRaises(ValidationError):
+        k.register_field("b", "int", "1.0")  # b 在 1.0 就独立存在
+        with self.assertRaises(ValidationError) as ctx:
             k.register_migration_rule("1.0", "2.0", renames=[("a", "b")])
-        k2 = ConfigKernel()
-        k2.register_field("a", "int", "1.0")
-        k2.register_field("b", "int", "2.0")
-        k2.register_migration_rule("1.0", "2.0", renames=[("a", "b")])
-        with self.assertRaises(DuplicateError):
-            k2.register_field("b", "string", "2.0")
+        self.assertIn("b", str(ctx.exception))
+        self.assertIn("a", str(ctx.exception))
+        # 规则未登记，状态不变
+        self.assertEqual(k.list_migration_rules(), [])
+
+    def test_valid_rename_target_must_be_introduced_at_target_version(self):
+        # 对照：目标字段在起始版本不存在、恰在目标版本引入，是合法改名
+        k = ConfigKernel()
+        k.register_field("a", "int", "1.0")
+        k.register_field("b", "int", "2.0")
+        k.register_migration_rule("1.0", "2.0", renames=[("a", "b")])
+        self.assertEqual(len(k.list_migration_rules()), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -488,29 +495,99 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(CorruptStateError):
             import_state(state)
 
-    def test_bad_version_on_load(self):
+    def test_bad_version_on_load_preserves_original(self):
+        # 收紧点二：底层异常原样抛出——精确类型、原始原因与出错位置都保留
         state = export_state(self.k)
         state["devices"][0]["firmware"] = "1.x"
-        with self.assertRaises(VersionError):
+        with self.assertRaises(VersionError) as ctx:
             import_state(state)
+        self.assertEqual(ctx.exception.position, 2)
+        self.assertEqual(ctx.exception.segment, 1)
+        self.assertNotIn("存档语义校验失败", str(ctx.exception))
+        self.assertIsNone(ctx.exception.__cause__)  # 没有被二次包装
 
-    def test_missing_reference_field_on_load(self):
+    def test_missing_reference_field_preserves_validation_error(self):
         state = export_state(self.k)
         state["fields"] = [
             f for f in state["fields"] if f["name"] != "timeout_s"]
-        with self.assertRaises((CorruptStateError, ValidationError)):
+        with self.assertRaises(ValidationError) as ctx:
             import_state(state)
+        self.assertIn("timeout_s", str(ctx.exception))
+        self.assertNotIn("存档语义校验失败", str(ctx.exception))
+        self.assertIsNone(ctx.exception.__cause__)
+
+    def test_bad_type_change_preserves_validation_error(self):
+        state = export_state(self.k)
+        state["migration_rules"][0]["type_changes"][0]["to_type"] = "bool"
+        with self.assertRaises(ValidationError) as ctx:
+            import_state(state)
+        self.assertIn("timeout_ms", str(ctx.exception))
+
+    def test_identity_merge_rule_preserves_validation_error(self):
+        # 收紧点一也适用于载入：身份合并规则以原始 ValidationError 拒绝
+        state = export_state(self.k)
+        state["migration_rules"].append({
+            "from_version": "3.0", "to_version": "4.0",
+            "renames": [{"from": "bt_name", "to": "ssid"}],
+            "type_changes": [],
+        })
+        with self.assertRaises(ValidationError) as ctx:
+            import_state(state)
+        self.assertIn("ssid", str(ctx.exception))
+
+    def test_truncated_json_reports_parse_position(self):
+        # 截断的存档：JSON 解析失败，错误带行列位置
+        text = dump_json(self.k)
+        with self.assertRaises(CorruptStateError) as ctx:
+            load_json(text[: len(text) // 2])
+        self.assertIn("行", str(ctx.exception))
+        self.assertIn("列", str(ctx.exception))
 
     def test_forked_rule_rejected_on_load(self):
         state = export_state(self.k)
         state["migration_rules"].append(dict(state["migration_rules"][0]))
-        with self.assertRaises(CorruptStateError):
+        with self.assertRaises(CorruptStateError) as ctx:
             import_state(state)
+        self.assertIn("分叉", str(ctx.exception))
 
-    def test_bad_type_change_rejected_on_load(self):
+    def test_equivalent_version_spellings_yield_identical_path(self):
+        # 收紧点三：'2.0' 与 '2.0.0' 等等价写法必须产出完全相同的路径
+        # （逐字符相同），无论从哪端查询。
+        spellings = [
+            ("1.0.0", "3.0.0"),
+            ("1.0", "3.0"),
+            ("1", "3"),
+            ("01.000", "03.000.000"),
+        ]
+        serialized = {
+            json.dumps(self.k.describe_migration_path(a, b),
+                       sort_keys=True, ensure_ascii=False)
+            for a, b in spellings
+        }
+        self.assertEqual(len(serialized), 1)
+        # 逆向同样一致
+        back = {
+            json.dumps(self.k.describe_migration_path(a, b),
+                       sort_keys=True, ensure_ascii=False)
+            for a, b in [("3", "1"), ("3.0.0", "1.0.0")]
+        }
+        self.assertEqual(len(back), 1)
+
+    def test_each_top_level_segment_is_required(self):
+        # 收紧点四：五个顶层段缺一不可，缺失即被结构校验直接拦下
+        for missing in ("devices", "fields", "migration_rules",
+                        "configs", "adaptations"):
+            state = export_state(self.k)
+            del state[missing]
+            with self.assertRaises(CorruptStateError) as ctx:
+                import_state(state)
+            self.assertIn(missing, str(ctx.exception))
+            self.assertIn("顶层字段", str(ctx.exception))
+
+    def test_top_level_null_segment_is_caught(self):
         state = export_state(self.k)
-        state["migration_rules"][0]["type_changes"][0]["to_type"] = "bool"
-        with self.assertRaises((CorruptStateError, ValidationError)):
+        state["fields"] = None
+        with self.assertRaises(CorruptStateError):
             import_state(state)
 
     def test_tampered_adaptation_record_rejected(self):

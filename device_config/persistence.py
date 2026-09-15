@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 
-from .errors import CorruptStateError, KernelError, VersionError
+from .errors import CorruptStateError
 from .kernel import ConfigKernel
 
 FORMAT_VERSION = "dc-state/1"
@@ -108,50 +108,48 @@ def import_state(state) -> ConfigKernel:
     _validate_records(records)
 
     # 语义阶段：全部登记发生在临时内核上，失败即随临时内核一起丢弃。
-    # 结构校验通过后出现的任何领域错误都包装为 CorruptStateError，
-    # 保证调用方只需区分"数据损坏"这一类载入失败。
-    try:
-        kernel = ConfigKernel()
-        for d in devices:
-            kernel.register_device(
-                d["device_id"], d["model"], d["firmware"], list(d["capabilities"])
-            )
-        for f in fields:
-            kernel.register_field(
-                f["name"],
-                f["type"],
-                f["introduced_in"],
-                required=f.get("required", True),
-                default=f.get("default"),
-                has_default=("default" in f),
-                required_capabilities=list(f.get("required_capabilities", [])),
-            )
-        for r in rules:
-            kernel.register_migration_rule(
-                r["from_version"],
-                r["to_version"],
-                renames=[(pair["from"], pair["to"]) for pair in r["renames"]],
-                type_changes=[
-                    (pair["field"], pair["to_type"]) for pair in r["type_changes"]
-                ],
-            )
-        for c in configs:
-            kernel.register_config(c["config_id"], c["version"], dict(c["values"]))
+    # 登记/迁移/适配产生的校验异常一律原样向上抛出（ValidationError、
+    # DuplicateError、VersionError、MigrationChainError、MissingFieldError 等），
+    # 不做二次包装，调用方拿到的就是最原始的错误原因、异常类型与出错位置。
+    # 唯一在这里主动抛 CorruptStateError 的情形是：结构合法，但适配记录
+    # 重算结果与存档不一致（存档被篡改）。
+    kernel = ConfigKernel()
+    for d in devices:
+        kernel.register_device(
+            d["device_id"], d["model"], d["firmware"], list(d["capabilities"])
+        )
+    for f in fields:
+        kernel.register_field(
+            f["name"],
+            f["type"],
+            f["introduced_in"],
+            required=f.get("required", True),
+            default=f.get("default"),
+            has_default=("default" in f),
+            required_capabilities=list(f.get("required_capabilities", [])),
+        )
+    for r in rules:
+        kernel.register_migration_rule(
+            r["from_version"],
+            r["to_version"],
+            renames=[(pair["from"], pair["to"]) for pair in r["renames"]],
+            type_changes=[
+                (pair["field"], pair["to_type"]) for pair in r["type_changes"]
+            ],
+        )
+    for c in configs:
+        kernel.register_config(c["config_id"], c["version"], dict(c["values"]))
 
-        # 重算每条适配记录，与存档逐条比对（含 record_id），确保存档未被篡改或丢失语义
-        for rec in records:
-            recomputed = kernel.adapt(rec["config_id"], rec["device_id"])
-            stored = _export_record(rec)
-            if stored != _export_record(recomputed):
-                raise CorruptStateError(
-                    f"适配记录 {rec.get('record_id')!r} 的存档与重算结果不一致，"
-                    "存档可能已损坏"
-                )
-    except (CorruptStateError, VersionError):
-        # 版本号错误自带位置信息，直接透传以保留精确类型
-        raise
-    except KernelError as exc:
-        raise CorruptStateError(f"存档语义校验失败：{exc}") from exc
+    # 重算每条适配记录，与存档逐条比对（含 record_id），确保存档未被篡改或丢失语义。
+    # 重算本身抛出的异常（如 MissingFieldError）原样传播。
+    for rec in records:
+        recomputed = kernel.adapt(rec["config_id"], rec["device_id"])
+        stored = _export_record(rec)
+        if stored != _export_record(recomputed):
+            raise CorruptStateError(
+                f"适配记录 {rec.get('record_id')!r} 的存档与重算结果不一致，"
+                "存档可能已损坏"
+            )
 
     return kernel
 
