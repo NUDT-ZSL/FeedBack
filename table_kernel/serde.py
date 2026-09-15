@@ -18,6 +18,11 @@
       "stats": {"full_rebuilds": 3, ...},
       "seed": 0
     }
+
+载入对结构自洽性的要求是**精确**的：每个对象只允许文档列出的键，
+任何多余/未知键（例如被手工塞入的 ``meta``、``anchor``）与显式
+``null`` 都按损坏拒绝，而不是静默丢弃——否则载入后的状态可能与
+导出前并不一致。
 """
 
 from __future__ import annotations
@@ -88,6 +93,19 @@ def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
+def _check_keys(item: dict, required: frozenset[str], path: str,
+                fail) -> bool:
+    """对象键集合必须与文档完全一致：缺键、多键都按损坏拒绝。"""
+    missing = sorted(required - set(item))
+    extra = sorted(set(item) - required)
+    if missing:
+        fail(f"缺少字段 {missing[0]!r}", f"{path}.{missing[0]}")
+    if extra:
+        fail(f"存在未知字段 {extra[0]!r}（只允许 "
+             f"{', '.join(sorted(required))}）", f"{path}.{extra[0]}")
+    return not missing and not extra
+
+
 def load_snapshot(data: Any) -> TableKernel:
     """从快照数据（dict 或 JSON 字符串）载入内核。
 
@@ -106,18 +124,26 @@ def load_snapshot(data: Any) -> TableKernel:
     if not isinstance(data, dict):
         raise SerializationError("快照载入失败，状态未改变：顶层必须是 JSON 对象")
 
-    errors: list[str] = []
-
-    def fail(msg: str, path: str | None = None) -> None:
-        where = f"（位置 {path}）" if path else ""
-        errors.append(f"{msg}{where}")
-
+    # 顶层键集合必须精确：缺键报错，未知键同样报错（防止静默丢信息）
+    allowed_top = {"version", "schema", "rows", "sort", "filters",
+                   "window", "stats", "seed"}
     missing = [k for k in ("version", "schema", "rows", "sort",
                            "filters", "window") if k not in data]
     if missing:
         raise SerializationError(
             "快照载入失败，状态未改变：缺少必需字段: "
             + ", ".join(repr(m) for m in missing))
+    unknown_top = sorted(set(data) - allowed_top)
+    if unknown_top:
+        raise SerializationError(
+            "快照载入失败，状态未改变：存在未知顶层字段: "
+            + ", ".join(repr(k) for k in unknown_top))
+
+    errors: list[str] = []
+
+    def fail(msg: str, path: str | None = None) -> None:
+        where = f"（位置 {path}）" if path else ""
+        errors.append(f"{msg}{where}")
 
     version = data["version"]
     if not _is_int(version) or version != SNAPSHOT_VERSION:
@@ -131,8 +157,8 @@ def load_snapshot(data: Any) -> TableKernel:
     rows, ids = _parse_rows(data["rows"], schema, fail)
 
     # ---- 3. sort / filters ----
-    sort_dicts = _parse_sort(data["sort"], fail)
-    filter_dicts = _parse_filters(data["filters"], fail)
+    sort_dicts = _parse_sort(data["sort"], schema, fail)
+    filter_dicts = _parse_filters(data["filters"], schema, fail)
 
     # ---- 4. window ----
     window = _parse_window(data["window"], fail)
@@ -192,39 +218,46 @@ def load_snapshot_file(path: "str | Path") -> TableKernel:
 # 各部分解析（只做结构/类型检查，错误全部收集进 errors）
 # ----------------------------------------------------------------------
 
-def _as_list(v: Any, name: str, fail) -> list | None:
-    if v is None:
-        fail(f"{name!r} 不能为 null", name)
-        return None
-    if not isinstance(v, list):
-        fail(f"{name!r} 必须是数组", name)
-        return None
-    return v
+_SORT_KEYS = frozenset({"field", "asc"})
+_FILTER_KEYS = frozenset({"field", "op", "value"})
+_SCHEMA_KEYS = frozenset({"name", "type"})
+_ROW_KEYS = frozenset({"id", "fields"})
+_WINDOW_KEYS = frozenset({"start", "size"})
+_ORDERED_OPS = frozenset({"lt", "le", "gt", "ge"})
 
 
-def _parse_sort(v: Any, fail) -> list[dict] | None:
+def _parse_sort(v: Any, schema: Schema | None,
+                fail) -> list[dict] | None:
     if not isinstance(v, list):
         fail("'sort' 必须是数组", "sort")
         return None
     out: list[dict] = []
+    seen: set[str] = set()
     for i, item in enumerate(v):
         p = f"sort[{i}]"
         if not isinstance(item, dict):
             fail("排序规则必须是对象", p)
             continue
-        if "field" not in item or "asc" not in item:
-            fail("排序规则缺少 'field' 或 'asc'", p)
+        if not _check_keys(item, _SORT_KEYS, p, fail):
             continue
         field, asc = item["field"], item["asc"]
         if not isinstance(field, str) or not field:
             fail("排序字段必须是非空字符串", f"{p}.field")
+        else:
+            if schema is not None and not schema.has(field):
+                fail(f"排序字段不存在: {field!r}", f"{p}.field")
+            if field in seen:
+                fail(f"排序字段重复: {field!r}", f"{p}.field")
+            seen.add(field)
         if not isinstance(asc, bool):
-            fail("asc 必须是布尔值", f"{p}.asc")
+            fail(f"asc 必须是布尔值，实际为 {type(asc).__name__}",
+                 f"{p}.asc")
         out.append({"field": field, "asc": asc})
     return out
 
 
-def _parse_filters(v: Any, fail) -> list[dict] | None:
+def _parse_filters(v: Any, schema: Schema | None,
+                   fail) -> list[dict] | None:
     from .kernel import OPERATORS
     if not isinstance(v, list):
         fail("'filters' 必须是数组", "filters")
@@ -235,20 +268,57 @@ def _parse_filters(v: Any, fail) -> list[dict] | None:
         if not isinstance(item, dict):
             fail("筛选条件必须是对象", p)
             continue
-        if not all(k in item for k in ("field", "op", "value")):
-            fail("筛选条件缺少 'field'、'op' 或 'value'", p)
+        if not _check_keys(item, _FILTER_KEYS, p, fail):
             continue
         field, op, value = item["field"], item["op"], item["value"]
-        if not isinstance(field, str) or not field:
+        field_ok = isinstance(field, str) and bool(field)
+        if not field_ok:
             fail("筛选字段必须是非空字符串", f"{p}.field")
+        if schema is not None and field_ok and not schema.has(field):
+            fail(f"筛选字段不存在: {field!r}", f"{p}.field")
+            field_ok = False
         if not isinstance(op, str) or op not in OPERATORS:
             fail(f"操作符非法: {op!r}", f"{p}.op")
-        # value 类型与字段的匹配在 kernel 构造时统一校验，这里只检查
-        # 多值操作是否给了数组
-        if op in ("in", "not_in") and not isinstance(value, list):
-            fail(f"{op!r} 的值必须是数组", f"{p}.value")
+            out.append({"field": field, "op": op, "value": value})
+            continue
+
+        field_type = None
+        if field_ok and schema is not None:
+            field_type = schema.field(field).type
+
+        # 值结构/类型自洽性在这里就给出可定位错误
+        if op in ("in", "not_in"):
+            if not isinstance(value, list):
+                fail(f"{op!r} 的值必须是数组", f"{p}.value")
+            elif field_type is not None:
+                for j, x in enumerate(value):
+                    if not _value_matches(field_type, x):
+                        fail(f"值元素需要 {field_type} 类型，实际为 "
+                             f"{type(x).__name__}（值: {x!r}）",
+                             f"{p}.value[{j}]")
+        elif op == "contains":
+            if not isinstance(value, str):
+                fail("'contains' 的值必须是字符串", f"{p}.value")
+            elif field_type is not None and field_type != "str":
+                fail(f"'contains' 只能用于字符串字段，字段类型为 "
+                     f"{field_type}", f"{p}.op")
+        else:
+            if field_type == "bool" and op in _ORDERED_OPS:
+                fail(f"布尔字段不支持次序操作 {op!r}", f"{p}.op")
+            if not _is_filter_scalar_plausible(value):
+                fail(f"比较值必须是标量，实际为 {type(value).__name__}",
+                     f"{p}.value")
+            elif field_type is not None and not _value_matches(
+                    field_type, value):
+                fail(f"比较值需要 {field_type} 类型，实际为 "
+                     f"{type(value).__name__}（值: {value!r}）",
+                     f"{p}.value")
         out.append({"field": field, "op": op, "value": value})
     return out
+
+
+def _is_filter_scalar_plausible(v: Any) -> bool:
+    return isinstance(v, (str, bool, int, float))
 
 
 def _parse_schema(v: Any, fail) -> Schema | None:
@@ -262,8 +332,7 @@ def _parse_schema(v: Any, fail) -> Schema | None:
         if not isinstance(item, dict):
             fail("字段描述必须是对象", p)
             continue
-        if "name" not in item or "type" not in item:
-            fail("字段描述缺少 'name' 或 'type'", p)
+        if not _check_keys(item, _SCHEMA_KEYS, p, fail):
             continue
         name, type_ = item["name"], item["type"]
         if not isinstance(name, str) or not name:
@@ -272,7 +341,8 @@ def _parse_schema(v: Any, fail) -> Schema | None:
         if name in names:
             fail(f"字段名重复: {name!r}", f"{p}.name")
             continue
-        if type_ not in ("int", "float", "str", "bool"):
+        if not isinstance(type_, str) or type_ not in (
+                "int", "float", "str", "bool"):
             fail(f"字段类型非法: {type_!r}", f"{p}.type")
             continue
         names.add(name)
@@ -292,8 +362,7 @@ def _parse_rows(v: Any, schema: Schema | None,
         if not isinstance(item, dict):
             fail("行必须是对象", p)
             continue
-        if "id" not in item:
-            fail("缺少 'id'", p)
+        if not _check_keys(item, _ROW_KEYS, p, fail):
             continue
         row_id = item["id"]
         if not isinstance(row_id, str) or not row_id:
@@ -303,29 +372,35 @@ def _parse_rows(v: Any, schema: Schema | None,
             fail(f"行标识重复: {row_id!r}", f"{p}.id")
             continue
         ids.add(row_id)
-        if "fields" not in item:
-            fail("缺少 'fields'", p)
-            continue
-        if not isinstance(item["fields"], dict):
+        fields = item["fields"]
+        if not isinstance(fields, dict):
             fail("fields 必须是对象", f"{p}.fields")
             continue
-        if schema is not None:
-            # 逐字段类型检查，给出精确位置
-            fields = item["fields"]
-            for fspec in schema.fields:
-                if fspec.name not in fields:
-                    fail(f"缺少字段 {fspec.name!r}", f"{p}.fields")
-                else:
-                    val = fields[fspec.name]
-                    if not _value_matches(fspec.type, val):
-                        fail(
-                            f"字段 {fspec.name!r} 需要 {fspec.type} 类型，"
-                            f"实际为 {type(val).__name__}（值: {val!r}）",
-                            f"{p}.fields.{fspec.name}")
-            extra = sorted(set(fields) - {f.name for f in schema.fields})
-            if extra:
-                fail(f"多余字段: {extra[0]!r}", f"{p}.fields.{extra[0]}")
-        rows_out.append(item)
+        if schema is None:
+            rows_out.append({"id": row_id, "fields": fields})
+            continue
+        schema_names = {f.name for f in schema.fields}
+        # 逐字段类型检查，给出精确位置
+        row_ok = True
+        for fspec in schema.fields:
+            if fspec.name not in fields:
+                fail(f"缺少字段 {fspec.name!r}", f"{p}.fields")
+                row_ok = False
+                continue
+            val = fields[fspec.name]
+            if not _value_matches(fspec.type, val):
+                fail(
+                    f"字段 {fspec.name!r} 需要 {fspec.type} 类型，"
+                    f"实际为 {type(val).__name__}（值: {val!r}）",
+                    f"{p}.fields.{fspec.name}")
+                row_ok = False
+        extra = sorted(set(fields) - schema_names)
+        if extra:
+            fail(f"多余字段: {extra[0]!r}", f"{p}.fields.{extra[0]}")
+            row_ok = False
+        if row_ok:
+            rows_out.append({"id": row_id,
+                             "fields": {n: fields[n] for n in schema_names}})
     return rows_out, ids
 
 
@@ -348,18 +423,18 @@ def _parse_window(v: Any, fail) -> tuple[int, int] | None:
     if not isinstance(v, dict):
         fail("window 必须是对象或 null", "window")
         return None
-    if "start" not in v or "size" not in v:
-        fail("window 缺少 'start' 或 'size'", "window")
+    if not _check_keys(v, _WINDOW_KEYS, "window", fail):
         return None
     start, size = v["start"], v["size"]
+    ok = True
     if not _is_int(start) or start < 0:
         fail(f"window.start 必须是非负整数，得到 {start!r}",
              "window.start")
+        ok = False
     if not _is_int(size) or size <= 0:
         fail(f"window.size 必须是正整数，得到 {size!r}", "window.size")
-    if _is_int(start) and _is_int(size) and start >= 0 and size > 0:
-        return start, size
-    return None
+        ok = False
+    return (start, size) if ok else None
 
 
 def _parse_stats(v: Any, fail) -> dict[str, int]:
