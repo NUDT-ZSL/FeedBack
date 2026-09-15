@@ -6,7 +6,7 @@
 """
 from .conditions import And, Compare, Condition, ConditionError, Const, Not, Or
 from .engine import Engine, EntryError, SAVE_FORMAT_VERSION
-from .merge import Conflict, merge_logs
+from .merge import Conflict, compute_confluence, merge_logs
 from .migration import migrate_save, register
 from .model import (ChangeError, Edge, Graph, Node, Schema, SchemaError,
                     StateChange, ValidationError, VariableDef)
@@ -14,7 +14,7 @@ from .model import (ChangeError, Edge, Graph, Node, Schema, SchemaError,
 __all__ = [
     "And", "Compare", "Condition", "ConditionError", "Const", "Not", "Or",
     "Engine", "EntryError", "SAVE_FORMAT_VERSION",
-    "Conflict", "merge_logs",
+    "Conflict", "compute_confluence", "merge_logs",
     "migrate_save", "register",
     "ChangeError", "Edge", "Graph", "Node", "Schema", "SchemaError",
     "StateChange", "ValidationError", "VariableDef",

@@ -34,7 +34,7 @@ graph = Graph([
          changes=[StateChange("c1", "trust", "add", 2)]),
     Node("n2a", "ch2", entry_condition=Compare("trust", "ge", 2),
          changes=[StateChange("c1", "met_ally", "set", True)]),
-    Node("n2b", "ch2", entry_condition=Compare("gold", "lt", 12),
+    Node("n2b", "ch2", entry_condition=Compare("gold", "ge", 5),
          changes=[StateChange("c1", "gold", "sub", 5)]),
     Node("n3", "ch2", entry_condition=Or([Compare("met_ally", "eq", True),
                                           Compare("gold", "le", 10)])),
@@ -108,6 +108,38 @@ check(5, "同变量不同值产生冲突并保留双方来源",
       len(conflicts) == 1 and conflicts[0].sources_a and conflicts[0].sources_b)
 check(5, "确定性规则（字典序小者胜）与参数顺序无关",
       engine.state["trust"] == 3)
+
+# 不同到达顺序的汇合结论一致，且冲突记录与生效值自洽
+def arrive_both(order):
+    e = Engine(schema, graph)
+    e.enter("n0")
+    e.enter("n1")
+    for branch, log in order:
+        e.arrive_at("n3", log, branch)
+    return e
+
+e_ab = arrive_both([("help-path", log_help), ("rob-path", log_rob)])
+e_ba = arrive_both([("rob-path", log_rob), ("help-path", log_help)])
+check(5, "两条路径不同到达顺序，合并结论一致",
+      e_ab.state == e_ba.state
+      and [c.to_dict() for c in e_ab.conflicts] == [c.to_dict() for c in e_ba.conflicts])
+unresolved = e_ba.unresolved_conflicts()[0]
+check(5, "冲突记录与生效值自洽（记录指明来源方）",
+      unresolved["effective_value"] == e_ba.state["trust"]
+      and unresolved["effective_source"] == "help-path"
+      and unresolved["status"] == "unresolved")
+# 回退到汇合节点进入前：冲突与合并痕迹一并消失，重走另一路径可复现
+e_ba.rollback_to("n1")
+check(5, "回退后无汇合残留（冲突/进度/分支归属一并回退）",
+      e_ba.conflicts == [] and e_ba.progress == 1
+      and e_ba.branch_attribution() == "main")
+e_ba.enter("n1")
+e_ba.enter("n2b")
+e_ba.enter("n3")
+e_ba.arrive_at("n3", log_rob, "rob-path")
+e_ba.arrive_at("n3", log_help, "help-path")
+check(5, "回退重走后合并结果与首次一致",
+      e_ba.state == e_ab.state and len(e_ba.unresolved_conflicts()) == 1)
 
 # ---------- 需求 6：存档跨版本迁移 ----------
 print("需求 6：旧存档迁移——补新变量默认值、缺失节点标记不可用、进度不变")

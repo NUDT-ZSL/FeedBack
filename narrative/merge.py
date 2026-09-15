@@ -1,11 +1,13 @@
 """分支合并：两条选择路径在汇合节点相遇时，按确定性规则合并各自累积的状态变更。
 
 规则（详见 docs/semantics.md）：
-1. 双方变更按 (分支名字典序, 分支内序号) 全序排列后依次应用 —— 完全确定。
-2. 同一变量被两条分支改成不同的最终值时产生冲突：
+1. 合并结论只取决于各分支累积的变更日志与分支名，与路径到达汇合点的
+   先后顺序无关：每次到达都对全部已到分支的日志**重新计算**合并结果。
+2. 同一变量被多条分支改成不同的最终值时产生冲突：
    - 保留双方来源（分支名、节点、变更标识、值）；
    - 生成可读冲突记录，初始为未解决；
-   - 合并取值按确定性规则：分支名字典序较小的一方胜出。
+   - 冲突未解决前，该变量的生效值恒为**分支名字典序最小**一方的值，
+     后到的一方不得覆盖先生效的一方。
 """
 from __future__ import annotations
 
@@ -26,21 +28,36 @@ class Conflict:
         self.branch_b = branch_b
         self.value_b = value_b
         self.sources_b = list(sources_b)
-        self.winner = winner               # 胜出的分支名
+        self.winner = winner               # 胜出的分支名（字典序较小者）
         self.resolved = False
+        self.resolved_value = None         # 解决时采用的值；未解决时为 None
 
     @property
     def winning_value(self) -> Any:
         return self.value_a if self.winner == self.branch_a else self.value_b
 
+    @property
+    def effective_value(self) -> Any:
+        """当前生效值：已解决为解决值，未解决为胜出方值。"""
+        return self.resolved_value if self.resolved else self.winning_value
+
+    def key(self) -> Tuple[str, str, str]:
+        """用于跨次重算识别同一冲突（保留解决状态）。"""
+        return (self.variable, self.branch_a, self.branch_b)
+
     def readable(self) -> str:
         src_a = ", ".join(self.sources_a)
         src_b = ", ".join(self.sources_b)
-        return (
+        text = (
             f"变量 {self.variable!r} 冲突："
             f"分支 {self.branch_a} = {self.value_a!r}（来源 {src_a}） vs "
             f"分支 {self.branch_b} = {self.value_b!r}（来源 {src_b}）；"
-            f"按确定性规则采用分支 {self.winner} 的值 {self.winning_value!r}"
+        )
+        if self.resolved:
+            return text + f"已解决，采用 {self.resolved_value!r}"
+        return text + (
+            f"未解决，按确定性规则暂采用分支 {self.winner} 的值 "
+            f"{self.winning_value!r}"
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -49,6 +66,7 @@ class Conflict:
             "branch_a": self.branch_a, "value_a": self.value_a, "sources_a": self.sources_a,
             "branch_b": self.branch_b, "value_b": self.value_b, "sources_b": self.sources_b,
             "winner": self.winner, "resolved": self.resolved,
+            "resolved_value": self.resolved_value,
         }
 
     @staticmethod
@@ -56,6 +74,7 @@ class Conflict:
         c = Conflict(d["variable"], d["branch_a"], d["value_a"], d["sources_a"],
                      d["branch_b"], d["value_b"], d["sources_b"], d["winner"])
         c.resolved = bool(d.get("resolved", False))
+        c.resolved_value = d.get("resolved_value")
         return c
 
 
@@ -106,3 +125,37 @@ def merge_logs(log_a: List[Dict[str, Any]], log_b: List[Dict[str, Any]],
         if entry["variable"] not in conflicted:
             merged.append(dict(entry, branch=branch_b))
     return merged, conflicts
+
+
+def compute_confluence(branches: Dict[str, List[Dict[str, Any]]]
+                       ) -> Tuple[Dict[str, Tuple[Any, str]], List[Conflict]]:
+    """对汇合点全部已到分支的日志做确定性合并，与到达顺序无关。
+
+    branches: {分支名: 变更日志}
+    返回 (values, conflicts)：
+    - values: {变量: (生效值, 来源分支)}。无冲突时来源为写入方（多方写入同值时
+      取字典序最小者）；有冲突时来源为胜出方（分支名字典序最小者）。
+    - conflicts: 每个 (变量, 落败分支) 一条记录，按 (变量, 落败分支) 稳定排序。
+    """
+    # var -> {branch: (final_value, sources)}
+    writers: Dict[str, Dict[str, Tuple[Any, List[str]]]] = {}
+    for branch in sorted(branches):
+        for var, (val, srcs) in _final_writes(branches[branch]).items():
+            writers.setdefault(var, {})[branch] = (val, srcs)
+
+    values: Dict[str, Tuple[Any, str]] = {}
+    conflicts: List[Conflict] = []
+    for var in sorted(writers):
+        w = writers[var]
+        winner_branch = sorted(w)[0]
+        winner_val, winner_srcs = w[winner_branch]
+        values[var] = (winner_val, winner_branch)
+        for loser in sorted(w):
+            if loser == winner_branch:
+                continue
+            loser_val, loser_srcs = w[loser]
+            if loser_val != winner_val:
+                conflicts.append(Conflict(var, winner_branch, winner_val, winner_srcs,
+                                          loser, loser_val, loser_srcs,
+                                          winner=winner_branch))
+    return values, conflicts
