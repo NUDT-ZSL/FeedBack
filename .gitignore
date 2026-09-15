@@ -12,3 +12,7 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 决策台账运行产物
+ledger.json
+demo_ledger.json
