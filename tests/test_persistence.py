@@ -195,5 +195,132 @@ class SplitArchiveIntegrityTests(unittest.TestCase):
             persistence.load(self.path)
 
 
+def _write_payload(payload, path):
+    env = {
+        "format": persistence.FORMAT,
+        "version": persistence.ENVELOPE_VERSION,
+        "payload": payload,
+        "checksum": persistence._checksum(payload),
+    }
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(env, fh)
+
+
+class LegacySnapshotInferenceTests(unittest.TestCase):
+    """早期快照没有 status / splits 字段：导入时按拆分记录推断并补齐归档状态。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "legacy.json")
+        self.current = build_split_sample().to_dict()
+
+    def _legacy_payload(self, *, drop_parent_into=False):
+        # 旧格式：保留 split_into / split_from / split_from_version 结构关系，
+        # 仅缺少 status、split_clock 与整份 splits 事件账。
+        payload = json.loads(json.dumps(self.current))
+        for meta in payload["entries"].values():
+            meta.pop("status", None)
+            meta.pop("split_clock", None)
+        if drop_parent_into:
+            payload["entries"]["a"].pop("split_into", None)
+        payload.pop("splits", None)
+        return payload
+
+    def test_legacy_snapshot_infers_archive_state(self):
+        for drop_parent_into in (False, True):
+            path = os.path.join(self.tmp, f"legacy_{drop_parent_into}.json")
+            _write_payload(self._legacy_payload(drop_parent_into=drop_parent_into), path)
+            loaded = persistence.load(path)
+            self.assertEqual(loaded.get_entry("a")["status"], "split")
+            self.assertEqual(loaded.get_entry("a")["split_into"], ["a1", "a2"])
+            self.assertEqual(loaded.get_entry("a1")["split_from"], "a")
+            self.assertEqual(loaded.get_entry("a1")["split_from_version"], 0)
+            # 归档条目从活跃列表隐藏、可在全量列表中找到
+            self.assertNotIn("a", loaded.list_entries())
+            self.assertIn("a", loaded.list_entries(include_archived=True))
+
+    def test_legacy_snapshot_normalizes_to_current_format(self):
+        _write_payload(self._legacy_payload(), self.path)
+        loaded = persistence.load(self.path)
+        # 导入结果与"当前格式导出再导入"完全一致
+        self.assertEqual(loaded.to_dict(), self.current)
+        # splits 事件账已补齐
+        self.assertEqual(loaded.to_dict()["splits"], self.current["splits"])
+        # 再次保存/载入稳定
+        again_path = os.path.join(self.tmp, "again.json")
+        persistence.save(loaded, again_path)
+        self.assertEqual(persistence.load(again_path).to_dict(), self.current)
+
+    def test_archived_revision_rejected_after_legacy_import(self):
+        _write_payload(self._legacy_payload(), self.path)
+        loaded = persistence.load(self.path)
+        chain_before = [c["new_version"] for c in loaded.revision_chain("a")]
+        with self.assertRaises(Exception):
+            loaded.submit_revision("a", "z", 0, "HACK", "改旧归档")
+        self.assertEqual(
+            [c["new_version"] for c in loaded.revision_chain("a")], chain_before)
+
+    def test_legacy_split_from_missing_source_rejected(self):
+        payload = self._legacy_payload()
+        payload["entries"]["a1"]["split_from"] = "ghost"
+        _write_payload(payload, self.path)
+        with self.assertRaises(CorruptSnapshot):
+            persistence.load(self.path)
+
+    def test_ledger_parent_missing_rejected(self):
+        payload = self.current
+        payload["splits"][0]["parent"] = "ghost"
+        _write_payload(payload, self.path)
+        with self.assertRaises(CorruptSnapshot):
+            persistence.load(self.path)
+
+    def test_active_with_split_into_rejected(self):
+        # 显式 active 却声明分片：自相矛盾，按损坏拒绝
+        payload = self.current
+        payload["entries"]["a"]["status"] = "active"
+        _write_payload(payload, self.path)
+        with self.assertRaises(CorruptSnapshot):
+            persistence.load(self.path)
+
+    def test_declared_part_order_preserved_on_roundtrip(self):
+        # 分片按非字母顺序声明时，当前格式往返必须原样保留声明顺序
+        g = ExperienceGraph()
+        g.create_entry("p", "T", "L0\nL1", "u")
+        g.create_entry("x", "X", "x", "v")
+        g.add_reference("x", "p")
+        g.split_entry("p", [
+            {"id": "zzz", "topic": "z", "body": "L0", "author": "u"},
+            {"id": "aaa", "topic": "a", "body": "L1", "author": "u"},
+        ])
+        path = os.path.join(self.tmp, "order.json")
+        persistence.save(g, path)
+        loaded = persistence.load(path)
+        self.assertEqual(loaded.to_dict(), g.to_dict())
+        self.assertEqual(loaded.get_entry("p")["split_into"], ["zzz", "aaa"])
+
+    def test_child_only_backref_rebuild_deterministic(self):
+        # 旧快照仅靠子片 split_from 回指重建父归档（父侧无 split_into/status）
+        g = ExperienceGraph()
+        g.create_entry("p", "T", "L0\nL1", "u")
+        g.split_entry("p", [
+            {"id": "zzz", "topic": "z", "body": "L0", "author": "u"},
+            {"id": "aaa", "topic": "a", "body": "L1", "author": "u"},
+        ])
+        payload = g.to_dict()
+        for meta in payload["entries"].values():
+            meta.pop("status", None)
+            meta.pop("split_clock", None)
+        payload["entries"]["p"].pop("split_into", None)
+        payload.pop("splits", None)
+        path = os.path.join(self.tmp, "childonly.json")
+        _write_payload(payload, path)
+        loaded = persistence.load(path)
+        self.assertEqual(loaded.get_entry("p")["status"], "split")
+        # 无权威顺序时按字典序确定化
+        self.assertEqual(loaded.get_entry("p")["split_into"], ["aaa", "zzz"])
+        with self.assertRaises(Exception):
+            loaded.submit_revision("p", "z", 0, "nope", "c")
+
+
 if __name__ == "__main__":
     unittest.main()

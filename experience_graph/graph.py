@@ -73,6 +73,8 @@ class ExperienceGraph:
         self._out: Dict[str, Set[str]] = {}
         self._in: Dict[str, Set[str]] = {}
         self._conflicts: Dict[str, ConflictRecord] = {}
+        # 权威拆分事件账：[{parent, children, point_version, clock}]，按发生次序
+        self._splits: List[dict] = []
         self.clock = 0
         self._seq = 0
 
@@ -477,6 +479,13 @@ class ExperienceGraph:
         # 邻接置空：旧条目不再是任何引用边的端点（key 保留以便只读查询）
         self._out[old_id] = set()
         self._in[old_id] = set()
+        # 权威拆分事件：导入旧格式快照时据此推断并回填归档状态
+        self._splits.append({
+            "parent": old_id,
+            "children": list(new_ids),
+            "point_version": split_point,
+            "clock": tick,
+        })
 
         # 2) 建立分片：各自从拆分点以 v0 开始自己的版本序列
         for p in parts:
@@ -628,6 +637,7 @@ class ExperienceGraph:
             "conflicts": {
                 cid: asdict(c) for cid, c in sorted(self._conflicts.items())
             },
+            "splits": [dict(ev) for ev in self._splits],
         }
 
     @classmethod
@@ -655,14 +665,20 @@ class ExperienceGraph:
         revisions = need(data, "revisions", "根", dict)
         edges = need(data, "edges", "根", list)
         conflicts = need(data, "conflicts", "根", dict)
+        # splits 为后增字段：旧快照可能没有，缺省视为空，稍后据其它线索推断
+        splits_raw = data.get("splits", [])
+        if not isinstance(splits_raw, list):
+            raise CorruptSnapshot("快照损坏：splits 必须是数组")
 
+        # 第一遍：原样读入条目（旧快照可能没有任何归档字段）。
         for eid, meta in entries.items():
             if not isinstance(meta, dict) or "topic" not in meta:
                 raise CorruptSnapshot(f"快照损坏：entries[{eid!r}] 缺少 topic")
-            status = meta.get("status", "active")
-            if status not in ("active", "split"):
+            if not isinstance(meta["topic"], str):
+                raise CorruptSnapshot(f"快照损坏：entries[{eid!r}].topic 必须是字符串")
+            if "status" in meta and meta["status"] not in ("active", "split"):
                 raise CorruptSnapshot(
-                    f"快照损坏：entries[{eid!r}] 非法状态 {status!r}"
+                    f"快照损坏：entries[{eid!r}] 非法状态 {meta['status']!r}"
                 )
             split_into = meta.get("split_into", [])
             if not isinstance(split_into, list):
@@ -671,14 +687,48 @@ class ExperienceGraph:
                 )
             g._entries[eid] = {
                 "topic": meta["topic"],
-                "status": status,
+                "status": meta.get("status", "active"),
                 "split_into": list(split_into),
                 "split_from": meta.get("split_from"),
                 "split_from_version": meta.get("split_from_version"),
                 "split_clock": meta.get("split_clock"),
+                # 临时标记字段是否显式给出（区分旧快照缺失与显式 active），推断后清除
+                "_status_explicit": "status" in meta,
+                "_split_from_explicit": "split_from" in meta,
+                "_split_from_version_explicit": "split_from_version" in meta,
+                "_split_into_explicit": "split_into" in meta,
             }
             g._out[eid] = set()
             g._in[eid] = set()
+
+        # 解析权威拆分事件账（字段严格校验）
+        for i, ev in enumerate(splits_raw):
+            where = f"splits[{i}]"
+            if not isinstance(ev, dict):
+                raise CorruptSnapshot(f"快照损坏：{where} 必须是对象")
+            parent = need(ev, "parent", where, str)
+            children = need(ev, "children", where, list)
+            point = need(ev, "point_version", where, int)
+            clock = need(ev, "clock", where, int)
+            if not children or not all(isinstance(c, str) for c in children):
+                raise CorruptSnapshot(f"快照损坏：{where}.children 非法")
+            if len(set(children)) != len(children):
+                raise CorruptSnapshot(f"快照损坏：{where}.children 有重复分片")
+            if parent not in g._entries:
+                raise CorruptSnapshot(
+                    f"快照损坏：{where} 的来源条目 {parent!r} 不存在"
+                )
+            for c in children:
+                if c not in g._entries:
+                    raise CorruptSnapshot(
+                        f"快照损坏：{where} 拆分到不存在的条目 {c!r}"
+                    )
+            g._splits.append({
+                "parent": parent,
+                "children": list(children),
+                "point_version": point,
+                "clock": clock,
+            })
 
         for eid, vers in versions.items():
             if eid not in g._entries:
@@ -721,6 +771,10 @@ class ExperienceGraph:
                     conflict_id=r.get("conflict_id"),
                 ))
             g._revisions[eid] = built
+
+        # 第二遍：解析完版本后，按拆分事件账 + 子分片回指推断并回填归档状态
+        # （兼容没有归档字段的旧快照），必须在边的归档校验之前完成。
+        cls._infer_archive_state(g)
 
         for i, e in enumerate(edges):
             if not isinstance(e, list) or len(e) != 2:
@@ -812,3 +866,167 @@ class ExperienceGraph:
             return False
 
         return any(color[n] == 0 and dfs(n) for n in self._entries)
+
+    @classmethod
+    def _infer_archive_state(cls, g: "ExperienceGraph") -> None:
+        """合并三类证据推断并回填拆分归档状态（兼容没有归档字段的旧快照）。
+
+        证据来源：权威拆分事件账 ``splits``、父条目自带的 ``status/split_into``、
+        子分片的 ``split_from`` 回指。三者必须一致；任一来源/目标缺失或互相矛盾，
+        以及回指指向不存在条目，都按 :class:`CorruptSnapshot` 拒绝。回填后清除
+        临时显式性标记。
+        """
+        metas = g._entries
+
+        def corrupt(msg: str):
+            raise CorruptSnapshot(f"快照损坏：{msg}")
+
+        # parent -> 子分片（保持权威事件顺序）；child -> (parent, point)
+        parent_children: Dict[str, List[str]] = {}
+        authoritative_parents: Set[str] = set()
+        child_parent: Dict[str, tuple] = {}
+
+        def declare_parent(parent: str, children, where: str,
+                           authoritative: bool = True) -> None:
+            kids = list(children)
+            for c in kids:
+                if c not in metas:
+                    corrupt(f"{where} 拆分到不存在的条目 {c!r}")
+            existing = parent_children.get(parent)
+            if existing is not None and (
+                set(existing) != set(kids) or len(existing) != len(kids)
+            ):
+                corrupt(f"条目 {parent!r} 的分片归属在快照中不一致："
+                        f"{existing} vs {kids}")
+            if existing is None:
+                parent_children[parent] = kids
+            elif authoritative:
+                parent_children[parent] = kids     # 权威声明覆盖重建顺序
+            if authoritative:
+                authoritative_parents.add(parent)
+
+        def declare_child(child: str, parent: str, point, where: str) -> None:
+            if parent not in metas:
+                corrupt(f"{where} 的来源条目 {parent!r} 不存在")
+            prev = child_parent.get(child)
+            if prev is not None and (prev[0] != parent or
+                                     (point is not None and prev[1] is not None
+                                      and point != prev[1])):
+                corrupt(f"分片 {child!r} 的来源在快照中不一致：{prev} vs "
+                        f"({parent!r}, {point})")
+            if prev is None:
+                child_parent[child] = (parent, point)
+
+        # 证据一：权威拆分事件账
+        for i, ev in enumerate(g._splits):
+            where = f"splits[{i}]"
+            if ev["parent"] not in metas:
+                corrupt(f"{where} 的来源条目 {ev['parent']!r} 不存在")
+            declare_parent(ev["parent"], ev["children"], where)
+            for c in ev["children"]:
+                declare_child(c, ev["parent"], ev["point_version"], where)
+
+        # 证据二/三：条目自带字段（旧快照可能只有其中一部分）
+        for eid, meta in metas.items():
+            status_explicit = meta.get("_status_explicit")
+            into_explicit = meta.get("_split_into_explicit")
+            from_explicit = meta.get("_split_from_explicit")
+
+            if status_explicit and meta["status"] == "split":
+                if not meta.get("split_into"):
+                    corrupt(f"归档条目 {eid!r} 缺少 split_into 分片")
+                declare_parent(eid, meta["split_into"], f"entries[{eid!r}]")
+            elif status_explicit and meta["status"] == "active" and into_explicit \
+                    and meta.get("split_into"):
+                corrupt(f"条目 {eid!r} 标记为 active 却声明了 split_into 分片")
+            elif into_explicit and meta.get("split_into"):
+                # 状态字段缺失但给了分片清单：据此推断为归档
+                declare_parent(eid, meta["split_into"], f"entries[{eid!r}]")
+
+            if from_explicit:
+                parent = meta.get("split_from")
+                if parent is not None:
+                    point = meta.get("split_from_version")
+                    declare_child(eid, parent, point, f"entries[{eid!r}]")
+
+        # 子分片回指反过来也确认父条目应归档
+        for child, (parent, _point) in child_parent.items():
+            if parent not in parent_children:
+                # 旧快照只有子片回指、没有任何父侧记录：以回指集合重建（非权威）
+                parent_children[parent] = [child]
+            elif parent in authoritative_parents:
+                # 父侧已权威声明：回指分片必须在其清单内，否则归属不一致
+                if child not in parent_children[parent]:
+                    corrupt(f"条目 {parent!r} 的分片清单未包含回指分片 {child!r}")
+            elif child not in parent_children[parent]:
+                # 同为回指重建：补入（最终统一排序确定化）
+                parent_children[parent].append(child)
+
+        # 回填父条目归档状态
+        for parent, kids in parent_children.items():
+            if parent not in metas:
+                corrupt(f"归档条目 {parent!r} 不存在")
+            if not kids:
+                corrupt(f"归档条目 {parent!r} 缺少分片")
+            meta = metas[parent]
+            if meta.get("_status_explicit") and meta["status"] == "active":
+                corrupt(f"条目 {parent!r} 标记为 active 却被拆分记录指为归档源")
+            # 权威来源保留声明顺序；纯由回指重建时按字典序确定化
+            ordered = list(kids) if parent in authoritative_parents else sorted(kids)
+            meta["status"] = "split"
+            meta["split_into"] = ordered
+
+        # 回填子分片来源指针
+        for child, (parent, point) in child_parent.items():
+            meta = metas[child]
+            parent_point = len(g._versions[parent]) - 1
+            if meta.get("_status_explicit") and meta["status"] == "split":
+                corrupt(f"分片 {child!r} 自身被标记为归档，不能再作为分片")
+            if point is None:
+                point = parent_point
+            if point != parent_point:
+                corrupt(f"分片 {child!r} 的拆分点版本 {point} 与来源 "
+                        f"{parent!r} 的末版本 v{parent_point} 不一致")
+            meta["status"] = "active"
+            meta["split_into"] = []
+            meta["split_from"] = parent
+            meta["split_from_version"] = point
+
+        # 回填父条目上缺失的拆分点版本（仅供展示/校验，权威值取子片回指）
+        for parent, kids in parent_children.items():
+            meta = metas[parent]
+            points = {metas[c].get("split_from_version") for c in kids}
+            points.discard(None)
+            if points:
+                meta.setdefault("split_point_version", next(iter(points)))
+
+        # 旧快照没有 splits 事件账：据推断结果补齐，使重导出即为当前规范格式。
+        ledger_parents = {ev["parent"]: ev for ev in g._splits}
+        for parent in sorted(parent_children):
+            kids = parent_children[parent]
+            parent_meta = metas[parent]
+            if parent in ledger_parents:
+                # 以推断出的规范分片集合校正事件账
+                ledger_parents[parent]["children"] = list(kids)
+                resolved_clock = ledger_parents[parent]["clock"]
+            else:
+                point = len(g._versions[parent]) - 1
+                resolved_clock = parent_meta.get("split_clock")
+                if resolved_clock is None:
+                    resolved_clock = g._versions[kids[0]][0].clock
+                g._splits.append({
+                    "parent": parent,
+                    "children": list(kids),
+                    "point_version": point,
+                    "clock": resolved_clock,
+                })
+            # 回填父条目缺失的拆分时钟（消除旧/新格式的非功能性差异）
+            if parent_meta.get("split_clock") is None:
+                parent_meta["split_clock"] = resolved_clock
+        g._splits.sort(key=lambda ev: (ev["clock"], ev["parent"]))
+
+        # 清除临时标记
+        for meta in metas.values():
+            for key in ("_status_explicit", "_split_from_explicit",
+                        "_split_from_version_explicit", "_split_into_explicit"):
+                meta.pop(key, None)

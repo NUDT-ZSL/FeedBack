@@ -6,6 +6,7 @@ from experience_graph import (
     EntryExists,
     EntryNotFound,
     ExperienceGraph,
+    GraphError,
     MergeConflict,
     ReferenceError,
     StaleRevision,
@@ -328,10 +329,36 @@ class SplitHistoryAndConflictOwnershipTests(unittest.TestCase):
 
     def test_archived_entry_is_readonly(self):
         g = self._split_graph()
-        with self.assertRaises(Exception):
+        version_before = g.current_version("a")
+        chain_before = [(c["new_version"], c["revision_id"], c["clock"])
+                        for c in g.revision_chain("a")]
+        body_before = g.get_entry("a")["body"]
+        clock_before = g.clock
+
+        # 提交修订被拒绝：消息说明已归档并指出由哪些分片延续
+        with self.assertRaises(GraphError) as ctx:
             g.submit_revision("a", "z", 1, "nope", "改归档")
-        with self.assertRaises(Exception):
+        message = str(ctx.exception)
+        self.assertIn("归档", message)
+        for part in ("a1", "a2"):
+            self.assertIn(part, message)
+
+        # 其余修改入口同样拒绝
+        with self.assertRaises(GraphError):
+            g.integrate_revisions("a", [
+                {"author": "z", "base_version": 1, "body": "nope", "change": "c"}])
+        with self.assertRaises(GraphError):
             g.add_reference("a", "b")
+
+        # 拒绝后：版本号、修订链、正文、逻辑时钟全部不变（不长并行版本线）
+        self.assertEqual(g.current_version("a"), version_before)
+        self.assertEqual(
+            [(c["new_version"], c["revision_id"], c["clock"])
+             for c in g.revision_chain("a")],
+            chain_before,
+        )
+        self.assertEqual(g.get_entry("a")["body"], body_before)
+        self.assertEqual(g.clock, clock_before)
 
     def test_new_parts_start_versioning_from_split_point(self):
         g = self._split_graph()
