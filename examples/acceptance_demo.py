@@ -50,9 +50,16 @@ def main():
     clk.advance(4)
     eng.observe("power", 4, "结算耗时", 100.0)
     eng.observe("newbie", 4, "结算耗时", 100.0)
-    # 重复上报：同值幂等；异值保留首次并记账
+    # 重复上报：同值幂等；异值直接拒绝（状态不变），异常带冲突双方
     assert eng.observe("power", 4, "结算耗时", 100.0) is None
-    dup = eng.observe("power", 4, "结算耗时", 120.0)
+    from attribution import ValidationError
+    try:
+        eng.observe("power", 4, "结算耗时", 120.0)
+        rejected = None
+    except ValidationError as e:
+        rejected = e.conflict
+    # 基线未被污染，仍是首次上报的 100
+    assert eng.value_at("power", 4, "结算耗时") == 100.0
 
     # ---- t=5：第一次改版 ----
     clk.advance(5)
@@ -68,13 +75,13 @@ def main():
     eng.observe("power", 8, "结算耗时", 90.0)    # 老用户真实改善 -10
     eng.observe("newbie", 8, "结算耗时", 80.0)   # 新人天然更快
 
-    line("1) 重复归属裁决台账（字典序最小分群获胜，与登记顺序无关）")
+    line("1) 重复归属裁决 + 观测冲突拒绝（均不静默覆盖）")
     for c in conflicts:
         print(f"  用户 {c.user_id} @t{c.time}: 保留 {c.kept_segment}，"
               f"拒绝 {c.rejected_segment}")
-    print(f"  重复观测异值上报：保留 {dup.kept_value}，忽略 "
-          f"{dup.rejected_value}（共记录 "
-          f"{len(eng.duplicate_observations())} 条）")
+    print(f"  观测异值上报被拒绝：已存在 {rejected.existing_value}，"
+          f"本次 {rejected.rejected_value} 被丢弃；基线仍为 "
+          f"{eng.value_at('power', 4, '结算耗时')}")
 
     line("2) rev-checkout 归因：总变化 = 结构变化 + 真实变化")
     rep = eng.attribute_revision("rev-checkout")
@@ -93,6 +100,30 @@ def main():
     print("  各分群贡献占比：",
           ", ".join(f"{s}={v:.1%}" for s, v in it.segment_shares))
     print("  被判定为用户结构的分群：", list(it.composition_segments))
+    print("  窗口内成员来源（稳定顺序）：")
+    for f in it.member_flows:
+        print(f"    {f.segment_id}: 留存 {list(f.retained) or '无'}；"
+              f"新入 {[f'{u}<-{s}' for u, s in f.joined_from] or '无'}；"
+              f"离开 {[f'{u}->{s}' for u, s in f.left_to] or '无'}")
+
+    line("2b) 迁移台账：用户 A->B->A 回迁被完整保留（独立小场景）")
+    mclk = LogicalClock(0)
+    mig = AttributionEngine(mclk)
+    mclk.advance(1)
+    mig.register_segment("A", 1, ["u", "a0"])
+    mig.register_segment("B", 1, ["b0"])
+    mclk.advance(3)
+    mig.replace_composition("A", 3, ["a0"])
+    mig.replace_composition("B", 3, ["b0", "u"])      # u: A -> B
+    mclk.advance(5)
+    mig.replace_composition("B", 5, ["b0"])
+    mig.replace_composition("A", 5, ["a0", "u"])      # u: B -> A 回迁
+    for m in mig.migrations():
+        if m.user_id == "u":
+            print(f"  t{m.time}: {m.from_segment} -> {m.to_segment}")
+    flow = mig.member_flow("A", 1, 5)
+    print(f"  A 在 t1->t5 的成员来源：{list(flow.joined_from)}"
+          f"（回迁用户显示来自 B，而非误判为留存）")
 
     line("3) 第二次改版 rev-perf 与来源链（望远镜拆分，段和==总变化）")
     clk.advance(9)

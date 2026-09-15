@@ -60,6 +60,19 @@ def _segment_attr_dict(a) -> Dict[str, Any]:
     }
 
 
+def _flow_dict(flow) -> Dict[str, Any]:
+    return {
+        "segment_id": flow.segment_id,
+        "before_time": flow.before_time,
+        "after_time": flow.after_time,
+        "before_members": list(flow.before_members),
+        "after_members": list(flow.after_members),
+        "retained": list(flow.retained),
+        "joined_from": [[u, s] for u, s in flow.joined_from],
+        "left_to": [[u, s] for u, s in flow.left_to],
+    }
+
+
 def _report_dict(report) -> Dict[str, Any]:
     return {
         "revision_id": report.revision.id,
@@ -77,6 +90,7 @@ def _report_dict(report) -> Dict[str, Any]:
                 "excluded_segments": list(it.excluded_segments),
                 "segments": [_segment_attr_dict(a)
                              for a in it.segment_attributions],
+                "member_flows": [_flow_dict(f) for f in it.member_flows],
             }
             for it in report.items
         ],
@@ -102,6 +116,7 @@ def _chain_dict(chain) -> Dict[str, Any]:
                 "structural": s.structural,
                 "real": s.real,
                 "canceled_by_structure": s.canceled_by_structure,
+                "member_flows": [_flow_dict(f) for f in s.member_flows],
             }
             for s in chain.segments
         ],
@@ -150,6 +165,11 @@ def to_dict(engine: AttributionEngine) -> Dict[str, Any]:
         "observations": [
             {"segment_id": sid, "time": t, "item": item, "value": value}
             for sid, t, item, value in engine.raw_observations()
+        ],
+        "migrations": [
+            {"user_id": m.user_id, "time": m.time,
+             "from_segment": m.from_segment, "to_segment": m.to_segment}
+            for m in engine.migrations()
         ],
         "attribution": _compute_results(engine),
     }
@@ -295,6 +315,11 @@ def _rebuild(data: Any) -> AttributionEngine:
         except ValidationError as e:
             raise e.at(f"{p}.{e.path}" if e.path else p)
 
+    # --- 迁移台账：结构校验 + 与由纪元重算的结果比对 ---
+    mig_rows = data.get("migrations")
+    if mig_rows is not None:
+        _check_migrations(mig_rows, engine)
+
     # --- 归因结果：守恒自查 + 与重算结果比对 ---
     stored = data.get("attribution")
     if stored is not None:
@@ -304,6 +329,28 @@ def _rebuild(data: Any) -> AttributionEngine:
         _compare_with_recomputed(engine, stored)
 
     return engine
+
+
+def _check_migrations(mig_rows: Any, engine: AttributionEngine) -> None:
+    """校验快照中的迁移台账：结构合法，且与纪元重算结果完全一致。"""
+    require(isinstance(mig_rows, list),
+            "migrations 必须是数组", "migrations")
+    parsed: List[Tuple[str, int, str, str]] = []
+    for i, row in enumerate(mig_rows):
+        p = f"migrations[{i}]"
+        require(isinstance(row, dict), "迁移记录必须是对象", p)
+        uid = _field(row, "user_id", p, str)
+        t = _field(row, "time", p, int)
+        src = _field(row, "from_segment", p, str)
+        dst = _field(row, "to_segment", p, str)
+        require(src != dst, "迁移记录的起止分群不能相同", p)
+        parsed.append((uid, t, src, dst))
+
+    fresh = [(m.user_id, m.time, m.from_segment, m.to_segment)
+             for m in engine.migrations()]
+    require(parsed == fresh,
+            f"迁移台账与由构成纪元重算的结果不一致：\n  存储 "
+            f"{parsed}\n  重算 {fresh}", "migrations")
 
 
 def _check_stored_conservation(attribution: Dict[str, Any]) -> None:
@@ -399,6 +446,9 @@ def _compare_with_recomputed(engine: AttributionEngine,
                                     "before_value", "after_value",
                                     "before_weight", "after_weight",
                                     "before_count", "after_count"))
+            _assert_flows(ip + ".member_flows",
+                          sit.get("member_flows", []),
+                          fit.get("member_flows", []))
 
     stored_chains = {c["item"]: c for c in stored["chains"]}
     fresh_chains = {c["item"]: c for c in fresh["chains"]}
@@ -421,6 +471,29 @@ def _compare_with_recomputed(engine: AttributionEngine,
             _assert_close_dict(sp, ss, fs,
                                ("contribution", "structural", "real",
                                 "canceled_by_structure"))
+            _assert_flows(sp + ".member_flows",
+                          ss.get("member_flows", []),
+                          fs.get("member_flows", []))
+
+
+def _assert_flows(path: str, stored: Any, recomputed: Any) -> None:
+    """逐字段比对成员来源（纯结构化数据，无浮点）。"""
+    def norm(flows):
+        out = []
+        for f in flows:
+            out.append((
+                f["segment_id"], f["before_time"], f["after_time"],
+                tuple(f["before_members"]), tuple(f["after_members"]),
+                tuple(f["retained"]),
+                tuple(tuple(p) for p in f["joined_from"]),
+                tuple(tuple(p) for p in f["left_to"]),
+            ))
+        return tuple(sorted(out))
+
+    require(isinstance(stored, list) and isinstance(recomputed, list),
+            "member_flows 必须是数组", path)
+    require(norm(stored) == norm(recomputed),
+            "成员来源（member_flows）与重算不一致", path)
 
 
 def load_dict(data: Any) -> AttributionEngine:

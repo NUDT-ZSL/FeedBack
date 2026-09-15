@@ -52,15 +52,34 @@ eng.register_segment("power", 1, ["p1", "p2"])
   台账由当前全量纪元推导，**与登记顺序无关**。
 - `active_members(seg, t)` 返回该分群在 `t` 真正拥有的成员。
 
-### 观测：幂等与缺失
+### 观测：幂等、异值拒绝与缺失
 
 `observe(segment, time, item, value)` 的唯一键是 `(分群, 时刻, 体验项)`：
 
 - 同值重复上报：幂等忽略；
-- 异值重复上报：保留首次值，返回并记录一条 `DuplicateObservation`；
+- **异值重复上报：直接拒绝**并抛 `ValidationError`（错误带位置，
+  `error.conflict` 是 `ObservationConflict`，含已存在值与被拒值），引擎
+  状态完全不变——基线不会被后到的新值静默覆盖；
 - 未上报（或当时无活动成员）的格子：`value_at()` 返回 `None`，
   `missing_slots(item)` 显式列出缺失的 `(分群, 时刻)`——**绝不补零**；
   真实上报的 `0.0` 正常保留。
+
+### 迁移台账与成员来源
+
+归属变化（由构成纪元驱动）会被确定性地记录为迁移事件，
+`migrations()` 返回 `MigrationRecord(user_id, time, from_segment,
+to_segment)`，按 `(时刻, 用户, 来源, 去向)` 稳定排序：
+
+- 用户首次进入某分群：`(新进入) -> 分群`；离开所有分群：`分群 -> (已离开)`；
+- 跨分群迁移：`A -> B`；**A→B→A 的回迁产生两条独立记录，不被合并**；
+- 台账由纪元时间线推导，与登记顺序无关。
+
+`member_flow(segment, t0, t1)` / `member_flows(t0, t1)` 给出每个分群在
+窗口前后的成员来源：`retained`（留存）、`joined_from`（新入成员及其来源
+分群）、`left_to`（离开成员及其去向）。来源以窗口内的迁移事件为准，因此
+**回迁用户会显示“从 B 迁回”，而不会被误判为一直留存**；过境路径（A→B→A
+中对 B 的进出）由迁移台账完整保留。归因报告的每个体验项、来源链的**每个
+段**都内嵌对比域 / 面板各分群的 `member_flows`（按分群 id 稳定排序）。
 
 ## 归因方法
 
@@ -116,8 +135,9 @@ eng.register_segment("power", 1, ["p1", "p2"])
 
 `store.save(eng, path)` / `store.load(path)`（或 `to_dict` /
 `load_dict`）。快照包含：逻辑时钟、改版、分群（含全部构成纪元）、观测、
-阈值，以及**归因结果段**（所有当前可计算的改版报告与来源链）。写入采用
-临时文件 + `os.replace` 原子替换。
+阈值、**迁移台账 `migrations`**，以及**归因结果段**（所有当前可计算的改版
+报告与来源链，报告项与链段内嵌 `member_flows` 成员来源）。写入采用临时
+文件 + `os.replace` 原子替换。
 
 载入时在一个**全新引擎**上重建并依次校验，任一失败即抛带位置的
 `ValidationError`，调用方原有引擎状态不变：
@@ -126,23 +146,26 @@ eng.register_segment("power", 1, ["p1", "p2"])
 2. 标识唯一（改版 id、分群 id、观测键）、时刻为整数且不晚于时钟、纪元
    严格递增、观测引用的分群存在且当时有活动成员；
 3. 同观测键冲突值、NaN/Inf 拒绝；
-4. 快照中存储的归因数字独立做守恒检查（`结构+真实==总变化`、
+4. 迁移台账结构合法（起止分群不同），且与由构成纪元重算的迁移路径逐条
+   一致（A→B→A 回迁被篡改 / 丢失都会被拒绝）；
+5. 快照中存储的归因数字独立做守恒检查（`结构+真实==总变化`、
    `mix+构成迁移+真实==总变化`、`Σ链段==首末总变化`）；
-5. 用重建数据**重算**全部报告与来源链，与快照归因段逐项比对，篡改归因
-   结果（即使保持表面守恒）也会被拒绝。
+6. 用重建数据**重算**全部报告与来源链（含报告项与链段内嵌的
+   `member_flows` 成员来源），与快照归因段逐项比对，篡改归因结果（即使
+   保持表面守恒）也会被拒绝。
 
 ## 需求到实现的对照
 
 | 需求 | 实现位置 / 测试 |
 | --- | --- |
 | 1 改版登记与位置化校验 | `register_revision`、`records.Revision`；`RevisionTests` |
-| 2 分群、唯一归属、确定性裁决台账 | 构成纪元、`owner_at`、`assignment_conflicts`；`SegmentTests` |
-| 3 逻辑时钟、幂等观测、缺失标注 | `LogicalClock`、`observe`、`value_at`、`missing_slots`；`ObservationTests` |
+| 2 分群、唯一归属、确定性裁决台账、迁移路径 | 构成纪元、`owner_at`、`assignment_conflicts`、`migrations`、`member_flow(s)`；`SegmentTests`、`MigrationTests` |
+| 3 逻辑时钟、同值幂等、**异值拒绝且状态不变**、缺失标注 | `LogicalClock`、`observe`（`ObservationConflict`）、`value_at`、`missing_slots`；`ObservationTests` |
 | 4 前后变化与结构/真实守恒分解 | `_window_attributions`；`DecompositionTests` |
 | 5 构成不同归因到结构 + 占比 | Jaccard 判定、`composition_segments`、`segment_shares`；`CompositionAttributionTests` |
 | 6 多次改版逐段拆分、段和守恒、顺序无关 | `item_chain`；`ChainTests` |
-| 7 净影响/贡献/抵消/来源链、稳定可复算 | 查询方法；`CancellationTests`、`QueryTests` |
-| 8 JSON 快照与载入校验、失败状态不变 | `store`；`StoreTests` |
+| 7 净影响/贡献/抵消/来源链（含每段成员来源）、稳定可复算 | 查询方法、`ChainSegment.member_flows`；`CancellationTests`、`QueryTests`、`MigrationTests` |
+| 8 JSON 快照与载入校验（含迁移台账）、失败状态不变 | `store`；`StoreTests`、`MigrationTests` |
 
 ## 口径说明（重要假设）
 

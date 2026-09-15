@@ -69,14 +69,63 @@ class AssignmentConflict:
 
 
 @dataclass(frozen=True)
-class DuplicateObservation:
-    """一次冲突的重复观测上报（幂等：保留首次值）。"""
+class ObservationConflict:
+    """同一 (分群, 时刻, 体验项) 用不同数值重复上报时的冲突说明。
+
+    冲突上报会被**拒绝**（引擎状态不变），异常中携带本记录，便于调用方
+    明确知道冲突双方而不是静默覆盖。
+    """
 
     segment_id: str
     time: int
     item: str
-    kept_value: float
+    existing_value: float
     rejected_value: float
+
+
+NEWLY_ENTERED = "(新进入)"
+DEPARTED = "(已离开)"
+
+
+@dataclass(frozen=True)
+class MemberFlow:
+    """分群在一个对比窗口内的成员来源/去向。
+
+    - ``retained``：    前后都在本分群的成员；
+    - ``joined_from``： 改版后新进入本分群的成员及其来源分群
+      （来源为 :data:`NEWLY_ENTERED` 表示此前不在任何分群）；
+    - ``left_to``：     改版前在本分群、改版后离开的成员及其去向分群
+      （去向为 :data:`DEPARTED` 表示此后不在任何分群）。
+
+    所有用户清单与 ``(user, other)`` 对都按稳定顺序排列。
+    """
+
+    segment_id: str
+    before_time: int
+    after_time: int
+    before_members: Tuple[str, ...]
+    after_members: Tuple[str, ...]
+    retained: Tuple[str, ...]
+    joined_from: Tuple[Tuple[str, str], ...]
+    left_to: Tuple[Tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class MigrationRecord:
+    """一次跨分群的归属迁移事件（由构成纪元时间线确定性推导）。
+
+    每次某个分群在纪元 ``time`` 失去用户 ``uid``，而该用户在同一纪元时刻
+    （或之后最近的纪元时刻）出现在另一个分群，记一条从 ``from_segment``
+    到 ``to_segment`` 的迁移。``from_segment`` 为 :data:`NEWLY_ENTERED`
+    表示外部流入；``to_segment`` 为 :data:`DEPARTED` 表示流出到外部。
+    同一路径的重复往返（A→B→A）会产生各自独立的记录，不被合并。
+    """
+
+    user_id: str
+    time: int
+    from_segment: str
+    to_segment: str
+
 
 
 @dataclass(frozen=True)
@@ -130,6 +179,8 @@ class ItemRevisionAttribution:
     composition_segments: Tuple[str, ...]
     # 窗口边缘出现过该体验项、但因另一侧缺失等无法纳入对比域的分群
     excluded_segments: Tuple[str, ...]
+    # 对比域内各分群改版前后的成员来源/去向（稳定排序）
+    member_flows: Tuple[MemberFlow, ...]
 
 
 @dataclass(frozen=True)
@@ -157,6 +208,8 @@ class ChainSegment:
     structural: float
     real: float
     canceled_by_structure: float
+    # 该窗口内面板各分群的成员来源/去向（稳定排序）
+    member_flows: Tuple[MemberFlow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -195,10 +248,8 @@ class AttributionEngine:
 
         self._revisions: Dict[str, Revision] = {}
         self._segments: Dict[str, Segment] = {}
-        # obs[segment_id][time][item] = float
+        # obs[segment_id][time][item] = float；同键异值上报直接拒绝
         self._obs: Dict[str, Dict[int, Dict[str, float]]] = {}
-        # 台账：冲突观测（归属冲突台账由全量纪元确定性推导）
-        self._duplicate_obs: List[DuplicateObservation] = []
 
     # ------------------------------------------------------------------
     # 1. 改版登记
@@ -307,16 +358,115 @@ class AttributionEngine:
                                            c.rejected_segment)))
 
     # ------------------------------------------------------------------
-    # 3. 观测上报（幂等 + 缺失标注）
+    # 2b. 迁移台账（由归属时间线确定性推导，含回迁）
+    # ------------------------------------------------------------------
+
+    def migrations(self) -> Tuple[MigrationRecord, ...]:
+        """跨分群归属迁移台账。
+
+        沿所有构成纪元时刻，逐用户跟踪其唯一归属分群（裁决后）的变化：
+        归属从 A 变为 B 即记一条 ``A -> B``；从无到有记
+        :data:`NEWLY_ENTERED -> 分群`，从有到无记
+        ``分群 -> :data:`DEPARTED```。A->B->A 的往返产生两条独立记录，
+        不被合并。结果由当前数据推导，与登记顺序无关。
+        """
+        event_times = sorted({
+            e.time for seg in self._segments.values() for e in seg.epochs})
+        # 只跟踪在任一纪元出现过的用户
+        users = set()
+        for seg in self._segments.values():
+            for e in seg.epochs:
+                users.update(e.users)
+
+        out: List[MigrationRecord] = []
+        for uid in users:
+            prev = None
+            prev_time = None
+            for t in event_times:
+                cur = self.owner_at(uid, t)
+                if cur == prev:
+                    continue
+                if prev is None and cur is not None:
+                    out.append(MigrationRecord(
+                        uid, t, NEWLY_ENTERED, cur))
+                elif prev is not None and cur is None:
+                    out.append(MigrationRecord(
+                        uid, t, prev, DEPARTED))
+                elif prev is not None and cur is not None:
+                    out.append(MigrationRecord(
+                        uid, t, prev, cur))
+                # prev is None and cur is None：不变，不记录
+                prev, prev_time = cur, t
+        return tuple(sorted(out,
+                            key=lambda m: (m.time, m.user_id,
+                                           m.from_segment, m.to_segment)))
+
+    def member_flow(self, segment_id: str, t0: int,
+                    t1: int) -> MemberFlow:
+        """单个分群在窗口 (t0, t1] 的成员来源/去向。
+
+        来源以窗口内的**迁移事件**为准（而非只看两端集合），因此 A→B→A
+        的回迁用户在最终分群里会显示“从 B 迁回”，不会被误判为一直留存：
+
+        - 改版后成员若在窗口内有迁入本分群的事件，``joined_from`` 记录其
+          最近一次迁入的来源分群（即使 t0 时它也在本分群）；
+        - 否则若 t0 时也在本分群，记为 ``retained``；
+        - t0 在、t1 不在的成员进 ``left_to``，去向取其 t1 的归属。
+        """
+        before = set(self.active_members(segment_id, t0))
+        after = set(self.active_members(segment_id, t1))
+
+        # 窗口内迁入本分群的最后一条事件（migrations 已按时刻排序）
+        last_in: Dict[str, MigrationRecord] = {}
+        for m in self.migrations():
+            if t0 < m.time <= t1 and m.to_segment == segment_id:
+                last_in[m.user_id] = m
+
+        retained: List[str] = []
+        joined: List[Tuple[str, str]] = []
+        for uid in sorted(after):
+            if uid in last_in:
+                joined.append((uid, last_in[uid].from_segment))
+            elif uid in before:
+                retained.append(uid)
+            else:
+                joined.append((uid, self.owner_at(uid, t0)
+                               or NEWLY_ENTERED))
+
+        left = [(uid, self.owner_at(uid, t1) or DEPARTED)
+                for uid in sorted(before - after)]
+
+        return MemberFlow(
+            segment_id=segment_id, before_time=t0, after_time=t1,
+            before_members=tuple(sorted(before)),
+            after_members=tuple(sorted(after)),
+            retained=tuple(retained),
+            joined_from=tuple(joined),
+            left_to=tuple(left))
+
+    def member_flows(self, t0: int, t1: int,
+                     segments: Optional[Sequence[str]] = None
+                     ) -> Tuple[MemberFlow, ...]:
+        """窗口内各分群（默认全部已知分群）的成员来源/去向，稳定排序。"""
+        sids = sorted(segments) if segments is not None \
+            else sorted(self._segments)
+        return tuple(self.member_flow(s, t0, t1) for s in sids)
+
+    # ------------------------------------------------------------------
+    # 3. 观测上报（幂等 + 异值拒绝 + 缺失标注）
     # ------------------------------------------------------------------
 
     def observe(self, segment_id: str, time: int, item: str,
-                value: float) -> Optional[DuplicateObservation]:
+                value: float) -> None:
         """上报一条观测，键为 ``(分群, 时刻, 体验项)``。
 
-        - 首次：写入并返回 ``None``；
-        - 重复且数值相同：幂等忽略，返回 ``None``；
-        - 重复但数值不同：保留首次值，记录并返回冲突记录。
+        - 首次上报：写入，返回 ``None``；
+        - 同键同值重复上报：幂等忽略，返回 ``None``；
+        - 同键异值重复上报：**拒绝**并抛 :class:`ValidationError`
+          （``error.conflict`` 携带 :class:`ObservationConflict`），
+          引擎已有观测与任何状态都不改变（绝不静默覆盖基线）。
+
+        所有参数校验先于任何写入，因此非法上报不会留下空桶等副作用。
         """
         require(segment_id in self._segments,
                 f"观测引用了未知分群 {segment_id!r}", "segment_id")
@@ -338,23 +488,26 @@ class AttributionEngine:
         val = float(value)
         require(val == val and val not in (float("inf"), float("-inf")),
                 "观测值不允许是 NaN/Inf", "value")
+        name = item.strip()
+
+        # 冲突检查在读路径完成；确认可写入后才落桶
+        existing = self._obs.get(segment_id, {}).get(time)
+        if existing is not None and name in existing:
+            if existing[name] == val:
+                return None  # 幂等
+            err = ValidationError(
+                f"同一分群 {segment_id!r} 在时刻 {time} 对体验项 "
+                f"{name!r} 上报了冲突数值：已存在 {existing[name]}，"
+                f"本次 {val} 被拒绝（重复上报必须与原值一致）",
+                f"observations[{segment_id!r}][{time}][{name!r}]")
+            err.conflict = ObservationConflict(
+                segment_id=segment_id, time=time, item=name,
+                existing_value=existing[name], rejected_value=val)
+            raise err
 
         at = self._obs.setdefault(segment_id, {}).setdefault(time, {})
-        name = item.strip()
-        if name in at:
-            if at[name] == val:
-                return None
-            rec = DuplicateObservation(
-                segment_id=segment_id, time=time, item=name,
-                kept_value=at[name], rejected_value=val)
-            self._duplicate_obs.append(rec)
-            return rec
         at[name] = val
         return None
-
-    def duplicate_observations(self) -> Tuple[DuplicateObservation, ...]:
-        return tuple(sorted(self._duplicate_obs,
-                            key=lambda d: (d.time, d.segment_id, d.item)))
 
     def value_at(self, segment_id: str, time: int, item: str
                  ) -> Optional[float]:
@@ -529,6 +682,7 @@ class AttributionEngine:
                 for a in sorted(attrs, key=lambda a: a.segment_id))
             comp_sids = tuple(sorted(
                 a.segment_id for a in attrs if a.attributed_to_composition))
+            flows = tuple(self.member_flow(s, t0, t1) for s in sids)
 
             results.append(ItemRevisionAttribution(
                 revision_id=revision_id, item=item,
@@ -539,7 +693,8 @@ class AttributionEngine:
                     sorted(attrs, key=lambda a: a.segment_id)),
                 segment_shares=shares,
                 composition_segments=comp_sids,
-                excluded_segments=tuple(edge)))
+                excluded_segments=tuple(edge),
+                member_flows=flows))
 
         return AttributionReport(
             revision=rev,
@@ -603,7 +758,9 @@ class AttributionEngine:
                 revision_id=rev_id, window_start=ta, window_end=tb,
                 contribution=sum(a.total for a in attrs),
                 structural=s_struct, real=s_real,
-                canceled_by_structure=s_cancel))
+                canceled_by_structure=s_cancel,
+                member_flows=tuple(self.member_flow(s, ta, tb)
+                                   for s in panel)))
 
         start_val = self._weighted_level(lo, item, panel)
         end_val = self._weighted_level(hi, item, panel)

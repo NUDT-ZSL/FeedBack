@@ -17,11 +17,14 @@ class ValidationError(AttributionError):
 
     :param message: 人类可读的错误说明。
     :param path:    出错位置（JSON 指针风格），可能为 ``None``。
+    :param conflict: 可选的冲突详情载荷（如观测值冲突），任意对象。
     """
 
-    def __init__(self, message: str, path: Optional[str] = None):
+    def __init__(self, message: str, path: Optional[str] = None,
+                 conflict: Any = None):
         self.message = message
         self.path = path
+        self.conflict = conflict
         if path:
             full = f"{path}: {message}"
         else:
@@ -30,7 +33,7 @@ class ValidationError(AttributionError):
 
     def at(self, path: str) -> "ValidationError":
         """返回一个补上（或替换）位置的新异常，便于在嵌套校验中传递。"""
-        return ValidationError(self.message, path)
+        return ValidationError(self.message, path, self.conflict)
 
 
 class ConsistencyError(AttributionError):
