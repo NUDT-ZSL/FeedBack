@@ -110,20 +110,21 @@ def main():
     mclk = LogicalClock(0)
     mig = AttributionEngine(mclk)
     mclk.advance(1)
-    mig.register_segment("A", 1, ["u", "a0"])
-    mig.register_segment("B", 1, ["b0"])
+    mig.register_segment("A", 1, ["u"])
+    mig.register_segment("B", 1, ["b"])
     mclk.advance(3)
-    mig.replace_composition("A", 3, ["a0"])
-    mig.replace_composition("B", 3, ["b0", "u"])      # u: A -> B
+    mig.replace_composition("A", 3, [])            # u 离开，A 暂时为空
+    mig.replace_composition("B", 3, ["b", "u"])    # u: A -> B
     mclk.advance(5)
-    mig.replace_composition("B", 5, ["b0"])
-    mig.replace_composition("A", 5, ["a0", "u"])      # u: B -> A 回迁
+    mig.replace_composition("B", 5, ["b"])
+    mig.replace_composition("A", 5, ["u"])         # u: B -> A 回迁
     for m in mig.migrations():
         if m.user_id == "u":
             print(f"  t{m.time}: {m.from_segment} -> {m.to_segment}")
     flow = mig.member_flow("A", 1, 5)
     print(f"  A 在 t1->t5 的成员来源：{list(flow.joined_from)}"
           f"（回迁用户显示来自 B，而非误判为留存）")
+    print(f"  u 离开期间（t4）A 的活动成员：{mig.active_members('A', 4)}")
 
     line("3) 第二次改版 rev-perf 与来源链（望远镜拆分，段和==总变化）")
     clk.advance(9)

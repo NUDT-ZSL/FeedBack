@@ -276,10 +276,10 @@ class AttributionEngine:
 
     def register_segment(self, segment_id: str, entry_time: int,
                          users: Sequence[str]) -> Segment:
-        """登记一个新分群（建立首个构成纪元）。"""
+        """登记一个新分群（建立首个构成纪元，首个纪元必须非空）。"""
         loc = f"segments[{segment_id!r}]"
         try:
-            epoch = Epoch(entry_time, users)
+            epoch = Epoch(entry_time, users, allow_empty=False)
             seg = Segment(segment_id, [epoch])
         except ValidationError as e:
             raise e.at(f"{loc}.{e.path}" if e.path else loc)

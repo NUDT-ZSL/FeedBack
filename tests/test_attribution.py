@@ -528,6 +528,124 @@ class MigrationTests(unittest.TestCase):
             ["segA", "segB"])
 
 
+    def test_first_epoch_must_be_nonempty_later_may_be_empty(self):
+        eng, clk = make_engine()
+        clk.advance(1)
+        # 首个纪元（进入）为空 → 拒绝
+        with self.assertRaises(ValidationError):
+            eng.register_segment("A", 1, [])
+        eng.register_segment("A", 1, ["u"])
+        # 之后的纪元允许为空（成员全部迁出，分群仍存在）
+        clk.advance(3)
+        eng.replace_composition("A", 3, [])
+        self.assertEqual(eng.active_members("A", 3), ())
+        # 快照载入也保持该约束：首个纪元空拒绝、后续空接受
+        data = store.to_dict(eng)
+        self.assertEqual(store.load_dict(data).active_members("A", 3), ())
+        bad = store.to_dict(eng)
+        bad["segments"][0]["epochs"][0]["users"] = []
+        with self.assertRaises(ValidationError):
+            store.load_dict(bad)
+
+    def test_return_migration_with_empty_epochs_two_records(self):
+        # 验收场景：A->B->A，u 离开期间 A 用空纪元表达“迁出”，必须产出
+        # 两条独立跨群记录（来源链可观测部分用锚点成员保证分群全程在面板内）
+        eng, clk = make_engine()
+        clk.advance(1)
+        eng.register_segment("A", 1, ["u"])
+        eng.register_segment("B", 1, ["b"])
+        clk.advance(3)
+        eng.replace_composition("A", 3, [])          # u 离开 A（A 暂时为空）
+        eng.replace_composition("B", 3, ["b", "u"])  # u 进入 B
+        clk.advance(5)
+        eng.replace_composition("B", 5, ["b"])       # u 离开 B
+        eng.replace_composition("A", 5, ["u"])       # u 回迁 A
+
+        cross = [(m.time, m.from_segment, m.to_segment)
+                 for m in eng.migrations() if m.user_id == "u"]
+        self.assertEqual(cross, [
+            (1, "(新进入)", "A"),
+            (3, "A", "B"),
+            (5, "B", "A"),
+        ])
+        # 回迁段独立成条：A->B 与 B->A 各一条
+        self.assertEqual(
+            [(f, t) for _, f, t in cross if f not in ("(新进入)",)],
+            [("A", "B"), ("B", "A")])
+        # A 在 u 离开期间确实没有活动成员
+        self.assertEqual(eng.active_members("A", 4), ())
+        # 成员来源：回迁用户显示来自 B，而不是被误判为留存
+        flow = eng.member_flow("A", 1, 5)
+        self.assertEqual(flow.joined_from, (("u", "B"),))
+        self.assertEqual(flow.retained, ())
+
+        # 导出导入后迁移记录逐条一致
+        data = store.to_dict(eng)
+        self.assertEqual(
+            [(m.time, m.user_id, m.from_segment, m.to_segment)
+             for m in store.load_dict(data).migrations()],
+            [(m.time, m.user_id, m.from_segment, m.to_segment)
+             for m in eng.migrations()])
+
+    def test_chain_member_flows_with_anchored_return(self):
+        # 用锚点成员让 A/B 全程可观测，验证来源链每段成员来源稳定有序，
+        # 且 A->B->A 的回迁在链上能看出 u 中间离开过 A
+        eng, clk = make_engine()
+        clk.advance(1)
+        eng.register_segment("A", 1, ["u", "a0"])
+        eng.register_segment("B", 1, ["b0"])
+        clk.advance(2)
+        eng.observe("A", 2, "m", 10.0)
+        eng.observe("B", 2, "m", 10.0)
+        clk.advance(4)
+        eng.replace_composition("A", 3, ["a0"])
+        eng.replace_composition("B", 3, ["b0", "u"])
+        eng.observe("A", 4, "m", 12.0)
+        eng.observe("B", 4, "m", 8.0)
+        clk.advance(5)
+        eng.replace_composition("B", 5, ["b0"])
+        eng.replace_composition("A", 5, ["a0", "u"])
+        clk.advance(6)
+        eng.observe("A", 6, "m", 14.0)
+        eng.observe("B", 6, "m", 6.0)
+
+        chain = eng.item_chain("m")
+        for seg in chain.segments:
+            ids = [f.segment_id for f in seg.member_flows]
+            self.assertEqual(ids, sorted(ids))  # 稳定顺序
+        # 第二段窗口（t4->t6）里 u 从 B 回到 A
+        flow_a = next(f for s in chain.segments
+                      for f in s.member_flows
+                      if s.window_end == 6 and f.segment_id == "A")
+        self.assertIn(("u", "B"), flow_a.joined_from)
+        self.assertNotIn("u", flow_a.retained)
+
+    def test_conservation_holds_with_empty_epoch_migrations(self):
+        eng, clk = make_engine()
+        clk.advance(1)
+        eng.register_segment("A", 1, ["u", "a"])
+        eng.register_segment("B", 1, ["b1", "b2"])
+        clk.advance(4)  # 之后统一补报历史观测
+        eng.observe("A", 2, "m", 10.0)
+        eng.observe("B", 2, "m", 10.0)
+        eng.register_revision("r", 3, ["m"])
+        eng.replace_composition("A", 3, ["a"])
+        eng.replace_composition("B", 3, ["b1", "b2", "u"])
+        eng.observe("A", 4, "m", 12.0)
+        eng.observe("B", 4, "m", 8.0)
+        rep = eng.attribute_revision("r").item("m")
+        self.assertTrue(math.isclose(
+            rep.structural + rep.real, rep.total, abs_tol=1e-9))
+        for a in rep.segment_attributions:
+            self.assertTrue(math.isclose(
+                a.mix + a.composition_migration + a.real, a.total,
+                abs_tol=1e-9))
+        # 重新载入后守恒仍成立
+        rep2 = store.load_dict(store.to_dict(eng)) \
+            .attribute_revision("r").item("m")
+        self.assertTrue(math.isclose(rep2.total, rep.total, abs_tol=1e-9))
+
+
 class StoreTests(unittest.TestCase):
     """需求 8：JSON 快照、载入校验、失败状态不变。"""
 

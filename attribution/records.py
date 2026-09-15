@@ -54,12 +54,17 @@ class Revision:
 
 @dataclass(frozen=True)
 class Epoch:
-    """分群成员构成的一个纪元：自 ``time`` 起成员为 ``users``。"""
+    """分群成员构成的一个纪元：自 ``time`` 起成员为 ``users``。
+
+    首个纪元（分群进入）必须非空；其后的纪元**允许为空**，表示该分群的
+    成员在某一时刻全部迁出（分群仍存在，只是暂时没有活动成员）。
+    """
 
     time: int
     users: Tuple[str, ...]
 
-    def __init__(self, time: int, users: Sequence[str]):
+    def __init__(self, time: int, users: Sequence[str],
+                 allow_empty: bool = True):
         require(isinstance(time, int) and not isinstance(time, bool),
                 "纪元时刻必须是 int", "time")
         seen = set()
@@ -69,7 +74,8 @@ class Epoch:
             uid = raw.strip()
             require(uid, "用户 id 不允许为空", f"users[{i}]")
             seen.add(uid)
-        require(seen, "纪元至少包含一个用户", "users")
+        require(allow_empty or seen,
+                "分群的首个纪元（进入）至少包含一个用户", "users")
         object.__setattr__(self, "time", time)
         object.__setattr__(self, "users", tuple(sorted(seen)))
 
