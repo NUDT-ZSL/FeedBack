@@ -1,7 +1,8 @@
 """核心数据模型：需求、批次、履约节点。
 
-节点不冗余存储"已承接量"，而是由批次的 node_id 派生，
-从结构上保证"同一批次不会被两个节点同时承接"，也避免计数与事实不一致。
+批次的归属（被哪个节点承接）以 batch.node_id 为唯一事实来源，
+从结构上保证"同一批次任意时刻只属于一个节点"；节点的已承接量
+是节点自己维护的累计计数器（只增不减），两者互不推导、不会失真。
 """
 
 from dataclasses import dataclass
@@ -44,8 +45,14 @@ class Batch:
 
 @dataclass
 class Node:
-    """一个履约节点。capacity 为可承接的批次数量上限（正整数）。"""
+    """一个履约节点。
+
+    capacity 为可承接的批次数量上限（正整数）。
+    accepted 为累计已承接量：每次成功承接 +1，只增不减；
+    批次完成或改派到其他节点都不扣减。
+    """
 
     id: str
     capacity: int
     online: bool = True
+    accepted: int = 0

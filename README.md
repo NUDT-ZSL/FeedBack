@@ -27,7 +27,8 @@ python -m unittest discover -s tests -t . -v
 - **批次（Batch）**：需求拆分的产物，有唯一标识、正整数数量、可选前置批次
   集合与所属节点。状态机：`pending → ready → in_progress → completed`。
 - **节点（Node）**：`add_node(id, capacity)`，capacity 为可承接的批次数量上限；
-  已承接量 = 分配到该节点且未完成的批次数（完成自动释放额度）。
+  已承接量按**累计口径**计量（只增不减，完成或改派出去都不扣减），
+  剩余可承接量 = 容量上限 − 累计已承接量。
 
 ## 关键设计
 
@@ -40,9 +41,14 @@ python -m unittest discover -s tests -t . -v
 3. **增量推进 ≡ 从头推导**：批次完成时只检查直接后继，是否解除阻塞按
    "全部前置已完成"重新判定，任意时刻 ready/pending 集合与
    `executable_order()` 从零推导的结果一致。
-4. **改派原子**：`reassign_batch` 先确认目标节点在线且有余量，再切换
-   `batch.node_id`；批次结构上只属于一个节点，不可能双重承接。
+4. **改派原子**：`reassign_batch` 先确认目标节点在线且有余量，再一次
+   性切换 `batch.node_id` 并给新节点累计计数；批次归属以 `node_id` 为
+   唯一事实来源，任意时刻只属于一个节点，不可能双重承接。
    `auto_reassign` 按固定规则选节点（剩余容量最大，并列取标识最小）。
+5. **累计承接口径**：节点维护 `accepted` 计数器，每次成功承接 +1，
+   批次完成或改派到其他节点都不扣减；`node_status` 中 `load` 为累计
+   已承接量、`remaining = capacity - load` 与之自洽，`batches` 为当前
+   在途（未完成）批次列表，由 `batch.node_id` 派生。
 5. **全程可追溯**：每次状态变化追加带序号的推进记录（`events`），
    `advancement_log()` 返回开工/完成/解除阻塞子集，可逐步比对。
 6. **持久化安全**：`save` 先写临时文件再原子替换；`load` 在全新实例上
@@ -70,6 +76,6 @@ s.complete_batch("B")
 
 s.save("state.json")
 loaded = FulfillmentSystem.load("state.json")
-print(loaded.node_status("N1"))       # {'load': 0, 'remaining': 2, ...}
+print(loaded.node_status("N1"))       # {'load': 1, 'remaining': 1, ...} 累计口径
 print(loaded.prerequisite_chain("B")) # ['A']
 ```

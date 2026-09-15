@@ -4,7 +4,10 @@
 --------
 * 拆分是确定性的：同一输入永远得到同一批次划分；对已拆分的需求重复提交
   相同方案是幂等 no-op，提交不同方案则报错。
-* 节点容量以"未完成的承接批次数"计量，批次完成后自动释放额度。
+* 节点已承接量按累计口径计量：每次成功承接 +1，只增不减，批次完成
+  或改派出去都不扣减；剩余可承接量 = 容量上限 - 累计已承接量。
+* 批次归属以 batch.node_id 为唯一事实来源，改派在校验通过后一次性
+  切换归属并给新节点计数，是原子操作，任何时刻同一批次只属于一个节点。
 * 推进只沿直接后继传播：批次完成时仅检查直接依赖它的批次，
   是否解除阻塞由"全部前置是否已完成"重新判定，因此任意时刻的
   ready/pending 集合与从头推导的结果一致。
@@ -107,13 +110,10 @@ class FulfillmentSystem:
         except KeyError:
             raise NotFoundError(f"节点 {node_id!r} 不存在") from None
 
-    def _node_load(self, node_id):
-        """节点当前承接量 = 分配到该节点且未完成的批次数。"""
-        return sum(
-            1
-            for b in self._batches.values()
-            if b.node_id == node_id and b.status != STATUS_COMPLETED
-        )
+    @staticmethod
+    def _node_remaining(node):
+        """剩余可承接量 = 容量上限 - 累计已承接量（与累计口径自洽）。"""
+        return node.capacity - node.accepted
 
     @staticmethod
     def _topo_order(prereq_map):
@@ -243,7 +243,7 @@ class FulfillmentSystem:
                 raise NotFoundError(f"节点 {node_id!r} 不存在")
             if not node.online:
                 raise StateError(f"节点 {node_id!r} 已下线，无法承接批次")
-            remaining = node.capacity - self._node_load(node_id)
+            remaining = self._node_remaining(node)
             if len(batch_ids) > remaining:
                 raise CapacityError(
                     f"节点 {node_id!r} 容量不足：剩余可承接量 {remaining}，"
@@ -263,6 +263,8 @@ class FulfillmentSystem:
                 status=STATUS_READY if not prereqs else STATUS_PENDING,
             )
             self._batches[batch_id] = batch
+            if node_id is not None:
+                self._nodes[node_id].accepted += 1
             created.append(batch)
         created.sort(key=lambda b: b.id)
         self._record(
@@ -323,7 +325,7 @@ class FulfillmentSystem:
     def _ensure_assignable(self, node, batch_id):
         if not node.online:
             raise StateError(f"节点 {node.id!r} 已下线，无法承接批次 {batch_id!r}")
-        remaining = node.capacity - self._node_load(node.id)
+        remaining = self._node_remaining(node)
         if remaining <= 0:
             raise CapacityError(
                 f"节点 {node.id!r} 容量不足：剩余可承接量 0，"
@@ -346,15 +348,17 @@ class FulfillmentSystem:
                 f"请使用 reassign_batch 改派"
             )
         self._ensure_assignable(node, batch_id)
+        node.accepted += 1
         batch.node_id = node_id
         self._record("batch_assigned", batch_id=batch_id, node_id=node_id)
         return batch
 
     def reassign_batch(self, batch_id, node_id):
-        """把批次改派到另一个节点。
+        """把批次改派到另一个节点（原子操作）。
 
-        前置约束与数量保持不变；批次在任一时刻只属于一个节点
-        （先校验目标可承接，再原子切换 node_id）。
+        先完成全部校验，再一次性切换归属并给新节点计数：改派完成后
+        批次只属于新节点，原节点不再持有它；前置约束与数量保持不变；
+        原节点的累计已承接量按口径不扣减。
         """
         batch = self._get_batch(batch_id)
         node = self._get_node(node_id)
@@ -364,6 +368,8 @@ class FulfillmentSystem:
             return batch
         self._ensure_assignable(node, batch_id)
         old_node_id = batch.node_id
+        # 原子切换：归属字段单点赋值，任何时刻批次只挂在一个节点名下
+        node.accepted += 1
         batch.node_id = node_id
         self._record(
             "batch_reassigned",
@@ -380,7 +386,7 @@ class FulfillmentSystem:
         for node in self._nodes.values():
             if node.id == batch.node_id or not node.online:
                 continue
-            remaining = node.capacity - self._node_load(node.id)
+            remaining = self._node_remaining(node)
             if remaining > 0:
                 candidates.append((-remaining, node.id))
         if not candidates:
@@ -461,9 +467,15 @@ class FulfillmentSystem:
         }
 
     def node_status(self, node_id):
-        """节点承接情况：已承接量、剩余容量、在途批次列表。"""
+        """节点承接情况。
+
+        load 为累计已承接量（只增不减，完成/改派出不扣减）；
+        remaining = capacity - load，与累计口径自洽；
+        batches 为当前仍挂在该节点名下的在途（未完成）批次，
+        由 batch.node_id 派生，同一批次只会出现在一个节点的列表里。
+        """
         node = self._get_node(node_id)
-        assigned = sorted(
+        in_flight = sorted(
             b.id
             for b in self._batches.values()
             if b.node_id == node_id and b.status != STATUS_COMPLETED
@@ -471,10 +483,10 @@ class FulfillmentSystem:
         return {
             "node_id": node_id,
             "capacity": node.capacity,
-            "load": len(assigned),
-            "remaining": node.capacity - len(assigned),
+            "load": node.accepted,
+            "remaining": self._node_remaining(node),
             "online": node.online,
-            "batches": assigned,
+            "batches": in_flight,
         }
 
     def prerequisite_chain(self, batch_id):

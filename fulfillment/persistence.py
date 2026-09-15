@@ -1,8 +1,9 @@
 """JSON 持久化：导出、原子写入、载入与完整校验。
 
 载入时的校验顺序：结构 -> 标识唯一 -> 数量为正 -> 前置存在 -> 无环 ->
-数量守恒 -> 承接不超容量 -> 推进记录合法。任何一步失败都抛出带明确
-原因的 PersistenceError，且载入在全新实例上构建，不会污染现有状态。
+数量守恒 -> 累计承接量口径自洽且不超容量 -> 推进记录合法。任何一步
+失败都抛出带明确原因的 PersistenceError，且载入在全新实例上构建，
+不会污染现有状态。
 """
 
 import json
@@ -12,7 +13,7 @@ from .errors import PersistenceError, ValidationError
 from .models import STATUSES, Batch, Demand, Node
 from .system import FulfillmentSystem
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 # ----------------------------------------------------------------------
@@ -25,7 +26,12 @@ def dump_system(system):
             {"id": d.id, "total_quantity": d.total_quantity} for d in system.demands
         ],
         "nodes": [
-            {"id": n.id, "capacity": n.capacity, "online": n.online}
+            {
+                "id": n.id,
+                "capacity": n.capacity,
+                "online": n.online,
+                "accepted": n.accepted,
+            }
             for n in system.nodes
         ],
         "batches": [
@@ -125,6 +131,13 @@ def _expect_positive_int(obj, key, where):
     return value
 
 
+def _expect_non_negative_int(obj, key, where):
+    value = _expect_field(obj, key, where)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise PersistenceError(f"{where}.{key} 必须是非负整数，收到: {value!r}")
+    return value
+
+
 def _parse_demands(items):
     demands = {}
     for i, item in enumerate(items):
@@ -148,9 +161,12 @@ def _parse_nodes(items):
         online = _expect_field(obj, "online", where)
         if not isinstance(online, bool):
             raise PersistenceError(f"{where}.online 必须是布尔值，收到: {online!r}")
+        accepted = _expect_non_negative_int(obj, "accepted", where)
         if node_id in nodes:
             raise PersistenceError(f"节点标识重复: {node_id!r}")
-        nodes[node_id] = Node(id=node_id, capacity=capacity, online=online)
+        nodes[node_id] = Node(
+            id=node_id, capacity=capacity, online=online, accepted=accepted
+        )
     return nodes
 
 
@@ -232,15 +248,22 @@ def _check_acyclic(batches):
 
 
 def _check_capacity(nodes, batches):
-    loads = {}
+    """累计口径校验：accepted 不超容量上限，且不小于当前挂载批次数。"""
+    mounted = {}
     for b in batches.values():
-        if b.node_id is not None and b.status != "completed":
-            loads[b.node_id] = loads.get(b.node_id, 0) + 1
-    for node_id, load in loads.items():
-        capacity = nodes[node_id].capacity
-        if load > capacity:
+        if b.node_id is not None:
+            mounted[b.node_id] = mounted.get(b.node_id, 0) + 1
+    for node_id, node in nodes.items():
+        if node.accepted > node.capacity:
             raise PersistenceError(
-                f"节点 {node_id!r} 承接量 {load} 超过容量上限 {capacity}"
+                f"节点 {node_id!r} 累计承接量 {node.accepted} "
+                f"超过容量上限 {node.capacity}"
+            )
+        current = mounted.get(node_id, 0)
+        if node.accepted < current:
+            raise PersistenceError(
+                f"节点 {node_id!r} 累计承接量 {node.accepted} "
+                f"小于当前挂载批次数 {current}，数据不一致"
             )
 
 

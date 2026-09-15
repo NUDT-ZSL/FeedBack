@@ -211,13 +211,17 @@ class TestNodeCapacity(unittest.TestCase):
         with self.assertRaises(StateError):
             self.s.assign_batch("A", "N2")
 
-    def test_completion_frees_capacity(self):
+    def test_completion_does_not_reduce_cumulative_load(self):
+        # 累计口径：批次完成后已承接量不回落，剩余容量不释放
         self.s.assign_batch("A", "N1")
         self.s.start_batch("A")
         self.s.complete_batch("A")
-        self.assertEqual(self.s.node_status("N1")["remaining"], 1)
-        self.s.assign_batch("B", "N1")  # 额度释放后可再承接
-        self.assertEqual(self.s.node_status("N1")["load"], 1)
+        st = self.s.node_status("N1")
+        self.assertEqual(st["load"], 1)
+        self.assertEqual(st["remaining"], 0)
+        self.assertEqual(st["batches"], [])  # 在途列表为空
+        with self.assertRaises(CapacityError):  # 剩余 0，新批次进不来
+            self.s.assign_batch("B", "N1")
 
 
 class TestAdvancement(unittest.TestCase):
@@ -340,8 +344,16 @@ class TestReassign(unittest.TestCase):
         with self.assertRaises(StateError):
             s.start_batch("A")
         s.reassign_batch("A", "N3")
+        # 归属唯一：A 只挂在 N3 名下，N1 的在途列表不再持有它
         self.assertEqual(s.batch_info("A")["node_id"], "N3")
-        self.assertEqual(s.node_status("N1")["load"], 1)  # B 仍挂在 N1
+        self.assertEqual(s.node_status("N1")["batches"], ["B"])
+        self.assertEqual(s.node_status("N3")["batches"], ["A"])
+        holders = [
+            n for n in ("N1", "N2", "N3") if "A" in s.node_status(n)["batches"]
+        ]
+        self.assertEqual(holders, ["N3"])
+        # 累计口径：N1 承接过 A、B，改派出 A 不扣减
+        self.assertEqual(s.node_status("N1")["load"], 2)
         self.assertEqual(s.node_status("N3")["load"], 1)
         s.start_batch("A")  # 改派后可以开工
         self.assertEqual(s.batch_info("A")["status"], STATUS_IN_PROGRESS)
@@ -408,6 +420,35 @@ class TestReassign(unittest.TestCase):
         s.set_node_online("ONLY", False)
         with self.assertRaises(CapacityError):
             s.auto_reassign("A")
+
+    def test_cumulative_load_monotonic_across_operations(self):
+        s = self.s
+        history = []
+
+        def snapshot():
+            history.append({n: s.node_status(n)["load"] for n in ("N1", "N2", "N3")})
+
+        snapshot()
+        s.start_batch("A")
+        s.complete_batch("A")          # 完成不扣减
+        snapshot()
+        s.reassign_batch("B", "N3")    # 改派出不扣减，新节点 +1
+        snapshot()
+        s.set_node_online("N1", False)
+        s.auto_reassign("B")           # N1 已下线，B 被改派到唯一有余量的 N2
+        snapshot()
+
+        for prev, cur in zip(history, history[1:]):
+            for node_id in prev:
+                self.assertGreaterEqual(
+                    cur[node_id], prev[node_id],
+                    f"节点 {node_id} 已承接量出现回落: {prev} -> {cur}",
+                )
+        # 任意时刻剩余容量与累计口径自洽
+        for node_id in ("N1", "N2", "N3"):
+            st = s.node_status(node_id)
+            self.assertEqual(st["remaining"], st["capacity"] - st["load"])
+            self.assertGreaterEqual(st["remaining"], 0)
 
 
 class TestQueries(unittest.TestCase):
@@ -501,17 +542,23 @@ class TestPersistence(unittest.TestCase):
 
     def test_round_trip_preserves_everything(self):
         s = make_diamond_system()
+        s.add_node("N2", 3)
         s.assign_batch("A", "N1")
+        s.assign_batch("B", "N1")
+        s.reassign_batch("B", "N2")  # N1 累计 2（改派出不扣减），N2 累计 1
         s.start_batch("A")
-        s.complete_batch("A")
+        s.complete_batch("A")        # 完成也不扣减
         s.save(self.path)
         loaded = FulfillmentSystem.load(self.path)
         self.assertEqual(
             json.dumps(s.dump(), sort_keys=True),
             json.dumps(loaded.dump(), sort_keys=True),
         )
+        # 累计承接量经往返保持不变
+        self.assertEqual(loaded.node_status("N1")["load"], 2)
+        self.assertEqual(loaded.node_status("N1")["remaining"], 8)
+        self.assertEqual(loaded.node_status("N2")["load"], 1)
         # 载入后可以继续推进，事件序号连续
-        loaded.assign_batch("B", "N1")
         loaded.start_batch("B")
         loaded.complete_batch("B")
         seqs = [e["seq"] for e in loaded.events]
@@ -587,14 +634,28 @@ class TestPersistence(unittest.TestCase):
         _, data = self._loaded_dict()
         for n in data["nodes"]:
             n["capacity"] = 1
-        # A 已完成不占额度，B、C 挂在 N1 -> 2 > 1
-        for b in data["batches"]:
-            if b["id"] in ("B", "C"):
-                b["node_id"] = "N1"
+            n["accepted"] = 2  # 累计承接量超过容量上限
         self._write(data)
         with self.assertRaises(PersistenceError) as ctx:
             FulfillmentSystem.load(self.path)
         self.assertIn("容量", str(ctx.exception))
+
+    def test_accepted_below_mounted_rejected(self):
+        _, data = self._loaded_dict()
+        for n in data["nodes"]:
+            n["accepted"] = 0  # 但批次 A 仍挂在 N1 名下
+        self._write(data)
+        with self.assertRaises(PersistenceError) as ctx:
+            FulfillmentSystem.load(self.path)
+        self.assertIn("不一致", str(ctx.exception))
+
+    def test_missing_accepted_field(self):
+        _, data = self._loaded_dict()
+        del data["nodes"][0]["accepted"]
+        self._write(data)
+        with self.assertRaises(PersistenceError) as ctx:
+            FulfillmentSystem.load(self.path)
+        self.assertIn("accepted", str(ctx.exception))
 
     def test_bad_version_and_bad_event_seq(self):
         _, data = self._loaded_dict()
@@ -632,6 +693,28 @@ class TestAcceptanceScenario(unittest.TestCase):
         s.add_node("N1", 2)
         s.add_node("N2", 2)
         s.add_node("N3", 1)
+
+        load_history = []
+
+        def checkpoint():
+            """每步校验：剩余容量与累计口径自洽，并记录各节点已承接量。"""
+            for n in ("N1", "N2", "N3"):
+                st = s.node_status(n)
+                self.assertEqual(st["remaining"], st["capacity"] - st["load"])
+                self.assertGreaterEqual(st["remaining"], 0)
+            load_history.append({n: s.node_status(n)["load"] for n in ("N1", "N2", "N3")})
+
+        def assert_single_ownership():
+            """任意时刻同一批次只出现在一个节点的在途列表里。"""
+            seen = {}
+            for n in ("N1", "N2", "N3"):
+                for bid in s.node_status(n)["batches"]:
+                    self.assertNotIn(bid, seen, f"批次 {bid} 同时挂在 {seen.get(bid)} 与 {n}")
+                    seen[bid] = n
+            for b in s.batches:
+                if b.status != STATUS_COMPLETED and b.node_id is not None:
+                    self.assertEqual(seen.get(b.id), b.node_id)
+
         batches = s.split_demand(
             "D1",
             [
@@ -643,6 +726,8 @@ class TestAcceptanceScenario(unittest.TestCase):
         )
         self.assertEqual([b.id for b in batches], ["A", "B", "C", "D"])
         self.assertEqual(sum(b.quantity for b in batches), 100)
+        checkpoint()
+        assert_single_ownership()
 
         # 超容量拒绝：N1 已满（A、B），新批次进不来
         s.create_demand("D2", 5)
@@ -652,6 +737,7 @@ class TestAcceptanceScenario(unittest.TestCase):
         self.assertIn("剩余可承接量 0", str(ctx.exception))
         self.assertIsNone(s.batch_info("E")["node_id"])
         self.assertEqual(s.node_status("N1")["batches"], ["A", "B"])
+        checkpoint()
 
         # 推进 A -> 只有直接后继 C 被解除阻塞
         s.start_batch("A")
@@ -659,20 +745,25 @@ class TestAcceptanceScenario(unittest.TestCase):
         self.assertEqual([b.id for b in promoted], ["C"])
         self.assertEqual(s.batch_info("C")["status"], STATUS_READY)
         self.assertEqual(s.batch_info("D")["status"], STATUS_PENDING)
+        checkpoint()
 
         # N1 下线 -> B 无法开工 -> 改派到 N2（N2 剩余 1）
         s.set_node_online("N1", False)
         with self.assertRaises(StateError):
             s.start_batch("B")
         s.reassign_batch("B", "N2")
-        self.assertEqual(s.node_status("N1")["load"], 0)
+        # 归属唯一：B 只挂在 N2，N1 在途列表为空（A 已完成、B 已改派）
+        self.assertEqual(s.node_status("N1")["batches"], [])
+        self.assertEqual(s.node_status("N2")["batches"], ["B", "C"])
+        assert_single_ownership()
+        # 累计口径：N1 承接过 A、B 共 2 个，改派出 B 不扣减；N2 累计 2
+        self.assertEqual(s.node_status("N1")["load"], 2)
         self.assertEqual(s.node_status("N2")["load"], 2)
         self.assertEqual(s.node_status("N2")["remaining"], 0)
-        # 改派不改变数量与前置；B 只挂在一个节点上
+        checkpoint()
+        # 改派不改变数量与前置
         self.assertEqual(s.batch_info("B")["quantity"], 30)
         self.assertEqual(s.batch_info("B")["prerequisites"], [])
-        holders = [n for n in ("N1", "N2", "N3") if "B" in s.node_status(n)["batches"]]
-        self.assertEqual(holders, ["N2"])
 
         # 继续推进到全部完成
         s.start_batch("B")
@@ -683,6 +774,16 @@ class TestAcceptanceScenario(unittest.TestCase):
         s.start_batch("D")
         s.complete_batch("D")
         self.assertTrue(all(b.status == STATUS_COMPLETED for b in s.demand_batches("D1")))
+        checkpoint()
+        assert_single_ownership()
+
+        # 各节点已承接量全程单调不减
+        for prev, cur in zip(load_history, load_history[1:]):
+            for node_id in prev:
+                self.assertGreaterEqual(
+                    cur[node_id], prev[node_id],
+                    f"节点 {node_id} 已承接量回落: {prev} -> {cur}",
+                )
 
         # 推进记录必须与逐步推导一致
         log = [(e["type"], e.get("batch_id")) for e in s.advancement_log()]
@@ -715,9 +816,13 @@ class TestAcceptanceScenario(unittest.TestCase):
             json.dumps(s.dump(), sort_keys=True),
             json.dumps(loaded.dump(), sort_keys=True),
         )
-        # B、C 已完成，不再占用 N2 额度
-        self.assertEqual(loaded.node_status("N2")["load"], 0)
-        self.assertEqual(loaded.node_status("N2")["remaining"], 2)
+        # 导出再导入后各节点数值不变（累计口径：完成/改派不扣减）
+        for n in ("N1", "N2", "N3"):
+            self.assertEqual(loaded.node_status(n), s.node_status(n))
+        self.assertEqual(loaded.node_status("N1")["load"], 2)
+        self.assertEqual(loaded.node_status("N2")["load"], 2)
+        self.assertEqual(loaded.node_status("N2")["remaining"], 0)
+        self.assertEqual(loaded.node_status("N3")["load"], 1)
 
 
 if __name__ == "__main__":
