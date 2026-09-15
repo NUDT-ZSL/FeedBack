@@ -18,10 +18,10 @@
 - 自增殖环(如 1A->2A,沿环成本可持续降低):成本按"推导深度不超过物品数"
   截断,未收敛的物品记入 _unsettled;当物品数变化(截断深度随之变化)时,
   这些物品被显式并入受影响集合重算,保证增量与全量一致。
-- 最优配方:成本收敛后单轮直接确定——在达到最小成本的配方中,取推导深度
-  最浅者(库存深度为 0,配方深度 = 1 + 输入最大深度;沿最优配方深度严格
-  下降,因此推导必然良基无环),深度仍相同按配方标识字典序取最小;
-  与库存成本相同(=1)时优先库存。
+- 最优配方:在达到最小成本的配方中,先排除"推导会绕回物品自身"的配方
+  (某输入不存在不经过该物品的最小成本推导,由最小二乘不动点判定),
+  其余按配方标识字典序取最小;与库存成本相同(=1)时优先库存。
+  无环情形下所有候选配方都可行,裁决完全由配方标识决定。
 - 增量重算:每次修改只重置"受影响物品"(变更配方的输出物品 + 反向依赖闭包,
   并并入受影响物品上游闭包中的未收敛物品)的派生值,未受影响物品保留缓存;
   由于未受影响且已收敛物品的全部传递输入都不在变更集中,其结果与从零全量
@@ -49,7 +49,6 @@ class Engine:
         self._consumers: Dict[str, Set[str]] = defaultdict(set)  # 物品 -> 消费它的配方
         self._cost: Dict[str, Optional[Fraction]] = {}
         self._best: Dict[str, Optional[str]] = {}
-        self._depth: Dict[str, Optional[int]] = {}
         self._usable: Dict[str, bool] = {}
         self.conflicts: List[dict] = []
         self._scc: Dict[str, int] = {}
@@ -275,50 +274,13 @@ class Engine:
         if not converged:
             self._unsettled |= self._affected_closure(last_changed)
 
-        # 推导深度:库存为 0,配方深度 = 1 + 输入最大深度,只在达到最小成本
-        # 的配方间取最浅。沿最优配方深度严格下降,推导必然良基无环。
-        depth = dict(self._depth)
-        for iid in affected:
-            # 库存深度为 0,但仅当库存确实是该物品的最优来源(成本=1)时;
-            # 若配方成本更低,深度由配方推导给出
-            depth[iid] = 0 if (self.items[iid].stock > 0 and cost[iid] == 1) else None
-        if affected:
-            for _ in range(len(self.items) + 1):
-                changed = False
-                for rid in sorted(self.recipes):
-                    r = self.recipes[rid]
-                    total = Fraction(0)
-                    dmax = 0
-                    ok = True
-                    for iid, q in r.inputs:
-                        ci = cost.get(iid)
-                        di = depth.get(iid)
-                        if ci is None or di is None:
-                            ok = False
-                            break
-                        total += ci * q
-                        if di > dmax:
-                            dmax = di
-                    if not ok:
-                        continue
-                    for o, q in r.outputs:
-                        if o not in affected or cost[o] is None:
-                            continue
-                        if total / q != cost[o]:
-                            continue  # 只在达到最小成本的配方间竞争
-                        cand = dmax + 1
-                        if depth[o] is None or cand < depth[o]:
-                            depth[o] = cand
-                            changed = True
-                if not changed:
-                    break
-
-        # 成本与深度确定后,最优配方单轮直接确定(确定性,与迭代历史无关)
+        # 成本确定后,最优配方单轮直接确定(确定性,与迭代历史无关)
         best = dict(self._best)
+        avoid_cache: Dict[str, Dict[str, bool]] = {}
         for iid in affected:
-            best[iid] = self._compute_best(iid, cost, depth)
+            best[iid] = self._compute_best(iid, cost, avoid_cache)
 
-        self._cost, self._best, self._depth = cost, best, depth
+        self._cost, self._best = cost, best
 
         # 配方可用性:只重算消费了受影响物品的配方
         dirty_recipes: Set[str] = set()
@@ -350,35 +312,67 @@ class Engine:
                     adj[iid].add(o)
         return adj
 
-    def _compute_best(self, item_id: str, cost, depth) -> Optional[str]:
-        """最优配方:达到最小成本且达到最浅推导深度的配方中,标识最小者;
+    def _compute_best(self, item_id: str, cost, avoid_cache) -> Optional[str]:
+        """最优配方:达到最小成本、且推导不绕回物品自身的配方中,标识最小者;
         与库存同价(=1)时优先库存(返回 None)。"""
         c = cost.get(item_id)
         if c is None:
             return None
         if self.items[item_id].stock > 0 and c == 1:
             return None
-        d = depth.get(item_id)
-        if d is None:
-            return None
+        avoid = avoid_cache.get(item_id)
+        if avoid is None:
+            avoid = self._avoid_map(item_id, cost)
+            avoid_cache[item_id] = avoid
         achieving = []
         for rid in self._producers.get(item_id, ()):
             r = self.recipes[rid]
             total = Fraction(0)
-            dmax = 0
             ok = True
             for iid, q in r.inputs:
                 ci = cost.get(iid)
-                di = depth.get(iid)
-                if ci is None or di is None:
+                if ci is None or not avoid.get(iid):
                     ok = False
                     break
                 total += ci * q
-                if di > dmax:
-                    dmax = di
-            if ok and total / r.output_qty(item_id) == c and dmax + 1 == d:
+            if ok and total / r.output_qty(item_id) == c:
                 achieving.append(rid)
         return min(achieving) if achieving else None
+
+    def _avoid_map(self, target: str, cost) -> Dict[str, bool]:
+        """avoid[i] = 物品 i 是否存在一条"不经过 target"的最小成本推导。
+
+        最小二乘不动点:库存本身就是最小成本来源的物品为真;某物品存在一条
+        达到最小成本、且所有输入都为真的配方时为真。沿推导必然终止于库存,
+        因此为真的物品都有良基无环的最小成本推导。
+        """
+        avoid: Dict[str, bool] = {}
+        for iid, it in self.items.items():
+            avoid[iid] = (
+                iid != target and it.stock > 0 and cost.get(iid) == Fraction(1)
+            )
+        for _ in range(len(self.items) + 1):
+            changed = False
+            for iid in sorted(self.items):
+                if avoid[iid] or iid == target or cost.get(iid) is None:
+                    continue
+                for rid in self._producers.get(iid, ()):
+                    r = self.recipes[rid]
+                    total = Fraction(0)
+                    ok = True
+                    for i2, q in r.inputs:
+                        ci = cost.get(i2)
+                        if ci is None or not avoid.get(i2):
+                            ok = False
+                            break
+                        total += ci * q
+                    if ok and total / r.output_qty(iid) == cost[iid]:
+                        avoid[iid] = True
+                        changed = True
+                        break
+            if not changed:
+                break
+        return avoid
 
     def _is_cyclic_edge(self, r: Recipe, output: str) -> bool:
         """配方 r 用于产出 output 是否会成环(某输入与 output 同属一个环状 SCC)。"""

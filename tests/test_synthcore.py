@@ -23,7 +23,6 @@ def snapshot(eng):
     return {
         "cost": dict(eng._cost),
         "best": dict(eng._best),
-        "depth": dict(eng._depth),
         "usable": dict(eng._usable),
         "conflicts": eng.conflicts,
         "unsettled": set(eng._unsettled),
@@ -318,6 +317,26 @@ class TestBestPlan(unittest.TestCase):
         eng.add_recipe("r_cheap", {"ore": 1}, {"ingot": 1})
         self.assertEqual(eng.best_recipe("ingot"), "r_cheap")
         self.assertEqual(eng.unit_cost("ingot"), Fraction(1))
+
+    def test_tie_broken_by_id_regardless_of_depth(self):
+        # 验收用例:同成本、不同推导深度的两条无环配方,按配方标识裁决
+        eng = Engine()
+        eng.add_item("ore", 10)
+        eng.add_item("mid")
+        eng.add_item("x")
+        # r_z:直接由库存产出(浅),成本 2
+        eng.add_recipe("r_z", {"ore": 2}, {"x": 1})
+        # r_a:经更长链产出(深),成本同为 2
+        eng.add_recipe("r_a", {"mid": 1}, {"x": 1})
+        eng.add_recipe("r_m", {"ore": 2}, {"mid": 1})
+        self.assertEqual(eng.unit_cost("x"), Fraction(2))
+        # 深度不参与裁决,按配方标识取 r_a
+        self.assertEqual(eng.best_recipe("x"), "r_a")
+        # 依赖树同样按标识裁决的结果展开
+        tree = eng.dependency_tree("x")
+        self.assertEqual(tree["recipe"], "r_a")
+        self.assertEqual(tree["inputs"][0]["item"], "mid")
+        self.assertEqual(tree["inputs"][0]["recipe"], "r_m")
 
     def test_tie_broken_by_recipe_id(self):
         eng = Engine()
