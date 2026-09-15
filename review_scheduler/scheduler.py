@@ -496,8 +496,12 @@ class Scheduler:
         """安排某一天（默认时钟当前时刻所在天）的复习。
 
         到期（含逾期）内容按紧迫度排序；超过当日上限时只保留最紧迫的，
-        其余顺延到次日并记录原因。顺延只移动到期时刻 ``due``，
+        其余顺延并记录原因。顺延只移动到期时刻 ``due``，
         稳定度、难度、次数等记忆状态保持不变。
+
+        顺延目标取 ``max(day + 1, clock.now() + 1)``：既严格晚于被排的
+        这一天，也不早于逻辑时钟当前时刻的次日。这样即使显式传入一个
+        历史日期排课，顺延项也不会在“当前”再次冒充到期、抢占名额。
         """
 
         current = self.clock.now() if day is None else _require_int(
@@ -516,10 +520,13 @@ class Scheduler:
 
         selected = ordered[:cap]
         deferred_items = ordered[cap:]
+        # 顺延到排课日的次日；若排课日早于逻辑时钟当前时刻，则至少推到
+        # 当前时刻的次日，保证顺延项当天（及对当前时钟而言）不再到期。
+        new_due = max(current + 1, self.clock.now() + 1)
         deferrals: List[Deferral] = []
         for it in deferred_items:
             old_due = it.due
-            it.due = current + 1  # 顺延一天；记忆状态不动
+            it.due = new_due  # 顺延；记忆状态不动
             entry = Deferral(
                 item_id=it.item_id,
                 day=current,

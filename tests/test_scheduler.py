@@ -540,6 +540,38 @@ class DeferralConsistencyTests(unittest.TestCase):
             )
             self.assertEqual(loaded.topic_stats("数学", now=10)["due_count"], 2)
 
+    def test_plan_for_past_day_defers_beyond_clock_now(self):
+        # 逻辑时钟在第 10 天，却用历史日期 day=6 排课：顺延目标不得
+        # 早于“当前时刻的次日”，否则顺延项会在当前查询里再次冒充到期。
+        clock = ManualClock(10)
+        s = Scheduler(clock=clock, daily_limit=1)
+        for i in range(3):
+            s.add_item(f"c{i}", "数学", stability=4.0)
+            s.get_item(f"c{i}").due = 5
+        plan = s.plan_day(day=6)
+        self.assertEqual(plan.selected, ["c0"])
+        self.assertEqual(
+            [(d.item_id, d.day, d.old_due, d.new_due) for d in plan.deferred],
+            [("c1", 6, 5, 11), ("c2", 6, 5, 11)],
+        )
+        # 以默认逻辑时钟（第 10 天）查询：顺延项不出现、不抢名额
+        self.assertEqual(s.due_items(), ["c0"])
+        self.assertEqual(s.topic_stats("数学")["due_count"], 1)
+        # 重复排课/查询保持稳定
+        self.assertEqual(s.plan_day(day=6).deferred, [])
+        self.assertEqual(s.due_items(), s.due_items())
+
+    def test_plan_for_future_day_defers_past_that_day(self):
+        clock = ManualClock(10)
+        s = Scheduler(clock=clock, daily_limit=1)
+        for i in range(2):
+            s.add_item(f"c{i}", "数学", stability=4.0)
+            s.get_item(f"c{i}").due = 5
+        plan = s.plan_day(day=20)
+        self.assertEqual(plan.deferred[0].new_due, 21)  # 严格晚于被排的第 20 天
+        # 当前时钟（第 10 天）下顺延项也不到期
+        self.assertEqual(s.due_items(), plan.selected)
+
 
 class Requirement7QueryTests(unittest.TestCase):
     """需求 7：状态/到期/轨迹/间隔变化，主题到期数与平均间隔。"""
