@@ -606,7 +606,12 @@ class TableKernel:
     # ------------------------------------------------------------------
 
     def add_rows(self, rows: list[dict[str, Any]]) -> None:
-        """增量插入一批行；整批校验失败不改变任何状态。"""
+        """增量插入一批行。
+
+        整批严格原子：先收集全部行的校验错误一次性抛出（任何一行
+        非法或标识重复都整批拒绝）；即使在校验通过后的提交阶段发生
+        意外，也会回滚已写入的行、统计与窗口，使内核回到导入前。
+        """
         with self._lock:
             parsed = self._validate_rows(rows)
             new_rows: list[Row] = []
@@ -615,14 +620,46 @@ class TableKernel:
                 row.sort_key = self._make_sort_key(values, row_id)
                 row.visible = self._row_passes(values)
                 new_rows.append(row)
-            # 全部校验通过后才提交
-            for row in new_rows:
-                self.rows[row.id] = row
-                self._full_treap.insert(row.sort_key, row)
-                if row.visible:
-                    self._visible_treap.insert(row.sort_key, row)
-                self._stats["rows_inserted"] += 1
-            self._reconcile_window()
+            if not new_rows:
+                # 空批次是完全 no-op：不动物化计数与窗口
+                return
+
+            saved_window = self._window
+            saved_stats = dict(self._stats)
+            committed: list[Row] = []
+            failed: Row | None = None
+            try:
+                for row in new_rows:
+                    failed = row
+                    self._full_treap.insert(row.sort_key, row)
+                    if row.visible:
+                        self._visible_treap.insert(row.sort_key, row)
+                    self.rows[row.id] = row
+                    self._stats["rows_inserted"] += 1
+                    committed.append(row)
+                    failed = None
+                self._reconcile_window()
+            except BaseException:
+                # 先撤销失败行可能已部分写入的树节点（按 contains 幂等，
+                # 处理插入内部异常时节点半入树的情况；映射尚未登记）
+                if failed is not None:
+                    if self._visible_treap.contains(failed.sort_key):
+                        self._visible_treap.remove(failed.sort_key)
+                    if self._full_treap.contains(failed.sort_key):
+                        self._full_treap.remove(failed.sort_key)
+                    self.rows.pop(failed.id, None)
+                # 再逆序回滚已完整提交的行
+                for row in reversed(committed):
+                    if row.visible:
+                        self._visible_treap.remove(row.sort_key)
+                    self._full_treap.remove(row.sort_key)
+                    self.rows.pop(row.id, None)
+                # 先按原窗口重新物化，再把统计整体还原（含撤销物化计数）
+                self._window = saved_window
+                self._materialize()
+                self._stats.clear()
+                self._stats.update(saved_stats)
+                raise
 
     def remove_rows(self, ids: "list[str] | tuple[str, ...]") -> None:
         """增量删除一批行；存在未知标识时整批拒绝，状态不变。
@@ -653,13 +690,46 @@ class TableKernel:
             if errors:
                 raise BatchValidationError("删除操作校验失败，整批拒绝",
                                            errors)
-            for row_id in ids:
-                row = self.rows.pop(row_id)
-                self._full_treap.remove(row.sort_key)
-                if row.visible:
-                    self._visible_treap.remove(row.sort_key)
-                self._stats["rows_removed"] += 1
-            self._reconcile_window()
+            if not ids:
+                # 空批次是完全 no-op
+                return
+            saved_window = self._window
+            saved_stats = dict(self._stats)
+            deleted: list[Row] = []
+            failed: Row | None = None
+            try:
+                for row_id in ids:
+                    failed = self.rows.pop(row_id)
+                    self._full_treap.remove(failed.sort_key)
+                    if failed.visible:
+                        self._visible_treap.remove(failed.sort_key)
+                    self._stats["rows_removed"] += 1
+                    deleted.append(failed)
+                    failed = None
+                self._reconcile_window()
+            except BaseException:
+                # 先恢复失败行：树在异常时可能已部分改动，按 contains
+                # 幂等补回，避免重复插入或遗漏
+                if failed is not None:
+                    if not self._full_treap.contains(failed.sort_key):
+                        self._full_treap.insert(failed.sort_key, failed)
+                    if failed.visible and not self._visible_treap.contains(
+                            failed.sort_key):
+                        self._visible_treap.insert(
+                            failed.sort_key, failed)
+                    self.rows[failed.id] = failed
+                # 再按相反顺序恢复已完整删除的行
+                for row in reversed(deleted):
+                    self._full_treap.insert(row.sort_key, row)
+                    if row.visible:
+                        self._visible_treap.insert(row.sort_key, row)
+                    self.rows[row.id] = row
+                # 先按原窗口重新物化，再整体还原统计
+                self._window = saved_window
+                self._materialize()
+                self._stats.clear()
+                self._stats.update(saved_stats)
+                raise
 
     # ------------------------------------------------------------------
     # 规则变更（增量的特例：整体重排/重筛，窗口与已可见行不乱序）
