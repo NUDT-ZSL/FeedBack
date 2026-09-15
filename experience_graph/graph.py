@@ -90,6 +90,18 @@ class ExperienceGraph:
         if entry_id not in self._entries:
             raise EntryNotFound(f"条目不存在：{entry_id!r}")
 
+    def _is_archived(self, entry_id: str) -> bool:
+        return self._entries[entry_id].get("status", "active") == "split"
+
+    def _require_active(self, entry_id: str) -> None:
+        self._require(entry_id)
+        if self._is_archived(entry_id):
+            targets = self._entries[entry_id].get("split_into", [])
+            raise GraphError(
+                f"条目 {entry_id!r} 已拆分归档（拆分至 {targets}），只读不可再修改；"
+                f"请对其分片操作"
+            )
+
     def _current_number(self, entry_id: str) -> int:
         return len(self._versions[entry_id]) - 1
 
@@ -105,7 +117,11 @@ class ExperienceGraph:
         if entry_id in self._entries:
             raise EntryExists(f"条目已存在：{entry_id!r}")
         tick = self._tick()
-        self._entries[entry_id] = {"topic": topic}
+        self._entries[entry_id] = {
+            "topic": topic,
+            "status": "active",       # active / split
+            "split_into": [],         # 拆分归档时记录分片
+        }
         self._versions[entry_id] = [
             Version(0, body, [author], change, kind="create", clock=tick)
         ]
@@ -127,14 +143,18 @@ class ExperienceGraph:
             "body": v.body,
             "version": v.number,
             "authors": list(v.authors),
+            "status": self._entries[entry_id].get("status", "active"),
+            "split_into": list(self._entries[entry_id].get("split_into", [])),
+            "split_from": self._entries[entry_id].get("split_from"),
+            "split_from_version": self._entries[entry_id].get("split_from_version"),
         }
 
     # ---- 引用 ----
 
     def add_reference(self, source: str, target: str) -> None:
         """建立 ``source -> target`` 引用；目标必须存在且不允许成环。"""
-        self._require(source)
-        self._require(target)
+        self._require_active(source)
+        self._require_active(target)
         if source == target:
             raise ReferenceError(f"不允许条目自引用：{source!r}")
         if (source, target) in self._edges:
@@ -187,7 +207,7 @@ class ExperienceGraph:
 
         基于过期版本会抛出 :class:`StaleRevision`（含落后版本数），不会覆盖。
         """
-        self._require(entry_id)
+        self._require_active(entry_id)
         cur = self._current_number(entry_id)
         if base_version < 0 or base_version > cur:
             raise GraphError(
@@ -230,7 +250,7 @@ class ExperienceGraph:
 
         返回新版本号（冲突时返回冲突 id 列表）。
         """
-        self._require(entry_id)
+        self._require_active(entry_id)
         if not candidates:
             raise GraphError("没有候选修订")
         cur = self._current_number(entry_id)
@@ -339,6 +359,7 @@ class ExperienceGraph:
             raise EntryNotFound(f"冲突记录不存在：{conflict_id!r}")
         record = self._conflicts[conflict_id]
         entry_id = record.entry_id
+        self._require_active(entry_id)
         cur = self._current_number(entry_id)
         if record.base_version != cur:
             raise StaleRevision(
@@ -388,8 +409,11 @@ class ExperienceGraph:
         """删除条目，并清除所有与之关联的引用边（绝不留悬空引用）。
 
         返回受影响的边，便于验收"只重算受影响部分"。
+
+        已拆分归档条目不可删除（它是分片的历史凭证）；如需彻底清除，请先删除
+        其全部分片后另行处理。
         """
-        self._require(entry_id)
+        self._require_active(entry_id)
         tick = self._tick()
         affected = sorted(
             [(s, entry_id) for s in self._in[entry_id]]
@@ -404,15 +428,23 @@ class ExperienceGraph:
     def split_entry(self, old_id: str, parts: List[dict],
                     incoming_target: Optional[str] = None,
                     outgoing_source: Optional[str] = None) -> dict:
-        """把一个条目拆分为多个新条目，仅重算与旧条目相关的引用边。
+        """把一个活跃条目拆分为多个新条目。
 
-        ``parts`` 为 ``[{id, topic, body, author}]``（按给定顺序，顺序即结果顺序）。
-        默认所有"指向旧条目"的引用改指向第一个分片，旧条目的出引用由第一个分片
-        继承；可用 ``incoming_target`` / ``outgoing_source`` 指定其它分片。
+        归属规则（确定性）：
 
-        结果与从头重建完全一致（无旧节点、无悬空边）。
+        * **旧条目不删除**，而是转为只读的"已拆分归档"：其完整版本序列与修订链
+          原样保留、冻结在拆分点，仍可通过 :meth:`revision_chain` /
+          :meth:`diff_versions` 查询；``split_into`` 记录分片。
+        * 锚定旧条目历史版本/段落的**冲突记录随旧条目归档保留**（其 ``entry_id``
+          始终指向一个存在的条目，不会悬空）。新分片干净起步，不携带旧冲突。
+        * 每个**新分片从拆分点以自己的 v0 开始**独立计版本，元数据记录
+          ``split_from`` 来源。
+        * 仅拆除并重定向与旧条目相关的引用边（默认入引用->第一个分片、
+          出引用由第一个分片继承），旧条目不再是任何边的端点；结果无悬空引用。
+
+        ``parts`` 为 ``[{id, topic, body, author}]``（顺序即结果顺序）。
         """
-        self._require(old_id)
+        self._require_active(old_id)
         if len(parts) < 2:
             raise GraphError("拆分至少需要两个新条目")
         new_ids = [p["id"] for p in parts]
@@ -429,26 +461,44 @@ class ExperienceGraph:
 
         old_incoming = sorted(self._in[old_id])
         old_outgoing = sorted(self._out[old_id])
+        split_point = self._current_number(old_id)
 
         tick = self._tick()
 
-        # 拆除与旧条目相关的边（受影响部分）
+        # 1) 仅拆除与旧条目相关的边（受影响部分）；旧条目转归档，保留历史与冲突
         for s, t in list(self._edges):
             if s == old_id or t == old_id:
                 self._drop_edge(s, t)
-        self._purge_entry_state(old_id)
+        meta = self._entries[old_id]
+        meta["status"] = "split"
+        meta["split_into"] = list(new_ids)
+        meta["split_clock"] = tick
+        meta["split_point_version"] = split_point
+        # 邻接置空：旧条目不再是任何引用边的端点（key 保留以便只读查询）
+        self._out[old_id] = set()
+        self._in[old_id] = set()
 
-        # 建立分片（不再各自动时钟，整体算作一次拆分操作）
+        # 2) 建立分片：各自从拆分点以 v0 开始自己的版本序列
         for p in parts:
-            self._entries[p["id"]] = {"topic": p["topic"]}
+            self._entries[p["id"]] = {
+                "topic": p["topic"],
+                "status": "active",
+                "split_into": [],
+                "split_from": old_id,
+                "split_from_version": split_point,
+            }
             self._versions[p["id"]] = [
-                Version(0, p["body"], [p.get("author", "split")],
-                        f"由 {old_id!r} 拆分", kind="create", clock=tick)
+                Version(
+                    0, p["body"], [p.get("author", "split")],
+                    f"由 {old_id!r} v{split_point} 拆分",
+                    kind="create", clock=tick,
+                )
             ]
             self._revisions[p["id"]] = []
             self._out[p["id"]] = set()
             self._in[p["id"]] = set()
 
+        # 3) 把旧条目的引用关系收敛到指定分片
         redirected = []
         for s in old_incoming:
             self._edges.add((s, in_target))
@@ -463,6 +513,8 @@ class ExperienceGraph:
 
         return {
             "clock": tick,
+            "archived": old_id,
+            "split_point_version": split_point,
             "new_ids": list(new_ids),
             "redirected_edges": sorted(redirected),
         }
@@ -535,8 +587,16 @@ class ExperienceGraph:
                                               versions[version_b].body),
         }
 
-    def list_entries(self) -> List[str]:
-        return sorted(self._entries)
+    def list_entries(self, include_archived: bool = False) -> List[str]:
+        """返回活跃条目标识（字典序）。
+
+        归档（已拆分）条目默认不列；需要连同归档一起枚举时传
+        ``include_archived=True``。归档条目仍可按 id 做只读查询。
+        """
+        return sorted(
+            eid for eid, meta in self._entries.items()
+            if include_archived or meta.get("status", "active") != "split"
+        )
 
     # ---- 序列化（供 persistence 使用）----
 
@@ -546,7 +606,14 @@ class ExperienceGraph:
             "clock": self.clock,
             "seq": self._seq,
             "entries": {
-                eid: {"topic": meta["topic"]}
+                eid: {
+                    "topic": meta["topic"],
+                    "status": meta.get("status", "active"),
+                    "split_into": list(meta.get("split_into", [])),
+                    "split_from": meta.get("split_from"),
+                    "split_from_version": meta.get("split_from_version"),
+                    "split_clock": meta.get("split_clock"),
+                }
                 for eid, meta in sorted(self._entries.items())
             },
             "versions": {
@@ -592,7 +659,24 @@ class ExperienceGraph:
         for eid, meta in entries.items():
             if not isinstance(meta, dict) or "topic" not in meta:
                 raise CorruptSnapshot(f"快照损坏：entries[{eid!r}] 缺少 topic")
-            g._entries[eid] = {"topic": meta["topic"]}
+            status = meta.get("status", "active")
+            if status not in ("active", "split"):
+                raise CorruptSnapshot(
+                    f"快照损坏：entries[{eid!r}] 非法状态 {status!r}"
+                )
+            split_into = meta.get("split_into", [])
+            if not isinstance(split_into, list):
+                raise CorruptSnapshot(
+                    f"快照损坏：entries[{eid!r}].split_into 必须是数组"
+                )
+            g._entries[eid] = {
+                "topic": meta["topic"],
+                "status": status,
+                "split_into": list(split_into),
+                "split_from": meta.get("split_from"),
+                "split_from_version": meta.get("split_from_version"),
+                "split_clock": meta.get("split_clock"),
+            }
             g._out[eid] = set()
             g._in[eid] = set()
 
@@ -646,6 +730,11 @@ class ExperienceGraph:
                 raise CorruptSnapshot(f"快照损坏：悬空引用 {s!r} -> {t!r}")
             if s == t:
                 raise CorruptSnapshot(f"快照损坏：自引用 {s!r}")
+            # 已拆分归档条目不再是任何引用边的端点
+            if g._is_archived(s) or g._is_archived(t):
+                raise CorruptSnapshot(
+                    f"快照损坏：引用边触及已拆分归档条目 {s!r} -> {t!r}"
+                )
             g._edges.add((s, t))
             g._out[s].add(t)
             g._in[t].add(s)
@@ -653,6 +742,44 @@ class ExperienceGraph:
         # 成环校验
         if g._contains_cycle():
             raise CorruptSnapshot("快照损坏：引用图存在环路")
+
+        # 拆分归档的跨条目一致性校验
+        for eid, meta in g._entries.items():
+            if meta.get("status") == "split":
+                targets = meta.get("split_into", [])
+                if not targets:
+                    raise CorruptSnapshot(
+                        f"快照损坏：归档条目 {eid!r} 缺少 split_into 分片"
+                    )
+                if g._out[eid] or g._in[eid]:
+                    raise CorruptSnapshot(
+                        f"快照损坏：归档条目 {eid!r} 仍持有引用边"
+                    )
+                parent_point = len(g._versions[eid]) - 1
+                for t in targets:
+                    if t not in g._entries:
+                        raise CorruptSnapshot(
+                            f"快照损坏：{eid!r} 拆分到不存在的条目 {t!r}"
+                        )
+                    child = g._entries[t]
+                    if child.get("split_from") != eid:
+                        raise CorruptSnapshot(
+                            f"快照损坏：分片 {t!r} 未回指其来源 {eid!r}"
+                        )
+                    if child.get("split_from_version") != parent_point:
+                        raise CorruptSnapshot(
+                            f"快照损坏：分片 {t!r} 的拆分点版本与 {eid!r} 不一致"
+                        )
+            sf = meta.get("split_from")
+            if sf is not None:
+                if sf not in g._entries:
+                    raise CorruptSnapshot(
+                        f"快照损坏：{eid!r} 的来源条目 {sf!r} 不存在"
+                    )
+                if eid not in g._entries[sf].get("split_into", []):
+                    raise CorruptSnapshot(
+                        f"快照损坏：{sf!r} 的分片清单未包含 {eid!r}"
+                    )
 
         for cid, c in conflicts.items():
             where = f"conflicts[{cid!r}]"

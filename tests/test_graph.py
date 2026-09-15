@@ -255,6 +255,148 @@ class DeleteSplitRecomputeTests(unittest.TestCase):
         self.assertEqual(set(map(tuple, g.to_dict()["edges"])), before)
 
 
+class DeleteConflictCascadeTests(unittest.TestCase):
+    """删除带冲突记录的条目：冲突级联清除，导出导入可通过。"""
+
+    def _with_conflict(self):
+        import os
+        import tempfile
+        from experience_graph import persistence
+        g = make_populated()
+        g.integrate_revisions("a", [
+            {"author": "x", "base_version": 0,
+             "body": "段0-X\n段1\n段2", "change": "x"},
+            {"author": "y", "base_version": 0,
+             "body": "段0-Y\n段1\n段2", "change": "y"},
+        ], strict=False)
+        g.add_reference("b", "a")
+        return g, persistence, os, tempfile
+
+    def test_delete_clears_conflicts_and_edges(self):
+        g, persistence, os, tempfile = self._with_conflict()
+        self.assertEqual(len(g.list_conflicts("a")), 1)
+        info = g.delete_entry("a")
+        # 冲突随删除级联清除
+        self.assertEqual(g.list_conflicts(), [])
+        # 指向 a 的边也收敛
+        self.assertEqual(info["removed_edges"], [("b", "a")])
+        self.assertFalse(g.has_dangling_reference())
+        self.assertEqual(g.outgoing("b"), [])
+
+    def test_export_import_after_delete(self):
+        g, persistence, os, tempfile = self._with_conflict()
+        g.delete_entry("a")
+        path = os.path.join(tempfile.mkdtemp(), "snap.json")
+        persistence.save(g, path)
+        loaded = persistence.load(path)            # 不应抛 CorruptSnapshot
+        self.assertEqual(loaded.list_conflicts(), [])
+        self.assertFalse(loaded.has_dangling_reference())
+        self.assertEqual(loaded.to_dict(), g.to_dict())
+
+
+class SplitHistoryAndConflictOwnershipTests(unittest.TestCase):
+    """拆分后：旧条目修订链可查、新条目从拆分点 v0 起、冲突随旧条目归档。"""
+
+    def _split_graph(self):
+        g = make_populated()
+        g.submit_revision("a", "dave", 0, "段0改\n段1\n段2", "dave 改段0")
+        g.integrate_revisions("a", [
+            {"author": "x", "base_version": 1,
+             "body": "段0改\n段1\n段2-X", "change": "x 改段2"},
+            {"author": "y", "base_version": 1,
+             "body": "段0改\n段1\n段2-Y", "change": "y 改段2"},
+        ], strict=False)
+        g.add_reference("c", "a")
+        g.add_reference("a", "b")
+        g.split_entry("a", [
+            {"id": "a1", "topic": "A1", "body": "段0改\n段1", "author": "alice"},
+            {"id": "a2", "topic": "A2", "body": "段2", "author": "alice"},
+        ])
+        return g
+
+    def test_old_entry_kept_as_readonly_archive_with_full_chain(self):
+        g = self._split_graph()
+        # 旧条目默认不出现在活跃列表，但仍可按 id 查询
+        self.assertNotIn("a", g.list_entries())
+        self.assertIn("a", g.list_entries(include_archived=True))
+        meta = g.get_entry("a")
+        self.assertEqual(meta["status"], "split")
+        self.assertEqual(meta["split_into"], ["a1", "a2"])
+        # 完整修订链保留到拆分点 v0(create)+v1(edit)，冲突不前进版本
+        versions = [c["new_version"] for c in g.revision_chain("a")]
+        self.assertEqual(versions, [0, 1])
+
+    def test_archived_entry_is_readonly(self):
+        g = self._split_graph()
+        with self.assertRaises(Exception):
+            g.submit_revision("a", "z", 1, "nope", "改归档")
+        with self.assertRaises(Exception):
+            g.add_reference("a", "b")
+
+    def test_new_parts_start_versioning_from_split_point(self):
+        g = self._split_graph()
+        self.assertEqual(g.current_version("a1"), 0)
+        self.assertEqual(g.current_version("a2"), 0)
+        m1 = g.get_entry("a1")
+        self.assertEqual(m1["split_from"], "a")
+        self.assertEqual(m1["split_from_version"], 1)   # 拆分点为旧 v1
+        # 新分片各自独立增长
+        self.assertEqual(
+            g.submit_revision("a1", "z", 0, "段0改\n段1\n注", "a1 补充"), 1)
+
+    def test_conflict_follows_archived_old_entry(self):
+        g = self._split_graph()
+        conflicts = g.list_conflicts()
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].entry_id, "a")   # 锚定旧条目，不悬空
+        # 新分片不携带旧冲突
+        self.assertEqual(g.list_conflicts("a1"), [])
+        # 归档条目的冲突不能再被 resolve（只读）
+        with self.assertRaises(Exception):
+            g.resolve_conflict(conflicts[0].conflict_id, "z", "body", "c")
+
+    def test_edges_converge_and_old_entry_detached(self):
+        g = self._split_graph()
+        self.assertFalse(g.has_dangling_reference())
+        self.assertEqual(g.outgoing("a"), [])
+        self.assertEqual(g.backlinks("a"), [])
+        self.assertEqual(g.backlinks("a1"), ["c"])
+        self.assertEqual(g.outgoing("a1"), ["b"])
+
+    def test_split_history_self_consistent_after_roundtrip(self):
+        import os
+        import tempfile
+        from experience_graph import persistence
+        g = self._split_graph()
+        path = os.path.join(tempfile.mkdtemp(), "snap.json")
+        persistence.save(g, path)
+        loaded = persistence.load(path)
+        self.assertEqual(
+            [c["new_version"] for c in loaded.revision_chain("a")], [0, 1])
+        self.assertEqual(loaded.current_version("a1"), 0)
+        self.assertEqual(
+            [c.entry_id for c in loaded.list_conflicts()], ["a"])
+        self.assertFalse(loaded.has_dangling_reference())
+        self.assertEqual(loaded.to_dict(), g.to_dict())
+
+    def test_split_then_part_revisions_roundtrip(self):
+        # 分片在拆分后继续独立修订，历史仍自洽
+        import os
+        import tempfile
+        from experience_graph import persistence
+        g = self._split_graph()
+        g.submit_revision("a2", "z", 0, "段2-修订", "a2 修订")
+        path = os.path.join(tempfile.mkdtemp(), "snap.json")
+        persistence.save(g, path)
+        loaded = persistence.load(path)
+        self.assertEqual(loaded.current_version("a2"), 1)
+        self.assertEqual(
+            [c["new_version"] for c in loaded.revision_chain("a2")], [0, 1])
+        # 旧归档仍冻结在拆分点
+        self.assertEqual(
+            [c["new_version"] for c in loaded.revision_chain("a")], [0, 1])
+
+
 class QueryTests(unittest.TestCase):
     def test_revision_chain_and_authors(self):
         g = make_populated()

@@ -142,5 +142,58 @@ class CorruptionTests(unittest.TestCase):
             self.fail("应当抛出 CorruptSnapshot")
 
 
+def build_split_sample():
+    g = ExperienceGraph()
+    g.create_entry("a", "主题A", "段0\n段1", "alice")
+    g.create_entry("b", "主题B", "B", "bob")
+    g.add_reference("b", "a")
+    g.split_entry("a", [
+        {"id": "a1", "topic": "A1", "body": "段0", "author": "alice"},
+        {"id": "a2", "topic": "A2", "body": "段1", "author": "alice"},
+    ])
+    return g
+
+
+class SplitArchiveIntegrityTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "split.json")
+
+    def _envelope(self, payload):
+        return {
+            "format": persistence.FORMAT,
+            "version": persistence.ENVELOPE_VERSION,
+            "payload": payload,
+            "checksum": persistence._checksum(payload),
+        }
+
+    def test_split_snapshot_roundtrips(self):
+        g = build_split_sample()
+        persistence.save(g, self.path)
+        loaded = persistence.load(self.path)
+        self.assertEqual(loaded.to_dict(), g.to_dict())
+        self.assertEqual(loaded.get_entry("a")["status"], "split")
+
+    def test_edge_touching_archived_entry_rejected(self):
+        g = build_split_sample()
+        payload = g.to_dict()
+        payload["edges"].append(["b", "a"])        # a 已归档，不得持边
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump(self._envelope(payload), fh)
+        with self.assertRaises(CorruptSnapshot):
+            persistence.load(self.path)
+
+    def test_split_target_missing_rejected(self):
+        g = build_split_sample()
+        payload = g.to_dict()
+        # 删掉分片 a2，却仍让归档 a 指向它
+        del payload["entries"]["a2"]
+        del payload["versions"]["a2"]
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump(self._envelope(payload), fh)
+        with self.assertRaises(CorruptSnapshot):
+            persistence.load(self.path)
+
+
 if __name__ == "__main__":
     unittest.main()
