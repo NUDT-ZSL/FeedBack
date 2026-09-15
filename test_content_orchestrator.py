@@ -300,6 +300,174 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(len(orch.variant_view("b")["conflicts"]), 1)
 
 
+class TestUnitDeletion(unittest.TestCase):
+    """删除仍被引用的母稿单元后的行为收紧。"""
+
+    def test_orphaned_items_marked_and_stale(self):
+        orch = make_orchestrator()
+        orch.generate_all()
+        orch.remove_unit("p1")
+        view = orch.variant_view("wechat")
+        # 历史内容保留，但来源失效被明确标记
+        self.assertIn("p1", view["items"])
+        self.assertEqual(view["sources"]["p1"], 1)  # 溯源记录保留
+        self.assertEqual(view["orphaned"], ["p1"])
+        self.assertTrue(view["stale"])
+        # 未涉及删除的变体不受影响
+        weibo = orch.variant_view("weibo")
+        self.assertEqual(weibo["orphaned"], [])
+        self.assertFalse(weibo["stale"])
+        with self.assertRaises(NotFoundError):
+            orch.remove_unit("p1")  # 已删除，再删报错
+
+    def test_regeneration_drops_deleted_unit(self):
+        orch = make_orchestrator()
+        orch.generate_all()
+        before_weibo = dict(orch.variants["weibo"].items)
+        orch.remove_unit("p1")
+        refreshed = orch.refresh_stale()
+        self.assertEqual(refreshed, ["wechat"])
+        # 重新生成后不再引用已删除单元
+        view = orch.variant_view("wechat")
+        self.assertNotIn("p1", view["items"])
+        self.assertNotIn("p1", view["sources"])
+        self.assertEqual(view["orphaned"], [])
+        self.assertFalse(view["stale"])
+        # 未受影响的变体内容不变
+        self.assertEqual(dict(orch.variants["weibo"].items), before_weibo)
+
+    def test_validation_reports_source_missing(self):
+        orch = make_orchestrator()
+        orch.generate_all()
+        orch.remove_unit("p1")
+        report = orch.validate()
+        self.assertTrue(any(
+            i["kind"] == "source_missing" and i["unit_id"] == "p1"
+            and i["channel"] == "wechat" for i in report))
+        # 重复校验结果相同
+        self.assertEqual(orch.validate(), report)
+
+
+class TestChannelCancellation(unittest.TestCase):
+    """冲突一方渠道被取消后，冲突记录保留并标注失效。"""
+
+    def _orch_with_conflict(self):
+        orch = Orchestrator()
+        orch.add_unit("s1", "summary", "销量增长 30%。")
+        ra = ChannelRule("chA")
+        ra.add_derivation("s1", {"30%": "三成"})
+        rb = ChannelRule("chB")
+        rb.add_derivation("s1", {"30%": "百分之三十"})
+        orch.add_rule(ra)
+        orch.add_rule(rb)
+        orch.generate_all()
+        orch.validate()
+        return orch
+
+    def test_conflict_retained_and_annotated_after_cancellation(self):
+        orch = self._orch_with_conflict()
+        orch.remove_channel("chB")
+        records = orch.conflict_records()
+        self.assertEqual(len(records), 1)  # 不静默丢弃
+        rec = records[0]
+        # 双方原始内容保留
+        self.assertEqual(rec["contents"]["chA"], "销量增长 三成。")
+        self.assertEqual(rec["contents"]["chB"], "销量增长 百分之三十。")
+        self.assertEqual(rec["rewrites"], {"chA": "三成", "chB": "百分之三十"})
+        # 失效标注
+        self.assertEqual(rec["channel_status"],
+                         {"chA": "active", "chB": "cancelled"})
+        self.assertFalse(rec["active"])
+        self.assertTrue(rec["unit_exists"])
+        # 存续渠道的查询视图也能看到该历史冲突及标注
+        view_conflicts = orch.variant_view("chA")["conflicts"]
+        self.assertEqual(len(view_conflicts), 1)
+        self.assertEqual(view_conflicts[0]["channel_status"]["chB"], "cancelled")
+        # 再次校验不会丢弃历史冲突，且报告标注失效方
+        report = orch.validate()
+        self.assertEqual(len(orch.conflicts), 1)
+        conflict_issues = [i for i in report if i["kind"] == "semantic_conflict"]
+        self.assertEqual(len(conflict_issues), 1)
+        self.assertIn("chB", conflict_issues[0]["message"])
+        self.assertIn("已失效", conflict_issues[0]["message"])
+        self.assertEqual(orch.validate(), report)  # 可重复
+
+    def test_cancel_unknown_channel_rejected(self):
+        orch = self._orch_with_conflict()
+        with self.assertRaises(NotFoundError):
+            orch.remove_channel("nope")
+
+
+class TestDeletionPersistence(unittest.TestCase):
+    """删除/取消后的标记与状态在导出导入后保持一致。"""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "state.json")
+
+    def test_roundtrip_preserves_marks(self):
+        orch = Orchestrator()
+        orch.add_unit("s1", "summary", "销量增长 30%。")
+        orch.add_unit("p1", "point", "要点一。")
+        ra = ChannelRule("chA")
+        ra.add_derivation("s1", {"30%": "三成"})
+        ra.add_derivation("p1")
+        rb = ChannelRule("chB")
+        rb.add_derivation("s1", {"30%": "百分之三十"})
+        orch.add_rule(ra)
+        orch.add_rule(rb)
+        orch.generate_all()
+        orch.validate()
+        orch.remove_channel("chB")   # 冲突一方失效
+        orch.remove_unit("p1")       # chA 的 p1 来源失效
+        orch.validate()
+        orch.save(self.path)
+
+        loaded = Orchestrator.load(self.path)
+        # 变体标记一致
+        view = loaded.variant_view("chA")
+        self.assertEqual(view["orphaned"], ["p1"])
+        self.assertTrue(view["stale"])
+        # 冲突记录与标注一致
+        records = loaded.conflict_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["channel_status"],
+                         {"chA": "active", "chB": "cancelled"})
+        self.assertFalse(records[0]["active"])
+        self.assertEqual(records[0]["contents"]["chB"], "销量增长 百分之三十。")
+        # 校验报告一致
+        self.assertEqual(loaded.report, orch.report)
+        # 载入后刷新过期变体：不再引用已删除单元
+        self.assertEqual(loaded.refresh_stale(), ["chA"])
+        self.assertNotIn("p1", loaded.variant_view("chA")["items"])
+
+    def test_load_conflict_with_cancelled_channel_accepted(self):
+        # 手工构造：冲突记录引用一个已不存在的渠道，应能载入并标注
+        orch = Orchestrator()
+        orch.add_unit("s1", "summary", "销量增长 30%。")
+        ra = ChannelRule("chA")
+        ra.add_derivation("s1", {"30%": "三成"})
+        orch.add_rule(ra)
+        orch.generate_all()
+        orch.validate()
+        data = orch.to_dict()
+        data["conflicts"] = [{
+            "unit_id": "s1",
+            "token": "30%",
+            "channels": ["chA", "chGone"],
+            "rewrites": {"chA": "三成", "chGone": "百分之三十"},
+            "contents": {"chA": "销量增长 三成。"},
+            "message": "母稿单元 's1' 的改写点 '30%' 在渠道间互相矛盾",
+        }]
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        loaded = Orchestrator.load(self.path)
+        rec = loaded.conflict_records()[0]
+        self.assertEqual(rec["channel_status"],
+                         {"chA": "active", "chGone": "cancelled"})
+        self.assertFalse(rec["active"])
+
+
 class TestPersistence(unittest.TestCase):
     """需求 7/8：保存、载入与载入校验。"""
 
@@ -375,22 +543,33 @@ class TestPersistence(unittest.TestCase):
             Orchestrator.load(self.path)
         self.assertIn("重复", str(ctx.exception))
 
-    def test_load_rule_referencing_missing_unit(self):
+    def test_load_rule_with_illegal_type_rejected(self):
+        data = self._valid_data()
+        data["rules"][0]["allowed_types"].append("body")
+        self._write_json(data)
+        with self.assertRaises(LoadError) as ctx:
+            Orchestrator.load(self.path)
+        self.assertIn("body", str(ctx.exception))
+
+    def test_load_rule_referencing_deleted_unit_accepted(self):
+        # 单元删除后的规则引用是合法历史状态，载入不拒绝
         data = self._valid_data()
         data["rules"][0]["derivations"].append(
             {"source": "ghost", "replacements": {}})
         self._write_json(data)
-        with self.assertRaises(LoadError) as ctx:
-            Orchestrator.load(self.path)
-        self.assertIn("ghost", str(ctx.exception))
+        loaded = Orchestrator.load(self.path)
+        self.assertIsNotNone(loaded.rules[data["rules"][0]["channel"]])
 
-    def test_load_variant_with_missing_source(self):
+    def test_load_variant_with_orphaned_source_accepted(self):
+        # 来源单元已删除的变体是合法历史状态：载入保留，视图标记失效
         data = self._valid_data()
         data["variants"][0]["sources"]["ghost"] = 1
+        data["variants"][0]["items"]["ghost"] = "残留内容"
         self._write_json(data)
-        with self.assertRaises(LoadError) as ctx:
-            Orchestrator.load(self.path)
-        self.assertIn("ghost", str(ctx.exception))
+        loaded = Orchestrator.load(self.path)
+        view = loaded.variant_view(data["variants"][0]["channel"])
+        self.assertEqual(view["orphaned"], ["ghost"])
+        self.assertTrue(view["stale"])
 
     def test_load_inconsistent_conflict(self):
         data = self._valid_data()

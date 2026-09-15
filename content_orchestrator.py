@@ -113,6 +113,13 @@ class MasterDraft:
         unit.content = content
         unit.version += 1
 
+    def remove_unit(self, unit_id):
+        """删除单元。引用它的变体保留历史内容，但来源随即失效
+        （查询时标记为 orphaned，过期状态置真，重新生成时不再引用）。"""
+        if unit_id not in self._units:
+            raise NotFoundError("母稿中不存在单元 %r，无法删除" % unit_id)
+        del self._units[unit_id]
+
     # -- 查询 ------------------------------------------------------------
 
     def get(self, unit_id):
@@ -258,10 +265,16 @@ class Variant:
 
 
 def build_variant(rule, master):
-    """按规则从母稿生成变体（纯函数：同样输入必然同样输出）。"""
+    """按规则从母稿生成变体（纯函数：同样输入必然同样输出）。
+
+    规则在登记时已校验引用合法，因此来源缺失只可能发生在母稿单元
+    被删除之后；此时跳过该派生，重新生成的变体不再引用已删除单元。
+    """
     variant = Variant(rule.channel)
     for deriv in rule.derivations:
-        unit = master.get(deriv.source)  # 不存在则抛 NotFoundError
+        if deriv.source not in master:
+            continue  # 来源单元已被删除
+        unit = master.get(deriv.source)
         content = apply_replacements(unit.content, deriv.replacements)
         content, trim_record = trim_text(content, rule.max_length_for(unit.type))
         if trim_record is not None:
@@ -295,6 +308,10 @@ class Orchestrator:
     def update_unit(self, unit_id, content):
         self.master.update_unit(unit_id, content)
 
+    def remove_unit(self, unit_id):
+        """删除母稿单元。引用它的变体保留历史内容但来源失效。"""
+        self.master.remove_unit(unit_id)
+
     # -- 2. 渠道规则 ------------------------------------------------------
 
     def add_rule(self, rule):
@@ -306,7 +323,9 @@ class Orchestrator:
         self._validate_rule(rule)
         self.rules[rule.channel] = rule
 
-    def _validate_rule(self, rule):
+    def _validate_rule(self, rule, check_references=True):
+        """校验规则。check_references=False 用于载入：母稿单元可能已被
+        删除，规则中指向它的引用是合法的历史状态（生成时会跳过）。"""
         for t in rule.allowed_types:
             if t not in UNIT_TYPES:
                 raise ValidationError(
@@ -325,7 +344,7 @@ class Orchestrator:
                 )
         seen_sources = set()
         for d in rule.derivations:
-            if d.source not in self.master:
+            if check_references and d.source not in self.master:
                 raise ValidationError(
                     "渠道 %r 的派生规则引用了不存在的母稿单元 %r"
                     % (rule.channel, d.source)
@@ -336,18 +355,31 @@ class Orchestrator:
                     % (rule.channel, d.source)
                 )
             seen_sources.add(d.source)
-            unit_type = self.master.get(d.source).type
-            if unit_type not in rule.allowed_types:
-                raise ValidationError(
-                    "渠道 %r 不允许使用类型 %r（母稿单元 %r）"
-                    % (rule.channel, unit_type, d.source)
-                )
-        for unit_id in rule.required:
-            if unit_id not in self.master:
-                raise ValidationError(
-                    "渠道 %r 的必填单元 %r 在母稿中不存在"
-                    % (rule.channel, unit_id)
-                )
+            if check_references:
+                unit_type = self.master.get(d.source).type
+                if unit_type not in rule.allowed_types:
+                    raise ValidationError(
+                        "渠道 %r 不允许使用类型 %r（母稿单元 %r）"
+                        % (rule.channel, unit_type, d.source)
+                    )
+        if check_references:
+            for unit_id in rule.required:
+                if unit_id not in self.master:
+                    raise ValidationError(
+                        "渠道 %r 的必填单元 %r 在母稿中不存在"
+                        % (rule.channel, unit_id)
+                    )
+
+    def remove_channel(self, channel):
+        """取消渠道：移除其规则与变体。
+
+        已生成的冲突记录不受影响——记录中保留双方原始内容，查询时
+        该方会被标注为已失效（cancelled），不会被静默丢弃。
+        """
+        if channel not in self.rules and channel not in self.variants:
+            raise NotFoundError("渠道 %r 不存在，无法取消" % channel)
+        self.rules.pop(channel, None)
+        self.variants.pop(channel, None)
 
     # -- 3/4. 生成与过期重算 ----------------------------------------------
 
@@ -406,6 +438,8 @@ class Orchestrator:
                     by_unit.setdefault(d.source, {}).setdefault(token, {})[channel] = value
         conflicts = []
         for unit_id in sorted(by_unit):
+            if unit_id not in self.master:
+                continue  # 单元已删除：历史冲突保留在 self.conflicts 中
             for token in sorted(by_unit[unit_id]):
                 per_channel = by_unit[unit_id][token]
                 if len(set(per_channel.values())) <= 1:
@@ -430,6 +464,32 @@ class Orchestrator:
                     ),
                 })
         return conflicts
+
+    @staticmethod
+    def _conflict_key(record):
+        return (record["unit_id"], record["token"], tuple(record["channels"]))
+
+    def conflict_records(self):
+        """返回冲突记录（含历史记录），并标注每方渠道与单元的当前状态。
+
+        - channel_status: 每方渠道为 "active"（规则仍在）或 "cancelled"
+          （已取消/不存在）；原始双方内容始终保留，不静默丢弃。
+        - unit_exists: 冲突涉及的母稿单元是否仍存在。
+        - active: 各方渠道都在且单元存在时为 True。
+        """
+        annotated = []
+        for c in self.conflicts:
+            rec = dict(c)
+            status = {
+                ch: ("active" if ch in self.rules else "cancelled")
+                for ch in c["channels"]
+            }
+            rec["channel_status"] = status
+            rec["unit_exists"] = c["unit_id"] in self.master
+            rec["active"] = (rec["unit_exists"]
+                             and all(s == "active" for s in status.values()))
+            annotated.append(rec)
+        return annotated
 
     # -- 6. 一致性校验 ----------------------------------------------------
 
@@ -480,13 +540,29 @@ class Orchestrator:
                             % (channel, unit_id, len(variant.items[unit_id]), limit)
                         ),
                     })
-        self.conflicts = self.detect_conflicts()
-        for c in self.conflicts:
+        # 合并冲突：现行冲突 + 因渠道取消或单元删除而不再是现行的历史冲突
+        # （历史记录必须保留，不能静默丢弃）
+        live = self.detect_conflicts()
+        live_keys = {self._conflict_key(c) for c in live}
+        historical = [c for c in self.conflicts
+                      if self._conflict_key(c) not in live_keys]
+        self.conflicts = sorted(
+            live + historical,
+            key=lambda c: (c["unit_id"], c["token"], list(c["channels"])),
+        )
+        for c in self.conflict_records():
+            message = c["message"]
+            inactive = sorted(ch for ch, s in c["channel_status"].items()
+                              if s == "cancelled")
+            if inactive:
+                message += "（已失效渠道: %s）" % ", ".join(inactive)
+            if not c["unit_exists"]:
+                message += "（母稿单元已删除）"
             issues.append({
                 "kind": "semantic_conflict",
                 "channel": ",".join(c["channels"]),
                 "unit_id": c["unit_id"],
-                "message": c["message"],
+                "message": message,
             })
         issues.sort(key=lambda i: (i["kind"], i["channel"], i["unit_id"] or ""))
         self.report = issues
@@ -495,7 +571,13 @@ class Orchestrator:
     # -- 7. 查询 ----------------------------------------------------------
 
     def variant_view(self, channel):
-        """查询某渠道变体的当前内容、来源、过期状态、裁剪项与冲突。"""
+        """查询某渠道变体的当前内容、来源、过期状态、裁剪项与冲突。
+
+        - sources: 各项内容派生自哪个母稿单元的哪个版本（历史溯源，
+          即使该单元后来被删除也保留记录）。
+        - orphaned: 来源单元已被删除、内容已失去来源的单元列表。
+        - conflicts: 含历史冲突记录，每方渠道标注 active/cancelled。
+        """
         variant = self.variants.get(channel)
         if variant is None:
             raise NotFoundError("渠道 %r 尚未生成变体" % channel)
@@ -503,9 +585,11 @@ class Orchestrator:
             "channel": channel,
             "items": dict(variant.items),
             "sources": dict(variant.sources),
+            "orphaned": sorted(u for u in variant.sources
+                               if u not in self.master),
             "stale": self.is_stale(channel),
             "trims": [dict(t) for t in variant.trims],
-            "conflicts": [c for c in self.detect_conflicts()
+            "conflicts": [c for c in self.conflict_records()
                           if channel in c["channels"]],
         }
 
@@ -603,9 +687,13 @@ class Orchestrator:
                     raise LoadError("%s 的派生[%d] 缺少字段 'source'" % (where, j))
                 rule.add_derivation(d["source"], d.get("replacements"))
             try:
-                orch.add_rule(rule)
+                # 载入时不校验母稿引用：单元可能已被删除，引用是合法历史状态
+                orch._validate_rule(rule, check_references=False)
             except ValidationError as e:
                 raise LoadError("%s 非法: %s" % (where, e))
+            if rule.channel in orch.rules:
+                raise LoadError("渠道规则重复: %r" % rule.channel)
+            orch.rules[rule.channel] = rule
 
         # -- 变体：渠道有规则、来源存在、字段齐全 --
         if not isinstance(data["variants"], list):
@@ -630,9 +718,8 @@ class Orchestrator:
                     raise LoadError("%s 单元 %r 的内容必须是字符串" % (where, unit_id))
                 variant.items[unit_id] = content
             for unit_id, version in v["sources"].items():
-                if unit_id not in orch.master:
-                    raise LoadError(
-                        "%s 的来源单元 %r 在母稿中不存在" % (where, unit_id))
+                # 来源单元可能已被删除（orphaned）：合法，载入后由
+                # variant_view 标记为来源失效
                 if not isinstance(version, int) or version < 1:
                     raise LoadError("%s 单元 %r 的来源版本必须是正整数"
                                     % (where, unit_id))
@@ -650,9 +737,7 @@ class Orchestrator:
                     if field not in t:
                         raise LoadError("%s 的裁剪记录[%d] 缺少字段 %r"
                                         % (where, j, field))
-                if t["unit_id"] not in orch.master:
-                    raise LoadError("%s 的裁剪记录[%d] 引用了不存在的母稿单元 %r"
-                                    % (where, j, t["unit_id"]))
+                # 裁剪是历史记录：来源单元可能已被删除，合法保留
                 entry = {
                     "unit_id": t["unit_id"],
                     "channel": channel,
@@ -663,7 +748,9 @@ class Orchestrator:
                 variant.trims.append(entry)
             orch.variants[channel] = variant
 
-        # -- 冲突记录：自洽（单元存在、渠道存在且互不相同、内容一致） --
+        # -- 冲突记录：自洽（字段齐全、各方互不相同、改写值确实相异、
+        #    内容与现存变体一致）。渠道已取消或单元已删除的历史记录
+        #    合法保留，查询时会被标注为已失效。 --
         if not isinstance(data["conflicts"], list):
             raise LoadError("字段 'conflicts' 必须是列表")
         for i, c in enumerate(data["conflicts"]):
@@ -673,17 +760,14 @@ class Orchestrator:
             for field in ("unit_id", "token", "channels", "rewrites", "message"):
                 if field not in c:
                     raise LoadError("%s 缺少字段 %r" % (where, field))
-            if c["unit_id"] not in orch.master:
-                raise LoadError("%s 引用了不存在的母稿单元 %r"
-                                % (where, c["unit_id"]))
             channels = c["channels"]
             if (not isinstance(channels, list) or len(channels) < 2
                     or len(set(channels)) != len(channels)):
                 raise LoadError("%s 的 channels 必须包含至少两个互不相同的渠道"
                                 % where)
+            if not isinstance(c["rewrites"], dict):
+                raise LoadError("%s 的 rewrites 必须是对象" % where)
             for ch in channels:
-                if ch not in orch.rules:
-                    raise LoadError("%s 引用了未登记的渠道 %r" % (where, ch))
                 if ch not in c["rewrites"]:
                     raise LoadError("%s 的 rewrites 缺少渠道 %r 的改写值"
                                     % (where, ch))
