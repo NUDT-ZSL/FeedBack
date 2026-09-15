@@ -218,40 +218,55 @@ class ConflictTest(unittest.TestCase):
 
 
 class AdjustTest(unittest.TestCase):
-    """需求 4：偏离后摊回，总量守恒。"""
+    """需求 4（收紧后口径）：已结束阶段按实绩结算、当前阶段不变、
+    超出量由当前阶段之后的剩余阶段承担、总量严格守恒。"""
 
     def setUp(self):
         self.eng = make_engine(tolerance=0.05)
         self.eng.register_park("P1", 1000.0, stages_4q(100.0))
-        self.eng.report("P1", "2026Q1", 150.0)  # 超 50
+        self.eng.report("P1", "2026Q1", 150.0)  # S1 结束，超 50
 
     def test_even_spread_conserves_total(self):
         rec = self.eng.adjust("P1", strategy="even", as_of="2026Q1")
         self.assertAlmostEqual(rec["excess"], 50.0)
-        self.assertEqual(rec["absorber_stage"], "S1")
+        self.assertEqual(rec["settled_stages"], ["S1"])
+        self.assertEqual(rec["current_stage"], "S2")
         stages = {s["stage_id"]: s for s in self.eng.targets("P1")}
-        self.assertAlmostEqual(stages["S1"]["allowance"], 150.0)
-        for sid in ("S2", "S3", "S4"):
-            self.assertAlmostEqual(stages[sid]["allowance"], 100.0 - 50.0 / 3)
+        self.assertAlmostEqual(stages["S1"]["allowance"], 150.0)   # 已结束阶段按实绩结算
+        self.assertAlmostEqual(stages["S2"]["allowance"], 100.0)   # 当前阶段保持不变
+        for sid in ("S3", "S4"):                                    # 剩余阶段均摊 50
+            self.assertAlmostEqual(stages[sid]["allowance"], 75.0)
         # 总量守恒：调整后之和 == 原总目标 400
         total = sum(s["allowance"] for s in stages.values())
         self.assertAlmostEqual(total, 400.0, places=9)
         self.assertAlmostEqual(rec["total_allowance"], 400.0, places=9)
-        # 调整后偏差被追认，回到达标
+        # 调整后已结束阶段被追认，回到达标
         self.assertEqual(self.eng.status("P1", as_of="2026Q1")["state"],
                          "on_track")
 
     def test_weighted_spread(self):
         rec = self.eng.adjust(
             "P1", strategy="weighted",
-            weights={"S2": 1.0, "S3": 1.0, "S4": 2.0}, as_of="2026Q1")
+            weights={"S3": 1.0, "S4": 3.0}, as_of="2026Q1")
         stages = {s["stage_id"]: s for s in self.eng.targets("P1")}
-        self.assertAlmostEqual(stages["S2"]["allowance"], 100.0 - 12.5)
+        self.assertAlmostEqual(stages["S1"]["allowance"], 150.0)
+        self.assertAlmostEqual(stages["S2"]["allowance"], 100.0)  # 当前阶段不变
         self.assertAlmostEqual(stages["S3"]["allowance"], 100.0 - 12.5)
-        self.assertAlmostEqual(stages["S4"]["allowance"], 100.0 - 25.0)
+        self.assertAlmostEqual(stages["S4"]["allowance"], 100.0 - 37.5)
         total = sum(s["allowance"] for s in stages.values())
         self.assertAlmostEqual(total, 400.0, places=9)
         self.assertEqual(rec["strategy"], "weighted")
+
+    def test_zero_weight_stage_excluded(self):
+        """权重为零的阶段不参与分配，额度不变，总量仍守恒。"""
+        self.eng.adjust("P1", strategy="weighted",
+                        weights={"S3": 0.0, "S4": 1.0}, as_of="2026Q1")
+        stages = {s["stage_id"]: s for s in self.eng.targets("P1")}
+        self.assertAlmostEqual(stages["S2"]["allowance"], 100.0)  # 当前阶段不变
+        self.assertAlmostEqual(stages["S3"]["allowance"], 100.0)  # 零权重不参与
+        self.assertAlmostEqual(stages["S4"]["allowance"], 50.0)   # 独自承担 50
+        total = sum(s["allowance"] for s in stages.values())
+        self.assertAlmostEqual(total, 400.0, places=9)
 
     def test_weighted_default_proportional_to_allowance(self):
         eng = make_engine()
@@ -261,16 +276,20 @@ class AdjustTest(unittest.TestCase):
             {"stage_id": "B", "start": "2026Q2", "end": "2026Q2",
              "allowance": 100.0},
             {"stage_id": "C", "start": "2026Q3", "end": "2026Q3",
+             "allowance": 100.0},
+            {"stage_id": "D", "start": "2026Q4", "end": "2026Q4",
              "allowance": 300.0},
         ])
-        eng.report("P9", "2026Q1", 200.0)  # 超 100
+        eng.report("P9", "2026Q1", 200.0)  # A 结束，超 100
         eng.adjust("P9", strategy="weighted", as_of="2026Q1")
         stages = {s["stage_id"]: s for s in eng.targets("P9")}
-        # B:C = 1:3 → 各扣 25 / 75
-        self.assertAlmostEqual(stages["B"]["allowance"], 75.0)
-        self.assertAlmostEqual(stages["C"]["allowance"], 225.0)
+        self.assertAlmostEqual(stages["A"]["allowance"], 200.0)  # 结算
+        self.assertAlmostEqual(stages["B"]["allowance"], 100.0)  # 当前阶段不变
+        # C:D = 1:3 → 各扣 25 / 75
+        self.assertAlmostEqual(stages["C"]["allowance"], 75.0)
+        self.assertAlmostEqual(stages["D"]["allowance"], 225.0)
         self.assertAlmostEqual(
-            sum(s["allowance"] for s in stages.values()), 500.0, places=9)
+            sum(s["allowance"] for s in stages.values()), 600.0, places=9)
 
     def test_adjust_requires_deviated_state(self):
         eng = make_engine()
@@ -279,7 +298,7 @@ class AdjustTest(unittest.TestCase):
         with self.assertRaises(StateError):
             eng.adjust("P2", as_of="2026Q1")
 
-    def test_adjust_rejected_without_future_stages(self):
+    def test_adjust_rejected_without_remaining_stages(self):
         eng = make_engine()
         eng.register_park("P3", 1000.0, [
             {"stage_id": "S1", "start": "2026Q1", "end": "2026Q1",
@@ -288,16 +307,46 @@ class AdjustTest(unittest.TestCase):
         eng.report("P3", "2026Q1", 150.0)
         with self.assertRaises(StateError) as ctx:
             eng.adjust("P3", as_of="2026Q1")
-        self.assertIn("没有后续阶段", str(ctx.exception))
+        self.assertIn("没有剩余阶段", str(ctx.exception))
+
+    def test_mid_stage_excess_not_settled_yet(self):
+        """超出发生在尚未结束的当前阶段时，已结束阶段无超出可结算，拒绝调整。"""
+        eng = make_engine()
+        eng.register_park("P4", 1000.0, [
+            {"stage_id": "S1", "start": "2026Q1", "end": "2026Q2",
+             "allowance": 200.0},
+            {"stage_id": "S2", "start": "2026Q3", "end": "2026Q4",
+             "allowance": 200.0},
+        ])
+        eng.report("P4", "2026Q1", 250.0)  # 当前阶段 S1 未结束
+        self.assertEqual(eng.status("P4", as_of="2026Q1")["state"], "deviated")
+        with self.assertRaises(StateError) as ctx:
+            eng.adjust("P4", as_of="2026Q1")
+        self.assertIn("未结束", str(ctx.exception))
+
+    def test_adjust_rejected_when_data_incomplete(self):
+        eng = make_engine()
+        eng.register_park("P5", 1000.0, stages_4q(100.0))
+        eng.report("P5", "2026Q1", 250.0)
+        eng.report("P5", "2026Q3", 100.0)  # Q2 缺失（未达连续缺失阈值）
+        self.assertEqual(eng.status("P5", as_of="2026Q3")["state"], "deviated")
+        with self.assertRaises(StateError) as ctx:
+            eng.adjust("P5", as_of="2026Q3")
+        self.assertIn("数据不完整", str(ctx.exception))
 
     def test_adjustment_history_recorded(self):
         self.eng.adjust("P1", strategy="even", as_of="2026Q1")
         hist = self.eng.adjustment_history("P1")
         self.assertEqual(len(hist), 1)
-        self.assertEqual(hist[0]["seq"], 1)
-        self.assertIn("S1", hist[0]["changes"])
-        self.assertAlmostEqual(hist[0]["changes"]["S1"]["before"], 100.0)
-        self.assertAlmostEqual(hist[0]["changes"]["S1"]["after"], 150.0)
+        rec = hist[0]
+        self.assertEqual(rec["seq"], 1)
+        self.assertEqual(rec["settled_stages"], ["S1"])
+        self.assertEqual(rec["current_stage"], "S2")
+        self.assertAlmostEqual(rec["changes"]["S1"]["before"], 100.0)
+        self.assertAlmostEqual(rec["changes"]["S1"]["after"], 150.0)
+        self.assertAlmostEqual(rec["changes"]["S3"]["before"], 100.0)
+        self.assertAlmostEqual(rec["changes"]["S3"]["after"], 75.0)
+        self.assertNotIn("S2", rec["changes"])  # 当前阶段未动
 
 
 class PersistenceTest(unittest.TestCase):
@@ -307,16 +356,17 @@ class PersistenceTest(unittest.TestCase):
         eng = make_engine(tolerance=0.1)
         eng.register_park("PA", 800.0, stages_4q(100.0))
         eng.register_park("PB", 1200.0, [
-            {"stage_id": "H1", "start": "2026Q1", "end": "2026Q2",
-             "allowance": 300.0},
-            {"stage_id": "H2", "start": "2026Q3", "end": "2026Q4",
+            {"stage_id": "T1", "start": "2026Q1", "end": "2026Q1",
+             "allowance": 100.0},
+            {"stage_id": "T2", "start": "2026Q2", "end": "2026Q2",
+             "allowance": 200.0},
+            {"stage_id": "T3", "start": "2026Q3", "end": "2026Q4",
              "allowance": 300.0},
         ])
         eng.report("PA", "2026Q1", 150.0, source="meter")
         eng.report("PA", "2026Q1", 155.0, source="audit")  # 冲突
-        eng.report("PB", "2026Q1", 200.0, source="meter")
-        eng.report("PB", "2026Q2", 250.0, source="meter")  # 累计 450 vs 300 → 偏离
-        eng.adjust("PB", strategy="even", as_of="2026Q2")
+        eng.report("PB", "2026Q1", 200.0, source="meter")  # 累计 200 vs 100 → 偏离
+        eng.adjust("PB", strategy="even", as_of="2026Q1")
         return eng
 
     def test_roundtrip_preserves_everything(self):
@@ -326,7 +376,7 @@ class PersistenceTest(unittest.TestCase):
             eng.export_json(path)
             loaded = CalibrationEngine.import_json(path)
             # 状态查询结果一致
-            for pid, as_of in (("PA", "2026Q1"), ("PB", "2026Q2")):
+            for pid, as_of in (("PA", "2026Q1"), ("PB", "2026Q1")):
                 a = eng.status(pid, as_of=as_of)
                 b = loaded.status(pid, as_of=as_of)
                 self.assertEqual(a, b)
@@ -345,7 +395,7 @@ class PersistenceTest(unittest.TestCase):
 
     def test_import_rejects_corrupted_and_state_unchanged(self):
         eng = self.build_engine()
-        before = eng.status("PB", as_of="2026Q2")
+        before = eng.status("PB", as_of="2026Q1")
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "state.json")
             eng.export_json(path)
@@ -416,8 +466,37 @@ class PersistenceTest(unittest.TestCase):
                 eng.load_json(bad6)
 
         # 所有失败之后，原引擎状态完全不变
-        self.assertEqual(eng.status("PB", as_of="2026Q2"), before)
+        self.assertEqual(eng.status("PB", as_of="2026Q1"), before)
         self.assertEqual(len(eng.parks()), 2)
+
+    def test_conflict_clocks_survive_roundtrip(self):
+        """冲突记录（含已解决）的来源、数值与逻辑时钟导出导入后逐项一致。"""
+        eng = make_engine()
+        eng.register_park("P1", 1000.0, stages_4q(100.0))
+        eng.report("P1", "2026Q1", 100.0, source="A")      # clock 2
+        eng.report("P1", "2026Q1", 130.0, source="B")      # clock 3 → 活跃冲突
+        eng.report("P1", "2026Q2", 90.0, source="A")       # clock 4
+        eng.report("P1", "2026Q2", 95.0, source="B")       # clock 5 → 冲突
+        eng.report("P1", "2026Q2", 90.0, source="B")       # clock 6 → 冲突解除
+        before = eng.conflicts("P1")
+        self.assertEqual(len(before), 2)
+        self.assertEqual(before[0]["detected_clock"], 3)
+        self.assertIsNone(before[0]["resolved_clock"])
+        self.assertEqual(before[1]["detected_clock"], 5)
+        self.assertEqual(before[1]["resolved_clock"], 6)
+        # 已解决记录仍保留当时双方各自数值
+        self.assertEqual(before[1]["values"], {"A": 90.0, "B": 95.0})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            eng.export_json(path)
+            loaded = CalibrationEngine.import_json(path)
+        after = loaded.conflicts("P1")
+        self.assertEqual(before, after)  # 来源、数值、时刻逐项一致
+        # 逻辑时钟连续：载入后新的上报从原时钟继续递增
+        self.assertEqual(loaded.clock, eng.clock)
+        loaded.report("P1", "2026Q3", 80.0, source="A")
+        self.assertEqual(loaded.clock, eng.clock + 1)
 
 
 class AcceptanceScenarioTest(unittest.TestCase):
@@ -449,10 +528,13 @@ class AcceptanceScenarioTest(unittest.TestCase):
         self.assertEqual(contrib, ["S2"])
         rec = eng.adjust("B", strategy="even", as_of="2026Q2")
         self.assertAlmostEqual(rec["excess"], 80.0)
+        self.assertEqual(rec["settled_stages"], ["S1", "S2"])
+        self.assertEqual(rec["current_stage"], "S3")
         stages_b = {s["stage_id"]: s["allowance"] for s in eng.targets("B")}
-        self.assertAlmostEqual(stages_b["S2"], 180.0)
-        for sid in ("S3", "S4"):
-            self.assertAlmostEqual(stages_b[sid], 100.0 - 40.0)
+        self.assertAlmostEqual(stages_b["S1"], 90.0)    # 已结束阶段按实绩结算
+        self.assertAlmostEqual(stages_b["S2"], 190.0)
+        self.assertAlmostEqual(stages_b["S3"], 100.0)   # 当前阶段保持不变
+        self.assertAlmostEqual(stages_b["S4"], 20.0)    # 剩余阶段承担全部 80
         self.assertAlmostEqual(sum(stages_b.values()), 400.0, places=9)
 
         # 园区 C：连续缺失 → 数据缺失标记

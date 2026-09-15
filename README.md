@@ -17,21 +17,23 @@ eng = CalibrationEngine(tolerance_rate=0.05, missing_threshold=2)
 
 # 1. 注册园区：阶段区间必须连续不重叠，否则报 ValidationError 并指出位置
 eng.register_park("P1", baseline=1000.0, stages=[
-    {"stage_id": "S1", "start": "2026Q1", "end": "2026Q2", "allowance": 200.0},
-    {"stage_id": "S2", "start": "2026Q3", "end": "2026Q4", "allowance": 200.0},
+    {"stage_id": "S1", "start": "2026Q1", "end": "2026Q1", "allowance": 100.0},
+    {"stage_id": "S2", "start": "2026Q2", "end": "2026Q2", "allowance": 100.0},
+    {"stage_id": "S3", "start": "2026Q3", "end": "2026Q3", "allowance": 100.0},
+    {"stage_id": "S4", "start": "2026Q4", "end": "2026Q4", "allowance": 100.0},
 ])
 
 # 2. 按季度上报实绩（同源同值重复上报幂等；同源异值视为更正）
-eng.report("P1", "2026Q1", 90.0, source="meter")
-eng.report("P1", "2026Q2", 160.0, source="meter")
+eng.report("P1", "2026Q1", 150.0, source="meter")
 
 # 3. 查询状态：累计实绩/累计目标/偏差率/归因/缺失与冲突标注
-st = eng.status("P1", as_of="2026Q2")
-# st["state"] == "deviated"；st["deviation_rate"] == 0.25
-# st["attribution"] 指出是 S1 段累计超出 50，落到 2026Q2
+st = eng.status("P1", as_of="2026Q1")
+# st["state"] == "deviated"；st["deviation_rate"] == 0.5
+# st["attribution"] 指出是 S1 段累计超出 50
 
-# 4. 偏离后摊回后续阶段目标（总量严格守恒）
-eng.adjust("P1", strategy="even", as_of="2026Q2")       # 或 "weighted" + weights={...}
+# 4. 偏离后调整：S1 按实绩结算为 150，当前阶段 S2 保持 100 不变，
+#    超出量 50 由剩余阶段 S3/S4 均摊（各 -25），总额度仍为 400
+eng.adjust("P1", strategy="even", as_of="2026Q1")       # 或 "weighted" + weights={...}
 
 # 5. 导出 / 载入（载入全面校验，失败报错且当前状态不变）
 eng.export_json("state.json")
@@ -48,9 +50,9 @@ eng2 = CalibrationEngine.import_json("state.json")
 | 偏差率 | `(累计实绩 − 累计目标) / 累计目标`，**累计口径**，非单季口径 |
 | 偏离判定 | 偏差率 > `tolerance_rate` → `deviated` |
 | 数据缺失 | 尾部连续未上报季度数 ≥ `missing_threshold` → `data_missing`；缺失季度不计入累计实绩、在结果中明确标注，**不按零排放处理**，缺失未决时不判 `on_track` |
-| 冲突 | 同季度多来源数值不一致 → 双方保留、生成冲突记录（季度/来源/各自数值），该季度暂不计入累计；某方更正为一致后冲突自动解除并保留历史 |
+| 冲突 | 同季度多来源数值不一致 → 双方保留、生成冲突记录（季度/来源/各自数值/检测与解除的逻辑时钟，随导出载入逐项保留），该季度暂不计入累计；某方更正为一致后冲突自动解除，记录保留当时双方数值快照 |
 | 幂等 | 同（园区, 季度, 来源, 数值）重复上报返回 `duplicate`，状态与逻辑时钟不变 |
-| 目标调整 | 超出量 E 计入当前阶段（+E 追认超排），后续阶段按均摊或权重核减 −E（某阶段扣到 0 后余额在其余阶段继续按比例分摊，不允许负额度）；**全部阶段额度之和调整前后严格守恒** |
+| 目标调整 | 已结束阶段（end ≤ as_of）按实绩结算（额度追认为实际排放量）；**当前阶段额度保持不变**；结算出的超出量由当前阶段之后的剩余阶段承担：均摊或按权重（**权重为零的阶段不参与**，缺省按额度比例）；**全部阶段额度之和调整前后严格守恒**。数据不完整（缺失/未决冲突）或超出发生在未结束阶段时拒绝调整 |
 | 逻辑时钟 | 每次有效变更 +1，随 JSON 导出/载入 |
 
 ## 主要 API

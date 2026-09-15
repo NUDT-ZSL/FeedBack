@@ -10,7 +10,8 @@
 * 偏差率 = (累计实绩 - 累计目标) / 累计目标，基于累计口径而非单季口径。
 * 状态：on_track / deviated（偏差率超过容忍带）/ data_missing（尾部连续未上报
   季度数达到阈值，此时即使账面达标也不判 on_track，避免缺失被误当零排放虚增达标）。
-* 目标调整：当前阶段吸收全部超出量（+E），后续阶段按策略（均摊/权重）核减 -E，
+* 目标调整：已结束阶段按实绩结算（追认），当前阶段额度保持不变，结算出的
+  超出量由当前阶段之后的剩余阶段按策略（均摊/权重，零权重不参与）核减，
   全部阶段额度之和在调整前后严格守恒。
 """
 
@@ -297,9 +298,9 @@ class CalibrationEngine:
             record["values"] = dict(sorted(values.items()))
             return self._public_conflict(record)
         if record is not None:
+            # 解除冲突：保留冲突时双方来源与各自数值的快照，仅标记状态与时刻
             record["active"] = False
             record["resolved_clock"] = self._clock
-            record["values"] = dict(sorted(values.items()))
         return None
 
     @staticmethod
@@ -441,13 +442,16 @@ class CalibrationEngine:
     # ------------------------------------------------------------------
 
     def adjust(self, park_id, strategy="even", weights=None, as_of=None):
-        """园区处于偏离状态时，把超出量摊回后续阶段。
+        """园区处于偏离状态时，把已结束阶段结算出的超出量摊回给更靠后的阶段。
 
-        * 超出量 E 计入当前阶段（+E，追认已发生的超排）；
-        * 后续阶段按 strategy 核减，合计恰为 E：
+        口径：
+        * 已结束阶段（end <= as_of）按实绩结算：额度追认为该阶段实际排放量；
+        * 当前阶段（as_of 之后第一个尚未结束的阶段）额度保持不变；
+        * 结算出的超出量由当前阶段之后的剩余阶段共同承担：
           - "even"：按剩余阶段数均摊；
-          - "weighted"：按 weights={stage_id: 权重} 分配，缺省按各阶段额度比例。
-        * 调整后全部阶段额度之和与原总目标严格一致。
+          - "weighted"：按 weights={stage_id: 权重} 分配（权重为零的阶段不参与），
+            缺省按各阶段额度比例；
+        * 调整后所有阶段额度之和与原总目标严格相等（追认与核减相互抵消）。
         """
         park = self._get_park(park_id)
         st = self.status(park_id, as_of=as_of)
@@ -455,54 +459,80 @@ class CalibrationEngine:
             raise StateError(
                 "园区 %r 当前状态为 %s，未处于偏离状态，不能调整目标"
                 % (park_id, st["state"]))
+        if not st["data_complete"]:
+            raise StateError(
+                "园区 %r 存在缺失或未决冲突季度（缺失: %s，冲突: %s），"
+                "数据不完整，不能调整目标"
+                % (park_id, st["missing_quarters"], st["conflict_quarters"]))
         q = parse_quarter(st["as_of"])
-        excess = st["deviation"]
-        if excess <= _EPS:
-            raise StateError("园区 %r 无正偏差可摊回" % park_id)
 
-        current = park.stage_at(q)
-        if current is None:
+        settled = [s for s in park.stages if s.end <= q]
+        current = next((s for s in park.stages if s.end > q), None)
+        remaining = ([s for s in park.stages if s.start > current.start]
+                     if current is not None else [])
+        if current is None or not remaining:
             raise StateError(
-                "园区 %r 季度 %s 不在任何阶段内，无法调整"
-                % (park_id, format_quarter(q)))
-        future = [s for s in park.stages if s.start > q]
-        if not future:
+                "园区 %r 当前阶段之后没有剩余阶段可摊回" % park_id)
+
+        # 已结束阶段按实绩结算，得出待摊回的超出量
+        actual_by_stage = {}
+        for s in settled:
+            total = 0.0
+            for t in range(s.start, s.end + 1):
+                val = self._effective_value(park, t)
+                if val is not None:
+                    total += val
+            actual_by_stage[s.stage_id] = total
+        excess = sum(actual_by_stage[s.stage_id] - s.allowance for s in settled)
+        if excess <= _EPS:
             raise StateError(
-                "园区 %r 当前已处于最后阶段 %r，没有后续阶段可摊回"
+                "园区 %r 已结束阶段累计未超出（超出发生在当前未结束阶段 %r），"
+                "待该阶段结束后才能摊回"
                 % (park_id, current.stage_id))
 
         if strategy == "even":
-            shares = {s.stage_id: 1.0 for s in future}
+            shares = {s.stage_id: 1.0 for s in remaining}
         elif strategy == "weighted":
             if weights is None:
-                shares = {s.stage_id: s.allowance for s in future}
+                shares = {s.stage_id: s.allowance for s in remaining}
             else:
                 if not isinstance(weights, dict):
                     raise ValidationError("weights 必须是 {stage_id: 权重} 的字典")
+                remaining_ids = {s.stage_id for s in remaining}
+                unknown = set(weights) - remaining_ids
+                if unknown:
+                    raise ValidationError(
+                        "权重包含不属于后续阶段的阶段: %s" % sorted(unknown))
                 shares = {}
-                for s in future:
-                    w = weights.get(s.stage_id)
-                    if not isinstance(w, (int, float)) or isinstance(w, bool) or w <= 0:
+                for s in remaining:
+                    if s.stage_id not in weights:
                         raise ValidationError(
-                            "后续阶段 %r 缺少正的权重: %r" % (s.stage_id, w))
+                            "后续阶段 %r 缺少权重" % s.stage_id)
+                    w = weights[s.stage_id]
+                    if not isinstance(w, (int, float)) or isinstance(w, bool) or w < 0:
+                        raise ValidationError(
+                            "后续阶段 %r 的权重必须是非负数值: %r" % (s.stage_id, w))
                     shares[s.stage_id] = float(w)
+                if sum(shares.values()) <= 0:
+                    raise ValidationError("后续阶段权重之和必须为正")
         else:
             raise ValidationError(
                 "未知的调整策略 %r，支持 'even' 或 'weighted'" % (strategy,))
 
         deductions = self._allocate_deduction(
-            {s.stage_id: s.allowance for s in future}, shares, excess)
+            {s.stage_id: s.allowance for s in remaining}, shares, excess)
 
         before = {s.stage_id: s.allowance for s in park.stages}
-        current.allowance += excess
-        for s in future:
+        for s in settled:
+            s.allowance = actual_by_stage[s.stage_id]
+        for s in remaining:
             s.allowance -= deductions[s.stage_id]
 
-        # 浮点守恒修正：把残差补到额度最大的后续阶段，保证总量严格不变
+        # 浮点守恒修正：把残差补到额度最大的剩余阶段，保证总量严格不变
         total_original = sum(s.original_allowance for s in park.stages)
         drift = total_original - sum(s.allowance for s in park.stages)
         if abs(drift) > 0:
-            anchor = max(future, key=lambda s: s.allowance)
+            anchor = max(remaining, key=lambda s: s.allowance)
             anchor.allowance += drift
 
         self._clock += 1
@@ -513,7 +543,8 @@ class CalibrationEngine:
             "strategy": strategy,
             "as_of": format_quarter(q),
             "excess": excess,
-            "absorber_stage": current.stage_id,
+            "settled_stages": [s.stage_id for s in settled],
+            "current_stage": current.stage_id,
             "changes": {
                 s.stage_id: {"before": before[s.stage_id], "after": s.allowance}
                 for s in park.stages
@@ -527,18 +558,18 @@ class CalibrationEngine:
     @staticmethod
     def _allocate_deduction(allowances, shares, amount):
         """把 amount 按 shares 比例从各阶段额度中扣除，不允许出现负额度；
-        某阶段扣到 0 后，剩余部分在其余阶段间继续按比例分摊。"""
-        if sum(allowances.values()) < amount - 1e-6:
+        权重为零的阶段不参与分配；某阶段扣到 0 后，剩余部分在其余参与
+        阶段间继续按比例分摊。"""
+        active = {sid for sid in allowances if shares.get(sid, 0.0) > 0}
+        absorbable = sum(allowances[sid] for sid in active)
+        if absorbable < amount - 1e-6:
             raise StateError(
-                "后续阶段额度之和 %.6f 不足以吸收超出量 %.6f"
-                % (sum(allowances.values()), amount))
+                "参与分配的后续阶段额度之和 %.6f 不足以吸收超出量 %.6f"
+                % (absorbable, amount))
         ded = {sid: 0.0 for sid in allowances}
         leftover = amount
-        active = set(allowances)
         while leftover > 1e-9 and active:
             tot_share = sum(shares[s] for s in active)
-            if tot_share <= 0:
-                raise StateError("后续阶段权重之和为零，无法分配")
             batch = leftover  # 本趟按份额一次性分配，趟内不再递减
             progressed = False
             for sid in sorted(active):
@@ -764,45 +795,78 @@ class CalibrationEngine:
                     "%s 与之前条目重复（季度 %s 来源 %r）"
                     % (rwhere, format_quarter(q), source))
             slot[source] = float(value)
-        for q in sorted(park.reports):
-            self._sync_conflict(park, q)
-
-        # 恢复冲突记录的逻辑时钟（冲突本身由实绩重建，这里只还原时间戳并校验一致）
+        # 冲突记录：按文件原样恢复（双方来源、各自数值、逻辑时钟逐项保留），
+        # 并与实绩数据交叉校验，不一致即拒绝
         conflicts_raw = raw["conflicts"]
         if not isinstance(conflicts_raw, list):
             raise ValidationError("园区 %r 的 conflicts 必须是数组" % park_id)
-        rebuilt = {rec["quarter_index"]: rec for rec in park.conflicts}
-        seen_quarters = set()
+        active_quarters = set()
         for k, rec in enumerate(conflicts_raw):
             cwhere = "园区 %r 第 %d 条冲突记录" % (park_id, k + 1)
             if not isinstance(rec, dict):
                 raise ValidationError("%s 不是对象: %r" % (cwhere, rec))
-            for key in ("quarter_index", "values", "active",
+            for key in ("quarter_index", "quarter", "values", "active",
                         "detected_clock", "resolved_clock"):
                 if key not in rec:
                     raise ValidationError("%s 缺少字段 %r" % (cwhere, key))
             qi = rec["quarter_index"]
-            if not isinstance(qi, int) or qi in seen_quarters:
-                raise ValidationError("%s 的 quarter_index 非法或重复: %r" % (cwhere, qi))
-            seen_quarters.add(qi)
-            target = rebuilt.get(qi)
-            if target is None:
+            if not isinstance(qi, int) or isinstance(qi, bool) or qi < 0:
+                raise ValidationError("%s 的 quarter_index 非法: %r" % (cwhere, qi))
+            if rec["quarter"] != format_quarter(qi):
                 raise ValidationError(
-                    "%s 指向的季度 %s 与实绩数据不一致（不存在对应冲突）"
-                    % (cwhere, format_quarter(qi)))
-            if set(rec["values"]) != set(target["values"]) or any(
-                    abs(rec["values"][s] - target["values"][s]) > 1e-9
-                    for s in rec["values"]):
+                    "%s 的季度标注 %r 与 quarter_index 不一致"
+                    % (cwhere, rec["quarter"]))
+            values = rec["values"]
+            if not isinstance(values, dict) or len(values) < 2:
+                raise ValidationError("%s 的 values 必须包含至少两个来源" % cwhere)
+            for src, v in values.items():
+                if not isinstance(src, str) or not src.strip() \
+                        or not isinstance(v, (int, float)) or isinstance(v, bool):
+                    raise ValidationError("%s 的来源或数值非法" % cwhere)
+            if len(set(values.values())) < 2:
+                raise ValidationError("%s 的各来源数值一致，不构成冲突" % cwhere)
+            if not isinstance(rec["detected_clock"], int) \
+                    or isinstance(rec["detected_clock"], bool) \
+                    or rec["detected_clock"] < 0:
+                raise ValidationError("%s 的 detected_clock 非法" % cwhere)
+            if rec["resolved_clock"] is not None and (
+                    not isinstance(rec["resolved_clock"], int)
+                    or isinstance(rec["resolved_clock"], bool)):
+                raise ValidationError("%s 的 resolved_clock 非法" % cwhere)
+            active = bool(rec["active"])
+            if active != (rec["resolved_clock"] is None):
                 raise ValidationError(
-                    "%s 的数值与实绩数据不一致" % cwhere)
-            target["detected_clock"] = rec["detected_clock"]
-            target["resolved_clock"] = rec["resolved_clock"]
-            target["active"] = bool(rec["active"])
-        if set(rebuilt) != seen_quarters:
-            raise ValidationError(
-                "园区 %r 的冲突记录与实绩数据不一致：缺少季度 %s 的记录"
-                % (park_id, ", ".join(format_quarter(q)
-                                      for q in sorted(set(rebuilt) - seen_quarters))))
+                    "%s 的 active 标记与 resolved_clock 矛盾" % cwhere)
+            slot = park.reports.get(qi)
+            if slot is None:
+                raise ValidationError(
+                    "%s 指向的季度 %s 没有对应实绩" % (cwhere, format_quarter(qi)))
+            if not set(values).issubset(set(slot)):
+                raise ValidationError("%s 的来源与实绩数据不一致" % cwhere)
+            if active:
+                if qi in active_quarters:
+                    raise ValidationError(
+                        "园区 %r 季度 %s 存在多条活跃冲突记录"
+                        % (park_id, format_quarter(qi)))
+                active_quarters.add(qi)
+                if any(abs(slot[s] - values[s]) > 1e-9 for s in values) \
+                        or len(set(slot.values())) < 2:
+                    raise ValidationError("%s 与当前实绩数据不一致" % cwhere)
+            park.conflicts.append({
+                "park_id": park_id,
+                "quarter_index": qi,
+                "quarter": format_quarter(qi),
+                "values": {s: float(v) for s, v in sorted(values.items())},
+                "active": active,
+                "detected_clock": rec["detected_clock"],
+                "resolved_clock": rec["resolved_clock"],
+            })
+        # 每个实绩矛盾的季度必须恰好有一条活跃冲突记录
+        for t, slot in park.reports.items():
+            if len(set(slot.values())) > 1 and t not in active_quarters:
+                raise ValidationError(
+                    "园区 %r 季度 %s 实绩存在矛盾但缺少活跃冲突记录"
+                    % (park_id, format_quarter(t)))
 
         adjustments = raw["adjustments"]
         if not isinstance(adjustments, list):
@@ -812,7 +876,7 @@ class CalibrationEngine:
             if not isinstance(adj, dict):
                 raise ValidationError("%s 不是对象: %r" % (awhere, adj))
             for key in ("seq", "clock", "strategy", "as_of", "excess",
-                        "absorber_stage", "changes"):
+                        "settled_stages", "current_stage", "changes"):
                 if key not in adj:
                     raise ValidationError("%s 缺少字段 %r" % (awhere, key))
             parse_quarter(adj["as_of"])
