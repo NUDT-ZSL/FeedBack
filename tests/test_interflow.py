@@ -840,5 +840,308 @@ class TestAcceptanceWalkthrough(unittest.TestCase):
         self.assertEqual(log[1].dest, ("home", "s0"))
 
 
+# ---------------------------------------------------------------------- #
+# 回归：批次三种失败位置无残留 + 带分支页面返回后再前进一致 + 重载后批次回滚
+# ---------------------------------------------------------------------- #
+
+def _el(eid, action):
+    x = InteractionElement(eid)
+    x.add_action(action)
+    return x
+
+
+def build_branch_regression_engine():
+    """三页图，A 上可改变量并按变量条件跳 B/C，每页都有返回按钮。
+
+    A.s0 变量 {v: 0}；条件 go 按 v：1->B.s0，其余兜底->C.s0。
+    另有 cond_missing 动作依赖永不提供的变量 zz，用于触发“条件无法判定”。
+    """
+    e = PrototypeEngine("A")
+    A = Page("A", "s0", [PageState("s0", {"v": 0})])
+    A.add_element(_el("set_v", Action.submit("w", "v")))
+    go = InteractionElement("go")
+    go.add_action(Action.branch_goto(
+        "w", "v", [(1, "B.s0")], default_target="C.s0"))
+    A.add_element(go)
+    missing = InteractionElement("cond_missing")
+    missing.add_action(Action.branch_goto(
+        "w", "zz", [(1, "B.s0")], default_target="C.s0"))
+    A.add_element(missing)
+    A.add_element(_el("back_btn", Action.back("back")))
+    e.add_page(A)
+
+    B = Page("B", "s0", [PageState("s0", {"b": 10})])
+    B.add_element(_el("set_b", Action.submit("w", "b")))
+    B.add_element(_el("back_btn", Action.back("back")))
+    e.add_page(B)
+
+    C = Page("C", "s0", [PageState("s0", {"c": 20})])
+    C.add_element(_el("back_btn", Action.back("back")))
+    e.add_page(C)
+
+    e.validate()
+    e.reset()
+    return e
+
+
+class TestBatchRollbackNoResidue(unittest.TestCase):
+    """整批失败时，迁移日志、历史栈、变量快照必须与批前完全一致。"""
+
+    def _assert_unchanged(self, e, before):
+        pos, variables, depth, log_ids, clock = before
+        self.assertEqual(e.current_position(), pos)
+        self.assertEqual(e.get_variables(), variables)
+        self.assertEqual(e.history_depth(), depth)
+        self.assertEqual(
+            [(r.clock, r.element_id, r.action_id) for r in e.migration_log()],
+            log_ids,
+        )
+        self.assertEqual(e.clock, clock)
+
+    def _capture(self, e):
+        return (
+            e.current_position(),
+            e.get_variables(),
+            e.history_depth(),
+            [(r.clock, r.element_id, r.action_id) for r in e.migration_log()],
+            e.clock,
+        )
+
+    def test_failure_at_first_step_leaves_nothing(self):
+        e = build_branch_regression_engine()
+        # 先制造非空日志与历史：v=1 -> B
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")
+        self.assertEqual(e.history_depth(), 1)
+        before = self._capture(e)
+        # 在 B 上：首步即条件无法判定（排序上 cond 也在最前），无成功步
+        # 通过给 B 增加一个缺变量条件元素来制造“首步失败”
+        bpage = e.pages["B"]
+        bpage.add_element(InteractionElement("a_missing")).add_action(
+            Action.branch_goto(
+                "w", "zz", [(1, "C.s0")], default_target="C.s0"))
+        bpage.add_element(_el("z_set", Action.submit("w", "b")))
+        with self.assertRaises(BatchAbortedError) as cm:
+            e.trigger_batch([
+                TriggerStep("z_set", "w", 99),
+                TriggerStep("a_missing", "w"),
+            ])
+        self.assertEqual(cm.exception.index, 0)
+        self.assertEqual(cm.exception.completed, 0)
+        self._assert_unchanged(e, before)
+
+    def test_failure_at_middle_step_leaves_nothing(self):
+        e = build_branch_regression_engine()
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")   # -> B，历史 1 帧，日志 2 条
+        bpage = e.pages["B"]
+        bpage.add_element(_el("a_set", Action.submit("w", "b")))
+        bpage.add_element(InteractionElement("m_missing")).add_action(
+            Action.branch_goto(
+                "w", "zz", [(1, "C.s0")], default_target="C.s0"))
+        bpage.add_element(_el("z_set", Action.submit("w", "b")))
+        before = self._capture(e)
+        # 排序：a_set（成功改 b）-> m_missing（条件无法判定）-> z_set（不执行）
+        with self.assertRaises(BatchAbortedError) as cm:
+            e.trigger_batch([
+                TriggerStep("z_set", "w", 7),
+                TriggerStep("m_missing", "w"),
+                TriggerStep("a_set", "w", 5),
+            ])
+        self.assertEqual(cm.exception.index, 1)
+        self.assertEqual(cm.exception.completed, 1)
+        self.assertIsInstance(cm.exception.reason, MissingVariablesError)
+        self.assertEqual(cm.exception.reason.missing, ["zz"])
+        # 第 0 步虽已成功改了 b、可能压栈，但整批回滚后无任何残留
+        self._assert_unchanged(e, before)
+        # 预览路径无半迁移：仍停在 B.s0，变量是 B 的落地快照
+        self.assertEqual(e.current_position(), ("B", "s0"))
+        self.assertEqual(e.get_variables(), {"b": 10})
+
+    def test_failure_at_last_step_leaves_nothing(self):
+        e = build_branch_regression_engine()
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")   # -> B
+        bpage = e.pages["B"]
+        bpage.add_element(_el("a_set", Action.submit("w", "b")))
+        bpage.add_element(_el("m_set", Action.submit("w", "b")))
+        bpage.add_element(InteractionElement("z_missing")).add_action(
+            Action.branch_goto(
+                "w", "zz", [(1, "C.s0")], default_target="C.s0"))
+        before = self._capture(e)
+        # 排序：a_set 成功、m_set 成功、z_missing 末步失败
+        with self.assertRaises(BatchAbortedError) as cm:
+            e.trigger_batch([
+                TriggerStep("z_missing", "w"),
+                TriggerStep("a_set", "w", 1),
+                TriggerStep("m_set", "w", 2),
+            ])
+        self.assertEqual(cm.exception.index, 2)
+        self.assertEqual(cm.exception.completed, 2)
+        self._assert_unchanged(e, before)
+
+    def test_failed_batch_does_not_taint_reachable_query_or_clock(self):
+        # 报告中的关键症状：失败批次里已成功的跨页步若残留，会让后续把未生效
+        # 迁移算进路径 / 日志。回滚后再成功触发，clock 必须接续批前值。
+        e = build_branch_regression_engine()
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")   # clock=2, 在 B
+        bpage = e.pages["B"]
+        bpage.add_element(_el("a_set", Action.submit("w", "b")))
+        bpage.add_element(InteractionElement("z_missing")).add_action(
+            Action.branch_goto(
+                "w", "zz", [(1, "C.s0")], default_target="C.s0"))
+        with self.assertRaises(BatchAbortedError):
+            e.trigger_batch([
+                TriggerStep("z_missing", "w"),
+                TriggerStep("a_set", "w", 1),
+            ])
+        # 回滚后下一条成功迁移的 clock 接续批前（=2），为 3，无空洞无重复
+        rec = e.trigger("set_b", "w", 42)
+        self.assertEqual(rec.clock, 3)
+        self.assertEqual([r.clock for r in e.migration_log()], [1, 2, 3])
+
+    def test_unexpected_error_also_rolls_back(self):
+        # 即使某步抛出业务之外的意外异常（非 InterflowError），
+        # 也必须先回滚再原样上抛，绝不留半迁移。
+        class Boom(Exception):
+            pass
+
+        class BoomEngine(PrototypeEngine):
+            def _finish_move(self, action, *a, **k):
+                if getattr(action, "target_page", None) == "B":
+                    raise Boom()
+                return super()._finish_move(action, *a, **k)
+
+        e = BoomEngine("A")
+        A = Page("A", "s0", [PageState("s0", {"v": 0})])
+        A.add_element(_el("a_sub", Action.submit("w", "v")))
+        A.add_element(_el("b_go", Action.goto("w", "B")))
+        e.add_page(A)
+        e.add_page(Page("B", "s0", [PageState("s0", {})]))
+        e.reset()
+        before = self._capture(e)
+        # 第 0 步提交成功（v 已被改成 9），第 1 步跨页时抛非业务异常
+        with self.assertRaises(Boom):
+            e.trigger_batch([
+                TriggerStep("b_go", "w"),
+                TriggerStep("a_sub", "w", 9),
+            ])
+        # 第 0 步的变量修改也必须随整批回滚撤销
+        self._assert_unchanged(e, before)
+        self.assertEqual(e.get_variables(), {"v": 0})
+
+
+class TestBackThenReForwardBranch(unittest.TestCase):
+    """带条件分支的页面被返回时，必须还原“离开那一刻”的变量快照，
+    随后再次前进要走回同一条分支。"""
+
+    def test_back_restores_departure_snapshot_and_same_branch(self):
+        e = build_branch_regression_engine()
+        # A 上把 v 改成 1（同页提交，活动变量 v=1）
+        e.trigger("set_v", "w", 1)
+        self.assertEqual(e.get_variables(), {"v": 1})
+        # 条件跳 B；离开 A 的历史帧必须捕获 v=1
+        go = e.trigger("go", "w")
+        self.assertEqual(go.dest, ("B", "s0"))
+        self.assertEqual(go.branch, 1)
+        frame = e.history_frames()[-1]
+        self.assertEqual((frame.page_id, frame.state_id), ("A", "s0"))
+        self.assertEqual(frame.variables, {"v": 1})  # 离开那一刻，非进入时 {v:0}
+
+        # 返回 A：必须恢复离开时的 v=1，而不是进入 A 时的 v=0
+        back = e.trigger("back_btn", "back")
+        self.assertEqual(back.dest, ("A", "s0"))
+        self.assertEqual(e.get_variables(), {"v": 1})
+
+        # 在 A 上预判分支，必须一致指向 B、命中值 1
+        q = e.which_branch("go", "w")
+        self.assertEqual(q["target_ref"], "B.s0")
+        self.assertEqual(q["matched"], 1)
+
+        # 再前进：同一变量取值 -> 同一条分支 B，命中值仍为 1
+        go2 = e.trigger("go", "w")
+        self.assertEqual(go2.dest, ("B", "s0"))
+        self.assertEqual(go2.branch, 1)
+
+    def test_back_after_multiple_layers_restores_each_departure(self):
+        e = build_branch_regression_engine()
+        # v 改为非 1，条件走兜底 C
+        e.trigger("set_v", "w", 2)
+        go = e.trigger("go", "w")
+        self.assertEqual(go.dest, ("C", "s0"))
+        self.assertTrue(go.to_dict()["default"])
+        # 离开 A 的帧捕获 v=2
+        self.assertEqual(e.history_frames()[-1].variables, {"v": 2})
+        e.trigger("back_btn", "back")
+        self.assertEqual(e.get_variables(), {"v": 2})
+        # 再前进仍走兜底 C
+        self.assertEqual(e.trigger("go", "w").dest, ("C", "s0"))
+
+
+class TestReloadThenBatchRollback(unittest.TestCase):
+    """导出再载入后，继续触发批次，失败时仍能整批回滚且无残留。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "proto.json")
+
+    def test_batch_rollback_after_reload(self):
+        e = build_branch_regression_engine()
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")       # -> B，clock=2，历史 1
+        save_to_file(self.path, e)
+
+        loaded = load_from_file(self.path)
+        self.assertEqual(loaded.current_position(), ("B", "s0"))
+        self.assertEqual(loaded.history_depth(), 1)
+
+        bpage = loaded.pages["B"]
+        bpage.add_element(_el("a_set", Action.submit("w", "b")))
+        bpage.add_element(InteractionElement("z_missing")).add_action(
+            Action.branch_goto(
+                "w", "zz", [(1, "C.s0")], default_target="C.s0"))
+        # 注意：新增的是运行期定义，未写回文件，这里只验证载入引擎的事务行为
+        before = (
+            loaded.current_position(), loaded.get_variables(),
+            loaded.history_depth(),
+            [(r.clock, r.element_id, r.action_id) for r in loaded.migration_log()],
+            loaded.clock,
+        )
+        with self.assertRaises(BatchAbortedError) as cm:
+            loaded.trigger_batch([
+                TriggerStep("z_missing", "w"),
+                TriggerStep("a_set", "w", 5),
+            ])
+        self.assertEqual(cm.exception.index, 1)
+        # 日志、栈、变量与批前（即载入态）完全一致
+        self.assertEqual(loaded.current_position(), before[0])
+        self.assertEqual(loaded.get_variables(), before[1])
+        self.assertEqual(loaded.history_depth(), before[2])
+        self.assertEqual(
+            [(r.clock, r.element_id, r.action_id)
+             for r in loaded.migration_log()],
+            before[3],
+        )
+        self.assertEqual(loaded.clock, before[4])
+        # 回滚后成功触发，clock 从载入态的 2 接续为 3
+        rec = loaded.trigger("set_b", "w", 7)
+        self.assertEqual(rec.clock, 3)
+        self.assertEqual(loaded.get_variables()["b"], 7)
+
+    def test_reload_preserves_back_branch_consistency(self):
+        e = build_branch_regression_engine()
+        e.trigger("set_v", "w", 1)
+        e.trigger("go", "w")       # A{v:1} -> B
+        save_to_file(self.path, e)
+        loaded = load_from_file(self.path)
+        # 载入后返回 A，再前进，仍应走回 B（分支一致、快照为离开时的 v=1）
+        loaded.trigger("back_btn", "back")
+        self.assertEqual(loaded.get_variables(), {"v": 1})
+        rec = loaded.trigger("go", "w")
+        self.assertEqual(rec.dest, ("B", "s0"))
+        self.assertEqual(rec.branch, 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

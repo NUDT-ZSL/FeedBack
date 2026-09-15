@@ -20,6 +20,7 @@ import copy
 from collections import namedtuple
 
 from .errors import (
+    InterflowError,
     DefinitionError,
     DuplicateIdError,
     TargetNotFoundError,
@@ -194,10 +195,17 @@ class PrototypeEngine:
     def trigger_batch(self, steps):
         """同一时刻到达的多个动作：稳定排序后逐个应用，失败整批回滚。
 
+        原子性是**结构性保证**，不依赖逐一枚举拒绝类型：
+
+        * 任一步抛出 :class:`InterflowError`（找不到元素/动作、条件无法
+          判定、取值未覆盖、返回栈空、目标缺失等任何业务拒绝），先把位置、
+          变量、历史栈、时钟、迁移日志整体恢复到批前快照，再抛
+          :class:`BatchAbortedError`（带失败下标与原始原因）；
+        * 即使某步抛出业务之外的意外异常，也会先回滚再原样向上抛，
+          绝不让引擎停在半迁移状态。
+
         Returns:
             按应用顺序排列的 :class:`MigrationRecord` 列表。
-        Raises:
-            BatchAbortedError: 任一步失败，index 为排序后批次中的失败下标。
         """
         self._ensure_started()
         ordered = sorted(steps, key=lambda s: s.sort_key())
@@ -206,10 +214,16 @@ class PrototypeEngine:
         for index, step in enumerate(ordered):
             try:
                 records.append(self._apply_step(step))
-            except (TriggerError, MissingVariablesError, BackRejectedError,
-                    ConditionError, TargetNotFoundError) as exc:
+            except InterflowError as exc:
+                # 一切业务拒绝都整批回滚（兼容任何现在或将来的拒绝子类型）
+                if isinstance(exc, BatchAbortedError):
+                    raise  # 不应发生（批次不嵌套），防御性直传
                 self._restore(snapshot)
                 raise BatchAbortedError(index, exc, completed=index) from exc
+            except BaseException:
+                # 意外错误也绝不留下半迁移：先回滚再原样抛出
+                self._restore(snapshot)
+                raise
         return records
 
     def _find_action(self, element_id, action_id):
