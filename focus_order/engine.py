@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -533,13 +534,6 @@ class FocusEngine:
                 f"焦点目标 {id!r} 不存在",
                 target=id,
             )
-        if not element.usable:
-            raise FocusError(
-                ErrorCode.INVALID_FOCUS_TARGET,
-                f"焦点目标 {id!r} 不可用"
-                f"{'（已禁用）' if element.disabled else '（不可聚焦）'}",
-                target=id,
-            )
         active = self.active_container
         if active is not None and element.container != active:
             raise FocusError(
@@ -549,6 +543,13 @@ class FocusEngine:
                 target=id,
                 container=element.container,
                 active_container=active,
+            )
+        if not element.usable:
+            raise FocusError(
+                ErrorCode.INVALID_FOCUS_TARGET,
+                f"焦点目标 {id!r} 不可用"
+                f"{'（已禁用）' if element.disabled else '（不可聚焦）'}",
+                target=id,
             )
         previous = self._current
         self._current = id
@@ -597,6 +598,23 @@ class FocusEngine:
                 f"方向 {direction!r} 的目标 {target_id!r} 不存在（悬空关系）",
                 target=target_id,
             )
+
+        # 接管生效期间，逃逸判定优先于目标自身状态：目标在容器外这一
+        # 事实与它是否禁用/可聚焦无关，任何指向容器外的推进一律拒绝。
+        active = self.active_container
+        if active is not None and target.container != active:
+            return self._reject(
+                direction,
+                at,
+                RejectCode.SCOPE_ESCAPE,
+                (
+                    f"容器 {active!r} 已接管焦点，{direction!r} 方向会逃逸到"
+                    f"容器 {target.container!r} 内的元素 {target_id!r}，推进被拒绝"
+                ),
+                target=target_id,
+                container=target.container,
+            )
+
         if target.disabled:
             return self._reject(
                 direction,
@@ -612,20 +630,6 @@ class FocusEngine:
                 RejectCode.TARGET_NOT_FOCUSABLE,
                 f"方向 {direction!r} 的目标 {target_id!r} 不可聚焦",
                 target=target_id,
-            )
-
-        active = self.active_container
-        if active is not None and target.container != active:
-            return self._reject(
-                direction,
-                at,
-                RejectCode.SCOPE_ESCAPE,
-                (
-                    f"容器 {active!r} 已接管焦点，{direction!r} 方向会逃逸到"
-                    f"容器 {target.container!r} 内的元素 {target_id!r}，推进被拒绝"
-                ),
-                target=target_id,
-                container=target.container,
             )
 
         cycle = self._cycle_for_edge(at, direction, target_id)
@@ -1022,6 +1026,235 @@ class FocusEngine:
         if snapshot["focus"] is not None:
             fresh.set_focus(snapshot["focus"])
         return fresh
+
+    # ------------------------------------------------------------------
+    # 完整运行时状态的导出 / 导入（往返不丢接管栈、历史与最近拒绝）
+    # ------------------------------------------------------------------
+
+    STATE_VERSION = 1
+
+    def export_state(self) -> Dict[str, Any]:
+        """导出**完整运行时状态**为 JSON 安全的普通 dict。
+
+        与只含声明式结构的 :meth:`graph_snapshot` 不同，导出包含接管栈
+        （含每层的返回元素）、焦点历史、最近一次拒绝、序号计数器等，
+        :meth:`import_state` 可无损恢复。
+        """
+        return {
+            "version": self.STATE_VERSION,
+            "directions": list(self._directions),
+            "history_limit": self._history.maxlen,
+            "elements": [
+                {
+                    "id": e.id,
+                    "container": e.container,
+                    "focusable": bool(e.focusable),
+                    "disabled": bool(e.disabled),
+                }
+                for e in sorted(self._elements.values(), key=lambda e: _id_key(e.id))
+            ],
+            "relations": [
+                {"source": s, "direction": d, "target": t}
+                for s, d, t in sorted(
+                    (
+                        (s, d, t)
+                        for s, by_dir in self._edges.items()
+                        for d, t in by_dir.items()
+                    ),
+                    key=lambda triple: (
+                        self._dir_index[triple[1]],
+                        _id_key(triple[0]),
+                        _id_key(triple[2]),
+                    ),
+                )
+            ],
+            "current": self._current,
+            "frames": [
+                {
+                    "container": f.container,
+                    "return_to": f.return_to,
+                    "return_container": f.return_container,
+                }
+                for f in self._frames
+            ],
+            "lost": copy.deepcopy(self._lost),
+            "seq": self._seq,
+            "history": [entry.to_dict() for entry in self._history],
+            "last_rejection": (
+                self._last_rejection.to_dict() if self._last_rejection else None
+            ),
+        }
+
+    def to_json(self, indent: int = 2) -> str:
+        """导出为 JSON 字符串（id/container 须是 JSON 可序列化类型）。"""
+        return json.dumps(self.export_state(), ensure_ascii=False, indent=indent)
+
+    @classmethod
+    def import_state(cls, state: Mapping[str, Any], *, strict: bool = True) -> "FocusEngine":
+        """从 :meth:`export_state` 的产物完整恢复一台引擎。
+
+        :param strict: True 时对任何结构/不变量违例抛 :class:`FocusError`；
+            非法状态绝不会部分导入。
+        """
+        if not isinstance(state, Mapping):
+            raise FocusError(
+                ErrorCode.ELEMENT_NOT_FOUND,
+                "导入状态必须是 dict（export_state/to_json 的产物）",
+            )
+        version = state.get("version", cls.STATE_VERSION)
+        if version != cls.STATE_VERSION:
+            raise FocusError(
+                ErrorCode.ELEMENT_NOT_FOUND,
+                f"不支持的状态版本 {version!r}，当前版本为 {cls.STATE_VERSION}",
+                version=version,
+            )
+
+        raw_dirs = state.get("directions")
+        if not isinstance(raw_dirs, (list, tuple)) or not raw_dirs:
+            raise FocusError(ErrorCode.UNKNOWN_DIRECTION, "导入状态缺少合法 directions")
+        directions = tuple(raw_dirs)
+        if len(set(directions)) != len(directions):
+            raise FocusError(
+                ErrorCode.UNKNOWN_DIRECTION,
+                f"导入状态的方向存在重复: {directions!r}",
+            )
+
+        history_limit = state.get("history_limit", 1000)
+        engine = cls(directions, history_limit=history_limit)
+        try:
+            raw_elements = state.get("elements", [])
+            if not isinstance(raw_elements, (list, tuple)):
+                raise FocusError(ErrorCode.ELEMENT_NOT_FOUND, "elements 必须是列表")
+            seen_ids = set()
+            for item in raw_elements:
+                if not isinstance(item, Mapping) or "id" not in item or "container" not in item:
+                    raise FocusError(
+                        ErrorCode.ELEMENT_NOT_FOUND,
+                        f"非法元素记录: {item!r}",
+                    )
+                if item["id"] in seen_ids:
+                    raise FocusError(
+                        ErrorCode.DUPLICATE_ELEMENT,
+                        f"导入状态中元素 id 重复: {item['id']!r}",
+                        id=item["id"],
+                    )
+                seen_ids.add(item["id"])
+                engine.add_element(
+                    item["id"],
+                    item["container"],
+                    focusable=bool(item.get("focusable", True)),
+                    disabled=bool(item.get("disabled", False)),
+                )
+
+            for item in state.get("relations", []):
+                if not isinstance(item, Mapping) or not all(
+                    k in item for k in ("source", "direction", "target")
+                ):
+                    raise FocusError(
+                        ErrorCode.RELATION_CONFLICT,
+                        f"非法关系记录: {item!r}",
+                    )
+                engine.add_relation(item["source"], item["direction"], item["target"])
+
+            raw_frames = state.get("frames", [])
+            if not isinstance(raw_frames, (list, tuple)):
+                raise FocusError(ErrorCode.SCOPE_MISMATCH, "frames 必须是列表")
+            frames: List[_ScopeFrame] = []
+            active_containers = set()
+            for item in raw_frames:
+                if not isinstance(item, Mapping) or "container" not in item:
+                    raise FocusError(
+                        ErrorCode.SCOPE_MISMATCH, f"非法接管帧: {item!r}"
+                    )
+                if item["container"] in active_containers:
+                    raise FocusError(
+                        ErrorCode.SCOPE_ALREADY_ACTIVE,
+                        f"导入的接管栈中容器重复: {item['container']!r}",
+                        container=item["container"],
+                    )
+                active_containers.add(item["container"])
+                frames.append(
+                    _ScopeFrame(
+                        container=item["container"],
+                        return_to=item.get("return_to"),
+                        return_container=item.get("return_container"),
+                    )
+                )
+            engine._frames = frames
+
+            raw_history = state.get("history", [])
+            if not isinstance(raw_history, (list, tuple)):
+                raise FocusError(ErrorCode.ELEMENT_NOT_FOUND, "history 必须是列表")
+            history: Deque[HistoryEntry] = deque(maxlen=history_limit)
+            for item in raw_history:
+                if not isinstance(item, Mapping) or "seq" not in item or "kind" not in item:
+                    raise FocusError(
+                        ErrorCode.ELEMENT_NOT_FOUND,
+                        f"非法历史记录: {item!r}",
+                    )
+                history.append(
+                    HistoryEntry(
+                        seq=int(item["seq"]),
+                        kind=str(item["kind"]),
+                        source=item.get("source"),
+                        target=item.get("target"),
+                        direction=item.get("direction"),
+                        detail=dict(item.get("detail", {})),
+                    )
+                )
+            engine._history = history
+
+            raw_rejection = state.get("last_rejection")
+            if raw_rejection is not None:
+                if not isinstance(raw_rejection, Mapping) or "code" not in raw_rejection:
+                    raise FocusError(
+                        ErrorCode.ELEMENT_NOT_FOUND,
+                        f"非法最近拒绝记录: {raw_rejection!r}",
+                    )
+                cycle_raw = raw_rejection.get("cycle")
+                engine._last_rejection = Rejection(
+                    seq=int(raw_rejection.get("seq", 0)),
+                    direction=raw_rejection.get("direction"),
+                    at=raw_rejection.get("at"),
+                    code=str(raw_rejection["code"]),
+                    message=str(raw_rejection.get("message", "")),
+                    target=raw_rejection.get("target"),
+                    container=raw_rejection.get("container"),
+                    cycle=tuple(cycle_raw) if cycle_raw is not None else None,
+                )
+
+            engine._lost = copy.deepcopy(state.get("lost"))
+            engine._seq = int(state.get("seq", 0))
+            engine._current = state.get("current")
+
+            if strict:
+                problems = engine.validate_integrity()
+                if problems:
+                    raise FocusError(
+                        ErrorCode.ELEMENT_NOT_FOUND,
+                        "导入状态未通过不变量校验: " + "; ".join(problems),
+                        problems=problems,
+                    )
+        except FocusError:
+            raise
+        except Exception as exc:  # 脏数据（类型错误等）一律拒绝，不部分导入
+            raise FocusError(
+                ErrorCode.ELEMENT_NOT_FOUND,
+                f"导入状态格式非法: {exc}",
+            ) from exc
+        return engine
+
+    @classmethod
+    def from_json(cls, text: str, *, strict: bool = True) -> "FocusEngine":
+        """从 :meth:`to_json` 的 JSON 字符串恢复引擎。"""
+        try:
+            state = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise FocusError(
+                ErrorCode.ELEMENT_NOT_FOUND,
+                f"导入内容不是合法 JSON: {exc}",
+            ) from exc
+        return cls.import_state(state, strict=strict)
 
     def validate_integrity(self) -> List[str]:
         """返回自检发现的问题列表；空列表表示所有不变量成立。"""

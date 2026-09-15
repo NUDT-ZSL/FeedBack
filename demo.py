@@ -112,6 +112,17 @@ def main():
               f"{entry['source']!r} -> {entry['target']!r}{extra}")
     assert ids == sorted(ids, key=lambda x: (1, x))  # 字符串 id 字典序
 
+    # 附加：完整导出/导入往返（接管栈、历史、最近拒绝都保留）
+    section("附加：导出 / 导入往返（to_json / from_json）")
+    text = engine.to_json()
+    cloned = FocusEngine.from_json(text)
+    print("往返后焦点一致:", cloned.current_focus == engine.current_focus)
+    print("往返后接管容器一致:", cloned.active_container == engine.active_container)
+    print("往返后历史一致:", cloned.history() == engine.history())
+    print("往返后最近拒绝一致:", cloned.last_rejection == engine.last_rejection)
+    print("再次导出字节一致:", cloned.to_json() == text)
+    assert cloned.export_state() == engine.export_state()
+
     print("\n全部 7 个场景断言通过。")
 
 

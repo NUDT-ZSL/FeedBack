@@ -5,7 +5,8 @@
 增量一致性，以及可预测、可追溯的稳定查询。
 
 - **零第三方依赖**，仅使用 Python 3.8+ 标准库；
-- 配套 **50 个 unittest 验收用例**（含 400 步随机差分测试）与一个演示脚本；
+- 配套 **68 个 unittest 验收用例**（含 400 步随机差分测试与第二轮契约
+  矩阵）与一个演示脚本；
 - 单文件核心实现位于 `focus_order/engine.py`。
 
 ## 目录结构
@@ -17,7 +18,8 @@ workspace/
 │   └── engine.py          # 核心引擎（数据模型 + FocusEngine）
 ├── tests/
 │   ├── __init__.py
-│   └── test_focus_order.py  # 与 7 条需求一一对应的 50 个验收用例
+│   ├── test_focus_order.py    # 与 7 条需求一一对应的 50 个验收用例
+│   └── test_round2_contracts.py  # 第二轮：逃逸矩阵、尾巴边环判定、导入导出往返
 ├── demo.py                # 对应 7 条需求的可运行演示
 └── README.md
 ```
@@ -75,10 +77,14 @@ python demo.py                                 # 看 7 条需求的实际行为
 2. `no-current-focus` — 还没有初始焦点；
 3. `no-relation` — 当前元素在该方向上没有配置目标；
 4. `target-missing` — 目标不存在（公共 API 不会产生，防御性分支）；
-5. `target-disabled` — 目标被禁用；
-6. `target-not-focusable` — 目标不可聚焦；
-7. `scope-escape` — 目标在当前接管容器之外；
+5. `scope-escape` — 目标在当前接管容器之外；
+6. `target-disabled` — 目标被禁用；
+7. `target-not-focusable` — 目标不可聚焦；
 8. `cycle` — **这条边本身位于环上**（target 沿同方向能回到 source）。
+
+> **逃逸优先于目标状态**：接管生效时，"目标在容器外"与该目标是否
+> 禁用/可聚焦无关，因此 `scope-escape` 先于 `target-disabled` /
+> `target-not-focusable` 判定，保证"任何指向容器外的推进都被拒绝"无例外。
 
 > **环的精确语义**：只有当待跨越的边位于环上（按方向迭代会回到自身）
 > 时才以 `cycle` 拒绝，因为跨过去才会开始无限循环；只是"下游远处有环"
@@ -138,6 +144,14 @@ python demo.py                                 # 看 7 条需求的实际行为
 | `history()` | 只包含**真正改变焦点**的事件（`focus/move/scope-enter/scope-exit/fallback/refocus`），序号单调 |
 | `last_rejection` | 最近一次拒绝的机器码、中文原因、所在元素、目标、所属容器、环序列 |
 | `graph_snapshot()` / `rebuild()` / `validate_integrity()` | 终态快照、按终态重建、不变量自检（悬空边/索引残留/焦点逃逸等） |
+| `export_state()` / `import_state(state)` | **完整运行时状态**导出/导入（含接管栈、历史、最近拒绝），往返幂等 |
+| `to_json(indent=2)` / `from_json(text)` | 同上的 JSON 字符串形式；导出按稳定全序排列，同样状态字节一致 |
+
+`graph_snapshot()` 只含声明式结构（元素/关系/当前焦点/接管容器），用于
+"增量 == 重建"等价性校验；`export_state()` 则额外无损保存接管栈每层的
+返回元素、焦点历史流水、序号计数器与最近一次拒绝，适合离线存档/回放。
+`import_state`/`from_json` 在导入前做严格校验（重复 id、未知方向、悬空
+关系、焦点逃逸接管容器、非法 JSON 等一律抛 `FocusError`，不产生半导入）。
 
 被拒绝的按键不入历史（焦点未变），但会更新 `last_rejection`，直到下一次
 被拒绝为止（成功移动不清空它，保证"最近一次被拒绝的原因"始终可查）。
