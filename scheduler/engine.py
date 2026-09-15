@@ -162,8 +162,21 @@ class SchedulingEngine:
         return now
 
     def employee_leave(self, employee_id: str, start: datetime, end: datetime) -> dict:
-        """员工临时请假：扣除可用时段，只重排受影响班次。"""
+        """员工临时请假：扣除可用时段，只重排受影响班次。
+
+        起止时刻非法（非 datetime 或结束不晚于开始）时抛出 ValidationError，
+        员工可用时段、班表、缺口报告与公平指标均保持不变。
+        """
         e = self._employee(employee_id)
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            raise ValidationError(
+                f"请假起止时刻必须是 datetime，得到 start={start!r}, end={end!r}"
+            )
+        if end <= start:
+            raise ValidationError(
+                f"员工 {employee_id!r} 请假结束必须晚于开始: "
+                f"{start.isoformat()} ~ {end.isoformat()}"
+            )
         now = self._check_event_time()
         e.availability = subtract_window(e.availability, start, end)
         self._events.append((now, f"员工 {employee_id} 请假 {start.isoformat()}~{end.isoformat()}"))
@@ -176,10 +189,19 @@ class SchedulingEngine:
         return self._reschedule(affected)
 
     def update_availability(self, employee_id: str, windows: Sequence[TimeWindow]) -> dict:
-        """员工可用时段整体变更，只重排受影响班次。"""
+        """员工可用时段整体变更，只重排受影响班次。
+
+        时段列表非法（含非 TimeWindow 项）时抛出 ValidationError，状态保持不变。
+        """
         e = self._employee(employee_id)
+        windows = list(windows)
+        for w in windows:
+            if not isinstance(w, TimeWindow):
+                raise ValidationError(
+                    f"员工 {employee_id!r} 的可用时段必须是 TimeWindow，得到 {w!r}"
+                )
         now = self._check_event_time()
-        e.availability = list(windows)
+        e.availability = windows
         self._events.append((now, f"员工 {employee_id} 可用时段变更"))
         affected = {
             sid
@@ -269,8 +291,11 @@ class SchedulingEngine:
         }
 
     def _first_conflict(self, employee_id: str, shift: Shift):
-        for sid, eid in self._assignments.items():
-            if eid != employee_id:
+        # 必须按固定（班次标识字典序）遍历：_assignments 的插入顺序在
+        # 现场排班（班次添加顺序）与导出载入（文件顺序）后可能不同，
+        # 同一缺口的冲突班次在三条路径下必须逐项一致
+        for sid in sorted(self._assignments):
+            if self._assignments[sid] != employee_id:
                 continue
             code = conflict_code(shift, self.shifts[sid], self.config.min_rest_minutes)
             if code:
