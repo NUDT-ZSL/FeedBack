@@ -495,6 +495,269 @@ class Requirement7QueryStabilityTests(unittest.TestCase):
                 self.assertFalse(item["in_version_snapshot"])
 
 
+# 结果登记收紧：缺失依据拒绝 / 冲突无悬空引用 / 重复提交幂等 ============= #
+
+class OutcomeHardeningTests(unittest.TestCase):
+    """验收场景：一条结果对应多条不同立场的依据、引用缺失依据、
+    同一结果标识连续提交；并核对冲突记录中的对象都真实存在、
+    分歧点位置准确，以及导出导入后冲突与轨迹不变。"""
+
+    def _decision_with_mixed_bases(self):
+        # 依据立场混合：a/c 支持，b/d 反对；其中 a/b/c 将被结果同时引用
+        ledger = Ledger(clock=FakeClock("2026-02-01T10:00:00"))
+        d = ledger.create_decision("是否签下这个大客户",
+                                   created_at="2026-02-01T09:00:00")
+        ids = []
+        ids.append(ledger.add_basis(d.decision_id, "销售判断", 3,
+                                    "supports", "客户口头承诺预付").evidence_id)
+        ids.append(ledger.add_basis(d.decision_id, "法务风险提示", 2,
+                                    "contradicts", "合同条款暗藏单方解约权").evidence_id)
+        ids.append(ledger.add_basis(d.decision_id, "对方采购表态", 1,
+                                    "supports", "预算已锁定").evidence_id)
+        ids.append(ledger.add_basis(d.decision_id, "行业简报", 1,
+                                    "contradicts", "行业环境转冷").evidence_id)
+        ledger.mark_chosen(d.decision_id, "签约", chosen_at="2026-02-02T10:00:00")
+        return ledger, d, ids
+
+    def test_one_outcome_supporting_bases_of_both_stances(self):
+        """结果立场=反对，同时关联 a(支持)/b(反对)/c(支持) 三条依据：
+        只与立场对立的 a、c 产生冲突，且都准确标注为直接对应依据。"""
+        ledger, d, ids = self._decision_with_mixed_bases()
+        b_a, b_b, b_c, b_d = ids
+        outcome, conflicts, _ = ledger.record_outcome(
+            d.decision_id,
+            basis_ids=[b_a, b_b, b_c],
+            observed_value="客户单方解约且拒付预付款",
+            stance="contradicts", weight=5, source="仲裁受理通知",
+            occurred_at="2026-08-01T09:00:00")
+
+        # 结果确实挂着三条不同立场的依据
+        self.assertEqual(outcome.basis_id, b_a)  # 主对应依据兼容字段
+        self.assertEqual(outcome.basis_ids, [b_a, b_b, b_c])
+
+        conflicted = {c.basis_evidence_id for c in conflicts}
+        self.assertEqual(conflicted, {b_a, b_c})  # 同立场的 b、d 不冲突
+
+        dec = ledger.get_decision(d.decision_id)
+        for c in conflicts:
+            # 每条冲突的四个指向都必须是真实对象
+            self.assertIn(c.outcome_id, dec.outcomes)
+            self.assertIn(c.result_evidence_id, dec.evidences)
+            self.assertIn(c.basis_evidence_id, dec.evidences)
+            self.assertEqual(dec.evidences[c.basis_evidence_id].kind, "basis")
+            self.assertEqual(dec.evidences[c.result_evidence_id].kind, "result")
+            # 分歧点位置准确：文本同时点名依据、结果与观测值
+            self.assertIn(c.basis_evidence_id, c.point)
+            self.assertIn(c.outcome_id, c.point)
+            self.assertIn("客户单方解约且拒付预付款", c.point)
+            # 立场确实对立
+            self.assertNotEqual(
+                dec.evidences[c.basis_evidence_id].stance,
+                dec.evidences[c.result_evidence_id].stance)
+            # 这两条都是该结果直接对应的依据，必须标注
+            self.assertIn("该结果直接对应的依据", c.point)
+            # 双向挂接
+            self.assertIn(c.conflict_id, dec.conflict_ids)
+            self.assertIn(c.conflict_id, outcome.conflicts)
+
+        # 非直接对应的对立依据若存在，其冲突不带标注（这里构造一条）
+        outcome2, conflicts2, _ = ledger.record_outcome(
+            d.decision_id, basis_ids=[b_b],
+            observed_value="同行也曝出该客户违约",
+            stance="contradicts", weight=1, source="行业群消息",
+            occurred_at="2026-09-01T09:00:00")
+        # 与 a、c 冲突，其中没有一条是该结果直接对应的依据
+        self.assertTrue(conflicts2)
+        self.assertTrue(all("该结果直接对应的依据" not in c.point
+                            for c in conflicts2))
+        # 全台账无悬空引用
+        self.assertEqual(ledger.referential_integrity(), [])
+
+    def test_missing_single_basis_rejected_names_id_and_no_partial_write(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        dec_before = ledger.get_decision(d.decision_id)
+        n_outcomes = len(dec_before.outcomes)
+        n_evidences = len(dec_before.evidences)
+        n_conflicts = len(ledger.list_conflicts(d.decision_id))
+        traj_len = len(ledger.conclusion_trajectory(d.decision_id))
+
+        with self.assertRaises(NotFoundError) as ctx:
+            ledger.record_outcome(
+                d.decision_id, basis_id="D-0001.B99",
+                observed_value="某观测", stance="contradicts", weight=2,
+                source="某来源", occurred_at="2026-08-01T09:00:00")
+        msg = str(ctx.exception)
+        self.assertIn("D-0001.B99", msg)
+        self.assertIn("不存在", msg)
+
+        dec_after = ledger.get_decision(d.decision_id)
+        self.assertEqual(len(dec_after.outcomes), n_outcomes)
+        self.assertEqual(len(dec_after.evidences), n_evidences)
+        self.assertEqual(len(ledger.list_conflicts(d.decision_id)), n_conflicts)
+        self.assertEqual(len(ledger.conclusion_trajectory(d.decision_id)), traj_len)
+        self.assertEqual(ledger.referential_integrity(), [])
+
+    def test_one_missing_among_multiple_bases_rejected_lists_all_missing(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        with self.assertRaises(NotFoundError) as ctx:
+            ledger.record_outcome(
+                d.decision_id,
+                basis_ids=[ids[0], "D-0001.B88", "D-0001.B77"],
+                observed_value="某观测", stance="contradicts", weight=2,
+                source="某来源", occurred_at="2026-08-01T09:00:00")
+        msg = str(ctx.exception)
+        self.assertIn("D-0001.B88", msg)
+        self.assertIn("D-0001.B77", msg)
+        self.assertIn("2 个", msg)
+        # 存在的那条依据也没有产生任何结果/冲突
+        self.assertEqual(ledger.get_decision(d.decision_id).outcome_list(), [])
+
+    def test_duplicate_outcome_id_is_idempotent(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        kwargs = dict(
+            observed_value="客户单方解约且拒付预付款",
+            stance="contradicts", weight=5, source="仲裁受理通知",
+            occurred_at="2026-08-01T09:00:00")
+        first, conflicts_first, flip_first = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]], outcome_id="OBS-2026-08-01",
+            **kwargs)
+        # 连续两次以相同标识提交完全相同的结果
+        second, conflicts_second, flip_second = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]], outcome_id="OBS-2026-08-01",
+            **kwargs)
+        third, conflicts_third, flip_third = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]], outcome_id="OBS-2026-08-01",
+            **kwargs)
+
+        # 始终是同一条结果、同一组冲突，没有新增结论版本
+        self.assertIs(first, second)
+        self.assertIs(second, third)
+        self.assertEqual([c.conflict_id for c in conflicts_first],
+                         [c.conflict_id for c in conflicts_second])
+        self.assertIsNone(flip_second)
+        self.assertIsNone(flip_third)
+        dec = ledger.get_decision(d.decision_id)
+        self.assertEqual(len(dec.outcomes), 1)
+        self.assertEqual(len(dec.result_evidence_list()), 1)
+        traj = ledger.conclusion_trajectory(d.decision_id)
+        # v0 待定 → v1 成立（选择时初判）→ v2 不成立（首次结果翻转），
+        # 两次重复提交都不再追加版本。
+        self.assertEqual([e.verdict for e in traj], ["待定", "成立", "不成立"])
+        # 冲突只生成一次
+        self.assertEqual(len(dec.conflict_ids), len(conflicts_first))
+
+    def test_repeated_submission_matches_single_submission_final_state(self):
+        """最终结论与只提交一次的对照台账一致。"""
+        repeated, d1, ids1 = self._decision_with_mixed_bases()
+        single, d2, ids2 = self._decision_with_mixed_bases()
+        payload = dict(
+            observed_value="客户单方解约", stance="contradicts", weight=5,
+            source="仲裁通知", occurred_at="2026-08-01T09:00:00")
+        for _ in range(3):
+            repeated.record_outcome(d1.decision_id, basis_ids=[ids1[0]],
+                                    outcome_id="OBS-X", **payload)
+        single.record_outcome(d2.decision_id, basis_ids=[ids2[0]], **payload)
+
+        self.assertEqual(
+            repeated.current_conclusion(d1.decision_id).verdict,
+            single.current_conclusion(d2.decision_id).verdict)
+        t1 = [(e.version, e.verdict, e.score_supports, e.score_contradicts)
+              for e in repeated.conclusion_trajectory(d1.decision_id)]
+        t2 = [(e.version, e.verdict, e.score_supports, e.score_contradicts)
+              for e in single.conclusion_trajectory(d2.decision_id)]
+        self.assertEqual(t1, t2)
+
+    def test_same_id_with_different_payload_rejected_not_overwritten(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        common = dict(stance="contradicts", weight=5, source="仲裁通知",
+                      occurred_at="2026-08-01T09:00:00")
+        first, _, _ = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]], outcome_id="OBS-Y",
+            observed_value="原始观测值", **common)
+        with self.assertRaises(ConflictError) as ctx:
+            ledger.record_outcome(
+                d.decision_id, basis_ids=[ids[0]], outcome_id="OBS-Y",
+                observed_value="被篡改的观测值", **common)
+        self.assertIn("不一致", str(ctx.exception))
+        # 首次记录原样保留
+        self.assertEqual(
+            ledger.get_decision(d.decision_id).outcomes["OBS-Y"].observed_value,
+            "原始观测值")
+
+    def test_same_id_across_different_decisions_rejected(self):
+        ledger, d1, _ = self._decision_with_mixed_bases()
+        d2 = ledger.create_decision("另一件事", created_at="2026-03-01T09:00:00")
+        bid = ledger.add_basis(d2.decision_id, "s", 1, "supports").evidence_id
+        ledger.mark_chosen(d2.decision_id, "定了", chosen_at="2026-03-02T09:00:00")
+        payload = dict(observed_value="v", stance="contradicts", weight=1,
+                       source="s", occurred_at="2026-04-01T09:00:00")
+        ledger.record_outcome(d1.decision_id, basis_ids=[
+            e.evidence_id for e in ledger.get_decision(d1.decision_id).basis_list()[:1]
+        ], outcome_id="OBS-Z", **payload)
+        with self.assertRaises(ConflictError):
+            ledger.record_outcome(d2.decision_id, basis_ids=[bid],
+                                  outcome_id="OBS-Z", **payload)
+
+    def test_custom_id_does_not_collide_with_auto_allocation(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        payload = dict(observed_value="v", stance="contradicts", weight=1,
+                       source="s", occurred_at="2026-08-01T09:00:00")
+        custom, _, _ = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]], outcome_id="O-0001", **payload)
+        self.assertEqual(custom.outcome_id, "O-0001")
+        auto, _, _ = ledger.record_outcome(
+            d.decision_id, basis_ids=[ids[0]],
+            observed_value="v2", stance="contradicts", weight=1, source="s",
+            occurred_at="2026-09-01T09:00:00")
+        self.assertNotEqual(auto.outcome_id, "O-0001")
+        self.assertEqual(len(ledger.get_decision(d.decision_id).outcomes), 2)
+
+    def test_export_import_preserves_conflicts_trajectory_and_links(self):
+        ledger, d, ids = self._decision_with_mixed_bases()
+        outcome, conflicts, _ = ledger.record_outcome(
+            d.decision_id, basis_ids=ids[:3],
+            observed_value="客户单方解约", stance="contradicts", weight=5,
+            source="仲裁通知", occurred_at="2026-08-01T09:00:00")
+        # 再来一次幂等提交，确认它也不影响导出内容
+        ledger.record_outcome(
+            d.decision_id, basis_ids=ids[:3], outcome_id=outcome.outcome_id,
+            observed_value="客户单方解约", stance="contradicts", weight=5,
+            source="仲裁通知", occurred_at="2026-08-01T09:00:00")
+
+        data = ledger.to_dict()
+        restored = Ledger.from_dict(data)
+
+        # 轨迹逐版本一致
+        before = [(e.version, e.verdict, e.triggering_outcome_id,
+                   e.score_supports, e.score_contradicts,
+                   list(e.basis_evidence_ids))
+                  for e in ledger.conclusion_trajectory(d.decision_id)]
+        after = [(e.version, e.verdict, e.triggering_outcome_id,
+                  e.score_supports, e.score_contradicts,
+                  list(e.basis_evidence_ids))
+                 for e in restored.conclusion_trajectory(d.decision_id)]
+        self.assertEqual(before, after)
+
+        # 冲突逐字段一致，且每个指向在重载后仍可解析
+        c_before = [c.to_dict() for c in
+                    sorted(ledger.list_conflicts(d.decision_id),
+                           key=lambda c: c.conflict_id)]
+        c_after = [c.to_dict() for c in
+                   sorted(restored.list_conflicts(d.decision_id),
+                          key=lambda c: c.conflict_id)]
+        self.assertEqual(c_before, c_after)
+        self.assertEqual(restored.referential_integrity(), [])
+
+        # 多依据链接保留；旧字段 basis_id 仍在导出结构里
+        loaded_outcome = restored.get_decision(d.decision_id).outcomes[outcome.outcome_id]
+        self.assertEqual(loaded_outcome.basis_ids, ids[:3])
+        raw = next(o for o in data["decisions"][0]["outcomes"]
+                   if o["outcome_id"] == outcome.outcome_id)
+        self.assertIn("basis_id", raw)
+        self.assertIn("basis_ids", raw)
+        self.assertEqual(raw["basis_id"], ids[0])
+
+
 # 持久化往返 ============================================================= #
 
 class PersistenceTests(unittest.TestCase):

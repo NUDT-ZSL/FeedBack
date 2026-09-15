@@ -83,7 +83,7 @@ def _cmd_show(ledger: Ledger, args) -> None:
     if not d.outcome_list():
         print("    （无）")
     for o in d.outcome_list():
-        print(f"    [{o.outcome_id}] 对应依据 {o.basis_id} "
+        print(f"    [{o.outcome_id}] 对应依据 {', '.join(o.basis_ids)} "
               f"立场={'支持' if o.stance == SUPPORTS else '反对'} "
               f"发生于 {o.occurred_at}  来源={o.source}")
         print(f"        观测值：{o.observed_value}")
@@ -214,23 +214,36 @@ def _cmd_add_basis(ledger: Ledger, args) -> None:
 
 
 def _cmd_outcome(ledger: Ledger, args) -> None:
+    # 调用前判断是否属于重复提交，便于输出幂等提示。
+    replayed = False
+    if args.id:
+        decision = ledger.get_decision(args.decision_id)
+        replayed = args.id in decision.outcomes
+
     outcome, conflicts, new_entry = ledger.record_outcome(
         decision_id=args.decision_id,
-        basis_id=args.basis,
+        basis_ids=args.basis,
         observed_value=args.value,
         stance=args.stance,
         weight=args.weight,
         source=args.source,
         occurred_at=args.at,
+        outcome_id=args.id,
     )
-    print(f"已登记结果 {outcome.outcome_id}（结果证据 {outcome.evidence_id}），"
+    print(f"结果 {outcome.outcome_id}（结果证据 {outcome.evidence_id}），"
           f"回填到决策 {outcome.decision_id}")
+    print(f"  对应依据：{', '.join(outcome.basis_ids)}")
     print(f"  发生时刻：{outcome.occurred_at}    观测值：{outcome.observed_value}")
+    if replayed:
+        print("  该结果标识已存在且内容一致：按幂等处理，结论与轨迹未改动。")
     if conflicts:
-        print(f"  ⚠ 检测到 {len(conflicts)} 条矛盾，已保留双方并记录：")
+        if replayed:
+            print(f"  该结果关联的既有冲突记录 {len(conflicts)} 条（未重复生成）：")
+        else:
+            print(f"  ⚠ 检测到 {len(conflicts)} 条矛盾，已保留双方并记录：")
         for c in conflicts:
             print(f"    - {c.conflict_id}：{c.point}")
-    else:
+    elif not replayed:
         print("  未检测到与既有依据的矛盾。")
     if new_entry is not None:
         prev = ledger.conclusion_trajectory(args.decision_id)[-2]
@@ -241,6 +254,16 @@ def _cmd_outcome(ledger: Ledger, args) -> None:
     else:
         cur = ledger.current_conclusion(args.decision_id)
         print(f"  当前结论仍为「{cur.verdict}」，轨迹不变。")
+
+
+def _cmd_doctor(ledger: Ledger, args) -> None:
+    problems = ledger.referential_integrity()
+    if not problems:
+        print("体检通过：结果、冲突、轨迹、经验之间没有悬空引用。")
+        return
+    print(f"发现 {len(problems)} 处悬空引用：")
+    for p in problems:
+        print(f"  ✗ {p}")
 
 
 def _cmd_crystallize(ledger: Ledger, args) -> None:
@@ -310,15 +333,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--at", help="获取时刻（ISO，默认现在）")
     p.set_defaults(func=_cmd_add_basis, mutates=True)
 
-    p = sub.add_parser("outcome", help="登记实际结果（可迟到回填）")
+    p = sub.add_parser("outcome", help="登记实际结果（可迟到回填，可对应多条依据）")
     p.add_argument("decision_id")
-    p.add_argument("--basis", required=True, help="结果对应的依据标识")
+    p.add_argument("--basis", required=True, nargs="+",
+                   help="结果对应的依据标识（一个或多个，必须都已存在）")
     p.add_argument("--value", required=True, help="观测值")
     p.add_argument("--stance", required=True, help="supports(支持) / contradicts(反对)")
     p.add_argument("--weight", required=True, type=float, help="结果可信度权重（正数）")
     p.add_argument("--source", required=True, help="观测来源（必填）")
     p.add_argument("--at", required=True, help="结果发生时刻（ISO，必填，可晚于决策）")
+    p.add_argument("--id", dest="id",
+                   help="客户端结果标识；同标识重复提交按幂等处理")
     p.set_defaults(func=_cmd_outcome, mutates=True)
+
+    p = sub.add_parser("doctor", help="引用完整性体检（排查悬空引用）")
+    p.set_defaults(func=_cmd_doctor, mutates=False)
 
     p = sub.add_parser("chain", help="查看推导依据链")
     p.add_argument("decision_id")

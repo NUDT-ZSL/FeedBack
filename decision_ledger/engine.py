@@ -267,22 +267,31 @@ class Ledger:
     def record_outcome(
         self,
         decision_id: str,
-        basis_id: str,
-        observed_value: str,
-        stance: str,
-        weight: float,
-        source: str,
-        occurred_at: str,
+        basis_id: Optional[str] = None,
+        observed_value: str = "",
+        stance: str = "",
+        weight: Optional[float] = None,
+        source: str = "",
+        occurred_at: str = "",
+        basis_ids: Optional[List[str]] = None,
+        outcome_id: Optional[str] = None,
     ) -> Tuple[Outcome, List[ConflictRecord], Optional[ConclusionEntry]]:
         """登记一条实际结果并回填到决策。
 
         - 决策必须已作出选择（已选择/已复盘均可）——复盘后很久才到的
           "迟到结果"同样允许回填。
-        - basis_id 是该结果对应的依据，必须存在。
-        - 与既有依据立场对立时，为每一对对立生成冲突记录并保留双方。
+        - 一条结果可对应多条依据：传 basis_ids，或单条时传 basis_id。
+          所有引用的依据都必须真实存在；只要有一个缺失就整体拒绝，
+          错误信息逐个列出缺失标识，且不产生任何半成品数据。
+        - outcome_id 由调用方指定时即成为该结果的稳定标识；同一标识
+          重复提交按幂等处理：原样返回首次结果与其冲突记录，不新增证据、
+          不重算结论、不改动变化轨迹。若用同一标识提交了不同内容则拒绝
+          （防止把旧结果悄悄改成另一件事）。
+        - 与立场对立的既有依据逐对生成冲突记录；冲突只引用真实存在的
+          依据与结果，不存在悬空引用。
         - 登记后重算结论；结论变化时追加轨迹版本。
 
-        返回 (结果对象, 新冲突列表, 新结论版本或 None)。
+        返回 (结果对象, 该结果的冲突列表, 新结论版本或 None)。
         """
         decision = self._require_decision(decision_id)
         if decision.state == PENDING:
@@ -291,26 +300,56 @@ class Ledger:
                 f"实际结果只能在决策作出后登记"
             )
 
-        basis = decision.evidences.get(basis_id)
-        where = f"决策 {decision_id} 登记结果（对应依据 {basis_id}）"
-        if basis is None or basis.kind != BASIS:
-            raise NotFoundError(
-                f"{where} 失败：该决策下不存在标识为 {basis_id} 的依据，"
-                f"结果必须对应一条既有依据"
-            )
+        # 对应依据标识先收集起来（去重在解析阶段做）；幂等比对也需要它。
+        raw_ids: List[str] = []
+        if basis_id is not None:
+            raw_ids.append(basis_id)
+        if basis_ids:
+            raw_ids.extend(basis_ids)
 
+        # ---- 幂等分支：同一结果标识重复提交，直接回放首次记录 ----
+        if outcome_id is not None:
+            key = outcome_id.strip()
+            if not key:
+                raise ValidationError(
+                    f"决策 {decision_id} 登记结果失败：结果标识不能为空字符串"
+                )
+            holder = self._find_outcome(key)
+            if holder is not None:
+                existing, existing_decision = holder
+                if existing_decision.decision_id != decision_id:
+                    raise ConflictError(
+                        f"结果标识 {key} 已属于决策 {existing_decision.decision_id}，"
+                        f"不能重复登记到决策 {decision_id}"
+                    )
+                return self._replay_outcome(
+                    existing_decision, existing, key,
+                    observed_value=observed_value, stance=stance, weight=weight,
+                    source=source, occurred_at=occurred_at,
+                    raw_basis_ids=raw_ids,
+                )
+
+        where = f"决策 {decision_id} 登记结果" + (
+            f"（结果标识 {outcome_id.strip()}）" if outcome_id else ""
+        )
+
+        # ---- 对应依据：全部必须真实存在 ----
+        links = self._resolve_basis_links(decision, raw_ids, where)
+
+        # ---- 其余字段先全部校验，任何一项不过都不留半成品 ----
         value = _check_text(observed_value, "观测值", where)
         ts = _parse_iso(occurred_at, "发生时刻", where)
         st = _normalize_stance(stance, where)
         w = _check_weight(weight, where)
         src = _check_text(source, "来源", where)
 
-        outcome_id = self._next_id("outcome", "O")
+        # ---- 分配标识（系统序号自动避开任何已占用的结果标识） ----
+        new_outcome_id = outcome_id.strip() if outcome_id else \
+            self._allocate_outcome_id()
         counters = self._evidence_seq.setdefault(decision_id, {"B": 0, "R": 0})
         seq = counters["R"] + 1
         result_eid = f"{decision_id}.R{seq:02d}"
-        # 同一决策内证据标识不冲突（结果标识由系统按序号生成，此处双保险）
-        if result_eid in decision.evidences:  # pragma: no cover - 理论不可达
+        if result_eid in decision.evidences:  # pragma: no cover - 序号单调，理论不可达
             raise ConflictError(f"结果证据标识 {result_eid} 已存在")
         counters["R"] = seq
 
@@ -322,14 +361,14 @@ class Ledger:
             stance=st,
             observed_at=ts,
             content=value,
-            outcome_id=outcome_id,
+            outcome_id=new_outcome_id,
         )
         decision.evidences[result_eid] = result_evidence
 
         outcome = Outcome(
-            outcome_id=outcome_id,
+            outcome_id=new_outcome_id,
             decision_id=decision_id,
-            basis_id=basis.evidence_id,
+            basis_ids=links,
             occurred_at=ts,
             observed_value=value,
             evidence_id=result_eid,
@@ -337,31 +376,133 @@ class Ledger:
             weight=w,
             source=src,
         )
-        decision.outcomes[outcome_id] = outcome
+        decision.outcomes[new_outcome_id] = outcome
 
         # 需求 5：与立场对立的既有依据逐一生成冲突记录，双方原样保留。
         conflicts = self._detect_conflicts(
-            decision, outcome, result_evidence, linked_basis_id=basis.evidence_id
+            decision, outcome, result_evidence, linked_basis_ids=set(links)
         )
 
         # 需求 4：重算结论并记录变化。
-        new_entry = self._recompute_conclusion(decision, outcome_id)
+        new_entry = self._recompute_conclusion(decision, new_outcome_id)
         return outcome, conflicts, new_entry
+
+    def _resolve_basis_links(
+        self, decision: Decision, raw_ids: List[str], where: str
+    ) -> List[str]:
+        """校验结果对应的依据标识：非空、去重、全部必须是真实存在的依据。"""
+        links: List[str] = []
+        seen = set()
+        for raw in raw_ids:
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValidationError(
+                    f"{where} 失败：结果必须至少对应一条既有依据，"
+                    f"收到了空的依据标识"
+                )
+            bid = raw.strip()
+            if bid in seen:
+                continue
+            seen.add(bid)
+            links.append(bid)
+        if not links:
+            raise ValidationError(
+                f"{where} 失败：结果必须至少对应一条既有依据（basis_id / basis_ids）"
+            )
+        missing = [
+            bid for bid in links
+            if bid not in decision.evidences
+            or decision.evidences[bid].kind != BASIS
+        ]
+        if missing:
+            raise NotFoundError(
+                f"{where} 失败：以下依据标识在决策 {decision.decision_id} 下"
+                f"不存在（共 {len(missing)} 个）：{', '.join(missing)}；"
+                f"结果只能对应真实存在的依据，未写入任何数据"
+            )
+        return links
+
+    def _allocate_outcome_id(self) -> str:
+        """分配系统结果标识；自动跳过任何已被占用的标识（含客户端自定义的）。"""
+        used = {oid for dec in self.decisions.values() for oid in dec.outcomes}
+        while True:
+            self._counters["outcome"] += 1
+            candidate = f"O-{self._counters['outcome']:04d}"
+            if candidate not in used:
+                return candidate
+
+    def _find_outcome(
+        self, outcome_id: str
+    ) -> Optional[Tuple[Outcome, Decision]]:
+        """按结果标识跨决策查找，返回 (结果, 所属决策)，找不到返回 None。"""
+        for dec in self.decisions.values():
+            if outcome_id in dec.outcomes:
+                return dec.outcomes[outcome_id], dec
+        return None
+
+    def _replay_outcome(
+        self,
+        decision: Decision,
+        existing: Outcome,
+        key: str,
+        observed_value: str,
+        stance: str,
+        weight: Any,
+        source: str,
+        occurred_at: str,
+        raw_basis_ids: List[str],
+    ) -> Tuple[Outcome, List[ConflictRecord], Optional[ConclusionEntry]]:
+        """同一结果标识重复提交：校验载荷一致后原样回放，不改动任何状态。
+
+        幂等只对"同一条结果的重复提交"成立。载荷字段缺失或与首次记录
+        不一致都拒绝，防止借重复提交之名静默改写已确认的结果与结论。
+        """
+        where = f"决策 {decision.decision_id} 重复提交结果 {key}"
+        value = _check_text(observed_value, "观测值", where)
+        ts = _parse_iso(occurred_at, "发生时刻", where)
+        st = _normalize_stance(stance, where)
+        w = _check_weight(weight, where)
+        src = _check_text(source, "来源", where)
+        links = self._resolve_basis_links(decision, raw_basis_ids, where)
+
+        diffs = []
+        if value != existing.observed_value:
+            diffs.append(f"观测值：{existing.observed_value!r} ≠ {value!r}")
+        if ts != existing.occurred_at:
+            diffs.append(f"发生时刻：{existing.occurred_at} ≠ {ts}")
+        if st != existing.stance:
+            diffs.append(f"立场：{existing.stance} ≠ {st}")
+        if abs(w - existing.weight) > 1e-9:
+            diffs.append(f"权重：{existing.weight:g} ≠ {w:g}")
+        if src != existing.source:
+            diffs.append(f"来源：{existing.source!r} ≠ {src!r}")
+        if sorted(links) != sorted(existing.basis_ids):
+            diffs.append(
+                f"对应依据：{sorted(existing.basis_ids)} ≠ {sorted(links)}")
+        if diffs:
+            raise ConflictError(
+                f"结果标识 {key} 已登记，重复提交的内容与首次记录不一致"
+                f"（{len(diffs)} 处）：{'；'.join(diffs)}。"
+                f"已确认结果不能覆盖；若确有新观测，请用新的结果标识登记"
+            )
+
+        conflicts = [self.conflicts[c] for c in existing.conflicts
+                     if c in self.conflicts]
+        return existing, conflicts, None
 
     def _detect_conflicts(
         self,
         decision: Decision,
         outcome: Outcome,
         result_evidence: Evidence,
-        linked_basis_id: str,
+        linked_basis_ids: set,
     ) -> List[ConflictRecord]:
         conflicts: List[ConflictRecord] = []
+        # 只遍历真实存在的依据对象，冲突引用不可能悬空。
         for other in decision.basis_list():
             if other.stance == result_evidence.stance:
                 continue
-            # 与每一条立场对立的既有依据都生成冲突记录；该结果直接对应的
-            # 依据在分歧点中特别标出。
-            linked = "（该结果直接对应的依据）" if other.evidence_id == linked_basis_id else ""
+            linked = "（该结果直接对应的依据）" \
+                if other.evidence_id in linked_basis_ids else ""
             self._counters["conflict"] += 1
             cid = f"C-{self._counters['conflict']:04d}"
             point = (
@@ -593,7 +734,6 @@ class Ledger:
 
     def list_lessons(self) -> List[Lesson]:
         return [self.lessons[k] for k in sorted(self.lessons)]
-
     def get_lesson(self, lesson_id: str) -> Lesson:
         if lesson_id not in self.lessons:
             raise NotFoundError(f"经验 {lesson_id} 不存在")
@@ -607,6 +747,104 @@ class Ledger:
             "source_decision_id": lesson.source_decision_id,
             "cited_by": sorted(lesson.cited_by),
         }
+
+    def referential_integrity(self) -> List[str]:
+        """体检：返回所有悬空引用的说明列表，空列表表示完全自洽。
+
+        逐项核对：结果→决策、结果→结果证据、结果→对应依据、
+        冲突→决策/结果/结果证据/依据、结论轨迹→触发结果、经验支撑链。
+        冲突记录涉及的每个对象都必须真实存在，且分歧点位置与对象一致。
+        """
+        problems: List[str] = []
+        for dec in self.list_decisions():
+            # 结果侧
+            for o in dec.outcome_list():
+                if o.evidence_id not in dec.evidences:
+                    problems.append(
+                        f"结果 {o.outcome_id} 的结果证据 {o.evidence_id} 不存在")
+                else:
+                    ev = dec.evidences[o.evidence_id]
+                    if ev.outcome_id != o.outcome_id:
+                        problems.append(
+                            f"结果 {o.outcome_id} 与结果证据 {o.evidence_id} "
+                            f"双向引用不一致")
+                for bid in o.basis_ids:
+                    basis = dec.evidences.get(bid)
+                    if basis is None or basis.kind != BASIS:
+                        problems.append(
+                            f"结果 {o.outcome_id} 引用了不存在的依据 {bid}")
+                for cid in o.conflicts:
+                    if cid not in self.conflicts:
+                        problems.append(
+                            f"结果 {o.outcome_id} 引用了不存在的冲突 {cid}")
+
+            # 冲突侧
+            for cid in sorted(dec.conflict_ids):
+                rec = self.conflicts.get(cid)
+                if rec is None:
+                    problems.append(
+                        f"决策 {dec.decision_id} 的冲突 {cid} 记录缺失")
+                    continue
+                if rec.decision_id != dec.decision_id:
+                    problems.append(
+                        f"冲突 {cid} 归属决策 {rec.decision_id} 与挂载位置 "
+                        f"{dec.decision_id} 不一致")
+                outcome = dec.outcomes.get(rec.outcome_id)
+                if outcome is None:
+                    problems.append(f"冲突 {cid} 指向不存在的结果 {rec.outcome_id}")
+                    continue
+                if rec.result_evidence_id not in dec.evidences:
+                    problems.append(
+                        f"冲突 {cid} 指向不存在的结果证据 {rec.result_evidence_id}")
+                basis = dec.evidences.get(rec.basis_evidence_id)
+                if basis is None or basis.kind != BASIS:
+                    problems.append(
+                        f"冲突 {cid} 指向不存在的依据 {rec.basis_evidence_id}")
+                else:
+                    # 分歧点位置必须准确：双方立场确实对立
+                    rev = dec.evidences.get(rec.result_evidence_id)
+                    if rev is not None and rev.stance == basis.stance:
+                        problems.append(
+                            f"冲突 {cid} 双方立场并不对立，分歧点位置不成立")
+                    if rec.basis_evidence_id not in outcome.basis_ids:
+                        pass  # 冲突可针对任何对立依据，不要求是结果直接对应的依据
+                    if basis.evidence_id not in rec.point \
+                            or outcome.outcome_id not in rec.point:
+                        problems.append(
+                            f"冲突 {cid} 的分歧点文本未准确点名依据与结果")
+
+            # 结论轨迹侧
+            for entry in dec.conclusion_history:
+                if entry.triggering_outcome_id is not None and \
+                        entry.triggering_outcome_id not in dec.outcomes:
+                    problems.append(
+                        f"决策 {dec.decision_id} v{entry.version} 轨迹指向"
+                        f"不存在的触发结果 {entry.triggering_outcome_id}")
+
+        # 经验侧
+        for lesson in self.list_lessons():
+            src = self.decisions.get(lesson.source_decision_id)
+            if src is None:
+                problems.append(
+                    f"经验 {lesson.lesson_id} 的源决策 "
+                    f"{lesson.source_decision_id} 不存在")
+                continue
+            for eid in lesson.evidence_ids + [
+                src.outcomes[oid].evidence_id for oid in lesson.outcome_ids
+                if oid in src.outcomes
+            ]:
+                if eid not in src.evidences:
+                    problems.append(
+                        f"经验 {lesson.lesson_id} 引用了不存在的证据 {eid}")
+            for oid in lesson.outcome_ids:
+                if oid not in src.outcomes:
+                    problems.append(
+                        f"经验 {lesson.lesson_id} 引用了不存在的结果 {oid}")
+            for did in lesson.cited_by:
+                if did not in self.decisions:
+                    problems.append(
+                        f"经验 {lesson.lesson_id} 的引用方决策 {did} 不存在")
+        return problems
 
     # ------------------------------------------------------------------ #
     # 内部工具

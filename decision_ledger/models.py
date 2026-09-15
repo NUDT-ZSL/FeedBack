@@ -122,20 +122,26 @@ class Outcome:
 
     outcome_id: str
     decision_id: str
-    basis_id: str            # 该结果对应的依据标识
     occurred_at: str          # 结果实际发生时刻
     observed_value: str       # 观测值
     evidence_id: str          # 该结果自身物化出的（结果）证据标识
     stance: str               # 结果对决策主题的立场
     weight: float             # 结果可信度权重
     source: str               # 结果观测来源
+    basis_ids: List[str] = field(default_factory=list)  # 该结果对应的依据标识
     conflicts: List[str] = field(default_factory=list)  # 触发的冲突记录 id
+
+    @property
+    def basis_id(self) -> Optional[str]:
+        """主对应依据（basis_ids 的第一个），兼容单依据使用方式。"""
+        return self.basis_ids[0] if self.basis_ids else None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "outcome_id": self.outcome_id,
             "decision_id": self.decision_id,
             "basis_id": self.basis_id,
+            "basis_ids": list(self.basis_ids),
             "occurred_at": self.occurred_at,
             "observed_value": self.observed_value,
             "evidence_id": self.evidence_id,
@@ -147,10 +153,13 @@ class Outcome:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Outcome":
+        basis_ids = list(d.get("basis_ids") or [])
+        if not basis_ids and d.get("basis_id"):
+            basis_ids = [d["basis_id"]]  # 向后兼容旧导出文件
         return cls(
             outcome_id=d["outcome_id"],
             decision_id=d["decision_id"],
-            basis_id=d["basis_id"],
+            basis_ids=basis_ids,
             occurred_at=d["occurred_at"],
             observed_value=d["observed_value"],
             evidence_id=d["evidence_id"],

@@ -8,7 +8,7 @@
 
 - 纯 Python 3.8+ 标准库实现，**零第三方依赖、完全离线**。
 - 台账整体保存为单个 UTF-8 JSON 文件（原子写入），可直接用 Git 管理。
-- 提供 Python API、中文命令行（CLI）、36 项验收测试和一个带自检的剧情演示。
+- 提供 Python API、中文命令行（CLI）、45 项验收测试和一个带自检的剧情演示。
 
 ## 快速开始
 
@@ -24,14 +24,17 @@ python -m decision_ledger --file my.json add-decision --topic "是否跳槽"
 python -m decision_ledger --file my.json add-basis D-0001 \
     --source "offer 邮件" --weight 3 --stance supports --content "涨薪 40%"
 python -m decision_ledger --file my.json choose D-0001 --option "跳槽"
-# 结果可以晚很久才登记，--at 是结果实际发生时刻
+# 结果可以晚很久才登记，--at 是结果实际发生时刻；--basis 可给多个
 python -m decision_ledger --file my.json outcome D-0001 \
-    --basis D-0001.B01 --value "试用期通过" --stance supports \
-    --weight 4 --source "直属主管" --at 2026-12-01T18:00:00
+    --basis D-0001.B01 D-0001.B02 \
+    --value "试用期通过" --stance supports \
+    --weight 4 --source "直属主管" --at 2026-12-01T18:00:00 \
+    --id OBS-2026-12-01     # 可选：客户端结果标识，同标识重提按幂等处理
 python -m decision_ledger --file my.json show D-0001
 python -m decision_ledger --file my.json trajectory D-0001
 python -m decision_ledger --file my.json chain D-0001
 python -m decision_ledger --file my.json conflicts D-0001
+python -m decision_ledger --file my.json doctor          # 引用完整性体检
 python -m decision_ledger --file my.json lesson D-0001 --title "经验标题" --content "经验正文"
 python -m decision_ledger --file my.json cite D-0002 --lesson L-0001
 python -m decision_ledger --file my.json lesson-refs L-0001
@@ -46,7 +49,7 @@ python -m decision_ledger --file my.json lesson-refs L-0001
 |---|---|
 | 决策 Decision | 唯一标识 `D-0001`、主题、发生时刻；状态在 **待定 → 已选择 → 已复盘** 间单向流转 |
 | 依据 Evidence(basis) | 待定阶段录入；同一决策内标识唯一（默认 `D-0001.B01`）；来源必填，权重必须为正；立场 supports/contradicts |
-| 结果 Outcome | 决策作出后登记，带发生时刻、观测值、可信度和**对应的依据标识**；可在已选择/已复盘阶段随时回填（含迟到结果） |
+| 结果 Outcome | 决策作出后登记，带发生时刻、观测值、可信度和**对应的依据标识（可多条）**；可在已选择/已复盘阶段随时回填（含迟到结果）；支持客户端结果标识，**同标识重复提交按幂等处理** |
 | 结论版本 ConclusionEntry | v0=待定；作出选择时基于依据形成初判；此后每登记一条结果重算，**仅在结论翻转时追加新版本** |
 | 冲突 ConflictRecord | 结果与任何立场对立的既有依据逐对生成；旧依据原样保留，绝不静默覆盖 |
 | 经验 Lesson | 由某次结论 + 获胜侧的依据/结果固化而成（`L-0001`），可被后续决策引用，反向引用链可查 |
@@ -112,8 +115,18 @@ b = lg.add_basis(d.decision_id, "offer 说明会", 4, "supports", "期权承诺"
 lg.mark_chosen(d.decision_id, "加入", chosen_at="2026-02-01T10:00:00")
 
 # 返回三元组：(结果, 新冲突列表, 新结论版本或 None)
+# basis_ids 可给多条（立场混合也允许）；outcome_id 为客户端稳定标识
 outcome, conflicts, new_version = lg.record_outcome(
-    d.decision_id, basis_id=b.evidence_id,
+    d.decision_id, basis_ids=[b.evidence_id, b2.evidence_id],
+    observed_value="融资砍半，期权缩水", stance="contradicts", weight=5,
+    source="公司全员信", occurred_at="2026-09-20T19:00:00",
+    outcome_id="OBS-2026-09-20")
+
+# 同一 outcome_id + 相同载荷再次提交 → 幂等回放，不新增证据/冲突/轨迹版本；
+# 载荷不一致则拒绝，防止覆盖已确认结果
+lg.record_outcome(
+    d.decision_id, basis_ids=[b.evidence_id, b2.evidence_id],
+    outcome_id="OBS-2026-09-20",
     observed_value="融资砍半，期权缩水", stance="contradicts", weight=5,
     source="公司全员信", occurred_at="2026-09-20T19:00:00")
 
@@ -147,3 +160,12 @@ lg = store.load("my.json")               # 重新加载
 - **时刻与登记时间分离**：结果的 `occurred_at` 是事情实际发生时刻
   （决定依据链排序），结论版本的 `changed_at` 是它进入台账的时刻，
   因此迟到回填不会重写历史。
+- **结果登记的三条收紧规则**：
+  1. 引用的依据必须全部真实存在——任一缺失就整体拒绝，错误信息逐个列出
+     缺失标识，且在任何写入之前完成校验，不留结果/证据/冲突半成品；
+  2. 冲突记录只从真实依据对象生成，结果证据、结果、依据三方均可解析，
+     `Ledger.referential_integrity()`（CLI `doctor`）可随时体检；
+  3. 客户端结果标识用于幂等：同标识同载荷重放返回首次记录、不动结论与
+     轨迹；同标识不同载荷直接拒绝。系统自动分配的 `O-xxxx` 也会避开
+     已被客户端占用的标识。导出结构中 `basis_id`（主依据）与 `basis_ids`
+     并存，旧导出文件可直接加载。

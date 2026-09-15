@@ -196,15 +196,107 @@ def main() -> int:
     check(refs["cited_by"] == [d2.decision_id], "反向引用链稳定、按序返回")
 
     # ------------------------------------------------------------------
+    section("收紧场景（1）：一条结果同时对应多条不同立场的依据")
+    # ------------------------------------------------------------------
+    d3 = ledger.create_decision("是否与供应商丙续约",
+                                created_at="2027-03-05T09:00:00")
+    p1 = ledger.add_basis(d3.decision_id, "销售承诺", 3, "supports",
+                          "承诺季度交付达标", observed_at="2027-03-03T09:00:00").evidence_id
+    p2 = ledger.add_basis(d3.decision_id, "法务提醒", 2, "contradicts",
+                          "历史合同纠纷未结", observed_at="2027-03-04T09:00:00").evidence_id
+    p3 = ledger.add_basis(d3.decision_id, "采购口碑", 1, "supports",
+                          "同行评价尚可", observed_at="2027-03-04T15:00:00").evidence_id
+    ledger.mark_chosen(d3.decision_id, "续约一年", chosen_at="2027-03-06T09:00:00")
+
+    # 引用一条不存在的依据：必须整体拒绝、不留半成品
+    try:
+        ledger.record_outcome(
+            d3.decision_id, basis_ids=[p1, "D-0003.B88", "D-0003.B77"],
+            observed_value="不该写入", stance="contradicts", weight=5,
+            source="不应产生", occurred_at="2027-06-01T09:00:00")
+        raise AssertionError("缺失依据竟然登记成功")
+    except LedgerError as exc:
+        print(f"  缺失依据被拒绝：{exc}")
+        check("D-0003.B88" in str(exc) and "D-0003.B77" in str(exc),
+              "错误信息逐个点名缺失的依据标识")
+    check(ledger.get_decision(d3.decision_id).outcome_list() == [],
+          "拒绝后没有任何结果/证据/冲突半成品")
+
+    # 真实结果：同时挂在 p1(支持)/p2(反对) 上，观测为负面
+    o4, conflicts4, flip4 = ledger.record_outcome(
+        d3.decision_id, basis_ids=[p1, p2], outcome_id="OBS-SUPPLIER-2027-09",
+        observed_value="连续两个季度交付不达标且对簿公堂",
+        stance="contradicts", weight=5, source="仲裁立案通知+验收记录",
+        occurred_at="2027-09-15T09:00:00")
+    check(o4.basis_ids == [p1, p2], "结果同时对应两条不同立场的依据")
+    # 结果为反对：与全部支持依据（p1、p3）冲突；p2 同立场不冲突。
+    check(len(conflicts4) == 2
+          and {c.basis_evidence_id for c in conflicts4} == {p1, p3},
+          "与立场对立的 p1、p3 各形成一条冲突；同立场的 p2 不冲突")
+    direct = next(c for c in conflicts4 if c.basis_evidence_id == p1)
+    indirect = next(c for c in conflicts4 if c.basis_evidence_id == p3)
+    check("该结果直接对应的依据" in direct.point
+          and "该结果直接对应的依据" not in indirect.point,
+          "分歧点位置准确：直接关联的 p1 有标注，未关联的 p3 无标注")
+    c = direct
+    check(p1 in c.point and o4.outcome_id in c.point,
+          "分歧点准确点名依据与结果，无悬空引用")
+
+    # ------------------------------------------------------------------
+    section("收紧场景（2）：同一结果标识连续重复提交 → 幂等")
+    # ------------------------------------------------------------------
+    payload = dict(
+        observed_value="连续两个季度交付不达标且对簿公堂",
+        stance="contradicts", weight=5, source="仲裁立案通知+验收记录",
+        occurred_at="2027-09-15T09:00:00")
+    o5, conflicts5, flip5 = ledger.record_outcome(
+        d3.decision_id, basis_ids=[p1, p2],
+        outcome_id="OBS-SUPPLIER-2027-09", **payload)
+    o6, conflicts6, flip6 = ledger.record_outcome(
+        d3.decision_id, basis_ids=[p1, p2],
+        outcome_id="OBS-SUPPLIER-2027-09", **payload)
+    check(o5 is o4 and o6 is o4, "重复提交返回的是首次那条结果本身")
+    check(flip5 is None and flip6 is None, "重复提交不翻动结论、不追加轨迹")
+    check(len(ledger.get_decision(d3.decision_id).outcomes) == 1,
+          "结果只有一条，冲突也只有首次的一组")
+    traj3 = [e.verdict for e in ledger.conclusion_trajectory(d3.decision_id)]
+    check(traj3 == ["待定", "成立", "不成立"],
+          f"轨迹保留完整过程（{traj3}），未被重复提交覆盖")
+
+    # 同标识但内容变了：拒绝，不许借重提改写已确认结果
+    try:
+        ledger.record_outcome(
+            d3.decision_id, basis_ids=[p1, p2],
+            outcome_id="OBS-SUPPLIER-2027-09",
+            observed_value="被篡改的说法", stance="contradicts", weight=5,
+            source="仲裁立案通知+验收记录", occurred_at="2027-09-15T09:00:00")
+        raise AssertionError("不一致的重复提交竟然成功")
+    except LedgerError as exc:
+        print(f"  同标识不同内容被拒绝：{exc}")
+
+    # ------------------------------------------------------------------
+    section("全台账引用完整性体检")
+    # ------------------------------------------------------------------
+    problems = ledger.referential_integrity()
+    check(problems == [], f"体检无悬空引用（{len(problems)} 处问题）")
+
+    # ------------------------------------------------------------------
     section("落盘并重新加载，验证离线持久化")
     # ------------------------------------------------------------------
     store.save(ledger, LEDGER_FILE)
     reloaded = store.load(LEDGER_FILE)
     check(reloaded.current_conclusion(d.decision_id).verdict == "不成立",
           "重载后当前结论不变")
-    check(len(reloaded.list_conflicts()) == 5, "重载后冲突记录完整")
+    check(len(reloaded.list_conflicts()) == 7,
+          "重载后冲突记录完整（D-0001 的 5 条 + D-0003 的 2 条）")
     check(reloaded.lesson_references(lesson.lesson_id)["cited_by"]
           == [d2.decision_id], "重载后经验引用链完整")
+    check(reloaded.referential_integrity() == [], "重载后体检仍无悬空引用")
+    # D-0003 的轨迹与多依据链接原样保留
+    check([e.verdict for e in reloaded.conclusion_trajectory(d3.decision_id)]
+          == ["待定", "成立", "不成立"], "重载后 D-0003 轨迹不变")
+    check(reloaded.get_decision(d3.decision_id).outcomes["OBS-SUPPLIER-2027-09"]
+          .basis_ids == [p1, p2], "重载后结果的多依据链接不变")
     print(f"\n台账已保存到：{LEDGER_FILE}")
     print("可用以下命令继续翻看：")
     print(f"  python -m decision_ledger --file {LEDGER_FILE.name} show D-0001")
