@@ -416,6 +416,131 @@ class Requirement6DailyLimitTests(unittest.TestCase):
             s.plan_day(day=0, limit=0)
 
 
+class DeferralConsistencyTests(unittest.TestCase):
+    """顺延后：主题统计 / 应复习集合 / 重复查询三者必须一致。
+
+    复现路径：时钟推进到某天 -> 当日复习量超上限触发顺延 ->
+    立刻查主题到期数与平均间隔 -> 时钟停在同一天反复查应复习集合。
+    """
+
+    def _setup(self, limit=2, n=4, topic="数学"):
+        clock = ManualClock(0)
+        s = Scheduler(clock=clock, daily_limit=limit)
+        for i in range(n):
+            iid = f"c{i}"
+            s.add_item(iid, topic, stability=5.0)
+            # tick=0 顺利复习：稳定度 5.0 -> 6.75，排定间隔 7 天，due=7
+            s.review(iid, 5, timestamp=0)
+        clock.set(10)  # 全部逾期，触发顺延（未选中项 due 7 -> 11）
+        return s, clock, s.plan_day(day=10)
+
+    def test_topic_due_count_matches_due_set(self):
+        s, _, plan = self._setup()
+        self.assertEqual(plan.selected, ["c0", "c1"])
+        self.assertEqual([d.item_id for d in plan.deferred], ["c2", "c3"])
+        due_set = set(s.due_items())
+        stats = s.topic_stats("数学", now=10)
+        # 主题到期数 == 应复习集合中该主题的成员数，顺延项不计入
+        self.assertEqual(stats["due_count"], 2)
+        self.assertEqual(stats["due_count"], sum(1 for i in due_set if i in {"c0", "c1", "c2", "c3"}))
+        self.assertEqual(due_set, {"c0", "c1"})
+
+    def test_average_interval_uses_postponed_due(self):
+        s, _, _ = self._setup()
+        stats = s.topic_stats("数学", now=10)
+        # c0,c1 实际间隔 7-0=7；c2,c3 顺延后 11-0=11；均值 9.0
+        # （旧口径取记录里的排定间隔，会错误地报 7.0）
+        self.assertAlmostEqual(stats["average_interval"], 9.0)
+
+    def test_deferral_leaves_scheduled_interval_history_intact(self):
+        s, _, _ = self._setup()
+        for iid in ("c2", "c3"):
+            self.assertEqual(
+                [c["scheduled_interval"] for c in s.interval_changes(iid)], [7]
+            )
+
+    def test_repeated_due_queries_same_day_identical(self):
+        s, _, _ = self._setup()
+        first = s.due_items()
+        for _ in range(5):
+            self.assertEqual(s.due_items(), first)
+        self.assertEqual(first, ["c0", "c1"])  # 顺延项不出现在前面/任何位置
+
+    def test_repeated_plan_same_day_does_not_redefer(self):
+        s, _, plan1 = self._setup()
+        ledger_before = [(d.item_id, d.old_due, d.new_due) for d in s.deferrals()]
+        plan2 = s.plan_day(day=10)
+        plan3 = s.plan_day(day=10)
+        self.assertEqual(plan2.selected, plan1.selected)
+        self.assertEqual(plan3.selected, plan1.selected)
+        self.assertEqual(plan2.deferred, [])
+        self.assertEqual(plan3.deferred, [])
+        # 顺延账本不重复登记
+        self.assertEqual(
+            [(d.item_id, d.old_due, d.new_due) for d in s.deferrals()],
+            ledger_before,
+        )
+
+    def test_urgency_order_reflects_new_due_next_day(self):
+        s, clock, _ = self._setup()
+        clock.set(11)
+        # 次日全部到期；排序按新 due：未复习的 c0,c1(due=5) 先，
+        # 顺延的 c2,c3(due=11) 后 —— 顺延项不再按旧时刻抢在前面。
+        self.assertEqual(s.due_items(), ["c0", "c1", "c2", "c3"])
+        stats = s.topic_stats("数学", now=11)
+        self.assertEqual(stats["due_count"], 4)
+
+    def test_deferral_changes_only_due_not_memory_state(self):
+        s, _, _ = self._setup()
+        before = {i: s.status(i) for i in ("c2", "c3")}
+        # 顺延当天再查若干次，状态不得被统计/查询改动
+        s.due_items()
+        s.topic_stats("数学", now=10)
+        s.plan_day(day=10)
+        for iid, b in before.items():
+            a = s.status(iid)
+            self.assertEqual(a["stability"], b["stability"])
+            self.assertEqual(a["difficulty"], b["difficulty"])
+            self.assertEqual(a["reps"], b["reps"])
+            self.assertEqual(a["lapses"], b["lapses"])
+            self.assertEqual(a["last_reviewed"], b["last_reviewed"])
+            self.assertEqual(a["due"], 11)  # 只有 due 被顺延改写
+
+    def test_other_topic_stats_unaffected(self):
+        clock = ManualClock(0)
+        s = Scheduler(clock=clock, daily_limit=2)
+        for i in range(3):
+            s.add_item(f"m{i}", "数学", stability=5.0)
+            s.review(f"m{i}", 5, timestamp=0)  # due=7
+        # 英语内容更晚复习，第 10 天本就不到期（due=11），不参与名额竞争
+        clock.set(4)
+        s.add_item("e0", "英语", stability=5.0)
+        s.review("e0", 5, timestamp=4)  # 间隔 7，due=11
+        clock.set(10)
+        s.plan_day(day=10)  # m0,m1 选中；m2 顺延到 11
+        math_stats = s.topic_stats("数学", now=10)
+        eng_stats = s.topic_stats("英语", now=10)
+        self.assertEqual(math_stats["due_count"], 2)
+        self.assertAlmostEqual(math_stats["average_interval"], (7 + 7 + 11) / 3)
+        self.assertEqual(eng_stats["due_count"], 0)
+        self.assertAlmostEqual(eng_stats["average_interval"], 7.0)
+        self.assertEqual(s.topic_stats("英语", now=11)["due_count"], 1)
+
+    def test_roundtrip_preserves_postponed_due_and_stats(self):
+        import tempfile
+
+        s, _, _ = self._setup()
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "state.json")
+            s.save(path)
+            loaded = Scheduler.load(path)
+            self.assertEqual(loaded.due_items(), ["c0", "c1"])
+            self.assertAlmostEqual(
+                loaded.topic_stats("数学", now=10)["average_interval"], 9.0
+            )
+            self.assertEqual(loaded.topic_stats("数学", now=10)["due_count"], 2)
+
+
 class Requirement7QueryTests(unittest.TestCase):
     """需求 7：状态/到期/轨迹/间隔变化，主题到期数与平均间隔。"""
 

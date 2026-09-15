@@ -579,8 +579,15 @@ class Scheduler:
     def topic_stats(self, topic: str, now: Optional[int] = None) -> dict:
         """某主题下到期内容数与平均间隔。
 
-        平均间隔取该主题下每条已复习内容“最新一次排定间隔”的算术平均；
-        尚未复习过的内容不计入平均。
+        两项口径都以内容**当前生效的到期时刻** ``due`` 为准，与
+        :meth:`due_items` 的“应复习集合”完全一致：
+
+        * 到期数：该主题下 ``due <= now`` 的内容数；顺延后的内容按
+          顺延后的新到期时刻判定，不会在当天被重复计入。
+        * 平均间隔：每条已复习内容“最新复习时刻 → 当前生效到期时刻”的
+          实际间隔（``due - last_reviewed``）的算术平均。无顺延时它等于
+          最新一次排定间隔；发生顺延时如实反映顺延带来的推迟。
+          尚未复习过的内容不计入平均。
         """
 
         current = self.clock.now() if now is None else _require_int(
@@ -590,9 +597,9 @@ class Scheduler:
         due_count = sum(1 for it in members if it.due <= current)
         intervals: List[int] = []
         for it in members:
-            records = self._records[it.item_id]
-            if records:
-                intervals.append(records[-1].scheduled_interval)
+            if self._records[it.item_id]:
+                # 以顺延后的实际到期时刻为准，而不是记录里的原始排定间隔。
+                intervals.append(it.due - (it.last_reviewed or 0))
         average = sum(intervals) / len(intervals) if intervals else None
         return {
             "topic": topic,
