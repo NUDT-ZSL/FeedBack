@@ -1,7 +1,7 @@
 """JSON 持久化：导出、原子写入、载入与完整校验。
 
 载入时的校验顺序：结构 -> 标识唯一 -> 数量为正 -> 前置存在 -> 无环 ->
-数量守恒 -> 累计承接量口径自洽且不超容量 -> 推进记录合法。任何一步
+数量守恒 -> 在途持有不超容量、累计口径自洽 -> 推进记录合法。任何一步
 失败都抛出带明确原因的 PersistenceError，且载入在全新实例上构建，
 不会污染现有状态。
 """
@@ -248,15 +248,19 @@ def _check_acyclic(batches):
 
 
 def _check_capacity(nodes, batches):
-    """累计口径校验：accepted 不超容量上限，且不小于当前挂载批次数。"""
-    mounted = {}
+    """口径校验：在途持有不超容量上限；累计承接量不小于挂载批次数。"""
+    mounted = {}    # 当前挂在节点名下的批次（含已完成）
+    in_flight = {}  # 其中未完成（实际占用额度）的
     for b in batches.values():
         if b.node_id is not None:
             mounted[b.node_id] = mounted.get(b.node_id, 0) + 1
+            if b.status != "completed":
+                in_flight[b.node_id] = in_flight.get(b.node_id, 0) + 1
     for node_id, node in nodes.items():
-        if node.accepted > node.capacity:
+        held = in_flight.get(node_id, 0)
+        if held > node.capacity:
             raise PersistenceError(
-                f"节点 {node_id!r} 累计承接量 {node.accepted} "
+                f"节点 {node_id!r} 当前持有 {held} 批，"
                 f"超过容量上限 {node.capacity}"
             )
         current = mounted.get(node_id, 0)

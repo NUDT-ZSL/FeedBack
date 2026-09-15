@@ -4,10 +4,11 @@
 --------
 * 拆分是确定性的：同一输入永远得到同一批次划分；对已拆分的需求重复提交
   相同方案是幂等 no-op，提交不同方案则报错。
-* 节点已承接量按累计口径计量：每次成功承接 +1，只增不减，批次完成
-  或改派出去都不扣减；剩余可承接量 = 容量上限 - 累计已承接量。
+* 统计与容量分离：节点已承接量（accepted）按累计口径统计，每次
+  承接 +1、只增不减；容量判断与剩余可承接量基于节点当前实际持有
+  的在途批次数，批次完成或改派出去即释放额度，两者互不干扰。
 * 批次归属以 batch.node_id 为唯一事实来源，改派在校验通过后一次性
-  切换归属并给新节点计数，是原子操作，任何时刻同一批次只属于一个节点。
+  切换归属，是原子操作，任何时刻同一批次只属于一个节点。
 * 推进只沿直接后继传播：批次完成时仅检查直接依赖它的批次，
   是否解除阻塞由"全部前置是否已完成"重新判定，因此任意时刻的
   ready/pending 集合与从头推导的结果一致。
@@ -110,10 +111,17 @@ class FulfillmentSystem:
         except KeyError:
             raise NotFoundError(f"节点 {node_id!r} 不存在") from None
 
-    @staticmethod
-    def _node_remaining(node):
-        """剩余可承接量 = 容量上限 - 累计已承接量（与累计口径自洽）。"""
-        return node.capacity - node.accepted
+    def _node_held(self, node_id):
+        """节点当前实际持有的在途（未完成）批次数，容量判断以此为准。"""
+        return sum(
+            1
+            for b in self._batches.values()
+            if b.node_id == node_id and b.status != STATUS_COMPLETED
+        )
+
+    def _node_remaining(self, node):
+        """剩余可承接量 = 容量上限 - 当前实际持有数（即真实可承接数）。"""
+        return node.capacity - self._node_held(node.id)
 
     @staticmethod
     def _topo_order(prereq_map):
@@ -357,8 +365,8 @@ class FulfillmentSystem:
         """把批次改派到另一个节点（原子操作）。
 
         先完成全部校验，再一次性切换归属并给新节点计数：改派完成后
-        批次只属于新节点，原节点不再持有它；前置约束与数量保持不变；
-        原节点的累计已承接量按口径不扣减。
+        批次只属于新节点，原节点不再持有它、立即释放其在途额度；
+        前置约束与数量保持不变；原节点的累计已承接量按口径不扣减。
         """
         batch = self._get_batch(batch_id)
         node = self._get_node(node_id)
@@ -469,10 +477,11 @@ class FulfillmentSystem:
     def node_status(self, node_id):
         """节点承接情况。
 
-        load 为累计已承接量（只增不减，完成/改派出不扣减）；
-        remaining = capacity - load，与累计口径自洽；
-        batches 为当前仍挂在该节点名下的在途（未完成）批次，
-        由 batch.node_id 派生，同一批次只会出现在一个节点的列表里。
+        load      累计已承接量（统计口径，只增不减）；
+        held      当前实际持有的在途（未完成）批次数，容量判断以此为准；
+        remaining = capacity - held，即当前真实可承接数；
+        batches   当前在途批次列表，由 batch.node_id 派生，
+                  同一批次只会出现在一个节点的列表里。
         """
         node = self._get_node(node_id)
         in_flight = sorted(
@@ -484,7 +493,8 @@ class FulfillmentSystem:
             "node_id": node_id,
             "capacity": node.capacity,
             "load": node.accepted,
-            "remaining": self._node_remaining(node),
+            "held": len(in_flight),
+            "remaining": node.capacity - len(in_flight),
             "online": node.online,
             "batches": in_flight,
         }
