@@ -23,8 +23,10 @@ def snapshot(eng):
     return {
         "cost": dict(eng._cost),
         "best": dict(eng._best),
+        "depth": dict(eng._depth),
         "usable": dict(eng._usable),
         "conflicts": eng.conflicts,
+        "unsettled": set(eng._unsettled),
     }
 
 
@@ -139,6 +141,38 @@ class TestIncrementalConsistency(unittest.TestCase):
         # 受影响的是新配方的输出及其下游;输入 d 及其上游 a/b/c 不受影响
         self.assertEqual(eng.last_affected, frozenset({"e"}))
 
+    def test_cycle_structure_changes_match_full(self):
+        # 环结构变化(并入/脱离环状分量)前后,增量与全量逐物品一致
+        eng = Engine()
+        for iid in ("a", "b", "c", "ore"):
+            eng.add_item(iid, 1 if iid == "ore" else 0)
+        steps = [
+            lambda: eng.add_recipe("r_ab", {"a": 1}, {"b": 1}),
+            lambda: eng.add_recipe("r_bc", {"b": 1}, {"c": 1}),
+            lambda: eng.add_recipe("r_ca", {"c": 1}, {"a": 1}),  # 成环
+            lambda: eng.add_recipe("r_ext", {"ore": 1}, {"b": 1}),  # 环外来源
+            lambda: eng.remove_recipe("r_ca"),  # 破环
+            lambda: eng.add_recipe("r_ca2", {"c": 1}, {"a": 1}),  # 重新成环
+            lambda: eng.update_recipe("r_ext", {"ore": 2}, {"b": 1}),
+            lambda: eng.remove_recipe("r_ext"),  # 撤掉环外来源
+        ]
+        for step in steps:
+            step()
+            self.assertEqual(snapshot(eng), snapshot(rebuild_full(eng)))
+
+    def test_self_improving_cycle_consistency_across_item_growth(self):
+        # 自增殖环(1A->2A)不收敛;物品数增长改变截断深度时,
+        # 未收敛物品必须被显式重算,增量与全量保持一致
+        eng = Engine()
+        eng.add_item("a", 1)
+        eng.add_recipe("r_dup", {"a": 1}, {"a": 2})
+        eng.add_recipe("r_use", {"a": 1}, {"a": 3})
+        for k in range(6):
+            eng.add_item(f"extra{k}", 0)  # 改变物品数 -> 截断深度变化
+            self.assertEqual(snapshot(eng), snapshot(rebuild_full(eng)))
+        # 自增殖环物品被标记为未收敛
+        self.assertIn("a", eng._unsettled)
+
     def test_randomized_ops_match_full_recompute(self):
         rng = random.Random(20260915)
         names = [f"i{k}" for k in range(10)]
@@ -212,24 +246,48 @@ class TestCycles(unittest.TestCase):
     def test_cycle_broken_by_stock(self):
         eng = self.build_cycle()
         eng.set_stock("a", 1)
-        # 环仍存在并被记录;a 可由库存获得,但环内配方不参与推导,
-        # 因此 b、c 不可合成获得
+        # 环仍被记录;a 由库存获得,b、c 沿 a 的无环来源接续推导获得
         self.assertEqual(len(eng.conflicts), 1)
-        self.assertTrue(eng.craftable("a"))
-        self.assertFalse(eng.craftable("b"))
-        self.assertFalse(eng.craftable("c"))
+        for iid in ("a", "b", "c"):
+            self.assertTrue(eng.craftable(iid), iid)
         self.assertEqual(
-            eng.conflicts[0]["obtainable"], {"a": True, "b": False, "c": False}
+            eng.conflicts[0]["obtainable"], {"a": True, "b": True, "c": True}
         )
 
     def test_cycle_broken_by_external_recipe(self):
         eng = self.build_cycle()
         eng.add_item("ore", 10)
         eng.add_recipe("r_ext", {"ore": 1}, {"b": 1})
-        # 输入全部来自环外的配方可以为环上物品提供来源
-        self.assertTrue(eng.craftable("b"))
-        self.assertFalse(eng.craftable("a"))
-        self.assertFalse(eng.craftable("c"))
+        # b 经环外来源获得,a、c 沿该无环来源接续推导
+        for iid in ("a", "b", "c"):
+            self.assertTrue(eng.craftable(iid), iid)
+
+    def test_cycle_with_external_source_best_plan(self):
+        # 验收用例:环 A->B->C->A 且存在 ore->B
+        eng = self.build_cycle()
+        eng.add_item("ore", 10)
+        eng.add_recipe("r_ext", {"ore": 1}, {"b": 1})
+        # B 可合成获得且最优方案走 ore->B
+        self.assertEqual(eng.best_recipe("b"), "r_ext")
+        self.assertEqual(eng.unit_cost("b"), Fraction(1))
+        # C、A 沿该无环来源接续推导
+        self.assertEqual(eng.best_recipe("c"), "r_bc")
+        self.assertEqual(eng.best_recipe("a"), "r_ca")
+        self.assertEqual(eng.unit_cost("a"), Fraction(1))
+        # 依赖树终止于库存 ore,不含环引用
+        tree = eng.dependency_tree("a")
+        self.assertEqual(tree["recipe"], "r_ca")
+        c_node = tree["inputs"][0]
+        self.assertEqual(c_node["recipe"], "r_bc")
+        b_node = c_node["inputs"][0]
+        self.assertEqual(b_node["recipe"], "r_ext")
+        ore_node = b_node["inputs"][0]
+        self.assertEqual(ore_node["item"], "ore")
+        self.assertEqual(ore_node["source"], "stock")
+        # 环冲突仍然记录,但物品都可获得
+        self.assertEqual(len(eng.conflicts), 1)
+        self.assertEqual(sorted(eng.conflicts[0]["recipes"]),
+                         ["r_ab", "r_bc", "r_ca"])
 
     def test_breaking_cycle_removes_conflict(self):
         eng = self.build_cycle()

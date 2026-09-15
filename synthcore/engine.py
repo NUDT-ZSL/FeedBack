@@ -12,13 +12,20 @@
   (成本相同优先库存)。库存数量只影响可获得性(>0 即可),不影响单位成本。
 - 环:在物品依赖图(配方输入物品 -> 输出物品)上求强连通分量(SCC),大小 > 1
   或存在自环的分量记为一条 cycle 冲突,并给出环上的配方序列。
-  环状 SCC 内部的配方(某个输入与某个输出同属一个环状 SCC)不参与成本推导;
-  环上物品只能由库存或"输入全部来自环外"的配方获得,否则不可获得。
-  因此有效推导图是凝聚 DAG,松弛必然收敛,不会死循环,也不会被
-  自我增殖配方(如 1A->2A)无限压低成本。
-- 增量重算:每次修改只重置"受影响物品"(变更配方的输出物品 + 反向依赖闭包)
-  的派生值,未受影响物品保留缓存;由于未受影响物品的全部传递输入与 SCC
-  结构都不在变更集中,其结果与从零全量推导逐物品一致(有随机化一致性测试保证)。
+  环上物品若存在环外来源(库存,或输入全部可获得的配方链),仍可正常获得,
+  其最优配方、成本与依赖树均按该无环来源推导;只有推导无法脱离环的物品
+  (成本保持 None)才判定为不可合成获得。
+- 自增殖环(如 1A->2A,沿环成本可持续降低):成本按"推导深度不超过物品数"
+  截断,未收敛的物品记入 _unsettled;当物品数变化(截断深度随之变化)时,
+  这些物品被显式并入受影响集合重算,保证增量与全量一致。
+- 最优配方:成本收敛后单轮直接确定——在达到最小成本的配方中,取推导深度
+  最浅者(库存深度为 0,配方深度 = 1 + 输入最大深度;沿最优配方深度严格
+  下降,因此推导必然良基无环),深度仍相同按配方标识字典序取最小;
+  与库存成本相同(=1)时优先库存。
+- 增量重算:每次修改只重置"受影响物品"(变更配方的输出物品 + 反向依赖闭包,
+  并并入受影响物品上游闭包中的未收敛物品)的派生值,未受影响物品保留缓存;
+  由于未受影响且已收敛物品的全部传递输入都不在变更集中,其结果与从零全量
+  推导逐物品一致(有随机化一致性测试保证)。
 """
 from __future__ import annotations
 
@@ -42,9 +49,12 @@ class Engine:
         self._consumers: Dict[str, Set[str]] = defaultdict(set)  # 物品 -> 消费它的配方
         self._cost: Dict[str, Optional[Fraction]] = {}
         self._best: Dict[str, Optional[str]] = {}
+        self._depth: Dict[str, Optional[int]] = {}
         self._usable: Dict[str, bool] = {}
         self.conflicts: List[dict] = []
         self._scc: Dict[str, int] = {}
+        #: 成本松弛未收敛(自增殖环)的物品,向下游闭包;物品数变化时需重算
+        self._unsettled: Set[str] = set()
         #: 上一次修改实际重算的物品集合(用于观测增量性)
         self.last_affected: frozenset = frozenset()
 
@@ -117,7 +127,8 @@ class Engine:
         if item_id in self.items:
             raise ValidationError(f"物品 {item_id!r} 已存在")
         self.items[item_id] = Item(item_id, stock)
-        self._recompute({item_id})
+        # 物品数变化会改变成本截断深度,未收敛物品必须一并重算
+        self._recompute({item_id} | self._unsettled)
 
     def set_stock(self, item_id: str, stock: int) -> None:
         self._require_item(item_id)
@@ -182,28 +193,51 @@ class Engine:
                         stack.append(o)
         return seen
 
+    def _upstream_closure(self, seed: Iterable[str]) -> Set[str]:
+        """种子物品 + 它们的全部传递输入物品(正向闭包)。"""
+        seen: Set[str] = set()
+        stack = [i for i in seed if i in self.items]
+        while stack:
+            iid = stack.pop()
+            if iid in seen:
+                continue
+            seen.add(iid)
+            for rid in self._producers.get(iid, ()):
+                for i2, _ in self.recipes[rid].inputs:
+                    if i2 not in seen:
+                        stack.append(i2)
+        return seen
+
     def full_recompute(self) -> None:
         """从零全量推导(基准实现,也是校验增量正确性的参照)。"""
         self._recompute(set(self.items))
 
     def _recompute(self, affected: Set[str]) -> None:
         affected = {i for i in affected if i in self.items}
+        # 未收敛物品不是不动点:受影响物品若读取未收敛的上游,必须把该上游
+        # 一并重置重算,否则与全量推导的迭代深度错位
+        if self._unsettled:
+            affected |= self._upstream_closure(affected) & self._unsettled
         self.last_affected = frozenset(affected)
 
-        # 先算 SCC(纯结构,只依赖配方):环状 SCC 内部的配方不参与成本推导
+        # SCC 仅用于环冲突记录与配方 cyclic 标记,不影响成本推导
         self._scc = _scc_index(self._item_graph())
 
         cost = dict(self._cost)
-        best = dict(self._best)
-        for iid in affected:
-            cost[iid] = Fraction(1) if self.items[iid].stock > 0 else None
-            best[iid] = None
 
-        if affected:
-            # 有效推导图是凝聚 DAG,深度不超过物品数,松弛必然在
-            # len(items)+1 轮内收敛(不再变化即提前结束)。
-            for _ in range(len(self.items) + 1):
-                changed = False
+        # 成本松弛:无自增殖环时,最优成本必然由深度不超过物品数的推导树
+        # 达到,因此 len(items)+1 轮内收敛;存在自增殖环时成本持续下降,
+        # 按该深度截断。截断值依赖于全部上游的逐轮预热序列,因此一旦未收敛,
+        # 必须把未收敛物品的全部上游(含已收敛物品)并入重算,直到闭合并与
+        # 全量推导逐轮对齐;未收敛物品记入 _unsettled。
+        converged = True
+        last_changed: Set[str] = set()
+        max_sweeps = len(self.items) + 1
+        while affected:
+            for iid in affected:
+                cost[iid] = Fraction(1) if self.items[iid].stock > 0 else None
+            for _ in range(max_sweeps):
+                last_changed = set()
                 for rid in sorted(self.recipes):
                     r = self.recipes[rid]
                     total = Fraction(0)
@@ -219,23 +253,72 @@ class Engine:
                     for o, q in r.outputs:
                         if o not in affected:
                             continue
-                        if self._is_cyclic_edge(r, o):
-                            continue
                         cand = total / q
-                        cur = cost[o]
-                        b = best[o]
-                        if (
-                            cur is None
-                            or cand < cur
-                            or (cand == cur and b is not None and rid < b)
-                        ):
+                        if cost[o] is None or cand < cost[o]:
                             cost[o] = cand
-                            best[o] = rid
+                            last_changed.add(o)
+                if not last_changed:
+                    break
+            converged = not last_changed
+            if converged:
+                break
+            # 未收敛:把仍在下降物品的全部上游并入受影响集合后重跑
+            need = self._upstream_closure(last_changed) - affected
+            if not need:
+                break
+            affected |= need
+        self.last_affected = frozenset(affected)
+
+        # 维护未收敛集合:本轮重算的物品先移出,仍下降的物品及其下游重新记入
+        for iid in affected:
+            self._unsettled.discard(iid)
+        if not converged:
+            self._unsettled |= self._affected_closure(last_changed)
+
+        # 推导深度:库存为 0,配方深度 = 1 + 输入最大深度,只在达到最小成本
+        # 的配方间取最浅。沿最优配方深度严格下降,推导必然良基无环。
+        depth = dict(self._depth)
+        for iid in affected:
+            # 库存深度为 0,但仅当库存确实是该物品的最优来源(成本=1)时;
+            # 若配方成本更低,深度由配方推导给出
+            depth[iid] = 0 if (self.items[iid].stock > 0 and cost[iid] == 1) else None
+        if affected:
+            for _ in range(len(self.items) + 1):
+                changed = False
+                for rid in sorted(self.recipes):
+                    r = self.recipes[rid]
+                    total = Fraction(0)
+                    dmax = 0
+                    ok = True
+                    for iid, q in r.inputs:
+                        ci = cost.get(iid)
+                        di = depth.get(iid)
+                        if ci is None or di is None:
+                            ok = False
+                            break
+                        total += ci * q
+                        if di > dmax:
+                            dmax = di
+                    if not ok:
+                        continue
+                    for o, q in r.outputs:
+                        if o not in affected or cost[o] is None:
+                            continue
+                        if total / q != cost[o]:
+                            continue  # 只在达到最小成本的配方间竞争
+                        cand = dmax + 1
+                        if depth[o] is None or cand < depth[o]:
+                            depth[o] = cand
                             changed = True
                 if not changed:
                     break
 
-        self._cost, self._best = cost, best
+        # 成本与深度确定后,最优配方单轮直接确定(确定性,与迭代历史无关)
+        best = dict(self._best)
+        for iid in affected:
+            best[iid] = self._compute_best(iid, cost, depth)
+
+        self._cost, self._best, self._depth = cost, best, depth
 
         # 配方可用性:只重算消费了受影响物品的配方
         dirty_recipes: Set[str] = set()
@@ -266,6 +349,36 @@ class Engine:
                 for o, _ in r.outputs:
                     adj[iid].add(o)
         return adj
+
+    def _compute_best(self, item_id: str, cost, depth) -> Optional[str]:
+        """最优配方:达到最小成本且达到最浅推导深度的配方中,标识最小者;
+        与库存同价(=1)时优先库存(返回 None)。"""
+        c = cost.get(item_id)
+        if c is None:
+            return None
+        if self.items[item_id].stock > 0 and c == 1:
+            return None
+        d = depth.get(item_id)
+        if d is None:
+            return None
+        achieving = []
+        for rid in self._producers.get(item_id, ()):
+            r = self.recipes[rid]
+            total = Fraction(0)
+            dmax = 0
+            ok = True
+            for iid, q in r.inputs:
+                ci = cost.get(iid)
+                di = depth.get(iid)
+                if ci is None or di is None:
+                    ok = False
+                    break
+                total += ci * q
+                if di > dmax:
+                    dmax = di
+            if ok and total / r.output_qty(item_id) == c and dmax + 1 == d:
+                achieving.append(rid)
+        return min(achieving) if achieving else None
 
     def _is_cyclic_edge(self, r: Recipe, output: str) -> bool:
         """配方 r 用于产出 output 是否会成环(某输入与 output 同属一个环状 SCC)。"""
@@ -341,12 +454,14 @@ class Engine:
         return self._cost.get(item_id)
 
     def source(self, item_id: str) -> Optional[str]:
-        """'recipe' / 'stock' / None(不可获得)。"""
+        """'recipe' / 'stock' / 'limit'(自增殖截断,无对应配方) / None。"""
         self._require_item(item_id)
         if self._best.get(item_id) is not None:
             return "recipe"
         if self.items[item_id].stock > 0:
             return "stock"
+        if self._cost.get(item_id) is not None:
+            return "limit"
         return None
 
     def best_recipe(self, item_id: str) -> Optional[str]:
@@ -427,6 +542,9 @@ class Engine:
                 ]
             elif self.items[iid].stock > 0:
                 node["source"] = "stock"
+            elif self._cost.get(iid) is not None:
+                node["source"] = "limit"
+                node["reason"] = "自增殖环,成本为截断极限值"
             else:
                 node["source"] = None
                 node["reason"] = "不可获得"

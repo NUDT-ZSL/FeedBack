@@ -79,7 +79,10 @@ def replace_state(engine: Engine, data: Union[str, bytes, dict],
     engine._consumers = fresh._consumers
     engine._cost = fresh._cost
     engine._best = fresh._best
+    engine._depth = fresh._depth
     engine._usable = fresh._usable
+    engine._unsettled = fresh._unsettled
+    engine._scc = fresh._scc
     engine.conflicts = fresh.conflicts
     engine.last_affected = fresh.last_affected
 
