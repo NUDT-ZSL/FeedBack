@@ -18,6 +18,10 @@ from impact_kernel import (
     ValidationError,
     evaluate,
     explain_flip,
+    export_kernel,
+    kernel_from_dict,
+    kernel_from_json,
+    kernel_to_json,
 )
 
 SCHEMA = {"user": "str", "age": "int", "vip": "bool", "score": "float"}
@@ -454,14 +458,18 @@ class TestEnableDisableAttribution(unittest.TestCase):
 # ----------------------------------------------------------------------
 class TestAttributionEdgeCases(unittest.TestCase):
     def test_empty_diff_unattributable(self):
-        """差异集合为空但决策翻转 → 明确报告无法归因，不随便挑规则。"""
+        """差异集合为空但决策翻转 → 明确报告无法归因，不随便挑规则。
+
+        全程只走公开接口：get_policy / get_request 取对象，
+        explain_flip 的 diffs 参数是文档化的法医式接口（外部差异清单场景）。
+        """
         k = make_kernel()
         k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.0})
         k.load_policy("old", [rule("R1", 1, Effect.ALLOW)])
         k.load_policy("new", [rule("R1", 1, Effect.DENY)])
-        # 显式传入空差异集合，模拟"决策不一致但无差异可归"的异常场景
+        # 外部系统提供的差异清单为空，但重放发现决策不一致
         exp = explain_flip(
-            k._policies["old"], k._policies["new"], k._requests["r1"], diffs=(),
+            k.get_policy("old"), k.get_policy("new"), k.get_request("r1"), diffs=(),
         )
         self.assertEqual(exp.status, ExplainStatus.UNATTRIBUTABLE)
         self.assertFalse(exp.unique)
@@ -560,6 +568,164 @@ class TestQueries(unittest.TestCase):
             self.k.decision_basis("ghost", "new")
         with self.assertRaises(ValidationError):
             self.k.decision_basis("r1", "ghost-version")
+
+
+# ----------------------------------------------------------------------
+# 导出 / 导入往返
+# ----------------------------------------------------------------------
+class TestExportImport(unittest.TestCase):
+    def _build_kernel(self):
+        k = ImpactKernel(SCHEMA, default_effect=Effect.DENY, max_exhaustive_diffs=8)
+        k.add_request("r1", {"user": "a", "age": 20, "vip": False, "score": 1.5})
+        k.add_request("r2", {"user": "b", "age": 30, "vip": True, "score": 2.5})
+        k.add_request("r3", {"user": "c", "age": 15, "vip": False, "score": 3.5})
+        k.load_policy("old", [
+            rule("R-adult", 10, Effect.ALLOW, [Clause("age", "ge", 18)]),
+            rule("R-vip", 5, Effect.AUDIT, [eq("vip", True)]),
+            rule("R-off", 1, Effect.DENY, [Clause("user", "in", ["x", "y"])], enabled=False),
+        ])
+        k.load_policy("new", [
+            rule("R-adult", 10, Effect.ALLOW, [Clause("age", "ge", 21)]),
+            rule("R-vip", 5, Effect.AUDIT, [eq("vip", True)]),
+            rule("R-off", 1, Effect.DENY, [Clause("user", "in", ["x", "y"])], enabled=False),
+        ], default_effect=Effect.DENY)
+        return k
+
+    def _assert_kernels_equivalent(self, k1, k2):
+        # 配置一致
+        self.assertEqual(k1.attribute_schema, k2.attribute_schema)
+        self.assertEqual(k1.default_effect, k2.default_effect)
+        self.assertEqual(k1.max_exhaustive_diffs, k2.max_exhaustive_diffs)
+        self.assertEqual(k1.request_ids(), k2.request_ids())
+        self.assertEqual(k1.policy_versions(), k2.policy_versions())
+        # 重放结果一致
+        self.assertEqual(k1.replay().comparisons, k2.replay().comparisons)
+        self.assertEqual(k1.flip_stats(), k2.flip_stats())
+        # 决策依据一致
+        for rid in k1.request_ids():
+            for ver in k1.policy_versions():
+                self.assertEqual(
+                    k1.decision_basis(rid, ver), k2.decision_basis(rid, ver)
+                )
+            # 归因结果一致
+            self.assertEqual(k1.explain_flip(rid), k2.explain_flip(rid))
+        # 规则命中查询一致
+        for ver in k1.policy_versions():
+            for rid_rule in k1.get_policy(ver).rule_ids():
+                self.assertEqual(
+                    k1.rule_hits(rid_rule, ver), k2.rule_hits(rid_rule, ver)
+                )
+
+    def test_roundtrip_via_dict(self):
+        k1 = self._build_kernel()
+        k2 = ImpactKernel.import_data(k1.export())
+        self._assert_kernels_equivalent(k1, k2)
+
+    def test_roundtrip_via_module_functions(self):
+        k1 = self._build_kernel()
+        k2 = kernel_from_dict(export_kernel(k1))
+        self._assert_kernels_equivalent(k1, k2)
+
+    def test_roundtrip_via_json(self):
+        k1 = self._build_kernel()
+        k2 = kernel_from_json(kernel_to_json(k1))
+        self._assert_kernels_equivalent(k1, k2)
+
+    def test_export_is_json_compatible(self):
+        import json
+        k1 = self._build_kernel()
+        # 不应抛出；且结果只含 JSON 原生类型
+        text = json.dumps(k1.export())
+        self.assertIsInstance(text, str)
+
+    def test_missing_top_level_fields_rejected(self):
+        k1 = self._build_kernel()
+        for key in ("attribute_schema", "default_effect", "requests", "policies"):
+            data = k1.export()
+            del data[key]
+            with self.assertRaises(ValidationError) as ctx:
+                kernel_from_dict(data)
+            self.assertIn(key, str(ctx.exception))
+
+    def test_bad_format_version_rejected(self):
+        k1 = self._build_kernel()
+        data = k1.export()
+        data["format_version"] = 999
+        with self.assertRaises(ValidationError):
+            kernel_from_dict(data)
+        del data["format_version"]
+        with self.assertRaises(ValidationError):
+            kernel_from_dict(data)
+
+    def test_corrupted_rule_fields_rejected(self):
+        k1 = self._build_kernel()
+        # 规则缺少 effect 字段
+        data = k1.export()
+        del data["policies"]["old"]["rules"][0]["effect"]
+        with self.assertRaises(ValidationError) as ctx:
+            kernel_from_dict(data)
+        self.assertIn("effect", str(ctx.exception))
+        # 非法效果值
+        data = k1.export()
+        data["policies"]["old"]["rules"][0]["effect"] = "bogus"
+        with self.assertRaises(ValidationError):
+            kernel_from_dict(data)
+        # 非法操作符
+        data = k1.export()
+        data["policies"]["old"]["rules"][0]["condition"][0]["op"] = "regex"
+        with self.assertRaises(ValidationError):
+            kernel_from_dict(data)
+        # 条件引用不存在的属性
+        data = k1.export()
+        data["policies"]["old"]["rules"][0]["condition"][0]["attribute"] = "ghost"
+        with self.assertRaises(ValidationError) as ctx:
+            kernel_from_dict(data)
+        self.assertIn("ghost", str(ctx.exception))
+
+    def test_corrupted_request_rejected(self):
+        k1 = self._build_kernel()
+        # 请求缺少必需属性
+        data = k1.export()
+        del data["requests"][0]["attributes"]["age"]
+        with self.assertRaises(ValidationError) as ctx:
+            kernel_from_dict(data)
+        self.assertIn("age", str(ctx.exception))
+        # 请求属性类型非法
+        data = k1.export()
+        data["requests"][0]["attributes"]["age"] = "二十"
+        with self.assertRaises(ValidationError):
+            kernel_from_dict(data)
+
+    def test_non_dict_and_bad_json_rejected(self):
+        with self.assertRaises(ValidationError):
+            kernel_from_dict([1, 2, 3])
+        with self.assertRaises(ValidationError):
+            kernel_from_json("{not valid json")
+        with self.assertRaises(ValidationError):
+            kernel_from_json(123)
+
+    def test_failed_import_leaves_existing_state_unchanged(self):
+        k1 = self._build_kernel()
+        before_replay = k1.replay()
+        before_ids = k1.request_ids()
+        # 连续多次失败导入
+        for bad in (None, [], {}, {"format_version": 1}, k1.export() | {"policies": "broken"}):
+            with self.assertRaises((ValidationError, TypeError)):
+                if isinstance(bad, dict) and bad.get("policies") == "broken":
+                    kernel_from_dict(bad)
+                else:
+                    kernel_from_dict(bad)
+        # 原内核状态不受影响
+        self.assertEqual(k1.request_ids(), before_ids)
+        self.assertEqual(k1.replay().comparisons, before_replay.comparisons)
+
+    def test_import_produces_independent_copy(self):
+        k1 = self._build_kernel()
+        k2 = ImpactKernel.import_data(k1.export())
+        # 修改导入出的内核不影响原内核
+        k2.add_request("r9", {"user": "z", "age": 1, "vip": False, "score": 0.5})
+        self.assertNotIn("r9", k1.request_ids())
+        self.assertIn("r9", k2.request_ids())
 
 
 if __name__ == "__main__":

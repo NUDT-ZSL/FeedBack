@@ -17,6 +17,13 @@ from .replay import (
     classify_flip,
     replay,
 )
+from .serde import (
+    FORMAT_VERSION,
+    export_kernel,
+    kernel_from_dict,
+    kernel_from_json,
+    kernel_to_json,
+)
 
 __all__ = [
     "AccessRequest",
@@ -28,6 +35,7 @@ __all__ = [
     "Effect",
     "Explanation",
     "ExplainStatus",
+    "FORMAT_VERSION",
     "FlipStats",
     "FlipType",
     "ImpactKernel",
@@ -43,5 +51,9 @@ __all__ = [
     "diff_policies",
     "evaluate",
     "explain_flip",
+    "export_kernel",
+    "kernel_from_dict",
+    "kernel_from_json",
+    "kernel_to_json",
     "replay",
 ]

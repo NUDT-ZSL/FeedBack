@@ -58,8 +58,18 @@ def explain_flip(
     new_policy: Policy,
     request: AccessRequest,
     diffs: Optional[Tuple[RuleDiff, ...]] = None,
+    max_exhaustive: int = MAX_EXHAUSTIVE_DIFFS,
 ) -> Explanation:
-    """解释单条请求的决策翻转。diffs 可显式传入（默认自动计算）。"""
+    """解释单条请求的决策翻转。
+
+    diffs：规则级差异集合，默认自动计算。该参数是公开的法医式接口：
+    当差异清单来自外部系统（例如审计方独立提供的变更记录，或一份空清单）
+    时，调用方可显式传入，用于复现"差异集合为空却仍发生翻转"等边界情形，
+    无需触碰内核内部字段。
+
+    max_exhaustive：差异集合不超过该规模时穷举全部子集以保证归因结论
+    经过完备验证；超过时退化为贪心约简并标注 unique=False。
+    """
     old_trace = evaluate(old_policy, request)
     new_trace = evaluate(new_policy, request)
     old_dec, new_dec = old_trace.decision, new_trace.decision
@@ -100,7 +110,7 @@ def explain_flip(
         trial = apply_diffs(old_policy, subset)
         return evaluate(trial, request).decision == new_dec
 
-    if len(diffs) <= MAX_EXHAUSTIVE_DIFFS:
+    if len(diffs) <= max_exhaustive:
         hitting = []
         for size in range(1, len(diffs) + 1):
             hitting = [s for s in combinations(diffs, size) if reproduces_new_decision(s)]
@@ -143,7 +153,7 @@ def explain_flip(
         reason=(
             _build_reason(old_trace, new_trace, minimal)
             + f"\n注意：差异集合共 {len(diffs)} 条，超过穷举上限 "
-            f"{MAX_EXHAUSTIVE_DIFFS}，以上解释为贪心约简得到的极小集合，"
+            f"{max_exhaustive}，以上解释为贪心约简得到的极小集合，"
             "未验证唯一性。"
         ),
     )
