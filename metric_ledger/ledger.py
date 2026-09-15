@@ -88,6 +88,7 @@ class Provenance:
     formula: Optional[str] = None           # 该版本公式的规范渲染
     children: Tuple["Provenance", ...] = ()  # 依赖贡献,按公式中引用顺序
     missing: Tuple[Missing, ...] = ()
+    sources: Tuple[str, ...] = ()           # 字段取值实际采信的来源(只含被采信方)
 
     def to_dict(self) -> dict:
         return {
@@ -99,6 +100,7 @@ class Provenance:
             "formula": self.formula,
             "contributions": [c.to_dict() for c in self.children],
             "missing": [m.to_dict() for m in self.missing],
+            "sources": list(self.sources),
         }
 
 
@@ -153,6 +155,47 @@ class _MetricDef:
         return chosen
 
 
+def _align(old: Expr, new: Expr, path: Tuple[str, ...] = ()):
+    """对齐两棵公式 AST,返回差异区域列表 [(路径, 旧子树, 新子树)]。
+
+    结构相同(运算符一致)的部分递归对齐,其余整体作为一个变化区域;
+    区域按在旧公式中从左到右的顺序返回,保证确定性。
+    """
+    if old == new:
+        return []
+    if isinstance(old, BinOp) and isinstance(new, BinOp) and old.op == new.op:
+        return (_align(old.left, new.left, path + ("l",))
+                + _align(old.right, new.right, path + ("r",)))
+    if isinstance(old, Neg) and isinstance(new, Neg):
+        return _align(old.operand, new.operand, path + ("n",))
+    return [(path, old, new)]
+
+
+def _replace(root: Expr, path: Tuple[str, ...], sub: Expr) -> Expr:
+    """把 root 中 path 处的子树替换为 sub,返回新 AST(原树不可变)。"""
+    if not path:
+        return sub
+    step, rest = path[0], path[1:]
+    if isinstance(root, BinOp):
+        if step == "l":
+            return BinOp(root.op, _replace(root.left, rest, sub), root.right)
+        return BinOp(root.op, root.left, _replace(root.right, rest, sub))
+    assert isinstance(root, Neg)
+    return Neg(_replace(root.operand, rest, sub))
+
+
+def _zero_refs(node: Expr, name: str) -> Expr:
+    """把 node 中所有对 name 的引用替换为常量 0(留一法量化贡献用)。"""
+    if isinstance(node, Ref):
+        return Const(Fraction(0)) if node.name == name else node
+    if isinstance(node, BinOp):
+        return BinOp(node.op, _zero_refs(node.left, name),
+                     _zero_refs(node.right, name))
+    if isinstance(node, Neg):
+        return Neg(_zero_refs(node.operand, name))
+    return node
+
+
 class MetricLedger:
     """经营指标台账。
 
@@ -166,6 +209,7 @@ class MetricLedger:
         self._results: Dict[Tuple[str, int], EvalResult] = {}
         self._observed_times: set = set()
         self._conflicts: Dict[Tuple[str, int], dict] = {}
+        self._resolutions: Dict[Tuple[str, int], dict] = {}
         self._recompute_log: List[dict] = []
         self._seq = 0
 
@@ -270,7 +314,12 @@ class MetricLedger:
 
         - 完全相同的 (字段, 时刻, 来源, 值) 重复上报为幂等空操作;
         - 同一字段同一时刻出现不同的值时,各方都保留并生成可读冲突记录,
-          该字段在该时刻按缺失(冲突)参与计算,不静默选用任何一方。
+          该字段在该时刻按缺失(冲突)参与计算,不静默选用任何一方;
+        - 冲突中若新上报与某一既有来源的值一致,冲突判定为已消解:该时刻
+          采信被一致认可的值,来源链只引用被采信的来源,冲突记录保留并
+          标注已消解与消解时刻;若与任何既有来源都不一致,冲突继续保留
+          并追加新来源,任何一方都不被静默丢弃;
+        - 已消解后若再出现矛盾上报,冲突重开,消解历史保留在记录中。
         """
         if field not in self._fields:
             raise LedgerError(f"未声明的原始数据字段: {field!r},请先 declare_field")
@@ -282,18 +331,44 @@ class MetricLedger:
         if (source, v) in reports:
             return {"status": "duplicate", "field": field, "time": t,
                     "value": _num(v), "source": source}
+        key = (field, t)
+        resolution = self._resolutions.get(key)
+        history = (list(self._conflicts[key].get("history", []))
+                   if key in self._conflicts else [])
+        prior_values = {val for _, val in reports}
         reports.append((source, v))
         self._observed_times.add(t)
         status = "ok"
-        if len({val for _, val in reports}) > 1:
+        if resolution is not None and v != resolution["value"]:
+            # 已消解的冲突被新的矛盾上报打破:重开,消解历史保留在记录中
+            status = "reopened"
+            history.append(self._conflicts[key]["resolution"])
+            del self._resolutions[key]
+            self._conflicts[key] = self._make_conflict_record(
+                field, t, reports, history=history)
+        elif resolution is not None:
+            # 与被采信值一致的佐证上报:维持已消解,仅更新来源列表
+            self._conflicts[key] = self._make_conflict_record(
+                field, t, reports, resolution=resolution, history=history)
+        elif len(prior_values) > 1 and v in prior_values:
+            # 冲突中,新上报与某一既有来源一致:冲突消解,采信被一致认可的值
+            status = "resolved"
+            resolution = {"value": v, "resolved_at": self._clock(),
+                          "by_source": source}
+            self._resolutions[key] = resolution
+            self._conflicts[key] = self._make_conflict_record(
+                field, t, reports, resolution=resolution, history=history)
+        elif len({val for _, val in reports}) > 1:
+            # 新冲突,或冲突持续(新来源与任何既有来源都不一致):全部保留
             status = "conflict"
-            self._conflicts[(field, t)] = self._make_conflict_record(field, t, reports)
+            self._conflicts[key] = self._make_conflict_record(
+                field, t, reports, history=history)
         # 数据变化只影响该时刻、且(传递)依赖该字段的指标
         affected = sorted(self._dependents_of_field(field))
         changes = self._recompute_entries(affected, [t])
         self._log("data_ingested", changes,
-                  field=field, time=t, affected_metrics=affected,
-                  affected_times=[t])
+                  field=field, time=t, status=status,
+                  affected_metrics=affected, affected_times=[t])
         return {"status": status, "field": field, "time": t,
                 "value": _num(v), "source": source}
 
@@ -343,6 +418,7 @@ class MetricLedger:
             after = self.query(metric_id, t)
             diff = (after.value - before.value
                     if after.value is not None and before.value is not None else None)
+            attribution, attribution_sum = self._attribute(t, prev, ver)
             out.append({
                 "metric": metric_id,
                 "effective_from": t,
@@ -355,7 +431,8 @@ class MetricLedger:
                 "diff": _num(diff),
                 "before_missing": [m.to_dict() for m in before.missing],
                 "after_missing": [m.to_dict() for m in after.missing],
-                "attribution": self._attribute(t, prev, ver),
+                "attribution": attribution,
+                "attribution_sum": _num(attribution_sum),
             })
         return out
 
@@ -560,13 +637,21 @@ class MetricLedger:
 
     def _compute_field(self, name: str, t: int) -> EvalResult:
         reports = self._fields[name].get(t, [])
-        distinct = sorted({v for _, v in reports})
-        if not distinct:
+        if not reports:
             missing = (Missing(NO_DATA, name, t,
                                f"字段 {name} 在 t={t} 无上报数据"),)
             return EvalResult(None, missing,
                               Provenance("field", name, t, None,
                                          None, None, (), missing))
+        resolution = self._resolutions.get((name, t))
+        if resolution is not None:
+            # 冲突已消解:只采信被一致认可的值,来源链只挂被采信的来源
+            adopted = resolution["value"]
+            sources = tuple(src for src, val in reports if val == adopted)
+            return EvalResult(adopted, (),
+                              Provenance("field", name, t, adopted,
+                                         None, None, (), (), sources))
+        distinct = sorted({v for _, v in reports})
         if len(distinct) > 1:
             detail = "; ".join(f"{src}={_num(val)}" for src, val in reports)
             missing = (Missing(CONFLICT, name, t,
@@ -574,8 +659,10 @@ class MetricLedger:
             return EvalResult(None, missing,
                               Provenance("field", name, t, None,
                                          None, None, (), missing))
+        sources = tuple(src for src, _ in reports)
         return EvalResult(distinct[0], (),
-                          Provenance("field", name, t, distinct[0]))
+                          Provenance("field", name, t, distinct[0],
+                                     None, None, (), (), sources))
 
     def _eval_ast(self, node: Expr, resolve, metric_id: str, t: int):
         """返回 (值或 None, 缺失元组)。任一操作数缺失则结果缺失,绝不当零。"""
@@ -642,50 +729,164 @@ class MetricLedger:
 
     @staticmethod
     def _make_conflict_record(field: str, t: int,
-                              reports: List[Tuple[str, Fraction]]) -> dict:
+                              reports: List[Tuple[str, Fraction]],
+                              resolution: Optional[dict] = None,
+                              history: Optional[List[dict]] = None) -> dict:
         entries = [{"source": src, "value": _num(val)} for src, val in reports]
         detail = "; ".join(f"来源 {src} 上报 {_num(val)}" for src, val in reports)
-        return {
+        record = {
             "field": field,
             "time": t,
+            "status": "resolved" if resolution else "open",
             "reports": entries,
-            "message": (f"字段 {field} 在 t={t} 收到 {len(reports)} 条相互矛盾的上报,"
-                        f"已全部保留: {detail};该字段在该时刻按缺失(冲突)处理,"
-                        f"不会静默选用任何一方"),
+            "history": list(history or []),
         }
+        if resolution is not None:
+            adopted = _num(resolution["value"])
+            adopted_sources = [src for src, val in reports
+                               if val == resolution["value"]]
+            record["resolution"] = {
+                "adopted_value": adopted,
+                "resolved_at": resolution["resolved_at"],
+                "resolved_by": {"source": resolution["by_source"],
+                                "value": adopted},
+            }
+            record["message"] = (
+                f"字段 {field} 在 t={t} 曾收到相互矛盾的上报(已全部保留: {detail});"
+                f"来源 {resolution['by_source']} 于逻辑时刻 {resolution['resolved_at']}"
+                f" 的上报与既有来源的值 {adopted} 一致,冲突已消解;"
+                f"该时刻采信 {adopted}(一致来源: {', '.join(adopted_sources)})"
+            )
+        else:
+            record["message"] = (
+                f"字段 {field} 在 t={t} 收到 {len(reports)} 条相互矛盾的上报,"
+                f"已全部保留: {detail};该字段在该时刻按缺失(冲突)处理,"
+                f"不会静默选用任何一方"
+            )
+        return record
 
     # ------------------------------------------------------------------
     # 内部:切换归因
     # ------------------------------------------------------------------
 
     def _attribute(self, t: int, prev: Optional[SpecVersion],
-                   ver: SpecVersion) -> List[dict]:
-        """把切换前后的取值差异归因到具体依赖:新增 / 移除 / 保留及各自数值。"""
-        old_refs = refs(prev.ast) if prev else []
-        new_refs = refs(ver.ast)
+                   ver: SpecVersion) -> Tuple[List[dict], Optional[Fraction]]:
+        """把切换前后的取值差异量化归因到具体依赖。
+
+        方法:对齐新旧公式的 AST,把差异切分为若干"变化区域";按区域在旧公式
+        中从左到右的顺序逐个把旧子树切换为新子树,形成 telescoping 序列——
+        每个区域对根值的影响之和精确等于总差值。区域内再分解到具体依赖:
+        移除的依赖按旧语境留一法(将其引用置零)量化其带走的贡献,新增的
+        依赖按新语境留一法量化其带来的贡献,保留的依赖分摊区域残余;
+        既无依赖变化也无法分摊的残余(如纯常量调整)归入结构项。
+
+        返回 (归因条目列表, 贡献差总和)。所有数值为精确 Fraction,
+        条目顺序固定,重复查询结果完全一致。
+        """
+        old_ast, new_ast = prev.ast, ver.ast
+        cache: Dict[str, EvalResult] = {}
+
+        def resolve(name: str) -> EvalResult:
+            if name not in cache:
+                if name in self._metrics:
+                    cache[name] = self.query(name, t)
+                else:
+                    cache[name] = self._compute_field(name, t)
+            return cache[name]
+
+        def ev(node: Expr) -> Optional[Fraction]:
+            return self._eval_ast(node, resolve, ver.metric, t)[0]
+
+        v_old, v_new = ev(old_ast), ev(new_ast)
+        numeric = v_old is not None and v_new is not None
+        deltas: Dict[str, Fraction] = {}
+        structural = Fraction(0)
+        if numeric:
+            current = old_ast
+            for path, ro, rn in _align(old_ast, new_ast):
+                def ctx(x, _cur=current, _p=path):
+                    return ev(_replace(_cur, _p, Const(x)))
+
+                vo, vn = ev(ro), ev(rn)
+                cvo, cvn = ctx(vo), ctx(vn)
+                impact = cvn - cvo
+                region_deltas, residual = self._region_deltas(
+                    ro, rn, ctx, vo, vn, cvo, cvn, impact, ev)
+                for d, dl in region_deltas.items():
+                    deltas[d] = deltas.get(d, Fraction(0)) + dl
+                structural += residual
+                current = _replace(current, path, rn)
+
+        old_refs = refs(old_ast)
+        new_refs = refs(new_ast)
         ordered = list(old_refs) + [n for n in new_refs if n not in old_refs]
-        out = []
+        entries = []
         for name in ordered:
-            if name in self._metrics:
-                r = self.query(name, t)
-                kind = "metric"
-            else:
-                r = self._compute_field(name, t)
-                kind = "field"
+            r = resolve(name)
             if name in old_refs and name in new_refs:
                 status = "retained"
             elif name in new_refs:
                 status = "added"
             else:
                 status = "removed"
-            out.append({
+            entries.append({
                 "dependency": name,
-                "kind": kind,
+                "kind": "metric" if name in self._metrics else "field",
                 "status": status,
                 "value_at_switch": _num(r.value),
                 "missing": [m.to_dict() for m in r.missing],
+                "contribution_diff": (_num(deltas.get(name, Fraction(0)))
+                                      if numeric else None),
             })
-        return out
+        if numeric and structural != 0:
+            # 纯常量 / 结构变化产生的残余,不属于任何具体依赖
+            entries.append({
+                "dependency": "<formula_structure>",
+                "kind": "structure",
+                "status": "structure_change",
+                "value_at_switch": None,
+                "missing": [],
+                "contribution_diff": _num(structural),
+            })
+        total = (v_new - v_old) if numeric else None
+        return entries, total
+
+    def _region_deltas(self, ro: Expr, rn: Expr, ctx, vo: Fraction, vn: Fraction,
+                       cvo: Fraction, cvn: Fraction, impact: Fraction, ev):
+        """把一个变化区域的影响 impact 分解到区域内各依赖。
+
+        返回 ({依赖: 贡献差}, 结构残余)。移除依赖按旧语境留一法量化,
+        新增依赖按新语境留一法量化,留一法不可计算(如除零)的依赖与
+        保留依赖一起等额分摊区域残余,保证各部分之和精确等于 impact。
+        """
+        old_deps, new_deps = refs(ro), refs(rn)
+        removed = [d for d in old_deps if d not in new_deps]
+        added = [d for d in new_deps if d not in old_deps]
+        pooled = [d for d in old_deps if d in new_deps]   # 保留依赖
+        deltas: Dict[str, Fraction] = {}
+        for d in removed:
+            vz = ev(_zero_refs(ro, d))
+            cz = ctx(vz) if vz is not None else None
+            if cz is None:
+                pooled.append(d)
+            else:
+                deltas[d] = -(cvo - cz)
+        for d in added:
+            vz = ev(_zero_refs(rn, d))
+            cz = ctx(vz) if vz is not None else None
+            if cz is None:
+                pooled.append(d)
+            else:
+                deltas[d] = cvn - cz
+        residual = impact
+        for dl in deltas.values():
+            residual -= dl
+        if pooled:
+            share = residual / len(pooled)
+            for d in pooled:
+                deltas[d] = deltas.get(d, Fraction(0)) + share
+            residual = Fraction(0)
+        return deltas, residual
 
     @staticmethod
     def _value_gap(a: EvalResult, b: EvalResult) -> Optional[str]:

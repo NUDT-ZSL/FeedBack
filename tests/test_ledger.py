@@ -441,6 +441,209 @@ class TestDiscontinuity:
 
 
 # ----------------------------------------------------------------------
+# 收紧 1:冲突消解(后续上报与某一既有来源一致)
+# ----------------------------------------------------------------------
+
+class TestConflictResolution:
+    def build(self):
+        clock = [50]
+        led = MetricLedger(clock=lambda: clock[0])
+        led.declare_field("revenue")
+        led.declare_field("refund")
+        led.define_metric("net", [(0, "revenue - refund")])
+        led.ingest("revenue", 100, time=5, source="A")
+        led.ingest("revenue", 120, time=5, source="B")
+        led.ingest("refund", 10, time=5)
+        return led, clock
+
+    def test_matching_report_resolves_conflict(self):
+        led, clock = self.build()
+        assert led.query("net", 5).value is None      # 冲突中按缺失处理
+        clock[0] = 60
+        r = led.ingest("revenue", 100, time=5, source="C")   # 与 A 一致
+        assert r["status"] == "resolved"
+        # 冲突记录保留,标注已消解与消解时刻
+        rec = led.conflicts()[0]
+        assert rec["status"] == "resolved"
+        assert rec["resolution"]["resolved_at"] == 60
+        assert rec["resolution"]["adopted_value"] == 100
+        assert rec["resolution"]["resolved_by"] == {"source": "C", "value": 100}
+        assert "已消解" in rec["message"]
+        # 各方上报都保留,任何一方不被静默丢弃
+        assert {(e["source"], e["value"]) for e in rec["reports"]} == {
+            ("A", 100), ("B", 120), ("C", 100)}
+        # 取值采信被一致认可的值
+        assert led.query("net", 5).value == 90
+        # 来源链只挂被采信的来源(A 与 C 值一致,B 被排除)
+        prov = led.explain("net", 5)["provenance"]
+        rev = [c for c in prov["contributions"] if c["name"] == "revenue"][0]
+        assert rev["value"] == 100
+        assert set(rev["sources"]) == {"A", "C"}
+        assert "B" not in rev["sources"]
+        assert led.verify_consistency() == []
+
+    def test_non_matching_report_keeps_conflict_open(self):
+        led, _ = self.build()
+        r = led.ingest("revenue", 130, time=5, source="C")   # 与各方都不一致
+        assert r["status"] == "conflict"
+        rec = led.conflicts()[0]
+        assert rec["status"] == "open"
+        assert "resolution" not in rec
+        # 三方都保留
+        assert {e["value"] for e in rec["reports"]} == {100, 120, 130}
+        assert led.query("net", 5).value is None
+
+    def test_resolution_recomputes_dependents(self):
+        led, _ = self.build()
+        led.ingest("revenue", 100, time=5, source="C")
+        rec = [x for x in led.recompute_log()
+               if x["event"] == "data_ingested" and x.get("status") == "resolved"][0]
+        assert rec["affected_metrics"] == ["net"]
+        change = [c for c in rec["changes"] if c["metric"] == "net"][0]
+        assert change["before"] is None        # 缺失(冲突)
+        assert change["after"] == 90           # 消解后恢复取值
+
+    def test_contradiction_after_resolution_reopens(self):
+        led, _ = self.build()
+        led.ingest("revenue", 100, time=5, source="C")
+        assert led.query("net", 5).value == 90
+        r = led.ingest("revenue", 999, time=5, source="D")
+        assert r["status"] == "reopened"
+        rec = led.conflicts()[0]
+        assert rec["status"] == "open"
+        # 消解历史保留,全部来源保留
+        assert len(rec["history"]) == 1
+        assert rec["history"][0]["adopted_value"] == 100
+        assert {e["value"] for e in rec["reports"]} == {100, 120, 999}
+        assert led.query("net", 5).value is None
+        assert led.verify_consistency() == []
+
+    def test_duplicate_of_resolving_report_is_idempotent(self):
+        led, _ = self.build()
+        led.ingest("revenue", 100, time=5, source="C")
+        r = led.ingest("revenue", 100, time=5, source="C")
+        assert r["status"] == "duplicate"
+        rec = led.conflicts()[0]
+        assert rec["status"] == "resolved"
+        assert len(rec["reports"]) == 3        # 没有新增记录
+
+    def test_resolution_uses_injected_clock(self):
+        led, clock = self.build()
+        clock[0] = 77
+        led.ingest("revenue", 120, time=5, source="C")   # 与 B 一致 -> 采信 120
+        rec = led.conflicts()[0]
+        assert rec["resolution"]["resolved_at"] == 77
+        assert rec["resolution"]["adopted_value"] == 120
+        assert led.query("net", 5).value == 110
+
+
+# ----------------------------------------------------------------------
+# 收紧 2:口径切换轨迹的依赖贡献差量化
+# ----------------------------------------------------------------------
+
+class TestContributionAttribution:
+    def test_retained_dependency_carries_structural_diff(self):
+        led = make_ledger()
+        for t in range(0, 20):
+            led.ingest("revenue", 100, time=t)
+            led.ingest("refund", 10, time=t)
+            led.ingest("orders", 2, time=t)
+        led.add_version("aov", 10, "net / (orders + 1)")
+        sw = led.trajectory("aov", 0, 20)[0]
+        attrs = {a["dependency"]: a for a in sw["attribution"]}
+        # net 取值未变、角色未变 -> 贡献差 0;orders 角色变化 -> 承担全部差异
+        assert attrs["net"]["contribution_diff"] == 0
+        assert attrs["orders"]["contribution_diff"] == -15
+        # 各依赖贡献差之和 == 切换前后取值差
+        assert sw["attribution_sum"] == sw["diff"] == -15
+
+    def test_added_and_removed_dependencies_quantified(self):
+        led = MetricLedger()
+        for f in ("a", "b", "c"):
+            led.declare_field(f)
+        led.define_metric("m", [(0, "a + b")])
+        for t in range(0, 20):
+            led.ingest("a", 1, time=t)
+            led.ingest("b", 2, time=t)
+            led.ingest("c", 5, time=t)
+        led.add_version("m", 10, "a + c")
+        sw = led.trajectory("m", 0, 20)[0]
+        attrs = {a["dependency"]: a for a in sw["attribution"]}
+        assert attrs["a"]["contribution_diff"] == 0     # 保留且角色不变
+        assert attrs["b"]["contribution_diff"] == -2    # 移除:带走其贡献
+        assert attrs["c"]["contribution_diff"] == 5     # 新增:带来其贡献
+        assert sw["attribution_sum"] == sw["diff"] == 3
+
+    def test_multiplicative_context_quantified(self):
+        led = MetricLedger()
+        for f in ("x", "y", "z"):
+            led.declare_field(f)
+        led.define_metric("m", [(0, "x * y")])
+        for t in range(0, 20):
+            led.ingest("x", 2, time=t)
+            led.ingest("y", 3, time=t)
+            led.ingest("z", 5, time=t)
+        led.add_version("m", 10, "x * z")
+        sw = led.trajectory("m", 0, 20)[0]
+        attrs = {a["dependency"]: a for a in sw["attribution"]}
+        # 乘法语境:移除 y 带走 x*y=6,新增 z 带来 x*z=10
+        assert attrs["x"]["contribution_diff"] == 0
+        assert attrs["y"]["contribution_diff"] == -6
+        assert attrs["z"]["contribution_diff"] == 10
+        assert sw["attribution_sum"] == sw["diff"] == 4
+
+    def test_constant_change_attributed_to_structure(self):
+        led = MetricLedger()
+        led.declare_field("a")
+        led.define_metric("m", [(0, "a + 1")])
+        for t in range(0, 20):
+            led.ingest("a", 10, time=t)
+        led.add_version("m", 10, "a + 2")
+        sw = led.trajectory("m", 0, 20)[0]
+        attrs = {a["dependency"]: a for a in sw["attribution"]}
+        assert attrs["a"]["contribution_diff"] == 0
+        # 常量调整不属于任何依赖,归入结构项,总和仍与取值差一致
+        assert attrs["<formula_structure>"]["contribution_diff"] == 1
+        assert sw["attribution_sum"] == sw["diff"] == 1
+
+    def test_multi_metric_chain_switch_attribution(self):
+        """多指标依赖链上的口径切换:逐层推导贡献差并核对总和。"""
+        led = MetricLedger()
+        for f in ("gmv", "cancel", "ship", "users"):
+            led.declare_field(f)
+        led.define_metric("valid_gmv", [(0, "gmv - cancel")])
+        led.define_metric("per_user", [(0, "ship / users")])
+        for t in range(0, 12):
+            led.ingest("gmv", 1000, time=t)
+            led.ingest("cancel", 100, time=t)
+            led.ingest("ship", 450, time=t)
+            led.ingest("users", 50, time=t)
+        # t=9 起人均口径改用有效GMV: per_user = valid_gmv / users
+        led.add_version("per_user", 9, "valid_gmv / users")
+        sw = led.trajectory("per_user", 0, 12)[0]
+        attrs = {a["dependency"]: a for a in sw["attribution"]}
+        # 逐步推导: 旧 450/50=9, 新 900/50=18, diff=9
+        # 移除 ship: 带走 450/50=9; 新增 valid_gmv: 带来 900/50=18; users 保留
+        assert sw["value_before"] == 9
+        assert sw["value_after"] == 18
+        assert attrs["ship"]["contribution_diff"] == -9
+        assert attrs["valid_gmv"]["contribution_diff"] == 18
+        assert attrs["users"]["contribution_diff"] == 0
+        assert sw["attribution_sum"] == sw["diff"] == 9
+
+    def test_attribution_is_deterministic(self):
+        led = make_ledger()
+        for t in range(0, 20):
+            led.ingest("revenue", 100, time=t)
+            led.ingest("refund", 10, time=t)
+            led.ingest("orders", 2, time=t)
+        led.add_version("aov", 10, "net / (orders + 1)")
+        first = json.dumps(led.trajectory("aov", 0, 20), sort_keys=False)
+        second = json.dumps(led.trajectory("aov", 0, 20), sort_keys=False)
+        assert first == second
+
+
+# ----------------------------------------------------------------------
 # 综合:多指标多依赖端到端,逐步推导比对
 # ----------------------------------------------------------------------
 
