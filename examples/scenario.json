@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "budget": "900.00",
+  "projects": [
+    {
+      "id": "CORE",
+      "priority": 1,
+      "total_need": "300.00",
+      "min_start": "120.00",
+      "benefit": "600.00",
+      "phases": ["120.00", "100.00", "80.00"]
+    },
+    {
+      "id": "APP",
+      "priority": 2,
+      "total_need": "400.00",
+      "min_start": "150.00",
+      "benefit": "800.00",
+      "phases": ["150.00", "250.00"]
+    },
+    {
+      "id": "DATA",
+      "priority": 2,
+      "total_need": "250.00",
+      "min_start": "100.00",
+      "benefit": "750.00",
+      "phases": ["100.00", "150.00"]
+    },
+    {
+      "id": "PORTAL",
+      "priority": 3,
+      "total_need": "200.00",
+      "min_start": "80.00",
+      "benefit": "200.00",
+      "phases": ["80.00", "120.00"]
+    }
+  ],
+  "dependencies": [
+    {"project": "APP", "requires": "CORE"},
+    {"project": "PORTAL", "requires": "APP"},
+    {"project": "PORTAL", "requires": "DATA"}
+  ]
+}
