@@ -58,6 +58,45 @@ class CumulativeStackingTest(unittest.TestCase):
         self.assertEqual(cm.exception.level, 2)
         self.assertIn("A", str(cm.exception))
 
+    def test_limit_two_non_adjacent_third_layer_rejected(self):
+        # 在 VehicleState 上构造四层塔：B(limit2) 在第 1 层，M/T 依次叠放，
+        # X 放第 4 层时与 B 之间隔着 M、T（非直接相邻）。
+        # B 上方累计 3 层 > 2 -> 拒绝，指出第 4 层、超限货物 B。
+        v = Vehicle("V", 2, 2, 10, 10000)
+        st = VehicleState(v)
+        specs = [
+            ("B", 0, 1, 2),   # 层1
+            ("M", 2, 2, 2),   # 层2
+            ("T", 4, 3, 2),   # 层3
+        ]
+        for cid, z, lvl, h in specs:
+            c = Cargo(cid, 2, 2, h, weight=1,
+                      stack_limit=2 if cid == "B" else 5)
+            p = Placement(cid, "V", 0, 0, z, 2, 2, h, (0, 1, 2), lvl)
+            ok, reason, info = st.check_placement(c, p)
+            self.assertTrue(ok, (cid, reason, info))
+            st.commit(c, p)
+        # X 放第 4 层：与 B(层1) 层差 3 > B.limit2，且非直接相邻
+        x = Cargo("X", 2, 2, 2, weight=1, stack_limit=5)
+        px = Placement("X", "V", 0, 0, 6, 2, 2, 2, (0, 1, 2), 4)
+        ok, reason, info = st.check_placement(x, px)
+        self.assertFalse(ok)
+        self.assertEqual(reason, "stack")
+        self.assertEqual(info, (4, "B", "below"))
+
+    def test_limit_two_adjacent_three_layer_tower_rejected(self):
+        # 与 plan_all 正向路径一致的字面场景：B(limit2) 同柱第4层拒绝。
+        s = LoadingSystem()
+        s.add_vehicle(Vehicle("V", 2, 2, 10, 10000))
+        s.add_cargo(Cargo("B", 2, 2, 2, weight=1, stack_limit=2))
+        s.add_cargo(Cargo("M", 2, 2, 2, weight=1, stack_limit=5))
+        s.add_cargo(Cargo("T", 2, 2, 2, weight=1, stack_limit=5))
+        s.add_cargo(Cargo("X", 2, 2, 2, weight=1, stack_limit=5))
+        with self.assertRaises(StackRuleError) as cm:
+            s.plan_all()
+        self.assertEqual(cm.exception.level, 4)
+        self.assertIn("B", str(cm.exception))
+
     def test_upward_check_when_inserted_under_existing_overhang(self):
         # 增量重排可达的提交顺序：高层货物先保留，重决策货物塞入其下方。
         # 直接构造该 VehicleState 验证“向上”累计检查。

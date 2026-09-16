@@ -126,15 +126,14 @@ class VehicleState:
                 supporters.append(b)
         if not _footprint_covered(box.x, box.y, box.dx, box.dy, supporters):
             return False, _SPACE, None
-        # 堆叠限制：
-        #  (a) 下方累计——投影柱内任何位于候选盒下方（直接或非直接相邻，
-        #      xy 投影相交即计入，不要求顶底齐平）的货物 b，要求
-        #      L - Lb <= b.stack_limit；易碎货物 b 的 limit 恒为 0。
-        #  (b) 上方累计——候选盒可能被塞进已有悬挑/桥接板的下方
-        #      （增量重排时高处货物先保留、低处货物后决策即可出现）。
-        #      沿“顶面=底面且投影相交”的直接支撑边，求候选盒向上能到达
-        #      的最长层数，要求 <= 候选货物自身 stack_limit（易碎品为 0，
-        #      即其投影柱内一旦还压有任何货物即拒绝）。
+        # 堆叠限制（投影柱内上下双向累计，按层差计数）：
+        #  (a) 下方：任何位于候选盒下方（顶 <= 底，允许隔空/跨越不可用区域
+        #      垫高）且 xy 投影相交的货物 b，其“上方累计层数”= 候选盒层号
+        #      - b 层号，必须 <= b.stack_limit；非直接相邻同样计入。
+        #      超限指出候选盒所在层与货物 b；易碎货物 b 的 limit 恒为 0。
+        #  (b) 上方：候选盒可能被塞进已保留的悬挑/桥接板下方（增量重排的
+        #      提交顺序可达），沿“底面=顶面且投影相交”的直接支撑边求候选盒
+        #      向上的最长层数，必须 <= 候选货物自身 stack_limit；易碎品为 0。
         level = 1 + max((lvl for _b, _c, lvl in item_supporters), default=0)
 
         def xy_intersects(a, b):
@@ -145,7 +144,7 @@ class VehicleState:
                 and a.y < b.y + b.dy - _EPS
             )
 
-        #  (a) 向下：投影柱累计；info=(超限层, 超限货物id, "below")
+        # (a) 向下：投影柱内按层差累计；info=(超限层, 超限货物id, "below")
         for b, cid, lvl in self.items:
             if not _le(b.z + b.dz, box.z):
                 continue
@@ -154,7 +153,7 @@ class VehicleState:
                 return False, _STACK, (level, cid, "below")
 
         # (b) 向上：候选盒 -> 已有货物的直接支撑图最长路径（按 z 自下而上）
-        # info=(超限层, 超限货物id, "above")
+        # info=(上方货物层, 候选货物id, "above")
         nodes = self.items
         above = [None] * len(nodes)
         for j, (jb, _jc, _jl) in enumerate(nodes):
