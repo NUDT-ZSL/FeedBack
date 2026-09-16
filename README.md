@@ -5,7 +5,7 @@
 
 - 纯 Python 标准库（Python ≥ 3.9），无需联网、无第三方依赖
 - 全部规则确定性：相同输入永远产生逐字节一致的输出
-- 45 个单元测试 + 62 个脚本化验收点，覆盖需求 1..8
+- 57 个单元测试 + 75 个脚本化验收点，覆盖需求 1..8 及两处语义收紧
 
 ## 目录结构
 
@@ -61,10 +61,10 @@ eng2 = ReflowEngine.load("doc.reflow.json")   # 载入时完整自洽校验
 | 1 稿件/块校验 | `Manuscript` 构造即校验：类型 ∈ {正文,标题,图片,注释}，`id` 与 `order` 唯一；错误 `details.position/first_position` 指出位置 |
 | 2 锚点合法 | 目标须存在且 `order` 在前；同目标只允许一个紧邻者；DFS 成环检测；`AnchorError.sequence` 给出涉及块序列 |
 | 3 确定性重排 | 栏数 `n=clamp(floor(vp/(fs·16)),1,6)` 并按块 `min_readable_width` 下调；顺序流式分栏，栏号随阅读顺序单调 |
-| 4 真增量 | ① `(块,字号,栏宽)` 几何缓存 ② 锚点组几何签名前缀复用、placement 对象直接复用、从变化组游标续排；结果与 `reflow_cold()` 冷重排逐字段相等；返回 `affected/relaid_out/unaffected/geometry_recomputed` 四类块清单 |
+| 4 真增量 | ① `(块,字号,栏宽)` 几何缓存 ② 锚点组几何签名前缀复用、placement 对象直接复用、从变化组游标续排；结果与 `reflow_cold()` 冷重排逐字段相等。**“重新打包”与“坐标变化”分离**：`relaid_out_blocks` 是触碰范围（被重新打包的后缀），`affected_blocks` 只含相对上一版 `(栏号,偏移)` 真正变化的块（最小重绘集），前者 ⊇ 后者；可通过 `query_relayout_info()` 分别查询。被重新打包但自身起点没动的块不会出现在 `affected_blocks` 中，调用方据此重绘不做无谓工作 |
 | 5 图片策略 | 栏宽够 → 原样；等比缩小但 ≥50% 且 ≥最小可读宽 → `scaled_to_fit`；否则降级占位（`below_legible_scale` / `below_min_readable_width`），保留替代文本，绝不静默丢弃 |
-| 6 位置恢复 | `restore_reading_position()` 返回同块新栏号与块内偏移（越界自动夹取）；块缺失时按原始顺序最近原则回退并给 `fallback_reason` |
-| 7 稳定查询 | `query_block/query_all` 返回栏号、偏移、是否降级、降级原因、锚点是否满足；顺序固定为 (栏号, 偏移, order)，重复查询逐字段一致；`layout_version` 每次重排 +1 |
+| 6 位置恢复 | `restore_reading_position()` 返回同块新栏号与块内偏移（越界自动夹取并标记 `offset_clamped`）；块缺失时按原始顺序最近原则回退并给 `fallback_reason` |
+| 7 稳定查询 | `query_block/query_all` 返回栏号、偏移、是否降级、降级原因、锚点是否满足；顺序固定为 (栏号, 偏移, order)，重复查询逐字段一致；`layout_version` 每次重排 +1。**锚点满足按真实几何判定**：目标须与锚点块同栏、偏移紧邻（`target.offset+height == block.offset`）、同栏前驱恰为目标；打破时 `anchor_satisfied=False`，并通过 `anchor_violation`/`anchor_involved` 及 `query_anchor_violations()` 给出原因与涉及块序列。`verify_anchors(placements)` 也可校验任意（含人为拆散的）版面 |
 | 8 存档/载入 | JSON 原子写入（临时文件 + `os.replace`）；载入校验字段完整 → 标识唯一 → 锚点合法 → 按配置重算并逐块比对栏号/偏移/几何；任何失败抛 `PersistenceError` 且不触碰既有引擎状态 |
 
 ## 确定性几何模型
@@ -91,7 +91,31 @@ eng2 = ReflowEngine.load("doc.reflow.json")   # 载入时完整自洽校验
    找到第一个几何签名变化的组 `k`，其前各组签名与结束游标与上一版完全相同，
    故前缀 placement 可逐对象复用，从组 `k−1` 的结束游标续排；
 3. **等价性**：续排使用与冷重排相同的纯函数、相同输入，由确定性得
-   前缀 + 后缀拼接结果与冷重排逐字段相等（测试在 10 组配置网格上验证）。
+   前缀 + 后缀拼接结果与冷重排逐字段相等（测试在多组配置网格上验证）。
+
+## 两个易混语义的边界
+
+**“重新打包” ≠ “坐标变化”。** 字号微变时，后缀组都会被重新打包
+（`relaid_out_blocks`），但某块自身的起始栏/偏移可能恰好没变——典型情况是
+它仍位于某栏栏首。这类块不进 `affected_blocks`。调用方：
+
+- 想失效几何/渲染缓存 → 看 `relaid_out_blocks` 与 `geometry_recomputed`；
+- 只想重绘真正移动的块 → 只看 `affected_blocks`（恒为前者的子集）。
+
+`query_relayout_info()` 一次返回这两个集合及其包含关系是否成立。
+
+**锚点满足是真实几何关系，不是“目标存在”。** 对声明锚点 T 的块 B，需同时满足：
+
+1. T 在当前版面中；
+2. T 与 B 同栏；
+3. `T.offset + T.height == B.offset`（偏移紧邻）；
+4. B 在同栏的紧邻前驱恰为 T（中间没有别的块）。
+
+任一条不满足，`anchor_satisfied=False`，并在 `anchor_violation` 给出中文原因、
+`anchor_involved` 给出涉及块序列（如中间插入块 X 时为 `[T, X, B]`）。
+引擎自身的锚点组不可拆分，正常版面恒满足；该判定同时能验收**外部/被人为拆散**
+的版面：`verify_anchors(placements)` 与纯函数 `verify_anchor_layout()` 接受任意
+placements，返回全部 `AnchorViolation`。
 
 ## 错误处理
 

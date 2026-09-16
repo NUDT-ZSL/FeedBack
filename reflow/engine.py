@@ -412,6 +412,120 @@ class PlacedBlock:
 
 
 @dataclass
+class AnchorViolation:
+    """锚点约束在实际版面几何中被打破的证据。"""
+
+    block_id: str            # 声明锚点的块
+    anchor_target: str       # 它应紧跟的目标块
+    predecessor_id: Optional[str]  # 版面中它在同栏的真实前驱
+    target_present: bool
+    same_column: bool
+    adjacent: bool
+    predecessor_is_target: bool
+    involved: List[str]      # 涉及的块序列（去重、稳定排序）
+    reason: str              # 中文说明，明确点名涉及块
+
+    def to_dict(self) -> dict:
+        return {
+            "block_id": self.block_id,
+            "anchor_target": self.anchor_target,
+            "predecessor_id": self.predecessor_id,
+            "target_present": self.target_present,
+            "same_column": self.same_column,
+            "adjacent": self.adjacent,
+            "predecessor_is_target": self.predecessor_is_target,
+            "involved": list(self.involved),
+            "reason": self.reason,
+        }
+
+
+def verify_anchor_layout(placements: List[PlacedBlock]) -> Dict[str, AnchorViolation]:
+    """按真实几何关系校验全部锚点（纯函数，可对任意 placements 使用）。
+
+    对每个声明锚点的块 B（锚点目标 T），必须同时满足：
+      1. T 存在于版面；
+      2. T 与 B 同栏；
+      3. B 在同栏的紧邻前驱恰为 T（中间无其他块插入）；
+      4. 偏移紧邻：T.offset + T.height == B.offset。
+    任一不满足即记录一条 :class:`AnchorViolation`，返回 {块id: 违约}。
+    """
+    ordered = sorted(placements, key=lambda p: (p.column, p.offset, p.block.order))
+    by_id = {p.block.id: p for p in ordered}
+    violations: Dict[str, AnchorViolation] = {}
+    last_by_col: Dict[int, PlacedBlock] = {}
+
+    for p in ordered:
+        predecessor = last_by_col.get(p.column)
+        last_by_col[p.column] = p
+        anc = p.block.anchor
+        if anc is None:
+            continue
+
+        target = by_id.get(anc)
+        if target is None:
+            violations[p.block.id] = AnchorViolation(
+                block_id=p.block.id,
+                anchor_target=anc,
+                predecessor_id=predecessor.block.id if predecessor else None,
+                target_present=False,
+                same_column=False,
+                adjacent=False,
+                predecessor_is_target=False,
+                involved=[anc, p.block.id],
+                reason=(
+                    f"锚点被打破：块 {p.block.id} 声明紧跟 {anc}，"
+                    f"但目标块 {anc} 不在当前版面中（涉及块：{anc} -> {p.block.id}）"
+                ),
+            )
+            continue
+
+        same_column = target.column == p.column
+        adjacent = target.offset + target.geometry.height == p.offset
+        predecessor_is_target = predecessor is not None and predecessor.block.id == anc
+
+        if same_column and adjacent and predecessor_is_target:
+            continue  # 约束成立
+
+        problems = []
+        if not same_column:
+            problems.append(
+                f"二者位于不同栏（{anc} 在栏 {target.column}，{p.block.id} 在栏 {p.column}）"
+            )
+        if same_column and not adjacent:
+            problems.append(
+                f"偏移不紧邻（{anc} 结束于偏移 {target.offset + target.geometry.height}，"
+                f"{p.block.id} 起始于偏移 {p.offset}）"
+            )
+        if not predecessor_is_target:
+            if predecessor is None:
+                problems.append(f"{p.block.id} 位于栏首，同栏没有前驱块")
+            elif predecessor.block.id != anc:
+                problems.append(
+                    f"{p.block.id} 的同栏前驱是 {predecessor.block.id} 而非锚点目标 {anc}"
+                )
+
+        involved: List[str] = [anc]
+        if predecessor is not None and predecessor.block.id != anc:
+            involved.append(predecessor.block.id)
+        involved.append(p.block.id)
+
+        violations[p.block.id] = AnchorViolation(
+            block_id=p.block.id,
+            anchor_target=anc,
+            predecessor_id=predecessor.block.id if predecessor else None,
+            target_present=True,
+            same_column=same_column,
+            adjacent=adjacent,
+            predecessor_is_target=predecessor_is_target,
+            involved=involved,
+            reason="锚点被打破：" + "；".join(problems)
+            + f"（涉及块序列：{' -> '.join(involved)}）",
+        )
+
+    return violations
+
+
+@dataclass
 class BlockView:
     """需求 7 的单块查询视图（稳定、可重复）。"""
 
@@ -426,6 +540,8 @@ class BlockView:
     degrade_reason: Optional[str]
     anchor: Optional[str]
     anchor_satisfied: bool
+    anchor_violation: Optional[str] = None   # 不满足时的中文原因
+    anchor_involved: Optional[List[str]] = None  # 不满足时涉及的块序列
 
     def to_dict(self) -> dict:
         return {
@@ -440,6 +556,8 @@ class BlockView:
             "degrade_reason": self.degrade_reason,
             "anchor": self.anchor,
             "anchor_satisfied": self.anchor_satisfied,
+            "anchor_violation": self.anchor_violation,
+            "anchor_involved": list(self.anchor_involved) if self.anchor_involved else None,
         }
 
 
@@ -454,6 +572,7 @@ class ReflowResult:
     relaid_out_blocks: List[str]        # 本次真正重新打包的块（首个变化组起的后缀）
     geometry_recomputed: List[str]      # 几何缓存未命中、重新测量的块
     unaffected_blocks: List[str]        # 位置保持不变的块（需求 4 可追溯）
+    anchor_violations: Dict[str, "AnchorViolation"] = field(default_factory=dict)
 
     def placement_of(self, block_id: str) -> Optional[PlacedBlock]:
         for p in self.placements:
@@ -568,6 +687,9 @@ class ReflowEngine:
         # relaid_out：本次实际重新打包的后缀（前缀组逐对象复用，未参与重排）
         relaid = [b.id for grp in groups[start:] for b in grp]
         # affected：相对上一版 (栏号, 偏移) 实际变化；unaffected：坐标完全一致。
+        # 语义不混用：relaid 描述“被重新打包”（触碰范围），affected 描述
+        # “坐标真的变了”（调用方需要重绘的最小集合）。未移动前缀两者皆否；
+        # 后缀块可能 relaid 但不 affected（块高微变但自身起点未动）。
         prev_coords = (
             {p.block.id: (p.column, p.offset) for p in self._result.placements}
             if self._result is not None
@@ -579,6 +701,16 @@ class ReflowEngine:
                 affected.append(p.block.id)
             else:
                 unaffected.append(p.block.id)
+        relaid_set, affected_set = set(relaid), set(affected)
+        # 不变量：坐标变化只可能发生在重新打包后缀内（前缀逐对象复用）
+        if not affected_set <= relaid_set:
+            raise RuntimeError(  # 防御性：理论不可达
+                f"内部不变量被破坏：受影响块 {sorted(affected_set - relaid_set)} "
+                f"不在重新打包后缀 {sorted(relaid_set)} 内"
+            )
+
+        # 锚点几何校验：按真实同栏 / 偏移紧邻 / 前驱恰为目标判定
+        anchor_violations = verify_anchor_layout(placements)
 
         self.font_size = font_size
         self.viewport_width = viewport_width
@@ -604,6 +736,7 @@ class ReflowEngine:
             relaid_out_blocks=relaid,
             geometry_recomputed=recomputed,
             unaffected_blocks=unaffected,
+            anchor_violations=anchor_violations,
         )
         return self._result
 
@@ -776,19 +909,51 @@ class ReflowEngine:
         )
         return [self._to_view(p) for p in ordered]
 
-    def _anchor_ok(self, p: PlacedBlock) -> bool:
-        """基于实际几何验证锚点：目标同栏、且恰好紧邻在本块之前。"""
-        if p.block.anchor is None:
-            return True
-        target = self._result.placement_of(p.block.anchor)
-        if target is None:
-            return False
-        return (
-            target.column == p.column
-            and target.offset + target.geometry.height == p.offset
-        )
+    def query_anchor_violations(self) -> List[AnchorViolation]:
+        """返回当前版面所有被打破的锚点，按块标识稳定排序。"""
+        if self._result is None:
+            raise LayoutError("尚未进行任何重排，无可查询版面")
+        return [self._result.anchor_violations[k]
+                for k in sorted(self._result.anchor_violations)]
+
+    def verify_anchors(self, placements: Optional[List[PlacedBlock]] = None) -> List[AnchorViolation]:
+        """校验锚点几何关系；不传参则校验当前版面。
+
+        也可传入任意 placements（例如外部排版结果 / 被人为拆散的版面），
+        返回所有违约，按块标识稳定排序。引擎自身的锚点组不可拆分，正常
+        版面返回空列表；当目标与锚点块被分到不同栏、偏移不紧邻或中间插入
+        了别的块时，对应条目会给出原因与涉及块序列。
+        """
+        if placements is None:
+            if self._result is None:
+                raise LayoutError("尚未进行任何重排，无可查询版面")
+            placements = self._result.placements
+        violations = verify_anchor_layout(placements)
+        return [violations[k] for k in sorted(violations)]
+
+    def query_relayout_info(self) -> dict:
+        """分别返回“重新打包”与“坐标实际变化”两组信息（语义不混用）。
+
+        - relaid_out_blocks：本次参与重新打包的块（触碰范围，供失效缓存）；
+        - affected_blocks  ：相对上一版 (栏号,偏移) 真正变化的块（最小重绘集）；
+        - geometry_recomputed：几何缓存未命中而重新测量的块；
+        - unaffected_blocks：坐标保持不变的块。
+        不变量：affected ⊆ relaid_out。
+        """
+        if self._result is None:
+            raise LayoutError("尚未进行任何重排，无可查询版面")
+        r = self._result
+        return {
+            "relaid_out_blocks": list(r.relaid_out_blocks),
+            "affected_blocks": list(r.affected_blocks),
+            "geometry_recomputed": list(r.geometry_recomputed),
+            "unaffected_blocks": list(r.unaffected_blocks),
+            "affected_subset_of_relaid":
+                set(r.affected_blocks) <= set(r.relaid_out_blocks),
+        }
 
     def _to_view(self, p: PlacedBlock) -> BlockView:
+        violation = self._result.anchor_violations.get(p.block.id)
         return BlockView(
             block_id=p.block.id,
             type=p.block.type,
@@ -800,7 +965,9 @@ class ReflowEngine:
             degraded=p.geometry.degraded,
             degrade_reason=p.geometry.degrade_reason,
             anchor=p.block.anchor,
-            anchor_satisfied=self._anchor_ok(p),
+            anchor_satisfied=violation is None,
+            anchor_violation=None if violation is None else violation.reason,
+            anchor_involved=None if violation is None else list(violation.involved),
         )
 
     @property

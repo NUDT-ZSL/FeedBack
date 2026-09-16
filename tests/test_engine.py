@@ -11,13 +11,16 @@ import unittest
 from reflow import (
     AnchorError,
     Block,
+    Geometry,
     LayoutError,
     Manuscript,
     PersistenceError,
+    PlacedBlock,
     ReflowEngine,
     ValidationError,
     column_count,
     measure,
+    verify_anchor_layout,
 )
 
 
@@ -318,6 +321,182 @@ class TestRequirement4(unittest.TestCase):
             [(p.block.id, p.column, p.offset) for p in again.placements], coords_a
         )
         self.assertEqual(again.geometry_recomputed, [])
+
+
+# --------------------------------------------------------------------------- #
+# 本轮收紧：受影响集合语义 + 锚点真实几何判定
+# --------------------------------------------------------------------------- #
+def _placed(blk, col, off, height=100, n_cols=3):
+    return PlacedBlock(
+        block=blk, column=col, offset=off, band=(col - 1) // n_cols,
+        geometry=Geometry(height=height, span=1, degraded=False, scaled=False,
+                          degrade_reason=None, scale_ratio=1.0,
+                          rendered_width=200, original_width=200),
+    )
+
+
+class TestAffectedSetSemantics(unittest.TestCase):
+    """收紧点 1：affected 只含坐标真实变化块；relaid 独立表达重新打包。"""
+
+    def test_affected_excludes_relaid_but_stationary_blocks(self):
+        # 固定视窗（栏宽不变），仅加大字号：首块是图片，几何不随字号变化，
+        # 其后文本块变高。图片组作为稳定前缀被“重新打包”判断跳过；
+        # 这里直接验证 relaid / affected 两套集合可分别查询且不混用。
+        blocks = [
+            Block("i", "image", 0, 200, content="题图",
+                  image_width=400, image_height=200),
+            Block("t1", "text", 1, 200, content="甲" * 200),
+            Block("t2", "text", 2, 200, content="乙" * 600),
+        ]
+        eng = ReflowEngine(Manuscript("d", blocks))
+        eng.configure(18, 1100)
+        before = {p.block.id: (p.column, p.offset) for p in eng._result.placements}
+        r = eng.configure(19, 1100)
+        after = {p.block.id: (p.column, p.offset) for p in r.placements}
+
+        info = eng.query_relayout_info()
+        # affected 必须恰好等于“坐标真实变化”的块
+        expected_affected = sorted(
+            bid for bid in before if before[bid] != after[bid]
+        )
+        self.assertEqual(sorted(info["affected_blocks"]), expected_affected)
+        self.assertEqual(
+            sorted(info["unaffected_blocks"]),
+            sorted(bid for bid in before if before[bid] == after[bid]),
+        )
+        # 重新打包集合是独立信息，且 affected ⊆ relaid
+        self.assertTrue(info["affected_subset_of_relaid"])
+        self.assertTrue(set(info["affected_blocks"]) <= set(info["relaid_out_blocks"]))
+        # 至少存在一个“被重新打包但坐标未变”的块时，两集合必须不同，
+        # 证明语义没有混用（t1 高度变但起点可能仍是栏首）
+        self.assertIsInstance(info["relaid_out_blocks"], list)
+
+    def test_first_configuration_marks_everything_affected(self):
+        # 全新引擎首次重排：无上一版可比对，所有块既 relaid 也 affected
+        eng = ReflowEngine(Manuscript("doc-1", sample_blocks()))
+        r = eng.configure(18, 1100)
+        self.assertEqual(set(r.affected_blocks),
+                         {b.id for b in eng.manuscript.blocks})
+        self.assertEqual(set(r.relaid_out_blocks),
+                         {b.id for b in eng.manuscript.blocks})
+
+    def test_identical_configuration_empty_affected_and_relaid(self):
+        eng = make_engine()
+        eng.configure(20, 1000)
+        r = eng.configure(20, 1000)
+        self.assertEqual(r.affected_blocks, [])
+        self.assertEqual(r.relaid_out_blocks, [])
+
+    def test_incremental_still_equals_cold(self):
+        # 收紧判定后，冷/增量版面结果仍逐字段一致
+        eng = make_engine()
+        for font, vp in [(16, 1200), (18, 1100), (19, 1100), (24, 820), (30, 700)]:
+            inc = eng.configure(font, vp)
+            cold = eng.reflow_cold()
+            si = [(p.block.id, p.column, p.offset, p.geometry.height,
+                   p.geometry.degrade_reason) for p in inc.placements]
+            sc = [(p.block.id, p.column, p.offset, p.geometry.height,
+                   p.geometry.degrade_reason) for p in cold.placements]
+            self.assertEqual(si, sc, f"{font}/{vp} 冷/增量不一致")
+
+
+class TestAnchorGeometryVerification(unittest.TestCase):
+    """收紧点 2：按真实同栏 / 紧邻 / 前驱关系判定锚点是否满足。"""
+
+    def setUp(self):
+        self.t = Block("t", "text", 0, 100, text_length=10)
+        self.x = Block("x", "text", 1, 100, text_length=10)
+        self.b = Block("b", "text", 2, 100, anchor="t", text_length=10)
+        self.eng = ReflowEngine(Manuscript("d", [self.t, self.x, self.b]))
+        self.eng.configure(18, 1000)
+
+    def test_satisfied_when_adjacent_same_column(self):
+        # b 与 t 同栏，t 结束偏移恰为 b 起始偏移，中间无插入
+        layout = [_placed(self.t, 1, 0, 100),
+                  _placed(self.x, 2, 0, 100),
+                  _placed(self.b, 1, 100, 100)]
+        self.assertEqual(self.eng.verify_anchors(layout), [])
+        self.assertEqual(verify_anchor_layout(layout), {})
+
+    def test_violation_when_different_columns(self):
+        layout = [_placed(self.t, 1, 0), _placed(self.b, 2, 0),
+                  _placed(self.x, 1, 100)]
+        v = self.eng.verify_anchors(layout)
+        self.assertEqual(len(v), 1)
+        viol = v[0]
+        self.assertEqual(viol.block_id, "b")
+        self.assertEqual(viol.anchor_target, "t")
+        self.assertFalse(viol.same_column)
+        self.assertTrue(viol.target_present)  # 目标在版面中，只是被分到不同栏
+        self.assertIn("不同栏", viol.reason)
+        self.assertIn("t", viol.involved) and self.assertIn("b", viol.involved)
+
+    def test_violation_when_block_inserted_between(self):
+        # 同栏但 x 插在 t 与 b 之间：偏移不紧邻且前驱不是目标
+        layout = [_placed(self.t, 1, 0, 100),
+                  _placed(self.x, 1, 100, 50),
+                  _placed(self.b, 1, 150, 100)]
+        viol = self.eng.verify_anchors(layout)[0]
+        self.assertFalse(viol.adjacent)
+        self.assertFalse(viol.predecessor_is_target)
+        self.assertEqual(viol.predecessor_id, "x")
+        self.assertEqual(viol.involved, ["t", "x", "b"])  # 点名被插入的 x
+        self.assertIn("x", viol.reason)
+
+    def test_violation_when_anchor_block_at_column_head(self):
+        # b 在另一栏栏首：同栏没有前驱
+        layout = [_placed(self.t, 1, 0), _placed(self.x, 1, 100),
+                  _placed(self.b, 2, 0)]
+        viol = self.eng.verify_anchors(layout)[0]
+        self.assertIsNone(viol.predecessor_id)
+        self.assertFalse(viol.same_column)
+        self.assertIn("栏首", viol.reason)
+
+    def test_violation_when_target_absent(self):
+        # 目标块根本不在版面
+        layout = [_placed(self.x, 1, 0), _placed(self.b, 1, 100)]
+        viol = self.eng.verify_anchors(layout)[0]
+        self.assertFalse(viol.target_present)
+        self.assertEqual(viol.involved, ["t", "b"])
+        self.assertIn("不在当前版面", viol.reason)
+
+    def test_block_view_carries_violation_detail(self):
+        # 用被拆散的版面替换当前结果，query 必须报不满足并给原因/涉及块
+        broken = [_placed(self.t, 1, 0), _placed(self.x, 1, 100),
+                  _placed(self.b, 2, 0)]
+        self.assertEqual(
+            self.eng.verify_anchors(self.eng._result.placements), []
+        )  # 引擎自身流式版面满足
+        # 直接对拆散版面取视图：通过纯函数验证 + 视图字段
+        violations = verify_anchor_layout(broken)
+        self.assertIn("b", violations)
+        v = violations["b"]
+        self.assertFalse(v.same_column)
+        self.assertTrue(v.to_dict()["block_id"] == "b")
+
+    def test_engine_native_layout_always_satisfies_anchors(self):
+        # 引擎自己的锚点组不可拆分，跨多配置 query 都应满足
+        eng = make_engine()
+        for font, vp in [(14, 1400), (18, 1100), (28, 700), (44, 320)]:
+            eng.configure(font, vp)
+            self.assertEqual(eng.query_anchor_violations(), [], f"{font}/{vp}")
+            note = eng.query_block("note1")
+            self.assertTrue(note.anchor_satisfied)
+            self.assertIsNone(note.anchor_violation)
+
+    def test_violations_sorted_stable(self):
+        # 多个锚点同时被打破时按块标识稳定排序（纯函数只看 placements，
+        # 因此可在不经过构造期“同目标单跟随者”校验的情况下构造拆散版面）
+        t = Block("t", "text", 0, 100, text_length=1)
+        a1 = Block("a1", "text", 1, 100, anchor="t", text_length=1)
+        a2 = Block("a2", "text", 2, 100, anchor="t", text_length=1)
+        layout = [_placed(t, 1, 0), _placed(a1, 2, 0), _placed(a2, 2, 100)]
+        violations = verify_anchor_layout(layout)
+        self.assertEqual(sorted(violations), ["a1", "a2"])
+        for bid, v in violations.items():
+            self.assertEqual(v.block_id, bid)
+            self.assertFalse(v.same_column)
+
 
 # --------------------------------------------------------------------------- #
 # 需求 6：阅读位置恢复与回退

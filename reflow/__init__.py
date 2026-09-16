@@ -2,6 +2,7 @@
 
 from .engine import (
     BLOCK_TYPES,
+    AnchorViolation,
     Block,
     BlockView,
     Geometry,
@@ -12,6 +13,7 @@ from .engine import (
     column_count,
     column_width,
     measure,
+    verify_anchor_layout,
 )
 from .errors import (
     AnchorError,

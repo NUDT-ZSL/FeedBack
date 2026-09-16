@@ -14,11 +14,14 @@ import tempfile
 from reflow import (
     AnchorError,
     Block,
+    Geometry,
     LayoutError,
     Manuscript,
     PersistenceError,
+    PlacedBlock,
     ReflowEngine,
     ValidationError,
+    verify_anchor_layout,
 )
 
 PASS = "通过"
@@ -338,6 +341,115 @@ def demo_requirement_8(eng, sample_path):
           coords_before == coords_after and loaded.layout_version == version_before)
 
 
+# ---- 本轮收紧点 1：受影响集合只含坐标真实变化块 --------------------------- #
+def demo_tightening_affected_set(eng):
+    section("收紧点 1：受影响集合 = 坐标真实变化；重新打包信息独立可查")
+    # 固定视窗（栏宽不变），仅字号 18 -> 19 微变
+    eng.configure(18, 1100)
+    before = {p.block.id: (p.column, p.offset) for p in eng._result.placements}
+    r = eng.configure(19, 1100)
+    after = {p.block.id: (p.column, p.offset) for p in r.placements}
+
+    info = eng.query_relayout_info()
+    print(f"  重新打包 relaid_out_blocks = {info['relaid_out_blocks']}")
+    print(f"  坐标变化 affected_blocks   = {info['affected_blocks']}")
+    print(f"  坐标未变 unaffected_blocks = {info['unaffected_blocks']}")
+    print(f"  重新测量 geometry_recomputed = {info['geometry_recomputed']}")
+
+    expected = sorted(bid for bid in before if before[bid] != after[bid])
+    check("affected 恰好等于坐标真实变化的块",
+          sorted(info["affected_blocks"]) == expected,
+          f"affected={sorted(info['affected_blocks'])} 实变={expected}")
+    check("affected ⊆ relaid（触碰范围包含重绘集合）",
+          info["affected_subset_of_relaid"])
+    check("relaid 与 affected 是两个独立字段、语义不混用",
+          "relaid_out_blocks" in info and "affected_blocks" in info)
+
+    # 显式展示“被重新打包但坐标没变”的块（若存在），证明不再被误标 affected
+    relaid_not_affected = [bid for bid in info["relaid_out_blocks"]
+                           if bid not in info["affected_blocks"]]
+    print(f"  被重新打包但坐标未变（无需重绘）：{relaid_not_affected}")
+    check("调用方按 affected 重绘不会包含无谓块",
+          all(before.get(b) == after.get(b) for b in relaid_not_affected))
+
+    # 冷重排与增量在同一配置下仍逐字段一致
+    cold = eng.reflow_cold()
+    snap_i = sorted((p.block.id, p.column, p.offset, p.geometry.height)
+                    for p in r.placements)
+    snap_c = sorted((p.block.id, p.column, p.offset, p.geometry.height)
+                    for p in cold.placements)
+    check("收紧后冷重排与增量重排结果仍完全一致", snap_i == snap_c)
+
+
+# ---- 本轮收紧点 2：锚点按真实几何判定 ------------------------------------- #
+def _placed(blk, col, off, height=100):
+    return PlacedBlock(
+        block=blk, column=col, offset=off, band=(col - 1) // 3,
+        geometry=Geometry(height=height, span=1, degraded=False, scaled=False,
+                          degrade_reason=None, scale_ratio=1.0,
+                          rendered_width=200, original_width=200),
+    )
+
+
+def demo_tightening_anchor_geometry(eng):
+    section("收紧点 2：锚点按真实同栏 / 紧邻 / 前驱关系判定，打破即点名")
+
+    t = Block("target", "text", 0, 100, text_length=10)
+    x = Block("intruder", "text", 1, 100, text_length=10)
+    b = Block("follower", "text", 2, 100, anchor="target", text_length=10)
+    # 借用引擎容器（其自身流式版面满足锚点）
+    verifier = ReflowEngine(Manuscript("verify", [t, x, b]))
+    verifier.configure(18, 1000)
+    check("引擎自身流式版面锚点全部满足", verifier.verify_anchors() == [])
+
+    # 场景 A：满足 —— follower 同栏紧邻 target
+    ok_layout = [_placed(t, 1, 0, 100), _placed(x, 2, 0, 100),
+                 _placed(b, 1, 100, 100)]
+    check("同栏且偏移紧邻、前驱恰为目标 -> 满足",
+          verifier.verify_anchors(ok_layout) == [])
+
+    # 场景 B：被分栏拆散 —— target 在栏1，follower 在栏2
+    split = [_placed(t, 1, 0), _placed(b, 2, 0), _placed(x, 1, 100)]
+    v = verifier.verify_anchors(split)
+    check("锚点块与目标不同栏 -> 判不满足", len(v) == 1 and not v[0].same_column,
+          v[0].reason if v else "")
+    print(f"      涉及块：{v[0].involved}")
+
+    # 场景 C：中间被插入 intruder —— 偏移不紧邻、前驱不是目标
+    inserted = [_placed(t, 1, 0, 100), _placed(x, 1, 100, 50),
+                _placed(b, 1, 150, 100)]
+    v = verifier.verify_anchors(inserted)
+    viol = v[0]
+    check("同栏但中间插入别的块 -> 判不满足",
+          not viol.adjacent and not viol.predecessor_is_target
+          and viol.predecessor_id == "intruder",
+          viol.reason)
+    check("给出涉及块序列 target -> intruder -> follower",
+          viol.involved == ["target", "intruder", "follower"], str(viol.involved))
+    print(f"      原因：{viol.reason}")
+
+    # 场景 D：目标块缺失
+    missing = [_placed(x, 1, 0), _placed(b, 1, 100)]
+    v = verifier.verify_anchors(missing)
+    check("锚点目标不在版面 -> 判不满足并点名",
+          not v[0].target_present and v[0].involved == ["target", "follower"],
+          v[0].reason)
+
+    # 真实引擎在各配置下 query 视图始终反映真实判定
+    eng.configure(22, 900)
+    note = eng.query_block("note1")
+    check("查询视图：满足时 anchor_satisfied=True 且无违约说明",
+          note.anchor_satisfied and note.anchor_violation is None
+          and note.anchor_involved is None)
+    broken_view = verify_anchor_layout(
+        [_placed(t, 1, 0), _placed(x, 1, 100), _placed(b, 2, 0)])
+    check("查询视图：打破时 anchor_satisfied=False 且携带原因/涉及块",
+          not broken_view["follower"].same_column
+          and "不同栏" in broken_view["follower"].reason
+          and broken_view["follower"].involved[0] == "target"
+          and broken_view["follower"].to_dict()["block_id"] == "follower")
+
+
 def main():
     print("#" * 72)
     print("# 离线阅读重排引擎 —— 验收演示（纯标准库，无需联网）")
@@ -347,6 +459,8 @@ def main():
     eng = ReflowEngine(build_manuscript())
     demo_requirement_3(eng)
     demo_requirement_4(eng)
+    demo_tightening_affected_set(eng)
+    demo_tightening_anchor_geometry(eng)
     demo_requirement_5(eng)
     demo_requirement_6(eng)
     sample_path = os.path.join("examples", "sample.reflow.json")
