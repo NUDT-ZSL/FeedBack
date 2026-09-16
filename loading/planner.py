@@ -126,21 +126,52 @@ class VehicleState:
                 supporters.append(b)
         if not _footprint_covered(box.x, box.y, box.dx, box.dy, supporters):
             return False, _SPACE, None
-        # 层号与堆叠限制：货物上方"累计"层数不得超过其 stack_limit。
-        # 检查新盒投影柱内所有位于其下方的货物（直接/间接支撑都算），
-        # 第 L 层货物压在第 Lb 层货物上方时要求 L - Lb <= 其 stack_limit。
+        # 堆叠限制：
+        #  (a) 下方累计——投影柱内任何位于候选盒下方（直接或非直接相邻，
+        #      xy 投影相交即计入，不要求顶底齐平）的货物 b，要求
+        #      L - Lb <= b.stack_limit；易碎货物 b 的 limit 恒为 0。
+        #  (b) 上方累计——候选盒可能被塞进已有悬挑/桥接板的下方
+        #      （增量重排时高处货物先保留、低处货物后决策即可出现）。
+        #      沿“顶面=底面且投影相交”的直接支撑边，求候选盒向上能到达
+        #      的最长层数，要求 <= 候选货物自身 stack_limit（易碎品为 0，
+        #      即其投影柱内一旦还压有任何货物即拒绝）。
         level = 1 + max((lvl for _b, _c, lvl in item_supporters), default=0)
+
+        def xy_intersects(a, b):
+            return (
+                a.x + a.dx > b.x + _EPS
+                and a.x < b.x + b.dx - _EPS
+                and a.y + a.dy > b.y + _EPS
+                and a.y < b.y + b.dy - _EPS
+            )
+
+        #  (a) 向下：投影柱累计；info=(超限层, 超限货物id, "below")
         for b, cid, lvl in self.items:
             if not _le(b.z + b.dz, box.z):
                 continue
-            xy_overlap = (
-                b.x + b.dx > box.x + _EPS
-                and b.x < box.x + box.dx - _EPS
-                and b.y + b.dy > box.y + _EPS
-                and b.y < box.y + box.dy - _EPS
-            )
-            if xy_overlap and level - lvl > self.stack_limits.get(cid, 0) + _EPS:
-                return False, _STACK, (level, cid)
+            if xy_intersects(b, box) and \
+                    level - lvl > self.stack_limits.get(cid, 0) + _EPS:
+                return False, _STACK, (level, cid, "below")
+
+        # (b) 向上：候选盒 -> 已有货物的直接支撑图最长路径（按 z 自下而上）
+        # info=(超限层, 超限货物id, "above")
+        nodes = self.items
+        above = [None] * len(nodes)
+        for j, (jb, _jc, _jl) in enumerate(nodes):
+            if _eq(box.z + box.dz, jb.z) and xy_intersects(box, jb):
+                above[j] = 1
+        for j in sorted(range(len(nodes)), key=lambda k: nodes[k][0].z):
+            if above[j] is None:
+                continue
+            jb = nodes[j][0]
+            for k, (kb, _kc, kl) in enumerate(nodes):
+                if k == j:
+                    continue
+                if _eq(jb.z + jb.dz, kb.z) and xy_intersects(jb, kb):
+                    above[k] = max(above[k] or 0, above[j] + 1)
+        for j, (_b, _cid, lvl) in enumerate(nodes):
+            if above[j] is not None and above[j] > cargo.stack_limit + _EPS:
+                return False, _STACK, (lvl, cargo.id, "above")
         return True, None, level
 
     # -- 枚举最佳位置 ------------------------------------------------------
@@ -240,15 +271,24 @@ def try_vehicles(cargo, vehicles, states):
 
 
 def _raise_if_unplaceable(cargo, failures):
-    # 优先报告堆叠违规（需求 4：指出超限层）
+    # 优先报告堆叠违规（需求 4：指出超限层与超限货物）
     for vid, reason, info in failures:
         if reason == _STACK:
-            level, under_id = info
-            raise StackRuleError(
-                f"货物 {cargo.id} 无法装载：放入车厢 {vid} 时将压在货物 "
-                f"{under_id} 上方达到第 {level} 层，超过其可堆叠层数",
-                level=level,
-            )
+            level, other_id, direction = info
+            if direction == "below":
+                message = (
+                    f"货物 {cargo.id} 无法装载：放入车厢 {vid} 时将压在货物 "
+                    f"{other_id} 上方达到第 {level} 层，超过货物 {other_id} "
+                    f"的可堆叠层数"
+                )
+            else:
+                message = (
+                    f"货物 {cargo.id} 无法装载：放入车厢 {vid} 后，其上方第 "
+                    f"{level} 层已有货物 {other_id}，超过货物 {cargo.id} "
+                    f"自身的可堆叠层数"
+                    + ("（易碎货物上方不得压货）" if cargo.fragile else "")
+                )
+            raise StackRuleError(message, level=level)
     if all(reason == _WEIGHT for _vid, reason, _info in failures):
         raise PlacementError(
             f"货物 {cargo.id} 无法装载：各车厢剩余载重均不足"

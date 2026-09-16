@@ -5,8 +5,9 @@
 
 - 纯 Python 标准库，无第三方依赖，完全离线
 - Python 3.9+（在 3.10 上验证）
-- 单元测试：`python -m unittest discover -s tests`（76 个用例）
+- 单元测试：`python -m unittest discover -s tests`（86 个用例）
 - 离线演示：`python demo.py`
+- 缺陷修复验收：`python verify_acceptance.py`（超限定位 + 双顺序逐车厢一致）
 
 ## 目录结构
 

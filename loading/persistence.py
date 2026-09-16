@@ -245,8 +245,12 @@ def _build_and_verify_plan(plan_raw, cargos, vehicles):
             if reason == "weight":
                 detail = "超过车厢最大载重"
             elif reason == "stack":
-                level, under = info
-                detail = f"在第 {level} 层超过货物 {under} 的可堆叠层数"
+                level, other, direction = info
+                if direction == "below":
+                    detail = f"在第 {level} 层超过货物 {other} 的可堆叠层数"
+                else:
+                    detail = (f"其上方第 {level} 层已有货物 {other}，"
+                              f"超过该货物自身的可堆叠层数")
             else:
                 detail = "与车厢边界、不可用区域或其他货物冲突（空间/支撑不合法）"
             raise PersistenceError(
