@@ -12,3 +12,5 @@ node_modules/
 __pycache__/
 dist/
 build/
+out/
+*.snapshot.json
