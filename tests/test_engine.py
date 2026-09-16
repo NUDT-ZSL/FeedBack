@@ -42,6 +42,14 @@ def make_engine(font=18, vp=1100):
     return eng
 
 
+class TestPublicApi(unittest.TestCase):
+    def test_star_import_exposes_tightening_api(self):
+        import reflow
+        self.assertIn("verify_anchor_layout", reflow.__all__)
+        self.assertIn("AnchorViolation", reflow.__all__)
+        self.assertTrue(callable(reflow.verify_anchor_layout))
+
+
 # --------------------------------------------------------------------------- #
 # 需求 1：稿件 / 块唯一标识、类型、顺序校验
 # --------------------------------------------------------------------------- #

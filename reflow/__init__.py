@@ -25,6 +25,7 @@ from .errors import (
 
 __all__ = [
     "BLOCK_TYPES",
+    "AnchorViolation",
     "Block",
     "BlockView",
     "Geometry",
@@ -35,6 +36,7 @@ __all__ = [
     "column_count",
     "column_width",
     "measure",
+    "verify_anchor_layout",
     "AnchorError",
     "FlowError",
     "LayoutError",
