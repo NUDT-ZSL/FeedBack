@@ -82,6 +82,28 @@ class TestProjectValidation(unittest.TestCase):
                 "min_start": "10.00",
             })
         self.assertEqual(cm.exception.field, "phases")
+        self.assertTrue(cm.exception.location.startswith("projects"))
+
+    def test_from_dict_missing_phases_and_minstart_locates_phases(self):
+        """同时缺 phases 和 min_start 时，错误必须定位到 phases 而非 min_start。"""
+        with self.assertRaises(ValidationError) as cm:
+            Project.from_dict({
+                "id": "X", "priority": 1, "total_need": "100.00",
+            }, index=2)
+        self.assertEqual(cm.exception.field, "phases")
+        self.assertIn("projects[2]", cm.exception.location)
+
+    def test_from_dict_non_integer_priority_rejected(self):
+        base = {
+            "id": "X", "total_need": "100.00", "min_start": "10.00",
+            "phases": ["100.00"],
+        }
+        for bad in (1.5, "1", None, True):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValidationError) as cm:
+                    Project.from_dict({**base, "priority": bad})
+                self.assertIn(".priority", cm.exception.location)
+                self.assertIn("整数", cm.exception.message)
 
     def test_negative_benefit(self):
         with self.assertRaises(ValidationError):

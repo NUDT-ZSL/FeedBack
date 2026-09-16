@@ -76,7 +76,7 @@ class Project:
             raise ValidationError("项目标识必须是非空字符串", "projects[<?>].id")
         if isinstance(self.priority, bool) or not isinstance(self.priority, int):
             raise ValidationError(
-                f"优先级必须是整数，得到 {type(self.priority).__name__}",
+                f"优先级必须是整数，得到 {type(self.priority).__name__}: {self.priority!r}",
                 f"{loc}.priority",
             )
         total = self.total_need
@@ -129,7 +129,7 @@ class Project:
         ben = money(benefit, f"projects[{project_id!r}].benefit") if benefit is not None else total
         if isinstance(priority, bool) or not isinstance(priority, int):
             raise ValidationError(
-                f"优先级必须是整数，得到 {type(priority).__name__}",
+                f"优先级必须是整数，得到 {type(priority).__name__}: {priority!r}",
                 f"projects[{project_id!r}].priority",
             )
         return cls(
@@ -161,7 +161,9 @@ class Project:
         loc = f"projects{tag}"
         if not isinstance(raw, Mapping):
             raise ValidationError(f"项目必须是对象，得到 {type(raw).__name__}", loc)
-        required = ("id", "priority", "total_need", "min_start", "phases")
+        # 结构性字段（标识、阶段计划）先于数值字段检查：
+        # 缺少阶段投入时错误必须定位到 phases，而不是后面的 min_start。
+        required = ("id", "phases", "priority", "total_need", "min_start")
         for key in required:
             if key not in raw:
                 raise ValidationError(f"缺少必填字段 {key!r}", loc, key)

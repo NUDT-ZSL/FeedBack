@@ -179,6 +179,15 @@ class TestLoadValidation(unittest.TestCase):
         with self.assertRaises(PersistenceError):
             persistence.load_new(self.path)
 
+    def test_non_integer_priority_rejected(self):
+        data = self._base()
+        data["projects"][0]["priority"] = "1"  # 字符串而非整数
+        self._write(data)
+        with self.assertRaises(PersistenceError) as cm:
+            persistence.load_new(self.path)
+        self.assertIn("priority", str(cm.exception))
+        self.assertIn("整数", str(cm.exception))
+
 
 class TestStateUnchangedOnFailure(unittest.TestCase):
     def setUp(self):

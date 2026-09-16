@@ -144,6 +144,49 @@ class TestIncrementalReduction(unittest.TestCase):
         self.assertEqual(new_plan.amount_for("C"), D("30.00"))
         self.assertEqual(new_plan.total, D("60.00"))
 
+    def test_freed_budget_never_leaks_to_unfunded_outside_project(self):
+        """对抗场景：释放出的预算不得让区域外、原本 0 拨款的项目起死回生。
+
+        预算 160 的初始方案：D=60（链式拉起前置 A=60）、X=40；独立项目 Y
+        因预算不足未启动（0）。取消叶子 D 释放 60 后，朴素重算会把这 60
+        投给区域外的 Y——契约要求 Y 逐分保持 0。
+        """
+        reg = Registry()
+        # id, 优先级, 总需求, 最低启动额, 阶段
+        specs = [
+            ("D", 1, "100.00", "60.00", ["100.00"]),  # 高优先下游
+            ("Y", 2, "100.00", "60.00", ["100.00"]),  # 独立，初始 0
+            ("X", 3, "100.00", "40.00", ["100.00"]),  # 独立，初始 40
+            ("A", 5, "100.00", "60.00", ["100.00"]),  # D 的前置
+        ]
+        for s in specs:
+            reg.add_project(Project.create(*s))
+        reg.add_dependency("D", "A")
+        eng = Engine(reg)
+        plan0 = eng.solve("160.00")
+        self.assertEqual(
+            {k: str(v) for k, v in plan0.allocations.items()},
+            {"D": "60.00", "A": "60.00", "X": "40.00"},
+        )
+        self.assertEqual(plan0.amount_for("Y"), D("0.00"))
+
+        # 先证明测试有牙齿：若朴素地“只锁定正数项目、不锁定 0 项目”，
+        # 带同约束的全量求解确实会把释放的 60 泄漏给 Y。
+        naive_fixed = {"A": D("60.00"), "X": D("40.00"), "D": D("0.00")}
+        naive_full = Solver.solve(SolveRequest(
+            registry=reg, budget=D("160.00"), preallocated=naive_fixed,
+        ))
+        self.assertEqual(naive_full.amount_for("Y"), D("60.00"),
+                         "前置条件：朴素实现应复现预算泄漏，否则本测试失去意义")
+
+        # 引擎的削减重算：Y 在区域外且锁定为 0，分文不动
+        new_plan, affected = eng.reduce("D", "0", _check_equivalence=True)
+        self.assertEqual(affected, ["D"])
+        self.assertEqual(new_plan.amount_for("Y"), D("0.00"))
+        self.assertEqual(new_plan.amount_for("A"), D("60.00"))
+        self.assertEqual(new_plan.amount_for("X"), D("40.00"))
+        self.assertEqual(new_plan.total, D("100.00"))  # 释放的 60 留在预算中
+
     def test_reduce_without_plan_fails(self):
         reg = Registry()
         reg.add_project(Project.create("A", 1, "100.00", "10.00", ["100.00"]))
