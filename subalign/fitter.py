@@ -10,9 +10,11 @@
 数学要点：
 
 * 所有运算用 :class:`fractions.Fraction`，斜率/截距精确可复现；
-* 切口检测对每个相邻锚点分界取两侧局部窗口（各最多 3 点）各自 OLS，
-  用“基准轴错位量 / 窗口内残差”信噪比确认中段缺失，支持多个缺口；
-  不依赖全局拟合（任何跨越其他缺口的全局直线都会被污染）；
+* 切口检测是全局分段回归 DP：枚举分段数 k，前缀和 O(1) 求任意连续段
+  OLS 残差平方和，DP 求分 k 段的全局最小 SSE，取第一个每个分界都通过
+  “基准轴错位量 ≥ 阈值 + 错位/段内残差信噪比”方案。支持两处及以上
+  互不相邻且相距很近的缺失（局部窗口判据会被另一处缺失污染，全局 DP
+  不会）；
 * 切口两侧各自拟合，残差归零 → 缺失不会被当成“内容压缩”；
 * 同一点集无论按什么顺序喂入，输出完全一致（只依赖点集与索引排序）；
 * 单段两个点时退化为两点式（OLS 的精确解）。
@@ -23,7 +25,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 from .errors import AlignmentError
 from .model import Anchor, MissingInterval, Segment
@@ -119,72 +121,269 @@ def _round_fraction(value: Fraction) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# 切口检测（中段缺失）
+# 切口检测（中段缺失）——全局分段回归 DP
 # --------------------------------------------------------------------------- #
+MAX_SEGMENTS = 16  # 单轨最多识别的分段数（即至多 15 处互不相邻缺失）
+
+
+def _segment_sse(
+    p: dict, l: int, r: int
+) -> Optional[Fraction]:
+    """连续点段 [l, r) 的 OLS 残差平方和（前缀和 O(1)）；不可拟合返回 None。"""
+    m = r - l
+    if m < 2:
+        return None
+    sx = p["sx"][r] - p["sx"][l]
+    sy = p["sy"][r] - p["sy"][l]
+    sxx = p["sxx"][r] - p["sxx"][l]
+    syy = p["syy"][r] - p["syy"][l]
+    sxy = p["sxy"][r] - p["sxy"][l]
+    sxx_dev = sxx - sx * sx / m
+    if sxx_dev <= 0:
+        return None
+    sxy_dev = sxy - sx * sy / m
+    syy_dev = syy - sy * sy / m
+    sse = syy_dev - sxy_dev * sxy_dev / sxx_dev
+    return Fraction(0) if sse < 0 else sse
+
+
+def _segment_line(
+    p: dict, l: int, r: int
+) -> Optional[Tuple[Fraction, Fraction]]:
+    """连续点段 [l, r) 的 (slope, intercept)；不可拟合返回 None。"""
+    m = r - l
+    if m < 2:
+        return None
+    sx = p["sx"][r] - p["sx"][l]
+    sy = p["sy"][r] - p["sy"][l]
+    sxx = p["sxx"][r] - p["sxx"][l]
+    sxy = p["sxy"][r] - p["sxy"][l]
+    xbar = Fraction(sx, m)
+    ybar = Fraction(sy, m)
+    sxx_dev = sxx - sx * sx / m
+    if sxx_dev <= 0:
+        return None
+    slope = (sxy - sx * sy / m) / sxx_dev
+    return slope, ybar - slope * xbar
+
+
 def detect_cuts(
     anchors: Sequence[Anchor],
     residual_factor: float,
     min_gap_ms: int,
+    min_anchors: int = 2,
 ) -> List[int]:
-    """在锚点序列（已按 cand_mid 升序）中找出切口边界。
+    """在锚点序列（已按 cand_mid 升序）中找出全部互不相邻的切口边界。
 
     返回切口个数个分界索引 ``b``：切口位于 ``anchors[b-1]`` 与 ``anchors[b]``
     之间。
 
-    判据（**局部窗口**，不依赖全局拟合——存在多个缺口时，任何跨越其他
-    缺口的全局/半全局直线都会被污染，递归也无法在顶层找到干净分界）：
+    判据是**候选预筛 + 全局分段回归**：
 
-    对每个候选分界，取紧邻两侧各最多 ``WINDOW=3`` 个锚点，各自 OLS：
+    1. 预筛（O(n)，精确）：对每个候选分界 b，用紧邻两侧各 ``w`` 个
+       （``w = max(2, min_anchors)``）锚点各拟合一条直线，若两直线在
+       分界候选时刻的基准轴错位量 ≥ ``min_gap_ms`` 则 b 进入候选集。
+       真实切口两侧紧邻锚点必落在各自分段直线上，真切口因此一定被预筛
+       命中；而纯平移/纯速率漂移时任意位置两侧窗口共线、错位量为 0，
+       候选集为空立即返回。局部窗口在“两处缺失相距很近、中间锚点组
+       只有 w 个点”时也不漏：窗口只取到分段边界为止，不横跨其他缺口。
+    2. 精确分段 DP：只允许在候选位置切分，枚举分段数 k，用前缀和 O(1)
+       求任意连续段 OLS 残差平方和，DP 求分 k 段的全局最小 SSE 与分界，
+       取第一个通过逐分界校验（错位量 ≥ 阈值、错位/段内残差信噪比
+       ≥ ``residual_factor``）的方案。假候选即使局部错位大，在全局最优
+       分段里也无法让各段残差归零，clean 校验将其排除。因此支持任意
+       多处互不相邻的缺失，且不会把噪声/漂移误切。
 
-    * ``noise`` = 两窗口内点相对各自直线的最大绝对残差；
-    * ``gap`` = 两条局部直线在分界候选时刻于**基准轴**上的错位量；
+    结果只依赖锚点点集与确定的扫描/平手裁决，与锚点到达顺序无关。
 
-    真切口：窗口内的点各自共线（noise≈0），gap 等于缺失时长；
-    紧邻真切口的假分界：其某个窗口必然横跨真缺口 → noise≈缺失量，被拒；
-    纯速率漂移：任意位置的两条局部直线都与全局直线重合，gap≈0，不切。
-
-    确认条件：``gap ≥ min_gap_ms`` 且 ``gap/noise ≥ residual_factor``。
-    已确认切口两侧一个窗口宽度内不再接受其他切口。结果只依赖锚点点集
-    与确定性扫描顺序，与到达顺序无关。
+    前提：相邻两个切口之间至少要有 ``w = max(2, min_anchors)`` 个锚点
+    （这是“一段独立直线”可辨识的最低条件）。两段缺失中间只剩 0~1 个
+    锚点时，中间段速率在数学上不可辨识，此时结果不保证——这是数据
+    不足而非算法缺陷；正常的多段缺失（中段锚点数与两侧同量级）可
+    可靠识别。
     """
-    # 不依赖输入顺序：内部一律按 (cand_mid, ref_index) 排序。
     ordered = sorted(anchors, key=lambda a: (a.cand_mid, a.ref_index))
     n = len(ordered)
-    if n < 4:
-        return []  # 至少两侧各 2 点才有意义
+    w = max(2, min_anchors)
+    if n < 2 * w:
+        return []
 
-    window = min(3, n - 2)
-    candidates: List[Tuple[Fraction, int, Fraction, Fraction]] = []  # (snr, b, gap, noise)
-    for b in range(2, n - 1):  # 两侧至少各 2 点
-        li = range(max(0, b - window), b)
-        ri = range(b, min(n, b + window))
-        left_pts = [(ordered[k].cand_mid, ordered[k].ref_mid) for k in li]
-        right_pts = [(ordered[k].cand_mid, ordered[k].ref_mid) for k in ri]
-        try:
-            rl, il = ols_fit(left_pts)
-            rr, ir = ols_fit(right_pts)
-        except AlignmentError:
+    xs = [Fraction(a.cand_mid) for a in ordered]
+    ys = [Fraction(a.ref_mid) for a in ordered]
+    p = {"xs": xs, "ys": ys,
+         "sx": _prefix(xs), "sy": _prefix(ys),
+         "sxx": _prefix_sq(xs), "syy": _prefix_sq(ys),
+         "sxy": _prefix_cross(xs, ys)}
+
+    # 精确共线快捷路径：切任何分界的错位量都是 0。
+    if _segment_sse(p, 0, n) == 0:
+        return []
+
+    # ---- 第 1 步：候选边界预筛 ----
+    candidates: List[int] = []
+    for b in range(w, n - w + 1):
+        left = _segment_line(p, b - w, b)
+        right = _segment_line(p, b, b + w)
+        if left is None or right is None:
             continue
-        noise_l = max(abs(Fraction(y) - (rl * x + il)) for x, y in left_pts)
-        noise_r = max(abs(Fraction(y) - (rr * x + ir)) for x, y in right_pts)
-        noise = max(noise_l, noise_r, Fraction(1))
-        x_cut = Fraction(ordered[b - 1].cand_mid + ordered[b].cand_mid, 2)
-        gap = abs((rr * x_cut + ir) - (rl * x_cut + il))
+        x_cut = (xs[b - 1] + xs[b]) / 2
+        gap = abs((right[0] * x_cut + right[1]) - (left[0] * x_cut + left[1]))
+        if gap >= min_gap_ms:
+            candidates.append(b)
+    if not candidates:
+        return []
+
+    # ---- 第 2 步：只在候选位置上做精确分段 DP ----
+    positions = [0] + candidates + [n]
+    mpos = len(positions)
+    last_i = mpos - 1
+    # 段代价表：只有段内锚点数 ≥ w 才可用。
+    sse_tab: Dict[Tuple[int, int], Fraction] = {}
+    for ai in range(mpos):
+        for bi in range(ai + 1, mpos):
+            lo, hi = positions[ai], positions[bi]
+            if hi - lo >= w:
+                sse = _segment_sse(p, lo, hi)
+                if sse is not None:
+                    sse_tab[(ai, bi)] = sse
+
+    kmax = min(len(candidates) + 1, n // w, MAX_SEGMENTS)
+
+    # dp[k][end_i] = 把锚点 [0, positions[end_i]) 分成 k 段（每段 ≥ w 点、
+    # 内部分界只能落在候选位置）的最小 SSE 与分界列表。
+    dp_prev: List[Optional[Tuple[Fraction, List[int]]]] = [None] * mpos
+    for end_i in range(1, mpos):
+        if (0, end_i) in sse_tab:
+            dp_prev[end_i] = (sse_tab[(0, end_i)], [])
+    prev_sse: Optional[Fraction] = (
+        dp_prev[last_i][0] if dp_prev[last_i] is not None else None
+    )
+
+    last_solution: Optional[List[int]] = None
+    for k in range(2, kmax + 1):
+        cur: List[Optional[Tuple[Fraction, List[int]]]] = [None] * mpos
+        for end_i in range(k - 1, mpos):
+            best: Optional[Tuple[Fraction, List[int]]] = None
+            # mid_i 必须是候选内部分界（下标 1..last_i-1）。
+            for mid_i in range(1, end_i):
+                prev = dp_prev[mid_i]
+                if prev is None or (mid_i, end_i) not in sse_tab:
+                    continue
+                total = prev[0] + sse_tab[(mid_i, end_i)]
+                bounds = prev[1] + [positions[mid_i]]
+                if best is None or total < best[0] or (
+                    total == best[0] and bounds < best[1]
+                ):
+                    best = (total, bounds)
+            cur[end_i] = best
+        final = cur[last_i]
+        if final is not None:
+            last_solution = final[1]
+            if _solution_clean(p, final[1], residual_factor, min_gap_ms):
+                return sorted(final[1])
+            # SSE 不再下降或已归零 → 更高 k 只会过拟合，提前结束。
+            if prev_sse is not None and (final[0] >= prev_sse or final[0] == 0):
+                break
+            prev_sse = final[0]
+        dp_prev = cur
+
+    # 缺口数超过分段上限：尽力而为，只保留局部门槛达标的分界。
+    if last_solution is not None:
+        return _partial_clean_bounds(p, last_solution, residual_factor, min_gap_ms)
+    return []
+
+
+def _segment_noise(p: dict, lo: int, hi: int,
+                   line: Tuple[Fraction, Fraction]) -> Fraction:
+    slope, intercept = line
+    max_res = Fraction(0)
+    for i in range(lo, hi):
+        res = abs(p["ys"][i] - (slope * p["xs"][i] + intercept))
+        if res > max_res:
+            max_res = res
+    return max_res
+
+
+def _solution_clean(
+    p: dict,
+    bounds: Sequence[int],
+    residual_factor: float,
+    min_gap_ms: int,
+) -> bool:
+    """分段方案中每个分界是否都满足错位量与局部信噪比要求（全部满足才 True）。"""
+    n = len(p["xs"])
+    edges = [0] + list(bounds) + [n]
+    lines = []
+    noises = []
+    for k in range(len(edges) - 1):
+        line = _segment_line(p, edges[k], edges[k + 1])
+        if line is None:
+            return False
+        lines.append(line)
+        noises.append(_segment_noise(p, edges[k], edges[k + 1], line))
+    factor = Fraction(residual_factor)
+    for k, b in enumerate(bounds):
+        sl_l, sh_l = lines[k]
+        sl_r, sh_r = lines[k + 1]
+        x_cut = (p["xs"][b - 1] + p["xs"][b]) / 2
+        gap = abs((sl_r * x_cut + sh_r) - (sl_l * x_cut + sh_l))
         if gap < min_gap_ms:
-            continue
-        snr = gap / noise
-        if snr >= residual_factor:
-            candidates.append((snr, b, gap, noise))
+            return False
+        noise = max(noises[k], noises[k + 1], Fraction(1))
+        if gap < factor * noise:
+            return False
+    return True
 
-    # SNR 高者优先；确认一个切口后，其两侧一个窗口宽度内的候选全部抑制
-    # （它们的窗口横跨该切口，本就不可信）。
-    candidates.sort(key=lambda c: (-c[0], c[1]))
-    cuts: List[int] = []
-    for _, b, _gap, _noise in candidates:
-        if all(abs(b - c) >= window for c in cuts):
-            cuts.append(b)
-    cuts.sort()
-    return cuts
+
+def _partial_clean_bounds(
+    p: dict,
+    bounds: Sequence[int],
+    residual_factor: float,
+    min_gap_ms: int,
+) -> List[int]:
+    """上限回退：方案中哪些分界局部门槛达标，就保留哪些。"""
+    n = len(p["xs"])
+    edges = [0] + list(bounds) + [n]
+    lines = []
+    noises = []
+    for k in range(len(edges) - 1):
+        line = _segment_line(p, edges[k], edges[k + 1])
+        if line is None:
+            return []
+        lines.append(line)
+        noises.append(_segment_noise(p, edges[k], edges[k + 1], line))
+    factor = Fraction(residual_factor)
+    kept: List[int] = []
+    for k, b in enumerate(bounds):
+        sl_l, sh_l = lines[k]
+        sl_r, sh_r = lines[k + 1]
+        x_cut = (p["xs"][b - 1] + p["xs"][b]) / 2
+        gap = abs((sl_r * x_cut + sh_r) - (sl_l * x_cut + sh_l))
+        noise = max(noises[k], noises[k + 1], Fraction(1))
+        if gap >= min_gap_ms and gap >= factor * noise:
+            kept.append(b)
+    return sorted(kept)
+
+
+def _prefix(seq: Sequence[Fraction]) -> List[Fraction]:
+    acc = [Fraction(0)]
+    for v in seq:
+        acc.append(acc[-1] + v)
+    return acc
+
+
+def _prefix_sq(seq: Sequence[Fraction]) -> List[Fraction]:
+    acc = [Fraction(0)]
+    for v in seq:
+        acc.append(acc[-1] + v * v)
+    return acc
+
+
+def _prefix_cross(xs: Sequence[Fraction], ys: Sequence[Fraction]) -> List[Fraction]:
+    acc = [Fraction(0)]
+    for x, y in zip(xs, ys):
+        acc.append(acc[-1] + x * y)
+    return acc
 
 
 # --------------------------------------------------------------------------- #

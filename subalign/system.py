@@ -131,6 +131,7 @@ class SubtitleSystem:
             anchors,
             residual_factor=self._config.cut_residual_factor,
             min_gap_ms=self._config.min_cut_gap_ms,
+            min_anchors=self._config.min_anchors,
         )
         segments, missing = fitter.build_segments(
             anchors, cuts, self._config.min_anchors, self._reference.entries
