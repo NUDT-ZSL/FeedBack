@@ -1,0 +1,171 @@
+{
+  "config": {
+    "font_size": 23,
+    "gutter": 16,
+    "viewport_width": 900
+  },
+  "format": "reflow-doc/v1",
+  "layout": {
+    "blocks": [
+      {
+        "block_id": "h1",
+        "column": 1,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 30,
+        "offset": 0,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "p1",
+        "column": 1,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 380,
+        "offset": 30,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "img1",
+        "column": 1,
+        "degrade_reason": "scaled_to_fit",
+        "degraded": false,
+        "height": 221,
+        "offset": 410,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "note1",
+        "column": 1,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 62,
+        "offset": 631,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "p2",
+        "column": 2,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 862,
+        "offset": 0,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "p3",
+        "column": 3,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 586,
+        "offset": 0,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "img2",
+        "column": 3,
+        "degrade_reason": "below_legible_scale",
+        "degraded": true,
+        "height": 104,
+        "offset": 586,
+        "rendered_width": 442,
+        "span": 1
+      },
+      {
+        "block_id": "p4",
+        "column": 3,
+        "degrade_reason": null,
+        "degraded": false,
+        "height": 276,
+        "offset": 690,
+        "rendered_width": 442,
+        "span": 1
+      }
+    ],
+    "column_count": 2,
+    "version": 28
+  },
+  "manuscript": {
+    "blocks": [
+      {
+        "content": "包容性阅读：分栏重排引擎",
+        "id": "h1",
+        "min_readable_width": 220,
+        "order": 0,
+        "text_length": 12,
+        "type": "title"
+      },
+      {
+        "content": "正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，正文应当在字号放大与视窗变化时保持连续的阅读顺序，",
+        "id": "p1",
+        "min_readable_width": 220,
+        "order": 1,
+        "text_length": 200,
+        "type": "text"
+      },
+      {
+        "content": "图1 城市天际线（摄影：作者）",
+        "id": "img1",
+        "image_height": 300,
+        "image_width": 600,
+        "min_readable_width": 260,
+        "order": 2,
+        "type": "image"
+      },
+      {
+        "anchor": "img1",
+        "content": "注释：图片须紧跟图1，展示拍摄参数与来源",
+        "id": "note1",
+        "min_readable_width": 180,
+        "order": 3,
+        "text_length": 20,
+        "type": "note"
+      },
+      {
+        "content": "第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。第二段文字内容。",
+        "id": "p2",
+        "min_readable_width": 220,
+        "order": 4,
+        "text_length": 480,
+        "type": "text"
+      },
+      {
+        "content": "第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。第三段文字内容。",
+        "id": "p3",
+        "min_readable_width": 220,
+        "order": 5,
+        "text_length": 320,
+        "type": "text"
+      },
+      {
+        "content": "图2 超宽信息图（原始 3000×900）",
+        "id": "img2",
+        "image_height": 900,
+        "image_width": 3000,
+        "min_readable_width": 300,
+        "order": 6,
+        "type": "image"
+      },
+      {
+        "content": "收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。收尾段落。",
+        "id": "p4",
+        "min_readable_width": 220,
+        "order": 7,
+        "text_length": 150,
+        "type": "text"
+      }
+    ],
+    "id": "ms-2026-001",
+    "title": "包容性阅读演示稿"
+  },
+  "reading_position": {
+    "block_id": "img1",
+    "intra_offset": 40
+  }
+}
