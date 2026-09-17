@@ -1,0 +1,14 @@
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*secret*
+.git/
+.claude/
+.venv/
+venv/
+node_modules/
+__pycache__/
+dist/
+build/
