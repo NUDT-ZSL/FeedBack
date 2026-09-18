@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>专注会话恢复工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>专注会话恢复工作台</h1>
+      <p class="subtitle" id="session-meta"></p>
+    </div>
+    <div class="header-actions">
+      <button id="btn-reset" class="btn btn-ghost" type="button">恢复示例数据</button>
+    </div>
+  </header>
+
+  <section id="resume-banner" class="resume-banner"></section>
+
+  <main class="layout">
+    <div class="col-left">
+      <section class="card">
+        <h2>会话设置</h2>
+        <div class="form-row">
+          <label>会话名称 <input id="inp-session-name" type="text" /></label>
+        </div>
+        <div class="form-row two">
+          <label>开始时刻 T+ <input id="inp-session-start" type="number" step="1" /> 分钟</label>
+          <label>当前时刻 T+ <input id="inp-session-now" type="number" step="1" /> 分钟</label>
+        </div>
+        <button id="btn-apply-session" class="btn" type="button">应用会话设置</button>
+      </section>
+
+      <section class="card">
+        <h2>工作阶段</h2>
+        <p class="hint">阶段按顺序号依次占用工作钟；预算时长必须为正，顺序号不得重复。</p>
+        <table class="edit-table" id="stage-edit-table">
+          <thead>
+            <tr><th>顺序</th><th>名称</th><th>预算(分钟)</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="row-actions">
+          <button id="btn-add-stage" class="btn btn-ghost" type="button">+ 添加阶段</button>
+          <button id="btn-apply-stages" class="btn" type="button">应用阶段设置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>补报打断</h2>
+        <p class="hint">同一打断标识可被多个来源上报；区间或消解结论矛盾时会保留双方并标记冲突。</p>
+        <div class="form-row two">
+          <label>打断标识 <input id="inp-rep-id" type="text" placeholder="如 intr-7" /></label>
+          <label>来源 <input id="inp-rep-source" type="text" placeholder="如 手动记录" /></label>
+        </div>
+        <div class="form-row two">
+          <label>起点 T+ <input id="inp-rep-start" type="number" step="1" /></label>
+          <label>止点 T+ <input id="inp-rep-end" type="number" step="1" /></label>
+        </div>
+        <div class="form-row">
+          <label>消解状态
+            <select id="inp-rep-status">
+              <option value="active">未消解（占用工作时间）</option>
+              <option value="resolved">已消解（不计入打断）</option>
+            </select>
+          </label>
+        </div>
+        <button id="btn-add-report" class="btn" type="button">提交补报</button>
+      </section>
+    </div>
+
+    <div class="col-right">
+      <section class="card">
+        <h2>阶段时间线</h2>
+        <div id="timeline" class="timeline"></div>
+        <div class="legend">
+          <span><i class="sw sw-counted"></i>已计入</span>
+          <span><i class="sw sw-remaining"></i>剩余额度</span>
+          <span><i class="sw sw-net"></i>净打断区间</span>
+          <span><i class="sw sw-conflict"></i>冲突报告区间</span>
+          <span><i class="sw sw-now"></i>当前时刻</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>各阶段计入与剩余 <span id="conservation-badge" class="badge"></span></h2>
+        <table class="data-table" id="stage-result-table">
+          <thead>
+            <tr><th>顺序</th><th>阶段</th><th>状态</th><th>预算</th><th>已计入</th><th>剩余</th><th>墙钟区间</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>净打断区间</h2>
+        <div id="net-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>打断报告与冲突</h2>
+        <div id="interruption-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>事件日志 <button id="btn-clear-log" class="btn btn-ghost btn-sm" type="button">清空</button></h2>
+        <ul id="event-log" class="event-log"></ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="src/engine.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
