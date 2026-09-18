@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>补贴申报自助引导（离线版）</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">📋</span>
+        <div>
+          <h1 id="app-title">补贴申报自助引导</h1>
+          <p class="brand-sub">离线运行 · 改答自动追踪影响范围 · 答案永不丢失</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="progress-text">已确认 0 项</span>
+            <span id="progress-percent">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+        </div>
+        <button class="btn btn-ghost" id="btn-reset" title="清空全部填写，重新开始">重置</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左：步骤序列 -->
+    <nav class="stepper" id="stepper" aria-label="申报步骤"></nav>
+
+    <!-- 中：当前步骤答题区 -->
+    <section class="workspace">
+      <div class="step-head">
+        <div class="step-head-main">
+          <span class="stage-chip" id="stage-chip"></span>
+          <h2 id="step-title"></h2>
+          <p class="step-desc" id="step-desc"></p>
+        </div>
+        <span class="step-state-badge" id="step-state-badge"></span>
+      </div>
+
+      <!-- 失活步骤（保留未激活）提示条 -->
+      <div class="notice notice-inactive" id="step-inactive-notice" hidden>
+        <strong>本步骤当前不适用。</strong>
+        上方问题的选择使本步骤成立条件不再满足；以下已填内容已<strong>原样保留</strong>，条件恢复后会自动回到流程，无需重填、也不会重复计入进度。
+      </div>
+
+      <!-- 前进被阻止提示条 -->
+      <div class="notice notice-block" id="block-notice" hidden>
+        <div class="notice-title">⛔ 暂时不能进入下一步</div>
+        <div id="block-detail"></div>
+      </div>
+
+      <div class="question-list" id="question-list"></div>
+
+      <div class="step-actions">
+        <button class="btn btn-ghost" id="btn-back">← 上一步</button>
+        <span class="step-actions-spacer"></span>
+        <button class="btn btn-link" id="btn-skip">跳过本步骤（可不填）</button>
+        <button class="btn btn-primary" id="btn-next">下一步 →</button>
+      </div>
+
+      <div class="finish-card" id="finish-card" hidden>
+        <h3>✅ 全部必答内容已确认</h3>
+        <p>可以提交申报。本演示为离线环境，点击下方按钮仅模拟提交，数据不会离开本机。</p>
+        <button class="btn btn-primary" id="btn-submit">模拟提交</button>
+      </div>
+    </section>
+
+    <!-- 右：改答影响 / 状态依据 -->
+    <aside class="impact-panel">
+      <div class="impact-head">
+        <h3>本次修改的影响</h3>
+        <p class="impact-sub">改答后立即重算，逐项给出判定依据</p>
+      </div>
+      <div id="impact-body"></div>
+
+      <div class="legend">
+        <h4>状态图例</h4>
+        <ul>
+          <li><span class="dot dot-confirmed"></span> 已确认：答案有效，计入进度</li>
+          <li><span class="dot dot-pending"></span> 待重新确认：上游答案变了，原值保留，请核对</li>
+          <li><span class="dot dot-inactive"></span> 未激活：条件暂不满足，答案保留</li>
+          <li><span class="dot dot-unreached"></span> 未到达：完成前面步骤后出现</li>
+        </ul>
+      </div>
+
+      <details class="validate-demo">
+        <summary>配置校验演示（重复 / 悬空 / 成环）</summary>
+        <p class="validate-demo-intro">引导配置在加载时强制校验。以下为三类必须拒绝的错误示例：</p>
+        <div class="validate-demo-btns">
+          <button class="btn btn-mini" data-bad="dup">① 标识重复</button>
+          <button class="btn btn-mini" data-bad="ghost">② 引用不存在</button>
+          <button class="btn btn-mini" data-bad="cycle">③ 依赖成环</button>
+        </div>
+        <div class="validate-result" id="validate-result" hidden></div>
+      </details>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
