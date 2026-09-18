@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>假设与证据验证工作台（离线版）</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --panel-2: #fafbfc; --ink: #1b2330; --ink-2: #55606e;
+    --line: #e2e6ec; --line-2: #d3d9e1;
+    --brand: #2357d6; --brand-soft: #e8effd;
+    --green: #1a7f4b; --green-bg: #e6f5ec; --green-2: #2f9e63;
+    --red: #c0392b; --red-bg: #fdecea; --red-2: #e26456;
+    --amber: #9a6b00; --amber-bg: #fdf3da;
+    --gray: #6b7480; --gray-bg: #eef1f4;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 16px rgba(20,30,50,.05);
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --panel-2: #20262f; --ink: #e7ebf0; --ink-2: #9aa5b2;
+      --line: #2c343f; --line-2: #39434f;
+      --brand: #6f9bff; --brand-soft: #1f2c47;
+      --green: #58d391; --green-bg: #16301f; --green-2: #3dbb78;
+      --red: #ff8a7a; --red-bg: #3a1d19; --red-2: #e57368;
+      --amber: #e3b84d; --amber-bg: #332a12;
+      --gray: #98a2af; --gray-bg: #262d37;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+
+  /* ---------- 顶栏 ---------- */
+  header.topbar { display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 30; }
+  header.topbar h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .5px; }
+  header.topbar .sub { color: var(--ink-2); font-size: 12px; }
+  header.topbar .spacer { flex: 1; }
+  .btn { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink);
+    border-radius: 7px; padding: 6px 12px; cursor: pointer; font-size: 13px; transition: .12s; }
+  .btn:hover { border-color: var(--brand); color: var(--brand); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover { opacity: .9; color: #fff; }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { border-color: var(--red); background: var(--red-bg); }
+  .btn.small { padding: 2px 8px; font-size: 12px; border-radius: 6px; }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---------- 布局 ---------- */
+  .layout { display: grid; grid-template-columns: 330px minmax(460px, 1fr) 396px; gap: 12px;
+    padding: 12px 18px 28px; align-items: start; }
+  @media (max-width: 1180px) { .layout { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  .card > .card-h { padding: 11px 14px 8px; display: flex; align-items: center; gap: 8px; }
+  .card > .card-h h2 { font-size: 13.5px; margin: 0; font-weight: 650; }
+  .card > .card-h .hint { color: var(--ink-2); font-size: 11.5px; }
+  .card > .card-b { padding: 4px 14px 14px; }
+
+  /* ---------- 假设列表 ---------- */
+  .h-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0;
+    cursor: pointer; background: var(--panel-2); transition: .12s; }
+  .h-item:hover { border-color: var(--brand); }
+  .h-item.active { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .h-item .row1 { display: flex; align-items: center; gap: 8px; }
+  .h-item .hid { font-family: var(--mono); font-weight: 700; font-size: 12.5px; color: var(--brand); }
+  .h-item .stmt { margin: 4px 0 6px; font-size: 13px; }
+  .h-item .meta { color: var(--ink-2); font-size: 11.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .rank-chip { font-family: var(--mono); font-size: 11px; background: var(--gray-bg); border-radius: 5px; padding: 0 6px; color: var(--ink-2); }
+
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+    padding: 1px 9px; font-size: 11.5px; font-weight: 650; white-space: nowrap; }
+  .badge.strong_support { background: var(--green-bg); color: var(--green); }
+  .badge.moderate_support { background: #dff3e8; color: var(--green); }
+  .badge.weak_support { background: var(--gray-bg); color: var(--gray); }
+  .badge.insufficient { background: var(--amber-bg); color: var(--amber); }
+  .badge.weak_refute { background: var(--gray-bg); color: var(--gray); }
+  .badge.moderate_refute { background: #fbe7e3; color: var(--red); }
+  .badge.strong_refute { background: var(--red-bg); color: var(--red); }
+  .badge.none { background: var(--gray-bg); color: var(--gray); }
+  .badge.status { background: var(--brand-soft); color: var(--brand); font-weight: 550; }
+  @media (prefers-color-scheme: dark) {
+    .badge.moderate_support { background: #173a28; }
+    .badge.moderate_refute { background: #452019; }
+  }
+
+  /* ---------- 表单 ---------- */
+  .field { margin: 8px 0; }
+  .field label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
+  .field label .req { color: var(--red); }
+  input[type=text], input[type=date], input[type=datetime-local], select, textarea {
+    width: 100%; border: 1px solid var(--line-2); border-radius: 7px; padding: 6px 9px;
+    background: var(--panel); outline: none;
+  }
+  textarea { resize: vertical; min-height: 54px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .form-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .form-note { font-size: 11.5px; color: var(--ink-2); margin-top: 4px; }
+  details.bulk { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; }
+  details.bulk summary { cursor: pointer; font-size: 12px; color: var(--brand); }
+
+  /* ---------- 结论面板 ---------- */
+  .verdict { display: flex; align-items: center; gap: 16px; padding: 12px 4px 6px; flex-wrap: wrap; }
+  .verdict .grade-big { font-size: 30px; font-weight: 750; line-height: 1.1; }
+  .grade-strong_support { color: var(--green); } .grade-moderate_support { color: var(--green-2); }
+  .grade-weak_support, .grade-weak_refute { color: var(--gray); }
+  .grade-insufficient { color: var(--amber); } .grade-none { color: var(--gray); }
+  .grade-moderate_refute { color: var(--red-2); } .grade-strong_refute { color: var(--red); }
+  .verdict .vmeta { color: var(--ink-2); font-size: 12.5px; }
+
+  .versus { margin: 10px 0 4px; }
+  .versus-bar { display: flex; height: 26px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--gray-bg); }
+  .versus-bar .seg-sup { background: var(--green-2); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 650; min-width: 0; }
+  .versus-bar .seg-ref { background: var(--red-2); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 650; min-width: 0; }
+  .versus-note { font-size: 12px; color: var(--ink-2); margin-top: 5px; }
+  .versus-note b { color: var(--ink); }
+
+  .ladder { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+  .ladder .rung { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; background: var(--panel-2); }
+  .ladder .rung.hit { border-color: var(--green-2); background: var(--green-bg); }
+  @media (prefers-color-scheme: dark) { .ladder .rung.hit { background: #16301f; } }
+  .ladder .rung .rt { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13px; }
+  .ladder .rung .rt .icon { font-size: 14px; }
+  .ladder .rung .why { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+  .checks { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+  .checks li { font-size: 12px; padding-left: 20px; position: relative; color: var(--ink-2); }
+  .checks li::before { position: absolute; left: 2px; }
+  .checks li.pass::before { content: "✓"; color: var(--green); font-weight: 700; }
+  .checks li.fail::before { content: "✗"; color: var(--red); font-weight: 700; }
+  .checks li b { color: var(--ink); font-weight: 600; }
+
+  .reasons { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .reasons li { font-size: 12.5px; padding: 4px 0 4px 22px; position: relative; border-top: 1px dashed var(--line); }
+  .reasons li:first-child { border-top: none; }
+  .reasons li::before { content: "▸"; position: absolute; left: 6px; color: var(--brand); }
+
+  h3.sec { font-size: 12.5px; text-transform: none; color: var(--ink-2); margin: 14px 0 6px; font-weight: 650; }
+
+  /* ---------- 独立证据组 ---------- */
+  .units { display: flex; flex-direction: column; gap: 6px; }
+  .unit { border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; background: var(--panel-2); }
+  .unit .uhead { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
+  .unit .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+  .chip { font-size: 11px; background: var(--gray-bg); border-radius: 5px; padding: 1px 7px; color: var(--ink-2); font-family: var(--mono); }
+  .chip.seg { background: var(--brand-soft); color: var(--brand); font-family: inherit; }
+  .stance-tag { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 1px 7px; }
+  .stance-tag.support { background: var(--green-bg); color: var(--green); }
+  .stance-tag.refute { background: var(--red-bg); color: var(--red); }
+  .stance-tag.conflicted { background: var(--amber-bg); color: var(--amber); }
+
+  /* ---------- 时间线 ---------- */
+  .timeline { display: flex; flex-direction: column; }
+  .ev { display: grid; grid-template-columns: 132px 1fr; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--line); }
+  .ev:first-child { border-top: none; }
+  .ev .when { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); padding-top: 1px; }
+  .ev .body .topline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+  .ev .src { font-weight: 650; }
+  .ev .excerpt { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+  .ev.flagged { background: var(--amber-bg); border-radius: 8px; border-top-color: transparent; margin: 4px 0; padding-left: 8px; }
+  .ev.withdrawn { opacity: .55; }
+  .flag-issues { margin: 4px 0 0; padding: 0; list-style: none; }
+  .flag-issues li { font-size: 11.5px; color: var(--amber); padding-left: 16px; position: relative; }
+  .flag-issues li::before { content: "⚠"; position: absolute; left: 0; }
+  .ev .evactions { margin-top: 4px; display: flex; gap: 6px; }
+  .filterbar { display: flex; gap: 8px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+
+  /* ---------- 关系/图 ---------- */
+  #graphWrap { position: relative; min-height: 220px; }
+  #graphSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .clusters { display: flex; gap: 12px; flex-wrap: wrap; position: relative; z-index: 2; padding: 10px 2px; }
+  .cluster { border: 1.5px dashed var(--line-2); border-radius: 12px; padding: 8px; min-width: 150px; max-width: 230px; background: var(--panel-2); }
+  .cluster .ctitle { font-size: 11px; color: var(--ink-2); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .cluster .srcchip { display: block; width: 100%; text-align: left; margin: 4px 0; padding: 5px 8px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--panel); font-size: 12px; cursor: default; }
+  .cluster .srcchip .sl { color: var(--ink-2); font-size: 10.5px; }
+  .cluster .same-note { font-size: 10.5px; color: var(--ink-2); margin-top: 4px; }
+  .cluster .equiv { border: 1px solid var(--brand); border-radius: 9px; padding: 5px 7px; margin: 3px 0; background: var(--panel); }
+  .cluster .equiv-tag { font-size: 10.5px; color: var(--brand); margin-bottom: 3px; }
+  .cluster .equiv .srcchip { border-color: var(--brand-soft); margin: 3px 0; }
+  .cluster .deriv-arrow { text-align: center; font-size: 11px; color: var(--red); font-weight: 650;
+    margin: 2px 0; font-family: var(--mono); }
+  .rel-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .rel-row { display: flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--mono);
+    border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; background: var(--panel-2); }
+  .rel-row .kind-tag { font-family: inherit; font-size: 10.5px; border-radius: 4px; padding: 0 6px; }
+  .kind-tag.same { background: var(--brand-soft); color: var(--brand); }
+  .kind-tag.derived { background: var(--amber-bg); color: var(--amber); }
+
+  /* ---------- 反馈条 ---------- */
+  #feedback { position: fixed; right: 18px; bottom: 18px; width: min(440px, calc(100vw - 36px)); z-index: 50;
+    display: flex; flex-direction: column; gap: 8px; }
+  .fb { border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow); font-size: 12.5px;
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--brand);
+    animation: slidein .18s ease; max-height: 240px; overflow: auto; }
+  .fb.error { border-left-color: var(--red); }
+  .fb.warn { border-left-color: var(--amber); }
+  .fb.ok { border-left-color: var(--green); }
+  .fb .fb-title { font-weight: 700; margin-bottom: 3px; }
+  .fb ul { margin: 2px 0; padding-left: 18px; }
+  .fb .parity { font-size: 11.5px; color: var(--ink-2); margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 4px; }
+  .fb .chg { font-family: var(--mono); font-size: 11.5px; }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .popline { font-size: 12px; color: var(--ink-2); }
+  .popline b { color: var(--ink); }
+  .seg-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+  .inline-edit { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 -14px 8px; padding: 0 14px; }
+  .tab { padding: 8px 12px; cursor: pointer; font-size: 13px; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 650; }
+  .empty { color: var(--ink-2); font-size: 12.5px; padding: 14px 4px; text-align: center; }
+  .count-pill { font-size: 11px; background: var(--gray-bg); border-radius: 999px; padding: 0 8px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>假设与证据验证工作台</h1>
+  <span class="sub">离线 · 证据去重 / 同源派生 / 分档结论 / 增量重算</span>
+  <span class="spacer"></span>
+  <button class="btn" id="btnDemo">重置为演示数据</button>
+  <button class="btn" id="btnExport">导出 JSON</button>
+  <button class="btn danger" id="btnClear">清空</button>
+</header>
+
+<div class="layout">
+
+  <!-- ============ 左：假设列表 ============ -->
+  <div class="col">
+    <div class="card">
+      <div class="card-h"><h2>待验证假设</h2><span class="hint">同分时按标识排序</span></div>
+      <div class="card-b">
+        <div id="hypList"></div>
+        <button class="btn small" id="btnAddHyp" style="width:100%;margin-top:4px;">＋ 新增假设</button>
+        <div id="hypForm" style="display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;">
+          <div class="field"><label>唯一标识 <span class="req">*</span></label><input type="text" id="fHId" placeholder="如 H4"></div>
+          <div class="field"><label>判断陈述（一句话、可判真假）<span class="req">*</span></label><textarea id="fHStmt" placeholder="如：目标用户愿意为 X 多付 10%"></textarea></div>
+          <div class="field"><label>目标人群 <span class="req">*</span></label><input type="text" id="fHPop" placeholder="如：一线城市家庭买菜决策者"></div>
+          <div class="field"><label>人群细分（逗号分隔，用于覆盖度核验）</label><input type="text" id="fHSeg" placeholder="如：年轻妈妈, 银发买菜者"></div>
+          <div class="form-actions">
+            <button class="btn primary small" id="fHSave">登记假设</button>
+            <button class="btn small ghost" id="fHCancel">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 中：结论 / 时间线 / 依赖图 ============ -->
+  <div class="col">
+    <div class="card">
+      <div class="card-h">
+        <h2>结论强度与判定依据</h2>
+        <span class="hint" id="detailHint"></span>
+      </div>
+      <div class="card-b" id="detail"></div>
+    </div>
+
+    <div class="card">
+      <div class="tabs" id="viewTabs">
+        <div class="tab active" data-tab="timeline">证据时间线</div>
+        <div class="tab" data-tab="graph">来源依赖关系</div>
+      </div>
+      <div class="card-b">
+        <div id="tabTimeline">
+          <div class="filterbar">
+            <label class="popline">范围</label>
+            <select id="timelineScope" style="width:auto;min-width:160px;">
+              <option value="__all__">全部假设</option>
+            </select>
+            <label class="popline"><input type="checkbox" id="tlShowInactive"> 显示已撤回/被标记材料</label>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+        <div id="tabGraph" style="display:none;">
+          <p class="popline" style="margin:2px 0 8px;">
+            每个虚线框 = 一个<b>独立来源组</b>（同源合并 + 派生连通，组内所有来源只算一条证据）；
+            组内红色 <b>A → B</b> 表示 B 的材料派生自 A；蓝色「＝」表示同源等价。
+          </p>
+          <div id="graphWrap"><div class="clusters" id="clusters"></div></div>
+          <h3 class="sec">已声明的来源关系</h3>
+          <div class="rel-list" id="relList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 右：登记 / 关系 / 撤回 ============ -->
+  <div class="col">
+    <div class="card">
+      <div class="card-h"><h2 id="evFormTitle">登记观察材料</h2><span class="hint" id="evFormHint"></span></div>
+      <div class="card-b">
+        <input type="hidden" id="fEditId">
+        <div class="grid2">
+          <div class="field"><label>指向假设 <span class="req">*</span></label><select id="fEHyp"></select></div>
+          <div class="field"><label>来源标识 <span class="req">*</span></label><input type="text" id="fESource" placeholder="如 U005 / N003"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>来源名称（可读）</label><input type="text" id="fESourceLabel" placeholder="如：王女士访谈"></div>
+          <div class="field"><label>人群标签</label><input type="text" id="fESeg" placeholder="须匹配假设细分"></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>采集时刻 <span class="req">*</span></label><input type="datetime-local" id="fETime"></div>
+          <div class="field"><label>立场 <span class="req">*</span></label>
+            <select id="fEStance"><option value="">— 必选，不默认 —</option><option value="support">支持</option><option value="refute">反驳</option></select>
+          </div>
+          <div class="field"><label>证据质量</label><select id="fEQuality"><option value="high">高（权重3）</option><option value="medium" selected>中（权重2）</option><option value="low">低（权重1）</option></select></div>
+        </div>
+        <div class="field"><label>摘录 / 要点</label><textarea id="fEExcerpt" placeholder="原话或观察要点"></textarea></div>
+        <div class="form-actions">
+          <button class="btn primary small" id="fESave">登记材料</button>
+          <button class="btn small ghost" id="fECancelEdit" style="display:none;">退出更正模式</button>
+        </div>
+        <div class="form-note">来源、采集时刻、立场任一缺失：<b>不会默认通过</b>，材料会被标记并说明原因，且不计入证据。</div>
+
+        <details class="bulk" id="bulkBox">
+          <summary>批量粘贴（每行一条：来源 | 时刻 | 立场 | 人群标签 | 质量 | 摘录，也可用 Tab 分隔）</summary>
+          <textarea id="bulkText" style="margin-top:6px;min-height:110px;font-family:var(--mono);font-size:12px;"
+            placeholder="U006|2026-09-12 10:30|支持|年轻妈妈|高|原话摘录…&#10;U007&#9;2026-09-13&#9;反驳"></textarea>
+          <div class="form-actions"><button class="btn small primary" id="btnBulk">批量登记到当前假设</button></div>
+        </details>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>声明来源关系</h2><span class="hint">同源 = 等价；派生有向、禁止成环</span></div>
+      <div class="card-b">
+        <div class="grid2">
+          <div class="field"><label>来源 A</label><input type="text" id="fRA" placeholder="如 N001"></div>
+          <div class="field"><label>来源 B</label><input type="text" id="fRB" placeholder="如 U003"></div>
+        </div>
+        <div class="field" style="display:flex;gap:14px;align-items:center;">
+          <label><input type="radio" name="relKind" value="same"> A 与 B 同源（A = B）</label>
+          <label><input type="radio" name="relKind" value="derived" checked> B 派生自 A（A → B）</label>
+        </div>
+        <div class="form-actions"><button class="btn small primary" id="fRelSave">声明关系</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="feedback"></div>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uniq = (arr) => Array.from(new Set(arr));
+  const LS_KEY = 'ev-workbench-state-v1';
+
+  /* ---------- 状态与持久化 ---------- */
+  let store;
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) store = EV.createStore(JSON.parse(raw));
+  } catch (e) { /* 损坏则回退演示数据 */ }
+  if (!store) store = EV.createStore(EV.demoState());
+
+  let selectedId = store.state.hypotheses[0] ? store.state.hypotheses[0].id : null;
+  let currentTab = new URLSearchParams(location.search).get('tab') === 'graph' ? 'graph' : 'timeline';
+  let timelineScope = '__all__';
+
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(store.state)); } catch (e) {}
+  }
+  function seed() {
+    store = EV.createStore(EV.demoState());
+    selectedId = store.state.hypotheses[0].id;
+    timelineScope = '__all__';
+    persist(); renderAll();
+  }
+
+  /* ---------- 反馈条 ---------- */
+  function feedback(out, summary) {
+    const wrap = $('feedback');
+    const div = document.createElement('div');
+    const hasErr = out.errors && out.errors.length;
+    const hasWarn = out.notices && out.notices.some((n) => n.indexOf('标记') >= 0 || n.indexOf('作废') >= 0);
+    div.className = 'fb ' + (hasErr ? 'error' : hasWarn ? 'warn' : 'ok');
+    let html = '<div class="fb-title">' + esc(summary || (hasErr ? '操作被拒绝' : '操作完成')) + '</div>';
+    if (hasErr) html += '<ul>' + out.errors.map((e) => '<li>' + esc(e.message) + '</li>').join('') + '</ul>';
+    const notices = (out.notices || []).filter((n) => !hasErr || true);
+    if (notices.length) html += '<ul>' + notices.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>';
+    if (out.recomputed && out.recomputed.length) {
+      const untouched = store.state.hypotheses.map((h) => h.id).filter((id) => out.recomputed.indexOf(id) < 0);
+      html += '<div class="parity">本次仅重算：<b class="chg">' + out.recomputed.map(esc).join(', ') + '</b>'
+        + (out.parityOk ? ' ✓ 与从头全量重算结果完全一致' : ' ✗ 与全量重算不一致（引擎缺陷）')
+        + (untouched.length ? '<br>未受影响（结论对象未变）：<span class="chg">' + untouched.map(esc).join(', ') + '</span>' : '') + '</div>';
+      if (out.changes && out.changes.length) {
+        html += '<div class="parity chg">' + out.changes.map((c) => esc(c.id) + '：' + (c.before ? esc(c.before) + ' → ' : '') + esc(c.after)).join('；') + '</div>';
+      }
+    }
+    div.innerHTML = html;
+    wrap.appendChild(div);
+    setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; setTimeout(() => div.remove(), 450); }, 9000);
+    div.addEventListener('click', () => div.remove());
+  }
+
+  function run(type, payload, summary) {
+    const out = EV.act(store, type, payload);
+    if (out.ok || (out.notices && out.notices.length)) persist();
+    feedback(out, summary);
+    renderAll();
+    return out;
+  }
+
+  /* ---------- 渲染：假设列表 ---------- */
+  function renderHypotheses() {
+    const box = $('hypList');
+    const ranked = store.state.hypotheses
+      .map((h) => ({ h, r: store.results.get(h.id) }))
+      .sort((a, b) => (b.r.score - a.r.score) || (a.h.id < b.h.id ? -1 : 1));
+    if (!ranked.length) { box.innerHTML = '<div class="empty">还没有假设，请先新增。</div>'; return; }
+    box.innerHTML = ranked.map(({ h, r }) => `
+      <div class="h-item ${h.id === selectedId ? 'active' : ''}" data-id="${esc(h.id)}">
+        <div class="row1">
+          <span class="hid">${esc(h.id)}</span>
+          <span class="rank-chip">#${r.rank}</span>
+          <span class="badge ${r.grade}">${esc(r.gradeLabel)}</span>
+          <span class="badge status">${esc(h.status)}</span>
+        </div>
+        <div class="stmt">${esc(h.statement)}</div>
+        <div class="meta"><span>人群：${esc(h.population)}</span></div>
+      </div>`).join('');
+    Array.from(box.querySelectorAll('.h-item')).forEach((el) => {
+      el.addEventListener('click', () => {
+        selectedId = el.getAttribute('data-id');
+        renderAll();
+      });
+    });
+  }
+
+  /* ---------- 渲染：结论详情 ---------- */
+  function renderDetail() {
+    const h = store.state.hypotheses.find((x) => x.id === selectedId);
+    const box = $('detail');
+    $('detailHint').textContent = '';
+    if (!h) { box.innerHTML = '<div class="empty">请选择或新增一条假设。</div>'; return; }
+    const r = store.results.get(h.id);
+    const o = r.opposition;
+    const supPct = r.weights.total ? Math.round(r.weights.support / r.weights.total * 100) : 0;
+    const refPct = 100 - supPct;
+
+    box.innerHTML = `
+      <div class="popline"><b class="mono" style="color:var(--brand)">${esc(h.id)}</b> ·
+        <select id="hStatus" style="width:auto;display:inline-block;min-width:0;padding:2px 6px;font-size:12px;">
+          ${EV.H_STATUS.map((s) => `<option ${s === h.status ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+        <span class="count-pill">有效 ${r.counts.active} · 标记 ${r.counts.flagged} · 撤回 ${r.counts.withdrawn}</span>
+      </div>
+      <div style="font-size:15px;font-weight:650;margin:6px 0 2px;">${esc(h.statement)}</div>
+      <div class="popline">目标人群：<b>${esc(h.population)}</b></div>
+      <div class="popline">人群细分：${
+        (h.segments || []).length
+          ? '<span class="seg-tags">' + h.segments.map((s) => `<span class="chip seg">${esc(s)}</span>`).join('') + '</span>'
+          : '未声明（覆盖维度不参与强档判定）'
+      }
+        <button class="btn small ghost" id="btnEditPop" style="padding:0 6px;">编辑人群/细分</button>
+      </div>
+      <div id="popEditor" style="display:none;margin-top:6px;">
+        <div class="field"><label>目标人群</label><input type="text" id="pePop" value="${esc(h.population)}"></div>
+        <div class="field"><label>细分（逗号分隔）</label><input type="text" id="peSeg" value="${esc((h.segments || []).join(', '))}"></div>
+        <button class="btn small primary" id="peSave">保存并重算</button>
+      </div>
+
+      <div class="verdict">
+        <span class="grade-big grade-${r.grade}">${esc(r.gradeLabel)}</span>
+        <span class="vmeta">强度分 <b>${r.score}</b> ／ 排名 <b>#${r.rank}</b>（同分按标识序）</span>
+      </div>
+
+      <div class="versus">
+        <div class="versus-bar">
+          ${r.weights.support ? `<div class="seg-sup" style="width:${supPct}%">支持 ${r.weights.support}</div>` : ''}
+          ${r.weights.refute ? `<div class="seg-ref" style="width:${refPct}%">反驳 ${r.weights.refute}</div>` : ''}
+          ${!r.weights.total ? '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:12px;">无有效证据</div>' : ''}
+        </div>
+        <div class="versus-note">${esc(o.note)} ${o.hasBoth && o.dominant !== 'tie' ? '差距 <b>' + esc(o.margin) + '</b> 个权重点（独立来源组 ' + (o.independentCounts.support) + ' : ' + (o.independentCounts.refute) + '）。' : ''}</div>
+      </div>
+
+      <h3 class="sec">逐档判定依据</h3>
+      <div class="ladder">
+        ${r.ladder.length ? r.ladder.map((g) => `
+          <div class="rung ${g.passed ? 'hit' : ''}">
+            <div class="rt"><span class="icon">${g.passed ? '✔' : '◻'}</span>${esc(g.grade)}</div>
+            ${g.checks.length ? '<ul class="checks">' + g.checks.map((c) =>
+              `<li class="${c.pass ? 'pass' : 'fail'}"><b>${esc(c.label)}</b> — ${esc(c.detail)}</li>`).join('') + '</ul>' : ''}
+            <div class="why">${esc(g.why)}</div>
+          </div>`).join('') : `
+          <div class="rung"><div class="rt"><span class="icon">◻</span>${esc(r.gradeLabel)}</div>
+          <div class="why">${esc(r.reasons[0] || '')}</div></div>`}
+      </div>
+
+      <h3 class="sec">合成说明（质量 · 独立性 · 人群覆盖 · 反证强度）</h3>
+      <ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+
+      <h3 class="sec">独立证据单元（${r.units.length} 组；同来源重复引用、同源与派生材料已合并）</h3>
+      <div class="units">
+        ${r.units.length ? r.units.map((u) => `
+          <div class="unit">
+            <div class="uhead">
+              <span class="stance-tag ${u.stance}">${u.stance === 'support' ? '支持' : u.stance === 'refute' ? '反驳' : '组内矛盾'}</span>
+              <b>${esc(u.clusterId)}</b>
+              <span class="chip">质量${EV.QUALITY_LABEL[u.quality]}·权重${u.weight}</span>
+              <span class="chip">合并记录 ${u.recordCount} 条</span>
+              ${u.firstAt ? `<span class="chip">最早 ${esc(u.firstAt.replace('T', ' '))}</span>` : ''}
+            </div>
+            <div class="chips">
+              ${u.sources.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}
+              ${u.segments.map((s) => `<span class="chip seg">${esc(s)}</span>`).join('')}
+            </div>
+          </div>`).join('') : '<div class="empty">暂无有效独立证据。</div>'}
+      </div>`;
+
+    $('hStatus').addEventListener('change', (e) => {
+      run('UPDATE_HYPOTHESIS', { id: h.id, status: e.target.value }, '验证状态已更新');
+    });
+    const btnPop = $('btnEditPop');
+    if (btnPop) btnPop.addEventListener('click', () => { $('popEditor').style.display = 'block'; });
+    const peSave = $('peSave');
+    if (peSave) peSave.addEventListener('click', () => {
+      run('UPDATE_HYPOTHESIS', { id: h.id, population: $('pePop').value, segments: $('peSeg').value },
+        `假设 ${h.id} 人群已更新，仅重算该假设`);
+    });
+  }
+
+  /* ---------- 渲染：时间线 ---------- */
+  function renderTimeline() {
+    const sel = $('timelineScope');
+    const cur = sel.value || timelineScope;
+    sel.innerHTML = '<option value="__all__">全部假设</option>' +
+      store.state.hypotheses.map((h) => `<option value="${esc(h.id)}" ${h.id === cur ? 'selected' : ''}>${esc(h.id)} ${esc(h.statement.slice(0, 18))}…</option>`).join('');
+    timelineScope = cur;
+    const showInactive = $('tlShowInactive').checked;
+    const q = $('fEHyp');
+
+    let recs = store.state.evidence.slice().sort((a, b) => (a.capturedAt < b.capturedAt ? 1 : a.capturedAt > b.capturedAt ? -1 : 0));
+    if (timelineScope !== '__all__') recs = recs.filter((e) => e.hypothesisId === timelineScope);
+    if (!showInactive) recs = recs.filter((e) => !e.withdrawn && !e.flagged);
+
+    const box = $('timeline');
+    if (!recs.length) { box.innerHTML = '<div class="empty">没有符合条件的材料。</div>'; return; }
+    box.innerHTML = recs.map((e) => {
+      const cls = ['ev', e.flagged ? 'flagged' : '', e.withdrawn ? 'withdrawn' : ''].join(' ');
+      const stance = e.flagged || (e.stance !== 'support' && e.stance !== 'refute')
+        ? '<span class="stance-tag conflicted">立场缺失/无效</span>'
+        : `<span class="stance-tag ${e.stance}">${e.stance === 'support' ? '支持' : '反驳'}</span>`;
+      return `
+      <div class="${cls}">
+        <div class="when">${esc((e.capturedAt || '（无时刻）').toString().replace('T', ' '))}<br>
+          <span class="mono" style="color:var(--brand)">${esc(e.hypothesisId)}</span> · ${esc(e.id)}</div>
+        <div class="body">
+          <div class="topline">${stance}
+            <span class="src">${esc(e.sourceId || '（来源缺失）')}</span>
+            ${e.sourceLabel ? '<span class="popline">' + esc(e.sourceLabel) + '</span>' : ''}
+            <span class="chip">质量${EV.QUALITY_LABEL[e.quality] || '中'}</span>
+            ${e.segment ? `<span class="chip seg">${esc(e.segment)}</span>` : ''}
+            ${e.withdrawn ? '<span class="badge insufficient">已撤回' + (e.withdrawReason ? '：' + esc(e.withdrawReason) : '') + '</span>' : ''}
+          </div>
+          ${e.excerpt ? '<div class="excerpt">' + esc(e.excerpt) + '</div>' : ''}
+          ${e.flagged ? '<ul class="flag-issues">' + e.fieldIssues.map((f) => '<li>' + esc(f.reason) + '</li>').join('') + '</ul>' : ''}
+          <div class="evactions">
+            <button class="btn small" data-act="edit" data-id="${esc(e.id)}">更正</button>
+            ${e.withdrawn
+              ? `<button class="btn small" data-act="restore" data-id="${esc(e.id)}">恢复</button>`
+              : `<button class="btn small danger" data-act="withdraw" data-id="${esc(e.id)}">撤回</button>`}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    Array.from(box.querySelectorAll('button[data-act]')).forEach((b) => {
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-id');
+        const act = b.getAttribute('data-act');
+        const e = store.state.evidence.find((x) => x.id === id);
+        if (act === 'withdraw') {
+          const reason = prompt('撤回原因（可留空，撤回后该材料从合成中剔除，时间线仍保留）：', e.withdrawReason || '');
+          if (reason === null) return;
+          run('WITHDRAW_EVIDENCE', { id, reason }, `材料 ${id} 已撤回`);
+        } else if (act === 'restore') {
+          run('RESTORE_EVIDENCE', { id }, `材料 ${id} 已恢复`);
+        } else if (act === 'edit') {
+          loadEvidenceIntoForm(e);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    });
+  }
+
+  /* ---------- 渲染：来源依赖图 ---------- */
+  function topoClasses(classes, edges) {
+    const set = new Set(classes);
+    const indeg = new Map(), adj = new Map();
+    classes.forEach((c) => { indeg.set(c, 0); adj.set(c, []); });
+    edges.forEach(({ from, to }) => {
+      if (set.has(from) && set.has(to)) { adj.get(from).push(to); indeg.set(to, (indeg.get(to) || 0) + 1); }
+    });
+    const order = [];
+    const ready = classes.filter((c) => indeg.get(c) === 0).sort();
+    while (ready.length) {
+      const c = ready.shift(); order.push(c);
+      adj.get(c).slice().sort().forEach((n) => {
+        indeg.set(n, indeg.get(n) - 1);
+        if (indeg.get(n) === 0) { ready.push(n); ready.sort(); }
+      });
+    }
+    classes.forEach((c) => { if (!order.includes(c)) order.push(c); });
+    return order;
+  }
+
+  function renderGraph() {
+    const m = store.model;
+    const clusters = Array.from(m.clusterMembers.entries())
+      .map(([cid, members]) => {
+        const classes = uniq(members.map((s) => m.classOf.get(s) || s));
+        const edges = m.derivedEdges.filter((e) => classes.includes(e.from) && classes.includes(e.to));
+        return { cid, classes, edges, order: topoClasses(classes, edges) };
+      })
+      .sort((a, b) => (a.cid < b.cid ? -1 : 1));
+
+    const box = $('clusters');
+    if (!clusters.length) { box.innerHTML = '<div class="empty">暂无来源。登记材料后此处展示来源分组与派生方向。</div>'; }
+    else box.innerHTML = clusters.map((c) => {
+      const edgeKey = new Set(c.edges.map((e) => e.from + '→' + e.to));
+      const shown = new Set();
+      const blocks = [];
+      c.order.forEach((cls, i) => {
+        const members = (m.classMembers.get(cls) || [cls]).slice().sort();
+        blocks.push(`
+          <div class="equiv">
+            <div class="equiv-tag">同源类${members.length > 1 ? ' · ' + members.length + ' 个来源等价' : ''}</div>
+            ${members.map((s) => `<button class="srcchip" data-source="${esc(s)}"><span class="mono">${esc(s)}</span>${sourceLabel(s) ? '<div class="sl">' + esc(sourceLabel(s)) + '</div>' : ''}</button>`).join('')}
+          </div>`);
+        const nxt = c.order[i + 1];
+        if (nxt && edgeKey.has(cls + '→' + nxt)) {
+          shown.add(cls + '→' + nxt);
+          blocks.push('<div class="deriv-arrow">↓ 派生（' + esc(cls) + ' → ' + esc(nxt) + '）</div>');
+        }
+      });
+      const extra = c.edges.filter((e) => !shown.has(e.from + '→' + e.to));
+      if (extra.length) blocks.push('<div class="same-note">另：' + extra.map((e) => esc(e.from) + ' → ' + esc(e.to)).join('；') + '</div>');
+      const sourceCount = c.classes.reduce((n, cls) => n + (m.classMembers.get(cls) || [cls]).length, 0);
+      return `
+      <div class="cluster" data-cluster="${esc(c.cid)}">
+        <div class="ctitle"><span>独立来源组</span><span>${sourceCount} 个来源 · ${c.classes.length} 个同源类</span></div>
+        ${blocks.join('')}
+        <div class="same-note">同源/派生连通，整组只计 1 条证据</div>
+      </div>`;
+    }).join('');
+
+    const rl = $('relList');
+    if (!store.state.relations.length) rl.innerHTML = '<div class="empty">尚未声明来源关系。</div>';
+    else rl.innerHTML = store.state.relations
+      .slice().sort((a, b) => (a.id < b.id ? -1 : 1))
+      .map((rel) => `
+      <div class="rel-row">
+        <span class="kind-tag ${rel.kind}">${rel.kind === 'same' ? '同源' : '派生'}</span>
+        <span>${esc(rel.kind === 'same' ? rel.from + ' = ' + rel.to : rel.from + ' → ' + rel.to)}</span>
+        <span style="flex:1"></span>
+        <button class="btn small danger" data-rel="${esc(rel.id)}">移除</button>
+      </div>`).join('');
+    Array.from(rl.querySelectorAll('button[data-rel]')).forEach((b) => {
+      b.addEventListener('click', () => run('REMOVE_RELATION', { id: b.getAttribute('data-rel') }, '来源关系已移除，独立性重新分组'));
+    });
+  }
+  function sourceLabel(s) {
+    const e = store.state.evidence.find((x) => x.sourceId === s && x.sourceLabel);
+    return e ? e.sourceLabel : '';
+  }
+
+  /* ---------- 表单：假设 ---------- */
+  $('btnAddHyp').addEventListener('click', () => {
+    const f = $('hypForm');
+    f.style.display = 'block';
+    $('fHId').value = EV.nextId('H', store.state.hypotheses.map((h) => h.id));
+    $('fHStmt').focus();
+  });
+  $('fHCancel').addEventListener('click', () => { $('hypForm').style.display = 'none'; });
+  $('fHSave').addEventListener('click', () => {
+    const out = run('ADD_HYPOTHESIS', {
+      id: $('fHId').value, statement: $('fHStmt').value,
+      population: $('fHPop').value, segments: $('fHSeg').value,
+    }, '假设已登记');
+    if (out.ok) { $('hypForm').style.display = 'none'; ['fHId', 'fHStmt', 'fHPop', 'fHSeg'].forEach((x) => $(x).value = ''); selectedId = out.changes[0].id; }
+  });
+
+  /* ---------- 表单：材料 ---------- */
+  function nowLocal() {
+    const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  $('fETime').value = nowLocal();
+  function loadEvidenceIntoForm(e) {
+    $('fEditId').value = e.id;
+    $('fEHyp').value = e.hypothesisId;
+    $('fESource').value = e.sourceId || '';
+    $('fESourceLabel').value = e.sourceLabel || '';
+    $('fESeg').value = e.segment || '';
+    $('fETime').value = (e.capturedAt || '').replace(' ', 'T');
+    $('fEStance').value = (e.stance === 'support' || e.stance === 'refute') ? e.stance : '';
+    $('fEQuality').value = e.quality || 'medium';
+    $('fEExcerpt').value = e.excerpt || '';
+    $('evFormTitle').textContent = '更正材料 ' + e.id;
+    $('evFormHint').textContent = '保存后仅重算受影响假设';
+    $('fESave').textContent = '保存更正';
+    $('fECancelEdit').style.display = '';
+  }
+  function resetEvForm() {
+    $('fEditId').value = '';
+    $('fESource').value = ''; $('fESourceLabel').value = ''; $('fESeg').value = '';
+    $('fEStance').value = ''; $('fEExcerpt').value = ''; $('fETime').value = nowLocal();
+    $('evFormTitle').textContent = '登记观察材料';
+    $('evFormHint').textContent = '';
+    $('fESave').textContent = '登记材料';
+    $('fECancelEdit').style.display = 'none';
+  }
+  $('fECancelEdit').addEventListener('click', resetEvForm);
+  $('fESave').addEventListener('click', () => {
+    const payload = {
+      hypothesisId: $('fEHyp').value, sourceId: $('fESource').value, sourceLabel: $('fESourceLabel').value,
+      capturedAt: $('fETime').value, stance: $('fEStance').value, quality: $('fEQuality').value,
+      segment: $('fESeg').value, excerpt: $('fEExcerpt').value,
+    };
+    const editId = $('fEditId').value;
+    const out = editId
+      ? run('CORRECT_EVIDENCE', Object.assign({ id: editId }, payload), '材料已更正')
+      : run('ADD_EVIDENCE', payload, '材料已登记');
+    if (out.ok) resetEvForm();
+  });
+  $('btnBulk').addEventListener('click', () => {
+    const hypothesisId = $('fEHyp').value;
+    const { rows, parseErrors } = EV.parseEvidenceText($('bulkText').value, { hypothesisId });
+    if (!rows.length && parseErrors.length) { feedback({ errors: parseErrors.map((p) => ({ message: p.message })), notices: [] }, '批量登记失败'); return; }
+    const out = run('ADD_EVIDENCE_BULK', { rows, startLine: 1 }, `批量登记完成：${rows.length} 行`);
+    if (out.ok || out.notices.length) $('bulkText').value = '';
+    if (parseErrors.length) setTimeout(() => feedback({ errors: parseErrors.map((p) => ({ message: p.message })), notices: [] }, '部分行无法解析'), 200);
+  });
+
+  /* ---------- 表单：关系 ---------- */
+  $('fRelSave').addEventListener('click', () => {
+    const kind = document.querySelector('input[name=relKind]:checked').value;
+    const from = $('fRA').value.trim(), to = $('fRB').value.trim();
+    run('ADD_RELATION', { from, to, kind }, kind === 'same' ? `已声明同源：${from} = ${to}` : `已声明派生：${from} → ${to}`);
+  });
+
+  /* ---------- 顶栏 ---------- */
+  $('btnDemo').addEventListener('click', () => { if (confirm('将丢弃当前全部内容并恢复演示数据，确定？')) seed(); });
+  $('btnClear').addEventListener('click', () => {
+    if (!confirm('清空全部假设、材料与来源关系（不可恢复）？')) return;
+    store = EV.createStore(EV.createState()); selectedId = null; persist(); renderAll();
+  });
+  $('btnExport').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(store.state, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'hypotheses-evidence.json';
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  /* ---------- tabs ---------- */
+  Array.from($('viewTabs').querySelectorAll('.tab')).forEach((t) => {
+    t.addEventListener('click', () => {
+      currentTab = t.getAttribute('data-tab');
+      Array.from($('viewTabs').querySelectorAll('.tab')).forEach((x) => x.classList.toggle('active', x === t));
+      $('tabTimeline').style.display = currentTab === 'timeline' ? '' : 'none';
+      $('tabGraph').style.display = currentTab === 'graph' ? '' : 'none';
+      if (currentTab === 'graph') renderGraph();
+    });
+  });
+  $('timelineScope').addEventListener('change', renderTimeline);
+  $('tlShowInactive').addEventListener('change', renderTimeline);
+
+  /* ---------- 全量渲染 ---------- */
+  function fillEvHypSelect() {
+    const q = $('fEHyp');
+    const keepEH = q.value;
+    q.innerHTML = store.state.hypotheses.map((h) => `<option value="${esc(h.id)}">${esc(h.id)}</option>`).join('');
+    if (store.state.hypotheses.some((h) => h.id === keepEH)) q.value = keepEH;
+    else if (selectedId) q.value = selectedId;
+  }
+  function renderAll() {
+    fillEvHypSelect();
+    renderHypotheses();
+    renderDetail();
+    if (currentTab === 'timeline') renderTimeline(); else renderGraph();
+    // 图在窗口尺寸变化后重画
+  }
+  window.addEventListener('resize', () => { if (currentTab === 'graph') renderGraph(); });
+  persist();
+  renderAll();
+  if (currentTab === 'graph') document.querySelector('.tab[data-tab="graph"]').click();
+})();
+</script>
+</body>
+</html>
