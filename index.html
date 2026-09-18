@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>财务方案评审台 · 离线</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📊</span>
+    <div>
+      <h1>财务方案评审台</h1>
+      <p class="sub">全程离线 · 数据仅来自本地录入的假设与响应配置</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span id="consistencyBadge" class="badge badge-ok" title="增量重算结果与从头全量求解的比对">校验中…</span>
+    <button id="btnReset" class="btn">重置为示例方案</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左列：假设与扰动方向 -->
+  <section class="panel" id="panelAssumptions">
+    <h2>假设与扰动方向</h2>
+    <p class="hint">拖动滑杆调整当前取值；「方向权重」表示每推进 1 单位 t 该假设的移动量（0 = 不动）。</p>
+    <div class="table-wrap">
+      <table class="tbl" id="assumptionTable">
+        <thead>
+          <tr><th>假设</th><th>当前取值</th><th>基准</th><th>区间</th><th>方向权重</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <details class="editor">
+      <summary>＋ 登记 / 修改假设</summary>
+      <div class="form-grid" id="assumptionForm">
+        <label>来源<input id="af_source" value="评审修订"></label>
+        <label>标识 id<input id="af_id" placeholder="如 wage"></label>
+        <label>名称<input id="af_name" placeholder="如 人工成本"></label>
+        <label>单位<input id="af_unit" placeholder="如 万元"></label>
+        <label>基准值<input id="af_base" type="number" step="any"></label>
+        <label>下限<input id="af_min" type="number" step="any"></label>
+        <label>上限<input id="af_max" type="number" step="any"></label>
+        <label class="chk"><input id="af_replace" type="checkbox"> 覆盖同来源同标识（修改）</label>
+        <button id="af_submit" class="btn btn-primary">登记假设</button>
+      </div>
+      <div class="errbox" id="af_errors"></div>
+    </details>
+
+    <details class="editor">
+      <summary>＋ 登记结果指标</summary>
+      <div class="form-grid" id="metricForm">
+        <label>标识 id<input id="mf_id" placeholder="如 roi"></label>
+        <label>名称<input id="mf_name" placeholder="如 投资回报率"></label>
+        <label>单位<input id="mf_unit" placeholder="如 %"></label>
+        <label>基准值<input id="mf_base" type="number" step="any"></label>
+        <label>决策阈值<input id="mf_threshold" type="number" step="any"></label>
+        <label>越线方向
+          <select id="mf_limit">
+            <option value="min">低于阈值越线</option>
+            <option value="max">高于阈值越线</option>
+          </select>
+        </label>
+        <button id="mf_submit" class="btn btn-primary">登记指标</button>
+      </div>
+      <div class="errbox" id="mf_errors"></div>
+    </details>
+  </section>
+
+  <!-- 中列：指标、决策边界、贡献分解、方向扫描 -->
+  <section class="panel panel-wide" id="panelMetrics">
+    <h2>指标 · 决策边界 · 贡献分解 · 方向扫描</h2>
+    <div id="metricCards"></div>
+  </section>
+
+  <!-- 右列：响应段与冲突 -->
+  <section class="panel" id="panelResponses">
+    <h2>响应段配置</h2>
+    <p class="hint">每行一段：<code>x0, y0 → x1, y1</code>（y 为仅该假设取 x、其余取基准时的指标值）。区间须首尾相接、不重叠、覆盖假设整个取值区间。</p>
+    <div class="form-grid" id="responseForm">
+      <label>指标<select id="rf_metric"></select></label>
+      <label>假设<select id="rf_assumption"></select></label>
+      <label>来源<input id="rf_source" value="评审修订"></label>
+    </div>
+    <textarea id="rf_segments" rows="6" spellcheck="false" placeholder="80, 400 → 105, 1900&#10;105, 1900 → 115, 1500"></textarea>
+    <div class="row">
+      <button id="rf_submit" class="btn btn-primary">校验并登记（覆盖同来源）</button>
+    </div>
+    <div class="errbox" id="rf_errors"></div>
+
+    <h2 class="mt">冲突记录 <span id="conflictCount" class="badge badge-warn">0</span></h2>
+    <div id="conflictList" class="conflicts"></div>
+
+    <h2 class="mt">操作日志</h2>
+    <div id="logList" class="log"></div>
+  </section>
+</main>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
