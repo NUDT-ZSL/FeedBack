@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专注会话恢复工作台</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<div class="app viz-root" id="app">
+
+  <header class="topbar">
+    <div class="title-block">
+      <h1>专注会话恢复工作台</h1>
+      <p class="subtitle">本地离线运行 · 阶段时间线 / 净打断 / 计入与剩余额度 / 冲突消解</p>
+    </div>
+    <div class="topbar-actions">
+      <label class="now-control">
+        当前时刻（会话相对时间）
+        <span class="now-inputs">
+          <input type="text" id="nowInput" placeholder="HH:MM，如 01:30" size="10">
+          <button class="btn" id="nowSetBtn" type="button">设定</button>
+          <button class="btn btn-ghost" id="nowClearBtn" type="button" title="清除后按已完成阶段自动推断">自动</button>
+        </span>
+      </label>
+      <button class="btn btn-ghost" id="sampleBtn" type="button">载入示例</button>
+      <button class="btn btn-ghost" id="clearBtn" type="button">清空</button>
+    </div>
+  </header>
+
+  <div id="resumeBanner" class="resume-banner" aria-live="polite"></div>
+
+  <div id="noticeBox" class="notice-box" aria-live="polite"></div>
+
+  <main class="grid">
+
+    <section class="card span-2">
+      <div class="card-head">
+        <h2>阶段时间线</h2>
+        <div class="legend" id="timelineLegend"></div>
+      </div>
+      <div id="timelineHost" class="timeline-host"></div>
+      <div id="chartError" class="chart-error" hidden></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>冲突标记</h2><span id="conflictCount" class="pill pill-danger"></span></div>
+      <div id="conflictList" class="conflict-list"></div>
+    </section>
+
+    <section class="card span-2">
+      <div class="card-head"><h2>各阶段计入时长与剩余额度</h2><span id="conservationBadge" class="pill"></span></div>
+      <div class="table-wrap">
+        <table class="data-table" id="stageTable">
+          <thead>
+            <tr><th>#</th><th>阶段</th><th>状态</th><th>预算(分)</th><th>占用窗</th><th>窗内打断(分)</th><th>已计入(分)</th><th>剩余额度(分)</th><th>守恒</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>净打断区间</h2><span id="netCount" class="pill"></span></div>
+      <div id="netList" class="net-list"></div>
+    </section>
+
+    <section class="card span-2">
+      <div class="card-head"><h2>阶段维护</h2></div>
+      <div id="stageErrorBox" class="field-errors"></div>
+      <form id="stageForm" class="form-row">
+        <input type="text" name="name" placeholder="阶段名称" required>
+        <input type="number" name="order" placeholder="顺序" min="1" step="1" required>
+        <input type="number" name="budget" placeholder="预算(分钟)" min="0" step="1" required>
+        <select name="status">
+          <option value="pending">未开始</option>
+          <option value="active">进行中</option>
+          <option value="done">已完成</option>
+        </select>
+        <button class="btn btn-primary" type="submit">添加阶段</button>
+      </form>
+      <div class="table-wrap">
+        <table class="data-table edit-table" id="stageEditTable">
+          <thead><tr><th>顺序</th><th>名称</th><th>预算(分)</th><th>状态</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-2">
+      <div class="card-head"><h2>打断记录与多源消解</h2></div>
+      <div id="interruptionList" class="interruption-list"></div>
+
+      <h3 class="form-title">补报一条打断来源记录</h3>
+      <div id="reportErrorBox" class="field-errors"></div>
+      <form id="reportForm" class="form-grid">
+        <label>归入打断
+          <select name="interruptionSel" id="interruptionSel"></select>
+        </label>
+        <label>新打断编号 <small>（仅上方选“新建”时）</small>
+          <input type="text" name="newId" placeholder="如 int-phone">
+        </label>
+        <label>打断原因
+          <input type="text" name="reason" placeholder="如：紧急来电">
+        </label>
+        <label>来源
+          <input type="text" name="source" placeholder="如：日历 / 主管 / 监控" required>
+        </label>
+        <label>起（HH:MM）
+          <input type="text" name="start" placeholder="00:10" required>
+        </label>
+        <label>止（HH:MM）
+          <input type="text" name="end" placeholder="00:20" required>
+        </label>
+        <label>消解结论
+          <select name="resolution">
+            <option value="pending">待消解（不计入）</option>
+            <option value="confirmed">确认成立（计入净打断）</option>
+            <option value="dismissed">否决（误报，不计入）</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">补报并重推</button>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    所有数据仅保存在本浏览器 localStorage，刷新不丢；整个应用无外部依赖，可断网使用。
+  </footer>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+
+<script src="src/core.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

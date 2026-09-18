@@ -1,0 +1,9 @@
+{
+  "name": "focus-recovery-workbench",
+  "version": "1.0.0",
+  "description": "本地离线的专注会话恢复工作台：阶段时间线、净打断、计入/剩余、冲突消解",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}
