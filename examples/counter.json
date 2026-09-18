@@ -1,0 +1,21 @@
+{
+  "seed": 20260918,
+  "input_count": 200,
+  "objects": ["counter"],
+  "objects_config": {
+    "counter": {
+      "fields": {
+        "delta":   {"type": "int", "min": -20, "max": 20},
+        "balance": {"type": "int", "min": -100, "max": 100, "edge_weight": 0.3},
+        "tags":    {"type": "list", "element": {"type": "int", "min": 0, "max": 9},
+                    "min_len": 0, "max_len": 6}
+      },
+      "constraints": ["balance != 0 or delta >= 0"]
+    }
+  },
+  "invariants": [
+    {"id": "余额非负", "target": "counter", "check": "balance >= 0",
+     "when": "delta > 0", "description": "正变动之后余额必须非负"},
+    {"id": "标签求和有界", "target": "counter", "check": "sum(tags) <= 100"}
+  ]
+}
