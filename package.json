@@ -1,0 +1,11 @@
+{
+  "name": "autodemo-spatial-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "离线可用的建筑与机械混合空间对象剖切、遮挡测量和增量推导工作台",
+  "scripts": {
+    "test": "node tests/core.test.js",
+    "test:browser": "node tests/browser-smoke.js",
+    "start": "node tests/serve.js"
+  }
+}

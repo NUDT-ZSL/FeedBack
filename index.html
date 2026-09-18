@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoDemo 空间剖切与测量工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>空间剖切与测量工作台</h1>
+      <p>离线 · 建筑/机械混合对象 · OBB 截面 · 遮挡测量 · 增量一致</p>
+    </div>
+    <div class="actions">
+      <button id="btnReset" type="button">载入示例</button>
+      <button id="btnBad" type="button">演示拒绝记录</button>
+      <button id="btnExport" type="button">导出项目</button>
+      <button id="btnImport" type="button">导入项目</button>
+      <input id="fileImport" type="file" accept="application/json,.json" hidden />
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel left">
+      <section>
+        <h2>对象层级</h2>
+        <div id="tree" class="tree"></div>
+      </section>
+      <section>
+        <h2>对象编辑</h2>
+        <div id="editor" class="editor"></div>
+      </section>
+      <section class="conflict-wrap">
+        <h2>冲突与拒绝 <span id="badgeState" class="badge ok">已校验</span></h2>
+        <div id="conflicts"></div>
+        <div id="rejections"></div>
+      </section>
+    </aside>
+
+    <section class="viewport panel">
+      <div class="plane-bar">
+        <label>法向 X <input id="nx" type="number" step="0.1" /></label>
+        <label>Y <input id="ny" type="number" step="0.1" /></label>
+        <label>Z <input id="nz" type="number" step="0.1" /></label>
+        <label>偏移 <input id="off" type="number" step="0.1" /></label>
+        <button id="applyPlane" type="button">应用剖切面</button>
+        <span class="hint">拖拽视图旋转；右键平移；滚轮缩放。</span>
+      </div>
+      <canvas id="view" width="1000" height="720"></canvas>
+      <div class="legend">
+        <span><i class="swatch box"></i>对象 OBB</span>
+        <span><i class="swatch cut"></i>截面轮廓</span>
+        <span><i class="swatch visible"></i>可见测量</span>
+        <span><i class="swatch blocked"></i>遮挡测量</span>
+        <span><i class="swatch plane"></i>剖切面</span>
+        <span id="incrementInfo" class="mono"></span>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <section>
+        <h2>剖切截面</h2>
+        <div id="sections" class="list"></div>
+      </section>
+      <section>
+        <h2>测量</h2>
+        <div class="measure-form">
+          <select id="measureType">
+            <option value="object-object">对象到对象</option>
+            <option value="point-object">点到对象</option>
+            <option value="point-point">点到点</option>
+          </select>
+          <select id="objA"></select>
+          <input id="pointA" placeholder="点A x,y,z" />
+          <select id="objB"></select>
+          <input id="pointB" placeholder="点B x,y,z" />
+          <button id="addMeasure" type="button">新增测量</button>
+        </div>
+        <div id="measurements" class="list"></div>
+      </section>
+      <section>
+        <h2>新增对象来源</h2>
+        <details>
+          <summary>粘贴 JSON 对象数组或来源</summary>
+          <textarea id="bulkInput" class="bulk" placeholder='{"name":"现场补录","objects":[{"id":"VALVE-1","parentId":"PIPE-1","position":[0,0,0],"rotationEuler":[0,0,0],"size":[0.4,0.4,0.4]}]}'></textarea>
+          <button id="bulkAdd" type="button">追加并校验</button>
+        </details>
+      </section>
+    </aside>
+  </main>
+  <div id="toast" class="toast" hidden></div>
+  <script src="js/data.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
