@@ -1,0 +1,13 @@
+﻿*** Begin Patch
+*** Add File: package.json
++{
++  "name": "offline-directory-viewer",
++  "version": "1.0.0",
++  "private": true,
++  "type": "module",
++  "description": "完全离线的分批目录树与文件条目虚拟浏览工具",
++  "scripts": {
++    "test": "node tests/core.test.mjs"
++  }
++}
+*** End Patch

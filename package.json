@@ -1,0 +1,10 @@
+{
+  "name": "offline-directory-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline local directory viewer",
+  "scripts": {
+    "test": "node tests/core.test.mjs"
+  }
+}
