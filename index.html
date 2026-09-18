@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>补贴申请引导 · 自助申报</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-main">
+    <h1 id="flow-title">申报引导</h1>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      <span id="progress-text" class="progress-text"></span>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-export" class="btn btn-ghost" title="把当前进度复制到剪贴板">导出进度</button>
+    <button id="btn-import" class="btn btn-ghost" title="从剪贴板/文件恢复进度">导入进度</button>
+    <button id="btn-custom" class="btn btn-ghost" title="载入自定义流程定义（JSON）">自定义流程</button>
+    <button id="btn-reset" class="btn btn-ghost danger">重新开始</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 左：步骤序列（四态） -->
+  <aside class="step-rail">
+    <div class="legend">
+      <span><i class="dot st-confirmed"></i>已确认</span>
+      <span><i class="dot st-stale"></i>待重新确认</span>
+      <span><i class="dot st-inactive"></i>未激活</span>
+      <span><i class="dot st-unreached"></i>未到达</span>
+    </div>
+    <nav id="step-list"></nav>
+  </aside>
+
+  <!-- 中：当前步骤与问题 -->
+  <main class="step-main">
+    <div id="block-panel" class="block-panel hidden"></div>
+    <section id="step-view"></section>
+    <footer class="nav-bar">
+      <button id="btn-prev" class="btn">← 上一步</button>
+      <div class="nav-right">
+        <button id="btn-skip" class="btn">跳过此步骤</button>
+        <button id="btn-next" class="btn btn-primary">下一步 →</button>
+        <button id="btn-submit" class="btn btn-primary hidden">确认提交</button>
+      </div>
+    </footer>
+  </main>
+
+  <!-- 右：影响判定面板 -->
+  <aside class="impact-rail">
+    <h2>改答影响判定</h2>
+    <p class="impact-hint">修改任何答案后，此处逐项列出受影响内容的判定与依据。</p>
+    <div id="impact-panel" class="impact-panel empty">尚未发生改答</div>
+  </aside>
+</div>
+
+<!-- 导入/自定义流程 对话框 -->
+<dialog id="io-dialog">
+  <h3 id="io-title"></h3>
+  <p id="io-desc" class="io-desc"></p>
+  <textarea id="io-text" rows="12" spellcheck="false"></textarea>
+  <div id="io-errors" class="io-errors"></div>
+  <div class="dialog-actions">
+    <button id="io-cancel" class="btn">取消</button>
+    <button id="io-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="engine.js"></script>
+<script src="flows/demo-flow.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
