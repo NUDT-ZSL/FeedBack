@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>渠道队列留存比较工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>渠道队列留存比较工作台</h1>
+  <p class="subtitle">离线本地分析 · 共同观察窗口内比较 · 看得久 ≠ 表现差</p>
+  <div class="header-controls">
+    <label>分层可比下限（最少队列数）
+      <input type="number" id="thresholdInput" min="1" max="10" value="2">
+    </label>
+    <button id="resetSeedBtn" type="button">重置为示例数据</button>
+    <button id="clearBtn" type="button">清空全部数据</button>
+  </div>
+</header>
+
+<main>
+  <!-- 留存矩阵 -->
+  <section class="panel" id="matrixPanel">
+    <h2>留存矩阵 <span class="hint">按队列 × 观察期；⚠ 表示该期存在来源冲突</span></h2>
+    <div id="matrixWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 队列两两比较 -->
+  <section class="panel" id="pairPanel">
+    <h2>队列两两比较 <span class="hint">仅在共同观察窗口内比较，窗口外观测一律排除并说明原因</span></h2>
+    <div class="selectors">
+      <label>队列 A <select id="cohortASelect"></select></label>
+      <label>队列 B <select id="cohortBSelect"></select></label>
+      <span id="pairCacheBadge" class="badge cache" hidden>结果来自缓存：两队列均未变化，未重新计算</span>
+    </div>
+    <div id="pairResult"></div>
+  </section>
+
+  <!-- 分层比较 -->
+  <section class="panel" id="strataPanel">
+    <h2>分层（渠道）比较 <span class="hint">队列数不足下限的分层标记为不可比，不参与优劣排名</span></h2>
+    <div id="stratumSummaryWrap" class="table-wrap"></div>
+    <div class="selectors" id="strataSelectors">
+      <label>分层 A <select id="stratumASelect"></select></label>
+      <label>分层 B <select id="stratumBSelect"></select></label>
+    </div>
+    <div id="strataResultResult"></div>
+  </section>
+
+  <!-- 数据录入 -->
+  <section class="panel" id="entryPanel">
+    <h2>数据录入 <span class="hint">重复上报幂等忽略；非法数据拒绝并指出位置；矛盾数值双方保留</span></h2>
+    <div class="forms">
+      <form id="cohortForm">
+        <h3>新增队列</h3>
+        <label>名称 <input name="name" required placeholder="如：信息流·7月"></label>
+        <label>分层（渠道） <input name="stratum" list="stratumList" required placeholder="如：信息流"></label>
+        <datalist id="stratumList"></datalist>
+        <label>起始时刻 <input name="start" placeholder="如：2026-07"></label>
+        <label>规模 <input name="size" type="number" min="1" required placeholder="如：1000"></label>
+        <button type="submit">新增队列</button>
+      </form>
+      <form id="obsForm">
+        <h3>上报观测</h3>
+        <label>队列 <select name="cohortId" required></select></label>
+        <label>观察期 <input name="period" type="number" min="0" required placeholder="0 起"></label>
+        <label>活跃数 <input name="active" type="number" min="0" required></label>
+        <label>来源 <input name="source" placeholder="如：数据平台 / 渠道后台"></label>
+        <label>上报时刻 <input name="reportedAt" type="number" min="0" placeholder="留空自动递增"></label>
+        <button type="submit">上报观测</button>
+      </form>
+      <form id="sizeForm">
+        <h3>修正规模</h3>
+        <label>队列 <select name="cohortId" required></select></label>
+        <label>新规模 <input name="newSize" type="number" min="1" required></label>
+        <button type="submit">修正规模</button>
+      </form>
+    </div>
+    <div id="ingestMsg" class="ingest-msg" hidden></div>
+  </section>
+
+  <!-- 冲突记录 -->
+  <section class="panel" id="conflictPanel">
+    <h2>冲突记录 <span class="hint">同一队列同一观察期被多个来源给出矛盾数值时，双方均保留，该期不纳入比较</span></h2>
+    <div id="conflictWrap"></div>
+  </section>
+
+  <!-- 拒绝日志 -->
+  <section class="panel" id="rejectPanel">
+    <h2>拒绝日志 <span class="hint">活跃数超规模、时刻倒退等非法上报，均指出具体位置</span></h2>
+    <div id="rejectWrap"></div>
+  </section>
+</main>
+
+<footer>全部数据保存在浏览器 localStorage，不发送任何网络请求。</footer>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
