@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>队列留存比较工作台（离线）</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div>
+      <h1>队列留存比较工作台
+        <span class="badge-offline">纯本地运行 · 数据不出本机</span>
+      </h1>
+      <p class="sub">只在<strong>双方都有观测的共同窗口</strong>内对齐比较；看得更久的队列，其窗口外尾部观测会被明确排除而不是当作 0，从根源上避免“观察期长 = 留存差”的误判。</p>
+    </div>
+    <div class="actions">
+      <button id="themeBtn" class="ghost" type="button" title="切换明暗主题">🌓 主题</button>
+      <button id="exportBtn" type="button">导出 JSON</button>
+      <button id="importBtn" class="ghost" type="button" onclick="document.getElementById('importFile').click()">导入 JSON</button>
+      <input id="importFile" type="file" accept="application/json,.json" hidden />
+      <button id="resetBtn" class="danger ghost" type="button">恢复演示数据</button>
+    </div>
+  </header>
+
+  <!-- 比较对象控制行：筛选在同一行、位于所有内容之上 -->
+  <div class="controlbar">
+    <label><span class="swatch a"></span>队列 A
+      <select id="cmpA" aria-label="选择队列 A"></select>
+    </label>
+    <button id="swapBtn" class="ghost" type="button" title="交换 A/B">⇄</button>
+    <label><span class="swatch b"></span>队列 B
+      <select id="cmpB" aria-label="选择队列 B"></select>
+    </label>
+    <label>每分层最少队列数
+      <input id="minCohorts" type="number" min="1" max="99" step="1" style="min-width:64px" aria-label="每分层最少队列数" />
+    </label>
+    <span class="spacer"></span>
+    <span class="small muted">比较结果按相对观察期对齐，与各队列起跑日历日无关</span>
+  </div>
+
+  <!-- 分层可比性 -->
+  <section class="panel">
+    <h2>分层可比性</h2>
+    <p class="panel-sub">某分层“含观测队列数”低于下限时标为不可比，并说明还缺多少；不可比分层不与其他分层并列输出优劣结论。</p>
+    <div id="strataCards" class="strata"></div>
+  </section>
+
+  <div class="grid-2">
+    <!-- 比较结果 -->
+    <section class="panel">
+      <h2>共同窗口与逐期差异</h2>
+      <p class="panel-sub">蓝底区域为共同观察窗口；窗口外灰色点线是真实观测但已排除；◇ 是未裁决冲突的候选值。</p>
+      <div id="comparePanel"></div>
+    </section>
+
+    <!-- 冲突记录 -->
+    <section class="panel">
+      <h2>来源冲突记录</h2>
+      <p class="panel-sub">同一队列、同一观察期被多个来源给出矛盾值时，双方来源与数值都在此保留，必须人工裁决，系统不会静默择一。</p>
+      <div id="conflictPanel"></div>
+    </section>
+  </div>
+
+  <!-- 留存矩阵 -->
+  <section class="panel">
+    <h2>留存矩阵</h2>
+    <p class="panel-sub">行为队列、列为相对观察期。“—”=从未观测（区别于观测到 0%）；⚠=数值冲突待裁决。</p>
+    <div id="matrixPanel"></div>
+  </section>
+
+  <!-- 录入与修正 -->
+  <h2 class="section-title">数据录入与规模修正</h2>
+  <div class="forms-grid">
+    <form id="formCohort" class="block" novalidate>
+      <h3>① 新建队列</h3>
+      <div class="field"><label for="fName">队列名称</label><input id="fName" required placeholder="如：信息流付费·9月起跑" /></div>
+      <div class="field"><label for="fChannel">获客渠道</label><input id="fChannel" required placeholder="如：信息流付费" /></div>
+      <div class="field"><label for="fStratum">分层属性</label><input id="fStratum" required placeholder="如：新客 / 老客 / 一线城市" /></div>
+      <div class="field"><label for="fSize">初始规模（正整数）</label><input id="fSize" type="number" min="1" step="1" required /></div>
+      <div class="field"><label for="fStart">起始时刻</label><input id="fStart" type="date" required /></div>
+      <div class="field"><label for="fNote">备注（可选）</label><input id="fNote" /></div>
+      <button class="primary" type="submit">新建队列</button>
+      <div class="form-msg" role="status"></div>
+    </form>
+
+    <form id="formObs" class="block" novalidate>
+      <h3>② 上报逐期活跃数</h3>
+      <div class="field"><label for="fObsCohort">目标队列</label><select id="fObsCohort" required></select></div>
+      <div class="field"><label for="fPeriod">观察期（第 N 期，从 0 开始）</label><input id="fPeriod" type="number" min="0" step="1" required /></div>
+      <div class="field"><label for="fActive">该期活跃数</label><input id="fActive" type="number" min="0" step="1" required /></div>
+      <div class="field"><label for="fSource">数据来源</label><input id="fSource" placeholder="如：BI日报 / 渠道回传" required /></div>
+      <button class="primary" type="submit">写入观测</button>
+      <div class="form-msg" role="status"></div>
+      <p class="small muted" style="margin-bottom:0">相同来源+期+数值的重复上报按幂等忽略；同期不同数值会保留双方并生成冲突；超规模、时刻倒退将被拒绝并指出位置。</p>
+    </form>
+
+    <form id="formScale" class="block" novalidate>
+      <h3>③ 修正队列规模</h3>
+      <div class="field"><label for="fScaleCohort">目标队列</label><select id="fScaleCohort" required></select></div>
+      <div class="field"><label for="fNewSize">修正后规模（正整数）</label><input id="fNewSize" type="number" min="1" step="1" required /></div>
+      <div class="field"><label for="fScaleReason">修正原因（可选，留痕）</label><input id="fScaleReason" placeholder="如：去重后口径修正" /></div>
+      <button class="primary" type="submit">提交规模修正</button>
+      <div class="form-msg" role="status"></div>
+      <p class="small muted" style="margin-bottom:0">新规模小于任一已观测活跃数会被拒绝并逐期指出；修正后受影响比较与全量重算一致，未涉及的比较保持不变。</p>
+    </form>
+  </div>
+
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="js/retention-core.js"></script>
+<script src="js/store.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+<script src="js/smoke.js"></script>
+</body>
+</html>

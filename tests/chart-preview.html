@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>chart preview</title>
+<link rel="stylesheet" href="../css/styles.css" />
+<style> body { padding: 24px; } .panel { max-width: 880px; } </style>
+</head>
+<body>
+<div class="panel">
+  <h2>共同窗口与逐期差异（图表预览夹具）</h2>
+  <div id="comparePanel"></div>
+</div>
+<script src="../js/retention-core.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/charts.js"></script>
+<script>
+  window.Store.init();
+  var s = window.Store.state();
+  var r = window.RetentionCore.compareCohorts(s, 'organic-0601', 'paid-0615');
+  var mount = document.getElementById('comparePanel');
+  mount.innerHTML =
+    '<div class="legend">' +
+    '<span class="item a"><span class="key"></span>自然搜索·6/1起跑</span>' +
+    '<span class="item b"><span class="key"></span>信息流付费·6/15起跑</span>' +
+    '<span class="item"><span class="key ghost"></span>窗口外真实观测（已排除，非 0）</span>' +
+    '<span class="item"><span class="key window"></span>共同窗口</span></div>' +
+    '<div class="chart-wrap" id="chartMount" style="min-height:320px"></div>';
+  window.Charts.compareChart(document.getElementById('chartMount'), r);
+
+  // 可选：?tip=<0..1> 合成一次十字线悬停，供无头截图检查 tooltip
+  var tipFrac = new URLSearchParams(location.search).get('tip');
+  if (tipFrac != null) {
+    var svg = document.querySelector('#chartMount svg');
+    var hit = svg.querySelector('rect[fill="transparent"]');
+    var rect = hit.getBoundingClientRect();
+    var ev = new PointerEvent('pointermove', { clientX: rect.left + Number(tipFrac) * rect.width, clientY: rect.top + 40, bubbles: true });
+    hit.dispatchEvent(ev);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "retention-cohort-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "纯本地、离线的队列留存共同窗口比较工作台",
+  "scripts": {
+    "test": "node --test tests/core.test.js",
+    "start": "node server.js"
+  },
+  "license": "UNLICENSED"
+}
