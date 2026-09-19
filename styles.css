@@ -1,0 +1,150 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f4f5f7;
+  color: #24292f;
+}
+header {
+  background: #1f2937;
+  color: #fff;
+  padding: 14px 24px;
+}
+header h1 { margin: 0; font-size: 20px; }
+.subtitle { margin: 4px 0 0; font-size: 12px; color: #9ca3af; }
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+button {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:hover { background: #f3f4f6; }
+button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+button.primary:hover { background: #1d4ed8; }
+button.danger { color: #b91c1c; border-color: #fca5a5; }
+button.small { padding: 2px 8px; font-size: 12px; }
+
+main {
+  display: grid;
+  grid-template-columns: 320px 1fr 300px;
+  gap: 16px;
+  padding: 16px 24px;
+  align-items: start;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+h2 { font-size: 15px; margin: 0 0 10px; }
+
+form label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+form input, form select, form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.form-actions { display: flex; gap: 8px; }
+.hidden { display: none; }
+
+.edit-list .edit-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.edit-item.retracted { opacity: 0.55; background: #f9fafb; }
+.edit-item.invalid { border-color: #fca5a5; background: #fef2f2; }
+.edit-item .meta { color: #6b7280; margin-bottom: 4px; }
+.edit-item .content { font-weight: 600; margin-bottom: 6px; word-break: break-all; }
+.edit-item .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.segment-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.segment-card.dirty { border-left: 4px solid #f59e0b; }
+.segment-card.has-conflict { border-left: 4px solid #dc2626; }
+.seg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg-id { font-weight: 700; }
+.badge {
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 2px 8px;
+  background: #e5e7eb;
+  color: #374151;
+}
+.badge.src { background: #dbeafe; color: #1e40af; }
+.badge.dirty { background: #fef3c7; color: #92400e; cursor: pointer; }
+.badge.conflict { background: #fee2e2; color: #b91c1c; }
+.badge.ok { background: #dcfce7; color: #166534; }
+.seg-base { font-size: 12px; color: #9ca3af; margin: 6px 0; }
+.seg-final {
+  font-size: 15px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 6px;
+  word-break: break-all;
+}
+.seg-final.unresolved {
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 600;
+}
+.conflict-box {
+  margin-top: 10px;
+  border: 1px dashed #fca5a5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff7f7;
+}
+.conflict-box h3 { margin: 0 0 8px; font-size: 13px; color: #b91c1c; }
+.candidate {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #fff;
+  border: 1px solid #fecaca;
+  font-size: 13px;
+}
+.candidate .who { color: #6b7280; font-size: 12px; white-space: nowrap; }
+.manual-row { display: flex; gap: 8px; margin-top: 8px; }
+.manual-row input { flex: 1; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.resolved-note { font-size: 12px; color: #166534; margin-top: 8px; }
+
+#log { font-size: 12px; max-height: 70vh; overflow-y: auto; }
+.log-entry { padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; }
+.log-entry.warn { background: #fef2f2; color: #b91c1c; }
+.log-entry.info { background: #eff6ff; color: #1e40af; }
+.log-entry.ok { background: #f0fdf4; color: #166534; }
+.log-entry .time { color: #9ca3af; margin-right: 6px; }
+.empty { color: #9ca3af; font-size: 12px; }

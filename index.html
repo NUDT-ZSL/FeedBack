@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多人共编协调工具（本地离线）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>多人共编协调工具</h1>
+  <p class="subtitle">本地离线运行 · 并行修改合成 · 冲突保留与裁决 · 撤回/改写后增量重推导</p>
+</header>
+
+<div class="toolbar">
+  <button id="btn-add-segment">＋ 新增片段</button>
+  <button id="btn-verify">⟳ 从头校验（与全量重算比对）</button>
+  <button id="btn-clear-dirty">清除“重新推导”标记</button>
+  <button id="btn-reset" class="danger">重置为演示数据</button>
+</div>
+
+<main>
+  <aside class="left">
+    <section class="panel">
+      <h2 id="form-title">提交修改</h2>
+      <form id="edit-form">
+        <label>来源（编辑者）
+          <input type="text" id="f-source" placeholder="如：编辑者甲（留空可演示非法修改）">
+        </label>
+        <label>发生顺序
+          <input type="number" id="f-seq" min="1" step="1">
+        </label>
+        <label>目标片段
+          <select id="f-segment"></select>
+        </label>
+        <label>修改内容
+          <textarea id="f-content" rows="3" placeholder="该片段希望改成的新内容"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" id="f-submit">提交修改</button>
+          <button type="button" id="f-cancel" class="hidden">取消改写</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>修改记录</h2>
+      <div id="edit-list" class="edit-list"></div>
+    </section>
+  </aside>
+
+  <section class="center">
+    <h2>共享内容（按片段）</h2>
+    <div id="segments"></div>
+  </section>
+
+  <aside class="right">
+    <section class="panel">
+      <h2>提示与日志</h2>
+      <div id="log"></div>
+    </section>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
