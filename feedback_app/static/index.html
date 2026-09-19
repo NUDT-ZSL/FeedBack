@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>反馈聚类 · 需求线索整理</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>反馈聚类工作台</h1>
+  <div class="settings">
+    <label>相似度阈值 <span id="thVal"></span>
+      <input type="range" id="threshold" min="0.05" max="0.6" step="0.01">
+    </label>
+    <label>边界带宽 <span id="bandVal"></span>
+      <input type="range" id="band" min="0.01" max="0.15" step="0.01">
+    </label>
+    <span id="constraints"></span>
+    <button id="resetBtn" class="warn">清除全部人工调整</button>
+  </div>
+</header>
+
+<section class="add-panel">
+  <input id="srcInput" placeholder="来源（如 客服/问卷/App）">
+  <input id="tagInput" placeholder="标签（逗号分隔，可选）">
+  <textarea id="textInput" rows="2" placeholder="反馈原文…"></textarea>
+  <button id="addBtn">添加反馈</button>
+</section>
+
+<main>
+  <section id="clusters"></section>
+  <aside>
+    <h2>边界相似对（判定依据）</h2>
+    <p class="hint">相似度落在阈值附近的反馈对会保留在这里，阈值微调时可核对归并依据。</p>
+    <div id="evidence"></div>
+  </aside>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
