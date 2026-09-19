@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>日志链可信性核查</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+  header { background: #1f3a5f; color: #fff; padding: 10px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header select, header button { padding: 4px 10px; }
+  #summary { display: flex; gap: 12px; padding: 10px 20px; flex-wrap: wrap; }
+  .card { background: #fff; border-radius: 6px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  #main { display: flex; gap: 16px; padding: 0 20px 20px; align-items: flex-start; }
+  #chain { flex: 1.4; } #detail { flex: 1; position: sticky; top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #e5e5e5; text-align: left; }
+  tr.rec { cursor: pointer; } tr.rec:hover { background: #eef4fb; }
+  tr.selected { background: #dcebfb; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; }
+  .ok { background: #2e9e5b; } .mismatch { background: #d33; }
+  .missing_checksum { background: #e08a00; } .bad_format { background: #b06ad3; }
+  .dangling_ref { background: #555; } .duplicate_seq { background: #8a6d3b; }
+  .impacted { background: #fff3f3; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+  textarea, input[type=text], select { width: 100%; box-sizing: border-box; margin: 3px 0 8px; padding: 5px; }
+  button { cursor: pointer; padding: 5px 14px; border: 0; border-radius: 4px; background: #1f3a5f; color: #fff; }
+  button.ghost { background: #888; }
+  .diff-ok { color: #2e9e5b; } .diff-bad { color: #d33; font-weight: bold; }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: #fff; padding: 10px 16px; border-radius: 6px; display: none; }
+  h3 { margin: 8px 0; } .muted { color: #777; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>运维日志链可信性核查</h1>
+  <label>校验依据(算法): <select id="algo"></select></label>
+  <button id="btnFullVerify">从头完整校验</button>
+  <button id="btnNextSusp" class="ghost">定位下一条可疑记录</button>
+  <span id="recomputed" class="muted"></span>
+</header>
+<div id="summary"></div>
+<div id="main">
+  <div id="chain" class="card"><h3>完整链条</h3><div id="chainTable"></div></div>
+  <div id="detail" class="card"><h3>记录详情</h3><div id="detailBody">点击左侧记录查看详情。</div></div>
+</div>
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

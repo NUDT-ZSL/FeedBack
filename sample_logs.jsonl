@@ -1,0 +1,12 @@
+{"seq": 1, "timestamp": "2026-09-20T09:15:00", "source": "db-01", "body": "备份任务开始 (#1)", "prev_seq": null, "checksum": "27db7e633adbb071da38f344631b81bef712bb22764589dd1d2480a3cf5897fb"}
+{"seq": 2, "timestamp": "2026-09-20T10:15:00", "source": "cron", "body": "备份任务完成, 大小 1.2GB (#2)", "prev_seq": 1, "checksum": "075298546f85aa0f78e516a4c0cdc38168d941b45670fee81f10af88225cda73"}
+{"seq": 3, "timestamp": "2026-09-20T11:15:00", "source": "api-gw", "body": "磁盘使用率 78% (#3)", "prev_seq": 2, "checksum": "72436650da89ca24c0180f904ae4f3b0e4577acddc5ddf758fa46b9bc047e7a7"}
+{"seq": 4, "timestamp": "2026-09-20T12:15:00", "source": "web-01", "body": "重启 nginx 服务 (#4)", "prev_seq": 3, "checksum": "6a73fca5cb290b1d4ec7b433201bfcd729b377c37932718a3613a3137dcac80e"}
+{"seq": 5, "timestamp": "2026-09-20T13:15:00", "source": "db-01", "body": "配置项 max_conn 修改为 99999 (被篡改)", "prev_seq": 4, "checksum": "9416640bef887038d1e909c500d982df2e0712702d7c37dbecebc261602bbe80"}
+{"seq": 6, "timestamp": "2026-09-20T14:15:00", "source": "cron", "body": "证书更新完成 (#6)", "prev_seq": 5, "checksum": "16404906191a9b75a9518e70dd09c077089f79dec44a67bc50038a7432ec6c67"}
+{"seq": 7, "timestamp": "2026-09-20T15:15:00", "source": "api-gw", "body": "清理临时文件 304 个 (#7)", "prev_seq": 6, "checksum": "49b1222cb2e82b3a21c8bab38ccf002a02267087f3911f72d8d90b4ca48c56d8"}
+{"seq": 8, "timestamp": "2026-09-20T16:15:00", "source": "web-01", "body": "用户 admin 登录成功 (#8)", "prev_seq": 7, "checksum": null}
+{"seq": 9, "timestamp": "2026-09-20T17:15:00", "source": "db-01", "body": "备份任务开始 (#9)", "prev_seq": 8, "checksum": "zzzz-not-hex"}
+{"seq": 10, "timestamp": "2026-09-20T18:15:00", "source": "cron", "body": "备份任务完成, 大小 1.2GB (#10)", "prev_seq": 9, "checksum": "8c38bc56d611882389db9329ea4d330d291d2d341bcca4dea380e2be07cfa81e"}
+{"seq": 11, "timestamp": "2026-09-20T19:15:00", "source": "api-gw", "body": "磁盘使用率 78% (#11)", "prev_seq": 999, "checksum": "78485e8f0bd70d21e70409a6aa3ef494978af65347731fcda6fbfd1350218886"}
+{"seq": 12, "timestamp": "2026-09-20T20:15:00", "source": "web-01", "body": "重启 nginx 服务 (#12)", "prev_seq": 11, "checksum": "498f544c7e6d63f17d6a1bee67985228fdd0ec7c237030bd41024c17e98f716c"}
