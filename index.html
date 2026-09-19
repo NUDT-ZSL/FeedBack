@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>生产链推演工作台</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>生产链推演工作台</h1>
+      <p>离线维护资源、配方与替代路线；库存修正或配方停用后立即增量重推。</p>
+    </div>
+    <div class="actions">
+      <button id="exportBtn" type="button">导出数据</button>
+      <button id="importBtn" type="button" class="secondary">导入 JSON</button>
+      <button id="resetBtn" type="button" class="danger">恢复示例</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel target-panel">
+      <h2>目标产出</h2>
+      <div class="form-grid">
+        <label>目标资源
+          <select id="targetId"></select>
+        </label>
+        <label>目标数量
+          <input id="targetQty" type="number" min="0" step="0.0001">
+        </label>
+        <div class="status-card" id="runStatus"></div>
+      </div>
+      <div id="validationErrors" class="error-list" hidden></div>
+      <div id="shortageBanner" class="shortage-banner" hidden></div>
+    </section>
+
+    <section class="panel result-panel">
+      <div class="section-title">
+        <h2>层级推演结果</h2>
+        <span id="incrementalInfo" class="pill"></span>
+      </div>
+      <div id="levels" class="levels"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>层级</th><th>资源</th><th>需求量</th><th>放大倍数</th>
+            <th>库存抵扣</th><th>配方产出</th><th>缺口</th><th>缺口来源</th>
+          </tr></thead>
+          <tbody id="resultRows"></tbody>
+        </table>
+      </div>
+      <div id="attempts"></div>
+    </section>
+
+    <section class="panel conflicts-panel">
+      <h2>冲突记录</h2>
+      <div id="conflicts" class="conflicts"></div>
+    </section>
+
+    <section class="panel resources-panel">
+      <h2>资源与库存</h2>
+      <form id="resourceForm" class="inline-form" novalidate>
+        <input name="id" placeholder="唯一标识，如 gear" required>
+        <input name="name" placeholder="名称（可选）">
+        <input name="initialStock" inputmode="decimal" placeholder="初始库存" required>
+        <input name="source" placeholder="来源，默认 manual">
+        <button type="submit">新增资源</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>标识</th><th>名称</th><th>库存</th><th>来源</th><th>操作</th></tr></thead>
+          <tbody id="resourceRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel recipes-panel">
+      <h2>配方</h2>
+      <form id="recipeForm" class="recipe-form" novalidate>
+        <input name="id" placeholder="配方标识" required>
+        <input name="outputId" placeholder="产出资源 ID" required>
+        <input name="outputQty" type="number" min="0" step="0.0001" placeholder="产出量" required>
+        <input name="inputs" placeholder="投入：motor:1,gear:2" required>
+        <input name="source" placeholder="来源，默认 manual">
+        <button type="submit">新增配方</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>启用</th><th>标识</th><th>产出</th><th>投入</th><th>来源</th><th>操作</th></tr></thead>
+          <tbody id="recipeRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel graph-panel">
+      <h2>生产链层级图</h2>
+      <div id="graph" class="graph"></div>
+    </section>
+  </main>
+
+  <input id="importFile" type="file" accept="application/json,.json" hidden>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
