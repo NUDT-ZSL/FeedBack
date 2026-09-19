@@ -1,0 +1,11 @@
+{
+  "name": "auth-workbench",
+  "version": "1.0.0",
+  "description": "离线多角色权限快照工作台",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  }
+}

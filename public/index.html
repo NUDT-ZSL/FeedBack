@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多角色授权快照工作台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">离线全栈验收 · 服务端权威快照</p>
+      <h1>多角色授权快照工作台</h1>
+    </div>
+    <div class="version" id="policyVersion">策略版本 --</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel admin-panel">
+      <h2>管理员操作</h2>
+      <div id="eventBanner" class="banner muted">等待服务端快照…</div>
+
+      <div class="control-block">
+        <h3>快速验收场景</h3>
+        <div class="button-grid">
+          <button data-quick="narrowAlice">1. 收窄 Alice 为只读访客</button>
+          <button data-quick="restoreAlice">恢复 Alice 运营专员</button>
+          <button data-quick="injectConflict">注入 Dave 角色/范围冲突</button>
+          <button data-quick="duplicate">提交重复成员（应拒绝）</button>
+          <button data-quick="unknownRole">引用未知角色（应拒绝）</button>
+          <button data-quick="cycle">新增 eu→root 继承（应拒绝成环）</button>
+          <button data-quick="missingScope">引用不存在范围（应拒绝）</button>
+        </div>
+      </div>
+
+      <div class="control-block">
+        <h3>调整成员角色</h3>
+        <select id="roleMember"></select>
+        <select id="roleSelect"></select>
+        <button id="changeRole">应用角色调整</button>
+      </div>
+
+      <div class="control-block">
+        <h3>打开成员页面（模拟新标签页）</h3>
+        <select id="pageMember"></select>
+        <select id="pageSelect"></select>
+        <button id="openPage">打开页面</button>
+      </div>
+
+      <div class="control-block">
+        <h3>维护继承范围</h3>
+        <label>父范围 <select id="edgeParent"></select></label>
+        <label>子范围 <select id="edgeChild"></select></label>
+        <button id="addEdge">新增继承</button>
+      </div>
+
+      <div class="control-block">
+        <h3>追加范围 allow / deny 来源</h3>
+        <select id="directiveMember"></select>
+        <select id="directiveScope"></select>
+        <select id="directiveEffect"><option>allow</option><option>deny</option></select>
+        <input id="directiveSource" value="外部风控系统" placeholder="来源名称">
+        <button id="addDirective">追加范围指令</button>
+      </div>
+
+      <div class="control-block">
+        <h3>新增成员</h3>
+        <input id="newMemberId" placeholder="唯一标识，如 erin">
+        <input id="newMemberName" placeholder="显示名">
+        <select id="newMemberRole"></select>
+        <button id="addMember">新增成员并授权</button>
+      </div>
+
+      <div class="control-block">
+        <h3>新增角色 / 授权</h3>
+        <input id="newRoleId" placeholder="角色 ID">
+        <input id="newRoleName" placeholder="角色名称">
+        <textarea id="newRoleGrants" rows="4" placeholder='每行 page,action,scope&#10;orders,view,eu'></textarea>
+        <button id="createRole">创建角色</button>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <section class="panel">
+        <h2>成员、角色与来源</h2>
+        <div id="members" class="cards"></div>
+      </section>
+      <section class="panel conflict-panel">
+        <h2>冲突列表（双方内容均保留）</h2>
+        <div id="conflicts"></div>
+      </section>
+      <section class="panel">
+        <h2>打开的页面快照与失效数据</h2>
+        <div id="pages" class="page-list"></div>
+      </section>
+      <section class="panel">
+        <h2>角色定义与范围继承</h2>
+        <div class="two-col">
+          <div id="roleDefinitions"></div>
+          <div id="scopeGraph"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
