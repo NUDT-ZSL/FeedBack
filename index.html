@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线共编协调台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+       <p class="eyebrow">本地离线 · 可解释合成</p>
+       <h1>离线共编协调台</h1>
+       <p class="subtitle">同序或同片段修改不会静默择一；撤回、改写后按当前状态重新推导。</p>
+    </div>
+    <div class="header-actions">
+      <button id="exportBtn" class="button subtle" type="button">导出 JSON</button>
+      <button id="resetBtn" class="button subtle danger" type="button">重置示例</button>
+    </div>
+  </header>
+
+  <section class="summary-bar" aria-live="polite">
+    <div><strong id="statSegments">0</strong><span>已定稿片段</span></div>
+    <div><strong id="statPending">0</strong><span>未决冲突</span></div>
+    <div><strong id="statEdits">0</strong><span>有效修改</span></div>
+    <div><strong id="statErrors">0</strong><span>问题修改</span></div>
+  </section>
+
+  <main class="layout">
+    <section class="panel document-panel">
+       <div class="panel-heading">
+        <div>
+          <h2 id="docTitle">共享内容</h2>
+          <p>逐片段查看当前合成结果、来源和冲突选择。</p>
+        </div>
+      </div>
+      <div id="segmentList" class="segment-list"></div>
+    </section>
+
+    <aside class="side-column">
+      <section class="panel">
+        <h2 id="formTitle">提交修改</h2>
+        <form id="editForm" class="edit-form">
+          <input type="hidden" id="editId">
+          <label>来源
+            <input id="sourceInput" type="text" placeholder="例如：林编辑" autocomplete="off">
+          </label>
+          <label>发生顺序（整数，越小越早）
+            <input id="seqInput" type="number" step="1" min="0" value="1">
+          </label>
+          <label>操作
+            <select id="opTypeInput">
+              <option value="replace">改写片段</option>
+              <option value="insertAfter">在片段后插入</option>
+              <option value="delete">删除片段</option>
+            </select>
+          </label>
+          <label>针对片段
+            <select id="targetInput"></select>
+          </label>
+          <label id="contentLabel">修改后的内容
+            <textarea id="contentInput" rows="4" placeholder="输入该来源提交的新内容"></textarea>
+          </label>
+          <div id="formMessage" class="form-message" role="alert"></div>
+          <div class="form-actions">
+            <button class="button primary" type="submit">提交修改</button>
+            <button id="cancelEditBtn" class="button subtle hidden" type="button">取消改写</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>修改记录</h2>
+        <p class="muted">撤回不会删除记录；改写后会重新推导关联片段。</p>
+        <div id="editList" class="edit-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
