@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多角色权限收敛工作台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">离线可验收 · 多页面授权快照</p>
+      <h1>多角色权限收敛工作台</h1>
+      <p id="connection" class="connection">正在连接服务端…</p>
+    </div>
+    <div class="version-card">
+      <span>当前权限版本</span>
+      <strong id="version">—</strong>
+      <small id="generatedAt">—</small>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel wide">
+      <div class="panel-title">
+        <div><h2>管理员调整</h2><p>非法引用、重复标识和继承环会在提交时被拒绝，并返回具体位置。</p></div>
+        <button id="demoConflict" class="secondary">注入范围冲突来源</button>
+      </div>
+      <div class="admin-grid">
+        <form id="memberForm" class="card-form">
+          <h3>新增成员</h3>
+          <label>唯一标识<input id="newMemberId" value="u-chen" required></label>
+          <label>姓名<input id="newMemberName" value="陈晨" required></label>
+          <label>初始角色<select id="newMemberRole"></select></label>
+          <label>初始范围<select id="newMemberScope"></select></label>
+          <button>登记成员</button>
+        </form>
+        <form id="roleForm" class="card-form">
+          <h3>调整角色</h3>
+          <label>成员<select id="roleMember"></select></label>
+          <label>新角色<select id="roleValue"></select></label>
+          <label>来源名称<input id="roleSource" value="HR 主数据"></label>
+          <button>提交角色调整</button>
+          <p class="hint">选择李雯→只读成员可立即收窄审批操作。</p>
+        </form>
+        <form id="scopeForm" class="card-form">
+          <h3>调整授权范围</h3>
+          <label>成员<select id="scopeMember"></select></label>
+          <label>新范围<select id="scopeValue"></select></label>
+          <label>来源名称<input id="scopeSource" value="HR 主数据"></label>
+          <button>提交范围调整</button>
+          <p class="hint">李雯从上海切到预算内，可看到客户数据失效但仍保留。</p>
+        </form>
+        <form id="scopeDefForm" class="card-form">
+          <h3>维护继承关系</h3>
+          <label>范围<select id="scopeDefId"></select></label>
+          <label>包含范围（英文逗号填 ID）<input id="scopeIncludes" value="scope-shanghai"></label>
+          <button>保存范围定义</button>
+          <p class="hint">输入 scope-budget,scope-east 可制造缺失链路检测。</p>
+        </form>
+        <form id="roleDefForm" class="card-form">
+          <h3>维护角色页面/操作</h3>
+          <label>角色<select id="roleDefId"></select></label>
+          <label>页面 ID（英文逗号）<input id="roleDefPages" value="customers"></label>
+          <label>操作 ID（英文逗号）<input id="roleDefActions" value="customers:view"></label>
+          <button>保存角色定义</button>
+          <p class="hint">收窄正在使用的角色会立即收敛对应页面。</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>成员、角色与来源</h2>
+      <div id="members" class="stack"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <div><h2>打开的页面</h2><p>每个页签持有独立快照和已加载数据。</p></div>
+        <form id="openPageForm" class="inline-form">
+          <select id="openMember"></select><select id="openPage"></select>
+          <input id="pageTitle" placeholder="页面标题，可空">
+          <button>打开页面</button>
+        </form>
+      </div>
+      <div id="sessions" class="sessions"></div>
+    </section>
+
+    <section class="panel wide">
+      <h2>冲突记录</h2>
+      <p class="muted">多个来源的矛盾授权会原样保留，不静默择一；裁定后才生成有效权限。</p>
+      <div id="conflicts" class="stack"></div>
+    </section>
+
+    <section class="panel wide">
+      <h2>配置定义与最近变更</h2>
+      <div class="two-col">
+        <div><h3>角色</h3><div id="roles" class="definition-list"></div></div>
+        <div><h3>授权范围</h3><div id="scopes" class="definition-list"></div></div>
+      </div>
+      <h3>最近受影响页面集合</h3>
+      <div id="events" class="events"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="alert"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

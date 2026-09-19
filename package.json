@@ -1,0 +1,14 @@
+{
+  "name": "permission-convergence-workbench",
+  "version": "1.0.0",
+  "description": "Offline full-stack workbench for role/scope snapshots, convergence and conflicts.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
