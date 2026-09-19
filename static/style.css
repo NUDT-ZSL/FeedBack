@@ -1,0 +1,64 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+       background: #0f1420; color: #dde3ee; font-size: 13px; }
+header { display: flex; align-items: center; justify-content: space-between;
+         padding: 10px 16px; background: #161d2e; border-bottom: 1px solid #2a3350; }
+header h1 { font-size: 17px; margin: 0; }
+.clock-bar { display: flex; gap: 8px; align-items: center; }
+main { display: grid; grid-template-columns: 250px 1fr 400px; gap: 10px; padding: 10px; }
+.panel-title { font-weight: 600; margin-bottom: 8px; display: flex; gap: 6px;
+               align-items: center; flex-wrap: wrap; }
+.panel { background: #161d2e; border: 1px solid #2a3350; border-radius: 8px;
+         padding: 10px; margin-bottom: 10px; }
+#left, #center { background: #161d2e; border: 1px solid #2a3350; border-radius: 8px;
+                 padding: 10px; }
+select, input, button { background: #0f1420; color: #dde3ee; border: 1px solid #2a3350;
+                        border-radius: 5px; padding: 4px 7px; font-size: 12px; }
+button { cursor: pointer; background: #25406e; border-color: #35548c; }
+button:hover { background: #2f5088; }
+button.ghost { background: transparent; }
+button.danger { background: #6e2525; border-color: #8c3535; }
+.ship-card { border: 1px solid #2a3350; border-radius: 7px; padding: 8px;
+             margin-bottom: 8px; cursor: pointer; }
+.ship-card:hover { border-color: #4a6db3; }
+.ship-card.selected { border-color: #6ea8ff; background: #1a2440; }
+.ship-card .name { font-weight: 600; }
+.ship-card .meta { color: #8b96b0; font-size: 12px; margin-top: 3px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+.b-normal { background: #1d4d33; color: #7fe0a8; }
+.b-delayed { background: #5a4416; color: #ffce6b; }
+.b-conflict_pending { background: #5a2a16; color: #ff9d6b; }
+.b-interrupted { background: #5e1d1d; color: #ff8b8b; }
+.b-actual { background: #24406e; color: #9cc2ff; }
+.b-unreachable { background: #3a3a3a; color: #bbb; }
+.node-row { display: flex; gap: 10px; align-items: baseline; }
+.node-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; margin-top: 2px; }
+.st-actual { background: #4d8dff; } .st-on_time { background: #35c46f; }
+.st-delayed { background: #e8b23a; } .st-unreachable { background: #d94f4f; }
+.st-pending, .st-planned { background: #556; }
+.node-info { flex: 1; }
+.node-times { color: #8b96b0; font-size: 12px; }
+.delay-pos { color: #ff9d6b; } .delay-zero { color: #7fe0a8; }
+.leg-block { margin: 4px 0 4px 5px; padding: 6px 10px; border-left: 2px solid #2a3350; }
+.leg-block.has-signal { border-left-color: #e8b23a; }
+.leg-block.has-conflict { border-left-color: #ff6b6b; background: #221722; border-radius: 4px; }
+.chip { display: inline-block; border: 1px solid #35548c; border-radius: 5px;
+        padding: 1px 6px; margin: 2px 3px 2px 0; font-size: 11px; }
+.chip.sev4, .chip.sev5 { border-color: #d94f4f; color: #ff9d9d; }
+.chip.conflict { border-color: #ff6b6b; background: #4d1d1d; color: #ffb3b3; cursor: pointer; }
+.chip.action { border-color: #35c46f; color: #8fe8b4; }
+.chip.superseded, .chip.retracted { opacity: .45; text-decoration: line-through; }
+.sig-item { border-bottom: 1px solid #232c46; padding: 5px 2px; }
+.sig-item .note { color: #8b96b0; }
+.conflict-card { border: 1px solid #8c3535; border-radius: 7px; padding: 8px; margin-bottom: 8px; }
+.conflict-card.done { border-color: #2f6e46; }
+.conflict-card .reasons { color: #ff9d6b; margin: 4px 0; }
+.chain-step { border-left: 2px solid #35548c; margin-left: 5px; padding: 4px 10px; }
+.chain-step .step-tag { color: #9cc2ff; font-weight: 600; margin-right: 6px; }
+.chain-step .at { color: #8b96b0; font-size: 11px; margin-left: 6px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.form-grid label { display: flex; flex-direction: column; gap: 2px; color: #8b96b0; }
+.form-grid .full { grid-column: 1 / 3; }
+.row { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.empty { color: #556; padding: 6px 2px; }
+#now-label { color: #9cc2ff; }

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>在途异常处置推演台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>在途异常处置推演台</h1>
+  <div class="clock-bar">
+    <label>推演时刻 <input type="datetime-local" id="clock-input"></label>
+    <button id="clock-apply">应用时刻</button>
+    <button id="reset-btn" class="ghost">重置数据</button>
+    <span id="now-label"></span>
+  </div>
+</header>
+<main>
+  <section id="left">
+    <div class="panel-title">运输单
+      <select id="status-filter">
+        <option value="">全部状态</option>
+        <option value="normal">正常</option>
+        <option value="delayed">延误</option>
+        <option value="conflict_pending">冲突待裁决</option>
+        <option value="interrupted">已中断</option>
+      </select>
+    </div>
+    <div id="shipment-list"></div>
+  </section>
+  <section id="center">
+    <div class="panel-title">节点时间轴 <span id="timeline-sub"></span></div>
+    <div id="timeline"></div>
+  </section>
+  <section id="right">
+    <div class="panel">
+      <div class="panel-title">异常信号
+        <select id="sig-type-filter"><option value="">全部类型</option></select>
+        <select id="sig-source-filter"><option value="">全部来源</option></select>
+        <select id="sig-sev-filter">
+          <option value="">全部严重度</option>
+          <option value="4">≥4</option><option value="3">≥3</option><option value="2">≥2</option>
+        </select>
+      </div>
+      <div id="signal-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">冲突裁决</div>
+      <div id="conflict-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">响应动作</div>
+      <div id="action-panel"></div>
+      <div id="action-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">中断结论与依据链</div>
+      <div id="interruption-panel"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">追加 / 修正信号</div>
+      <div id="signal-form"></div>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

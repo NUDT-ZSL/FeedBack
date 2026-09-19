@@ -1,0 +1,79 @@
+{
+  "now": "2026-09-19T18:00",
+  "shipments": [
+    {
+      "id": "SH-001",
+      "name": "上海→北京 冷链",
+      "carrier": "顺达物流",
+      "nodes": [
+        {"id": "N1", "name": "上海仓", "planned_arrival": "2026-09-19T08:00"},
+        {"id": "N2", "name": "苏州服务区", "planned_arrival": "2026-09-19T10:00"},
+        {"id": "N3", "name": "南京枢纽", "planned_arrival": "2026-09-19T13:00"},
+        {"id": "N4", "name": "徐州中转", "planned_arrival": "2026-09-19T16:30"},
+        {"id": "N5", "name": "北京仓", "planned_arrival": "2026-09-19T21:00"}
+      ],
+      "progress": {"actual_arrivals": {"N1": "2026-09-19T08:05", "N2": "2026-09-19T10:20"}}
+    },
+    {
+      "id": "SH-002",
+      "name": "广州→武汉 普货",
+      "carrier": "南粤运输",
+      "nodes": [
+        {"id": "G1", "name": "广州仓", "planned_arrival": "2026-09-19T06:00"},
+        {"id": "G2", "name": "韶关", "planned_arrival": "2026-09-19T09:00"},
+        {"id": "G3", "name": "长沙", "planned_arrival": "2026-09-19T13:00"},
+        {"id": "G4", "name": "岳阳", "planned_arrival": "2026-09-19T15:30"},
+        {"id": "G5", "name": "武汉仓", "planned_arrival": "2026-09-19T18:30"}
+      ],
+      "progress": {"actual_arrivals": {"G1": "2026-09-19T06:00", "G2": "2026-09-19T08:50"}}
+    },
+    {
+      "id": "SH-003",
+      "name": "成都→重庆 短驳",
+      "carrier": "巴蜀快运",
+      "nodes": [
+        {"id": "C1", "name": "成都仓", "planned_arrival": "2026-09-19T09:00"},
+        {"id": "C2", "name": "资阳", "planned_arrival": "2026-09-19T11:00"},
+        {"id": "C3", "name": "重庆仓", "planned_arrival": "2026-09-19T14:00"}
+      ],
+      "progress": {"actual_arrivals": {"C1": "2026-09-19T09:10"}}
+    },
+    {
+      "id": "SH-004",
+      "name": "杭州→宁波 夜配",
+      "carrier": "浙东物流",
+      "nodes": [
+        {"id": "H1", "name": "杭州仓", "planned_arrival": "2026-09-19T19:00"},
+        {"id": "H2", "name": "绍兴", "planned_arrival": "2026-09-19T20:00"},
+        {"id": "H3", "name": "宁波仓", "planned_arrival": "2026-09-19T21:30"}
+      ],
+      "progress": {"actual_arrivals": {}}
+    }
+  ],
+  "signals": [
+    {"id": "SIG-A1", "shipment_id": "SH-001", "occurred_at": "2026-09-19T11:00",
+     "type": "congestion", "severity": 2, "source": "iot", "leg_index": 1,
+     "delay_minutes": 30, "note": "苏南段拥堵缓行"},
+    {"id": "SIG-A2", "shipment_id": "SH-001", "occurred_at": "2026-09-19T14:10",
+     "type": "road_closure", "severity": 4, "source": "carrier", "leg_index": 2,
+     "unreachable": true, "note": "G3高速南京北段封闭"},
+    {"id": "SIG-A3", "shipment_id": "SH-001", "occurred_at": "2026-09-19T14:40",
+     "type": "recovery", "severity": 1, "source": "dispatch", "leg_index": 2,
+     "note": "现场反馈已恢复通行（待核实）"},
+    {"id": "SIG-B1", "shipment_id": "SH-002", "occurred_at": "2026-09-19T12:30",
+     "type": "breakdown", "severity": 5, "source": "iot", "leg_index": 2,
+     "delay_minutes": 90, "unreachable": true, "note": "车辆故障停靠长沙北"},
+    {"id": "SIG-B2", "shipment_id": "SH-002", "occurred_at": "2026-09-19T13:10",
+     "type": "delay_update", "severity": 3, "source": "carrier", "leg_index": 2,
+     "delay_minutes": 240, "note": "承运方预估需4小时维修"},
+    {"id": "SIG-C1", "shipment_id": "SH-003", "occurred_at": "2026-09-19T10:00",
+     "type": "weather", "severity": 2, "source": "dispatch", "leg_index": 0,
+     "delay_minutes": 20, "note": "成渝段降雨限速"},
+    {"id": "SIG-C2", "shipment_id": "SH-003", "occurred_at": "2026-09-19T10:30",
+     "type": "delay_update", "severity": 3, "source": "carrier", "leg_index": 1,
+     "delay_minutes": 60, "note": "资阳段预计延误1小时"},
+    {"id": "SIG-C3", "shipment_id": "SH-003", "occurred_at": "2026-09-19T10:50",
+     "type": "delay_update", "severity": 2, "source": "carrier", "leg_index": 1,
+     "delay_minutes": 25, "revises": "SIG-C2", "note": "修正：路况好转，预计延误25分钟"}
+  ]
+}
