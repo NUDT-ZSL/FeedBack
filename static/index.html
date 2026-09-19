@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>教研评分工作台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+         background: #f3f5f7; color: #222; }
+  header { background: #1f3a5f; color: #fff; padding: 10px 18px;
+           display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; }
+  button { border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer;
+           background: #2f6fb2; color: #fff; font-size: 13px; }
+  button.ghost { background: #e8edf3; color: #234; }
+  button.warn { background: #b25a2f; }
+  main { display: flex; height: calc(100vh - 46px); }
+  #list { width: 300px; background: #fff; border-right: 1px solid #dde3ea;
+          overflow-y: auto; }
+  .stu { padding: 10px 14px; border-bottom: 1px solid #eef1f5; cursor: pointer; }
+  .stu:hover { background: #f0f5fb; }
+  .stu.sel { background: #e3eefb; border-left: 3px solid #2f6fb2; }
+  .stu .name { font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 9px;
+           font-size: 12px; margin-left: 6px; }
+  .b-grade { background: #2f6fb2; color: #fff; }
+  .b-conflict { background: #c0392b; color: #fff; }
+  .b-unstable { background: #e67e22; color: #fff; }
+  .b-missing { background: #95a5a6; color: #fff; }
+  .b-ok { background: #27ae60; color: #fff; }
+  .stu .meta { font-size: 12px; color: #667; margin-top: 3px; }
+  #detail { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .card { background: #fff; border: 1px solid #dde3ea; border-radius: 6px;
+          padding: 14px 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; }
+  .dim { border-left: 4px solid #2f6fb2; }
+  .dim.conflict { border-left-color: #c0392b; }
+  .dim.missing { border-left-color: #95a5a6; }
+  .dim.excluded { border-left-color: #e67e22; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left; }
+  th { background: #f4f7fa; }
+  tr.conflict-row { background: #fdecea; }
+  .note { background: #fff8e6; border: 1px solid #f0dfa8; border-radius: 4px;
+          padding: 6px 10px; margin: 4px 0; font-size: 13px; }
+  .dimhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dimhead .score { margin-left: auto; font-weight: 600; }
+  #panel { position: fixed; top: 0; right: 0; width: 560px; height: 100vh;
+           background: #fff; box-shadow: -3px 0 12px rgba(0,0,0,.18);
+           padding: 16px; overflow-y: auto; display: none; z-index: 10; }
+  #panel.open { display: block; }
+  #panel h2 { font-size: 16px; margin-top: 0; }
+  #panel input { width: 100%; padding: 4px 6px; font-size: 13px; }
+  #panel textarea { width: 100%; height: 180px; font-family: Consolas, monospace;
+                    font-size: 12px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .row label { width: 90px; font-size: 13px; color: #445; flex: none; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+           background: #234; color: #fff; padding: 8px 18px; border-radius: 4px;
+           display: none; z-index: 20; }
+  .small { font-size: 12px; color: #667; }
+  .del { color: #c0392b; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>教研评分工作台（离线）</h1>
+  <button class="ghost" onclick="openImport()">导入采证</button>
+  <button class="ghost" onclick="openRules()">评价规则配置</button>
+  <button class="ghost" onclick="verify()">一致性校验</button>
+  <button class="warn" onclick="resetDemo()">重置演示数据</button>
+</header>
+<main>
+  <div id="list"></div>
+  <div id="detail"><p class="small" style="padding:20px">请选择左侧学员查看维度明细。</p></div>
+</main>
+<div id="panel"></div>
+<div id="toast"></div>
+<script>
+let RULES = null, SELECTED = null;
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 2600);
+}
+async function api(path, body) {
+  const opt = body === undefined ? {} :
+    { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || ("请求失败 " + r.status));
+  return j;
+}
+function fmt(v) { return v === null || v === undefined ? "—" :
+  (typeof v === "number" ? (Math.round(v * 10) / 10) : v); }
+function esc(s) { return String(s).replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function loadState() {
+  const s = await api("/api/state");
+  RULES = s.rules;
+  const el = document.getElementById("list");
+  el.innerHTML = s.students.length ? "" :
+    '<p class="small" style="padding:14px">暂无数据，请导入采证或重置演示数据。</p>';
+  for (const st of s.students) {
+    const d = document.createElement("div");
+    d.className = "stu" + (st.student === SELECTED ? " sel" : "");
+    let badges = '<span class="badge b-grade">' + esc(st.grade) + "</span>";
+    if (st.has_conflict) badges += '<span class="badge b-conflict">冲突</span>';
+    if (!st.stable) badges += '<span class="badge b-unstable">结论不稳定</span>';
+    if (st.assessed < st.total)
+      badges += '<span class="badge b-missing">缺测 ' +
+        (st.total - st.assessed) + "</span>";
+    d.innerHTML = '<div><span class="name">' + esc(st.student) + "</span>" +
+      badges + "</div>" +
+      '<div class="meta">综合分 ' + fmt(st.score) +
+      " · 采证覆盖 " + Math.round(st.coverage * 100) + "%</div>";
+    d.onclick = () => { SELECTED = st.student; loadState(); loadDetail(); };
+    el.appendChild(d);
+  }
+}
+
+async function loadDetail() {
+  const box = document.getElementById("detail");
+  if (!SELECTED) return;
+  const d = await api("/api/student/" + encodeURIComponent(SELECTED));
+  const c = d.composite;
+  let h = "<h2>" + esc(SELECTED) +
+    ' <span class="badge b-grade" style="font-size:14px">' +
+    esc(c.grade) + "</span>";
+  h += c.stable ? '<span class="badge b-ok">结论稳定</span>'
+    : '<span class="badge b-unstable">结论不稳定：' + esc(c.low_grade) +
+      " ~ " + esc(c.high_grade) + "</span>";
+  h += "</h2>";
+  h += '<div class="card"><h3>综合结论</h3>' +
+    "<p>综合分 <b>" + fmt(c.score) + "</b>（冲突区间 " + fmt(c.low_score) +
+    " ~ " + fmt(c.high_score) + "）· 已采证维度 " + c.assessed + "/" +
+    c.total + " · 权重覆盖率 " + Math.round(c.coverage * 100) + "%</p>";
+  for (const n of c.notes) h += '<div class="note">' + esc(n) + "</div>";
+  h += "</div>";
+  for (const [id, dim] of Object.entries(d.dims)) {
+    const cls = dim.status === "missing" ? "missing" :
+      dim.conflict ? "conflict" : (dim.participates ? "" : "excluded");
+    h += '<div class="card dim ' + cls + '"><div class="dimhead"><h3>' +
+      esc(dim.name) + "</h3>" +
+      '<span class="small">权重 ' + dim.weight + " · 达标线 " +
+      dim.pass_line + (dim.prereqs.length ?
+        " · 前置：" + dim.prereqs.map(p =>
+          esc((RULES.dimensions[p] || {}).name || p)).join("、") : "") +
+      "</span>";
+    if (dim.status === "missing")
+      h += '<span class="badge b-missing">未采证</span>';
+    if (dim.conflict) h += '<span class="badge b-conflict">评价冲突</span>';
+    if (dim.status === "assessed")
+      h += dim.participates
+        ? '<span class="badge b-ok">参与综合</span>'
+        : '<span class="badge b-unstable">不参与综合</span>';
+    h += '<span class="score">' + fmt(dim.point) +
+      (dim.conflict ? "（区间 " + fmt(dim.low) + " ~ " + fmt(dim.high) + "）" : "") +
+      "</span></div>";
+    if (dim.exclude_note)
+      h += '<div class="note">' + esc(dim.exclude_note) + "</div>";
+    if (dim.status === "missing")
+      h += '<p class="small">该维度暂无采证记录，未按零分计入，'
+        + "其权重已从综合分母中剔除。</p>";
+    if (dim.entries.length) {
+      h += "<table><tr><th>评价者</th><th>采证时刻</th><th>原始取值</th>" +
+        "<th>归一分值</th><th></th></tr>";
+      for (const e of dim.entries) {
+        h += '<tr class="' + (dim.conflict ? "conflict-row" : "") + '"><td>' +
+          esc(e.evaluator) + "</td><td>" + esc(e.recorded_at) + "</td><td>" +
+          esc(e.raw) + "</td><td>" + fmt(e.score) + "</td><td>" +
+          '<span class="del" onclick="delEvidence(' + e.evidence_id +
+          ')">删除</span></td></tr>';
+      }
+      h += "</table>";
+      if (dim.conflict)
+        h += '<p class="small" style="color:#c0392b">多位评价者取值不一致，'
+          + "全部记录已保留；综合结论按冲突区间评估稳定性。</p>";
+    }
+    h += "</div>";
+  }
+  box.innerHTML = h;
+}
+
+async function delEvidence(id) {
+  if (!confirm("确认删除该条采证？删除后仅重算受影响学员。")) return;
+  await api("/api/evidence/delete", { id });
+  toast("已删除并重算");
+  loadState(); loadDetail();
+}
+
+// ---------- 规则配置 ----------
+function openRules() {
+  const p = document.getElementById("panel");
+  let h = "<h2>评价规则配置</h2>";
+  h += "<h3 style='font-size:14px'>维度（权重 / 达标线 / 前置维度）</h3>";
+  for (const [id, d] of Object.entries(RULES.dimensions)) {
+    h += '<div class="card"><b>' + esc(d.name) + "</b> <span class='small'>(" +
+      esc(id) + ")</span>" +
+      '<div class="row"><label>名称</label><input id="rn_' + id +
+      '" value="' + esc(d.name) + '"></div>' +
+      '<div class="row"><label>权重</label><input id="rw_' + id +
+      '" type="number" step="0.5" value="' + d.weight + '"></div>' +
+      '<div class="row"><label>达标线</label><input id="rp_' + id +
+      '" type="number" value="' + d.pass_line + '"></div>' +
+      '<div class="row"><label>前置维度</label><input id="rq_' + id +
+      '" value="' + esc(d.prereqs.join(",")) +
+      '" placeholder="维度ID，逗号分隔"></div></div>';
+  }
+  h += "<h3 style='font-size:14px'>等级分数线（JSON）</h3>" +
+    '<textarea id="rbands">' +
+    esc(JSON.stringify(RULES.grade_bands, null, 1)) + "</textarea>" +
+    "<h3 style='font-size:14px'>等级→分值映射（JSON）</h3>" +
+    '<textarea id="rlevels">' +
+    esc(JSON.stringify(RULES.level_scores, null, 1)) + "</textarea>" +
+    '<div class="row"><button onclick="saveRules()">保存并重算</button>' +
+    '<button class="ghost" onclick="closePanel()">取消</button></div>' +
+    '<p class="small">保存后只重算受影响的学员与维度，列表立即刷新。</p>';
+  p.innerHTML = h;
+  p.className = "open";
+}
+async function saveRules() {
+  try {
+    const rules = { dimensions: {},
+      grade_bands: JSON.parse(document.getElementById("rbands").value),
+      level_scores: JSON.parse(document.getElementById("rlevels").value) };
+    for (const id of Object.keys(RULES.dimensions)) {
+      rules.dimensions[id] = {
+        name: document.getElementById("rn_" + id).value,
+        weight: parseFloat(document.getElementById("rw_" + id).value) || 0,
+        pass_line: parseFloat(document.getElementById("rp_" + id).value) || 0,
+        prereqs: document.getElementById("rq_" + id).value
+          .split(",").map(s => s.trim()).filter(Boolean) };
+    }
+    const r = await api("/api/rules", rules);
+    RULES = rules;
+    closePanel();
+    toast("规则已保存，重算学员 " + r.affected.length + " 人");
+    loadState(); loadDetail();
+  } catch (e) { alert("保存失败：" + e.message); }
+}
+
+// ---------- 导入 ----------
+function openImport() {
+  const p = document.getElementById("panel");
+  p.innerHTML = "<h2>导入 / 补录采证</h2>" +
+    '<p class="small">粘贴 JSON 数组，字段：student, dimension, evaluator, '
+    + 'recorded_at, value（数值或等级）。同一维度可有多位评价者记录。</p>' +
+    '<textarea id="imp">[\n  {"student":"张三","dimension":"skill",'
+    + '"evaluator":"赵老师","recorded_at":"2026-09-19 10:00","value":"A"}\n]'
+    + "</textarea>" +
+    '<div class="row"><button onclick="doImport()">导入并重算</button>' +
+    '<button class="ghost" onclick="closePanel()">取消</button></div>' +
+    '<p class="small">导入后只重算涉及的学员，其余结果保持不变。</p>';
+  p.className = "open";
+}
+async function doImport() {
+  try {
+    const records = JSON.parse(document.getElementById("imp").value);
+    const r = await api("/api/import", { records });
+    closePanel();
+    toast("已导入 " + records.length + " 条，重算学员：" +
+      r.affected.join("、"));
+    loadState(); loadDetail();
+  } catch (e) { alert("导入失败：" + e.message); }
+}
+
+function closePanel() {
+  document.getElementById("panel").className = "";
+}
+async function verify() {
+  const r = await api("/api/verify", {});
+  toast(r.ok ? "校验通过：增量结果与全量重算一致"
+             : "不一致学员：" + r.mismatched.join("、"));
+}
+async function resetDemo() {
+  if (!confirm("将清空全部数据并载入演示数据，确认？")) return;
+  await api("/api/reset", {});
+  SELECTED = null;
+  toast("已载入演示数据");
+  loadState();
+  document.getElementById("detail").innerHTML =
+    '<p class="small" style="padding:20px">请选择左侧学员查看维度明细。</p>';
+}
+
+const _q = new URLSearchParams(location.search).get("student");
+loadState().then(() => { if (_q) { SELECTED = _q; loadDetail(); } });
+</script>
+</body>
+</html>
