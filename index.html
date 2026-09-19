@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生产链推演工作台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1>生产链推演工作台</h1>
+    <span id="consistency" class="badge"></span>
+  </div>
+  <div class="target-bar">
+    <label>目标产物 <select id="target-resource"></select></label>
+    <label>目标数量 <input id="target-qty" type="number" min="0" step="any" value="0"></label>
+    <button id="btn-run" class="primary">推演</button>
+    <span class="sep"></span>
+    <button id="btn-sample">载入示例数据</button>
+    <button id="btn-conflict">导入第二来源（冲突样例）</button>
+    <button id="btn-verify">全量重推校验</button>
+    <button id="btn-clear" class="danger">清空全部数据</button>
+  </div>
+</header>
+<div id="alert" class="alert hidden"></div>
+<main>
+  <div class="col">
+    <section class="panel" id="panel-resources">
+      <h2>资源库存</h2>
+      <div id="resource-table"></div>
+      <form id="resource-form" class="add-form">
+        <h3>录入资源</h3>
+        <input id="resource-source" placeholder="来源（默认：手工录入）">
+        <div class="row">
+          <input id="resource-id" placeholder="资源标识（唯一）" required>
+          <input id="resource-stock" type="number" min="0" step="any" placeholder="初始库存" required>
+        </div>
+        <button type="submit">添加资源</button>
+      </form>
+    </section>
+    <section class="panel" id="panel-conflicts">
+      <h2>冲突记录</h2>
+      <div id="conflict-list"></div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="panel" id="panel-recipes">
+      <h2>配方</h2>
+      <div id="recipe-table"></div>
+      <form id="recipe-form" class="add-form">
+        <h3>录入配方</h3>
+        <input id="recipe-source" placeholder="来源（默认：手工录入）">
+        <input id="recipe-id" placeholder="配方标识（唯一）" required>
+        <div class="row">
+          <input id="recipe-out-res" placeholder="产出资源" required>
+          <input id="recipe-out-qty" type="number" min="0" step="any" placeholder="产出用量" required>
+        </div>
+        <div id="input-rows"></div>
+        <div class="row">
+          <button type="button" id="btn-add-input">＋ 添加投入项</button>
+          <button type="submit">添加配方</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel" id="panel-errors">
+      <h2>拒绝记录</h2>
+      <div id="error-list"></div>
+    </section>
+  </div>
+  <div class="col wide">
+    <section class="panel" id="panel-results">
+      <h2>推演结果</h2>
+      <div id="result-meta" class="meta"></div>
+      <div id="result-table"></div>
+    </section>
+    <section class="panel" id="panel-log">
+      <h2>操作日志</h2>
+      <div id="log-list"></div>
+    </section>
+  </div>
+</main>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
