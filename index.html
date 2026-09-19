@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>版式推演工具 · 本地离线</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>版式推演工具</h1>
+  <span id="recomputeBadge" class="badge"></span>
+  <span class="spacer"></span>
+  <button id="btnLoad">读取 JSON</button>
+  <button id="btnSave">导出 JSON</button>
+  <button id="btnSample">载入示例</button>
+  <input type="file" id="fileInput" accept=".json" hidden>
+</header>
+
+<main>
+  <aside id="leftPanel">
+    <section>
+      <h2>容器</h2>
+      <label>宽度 <input type="range" id="cWidth" min="160" max="1200" step="1">
+        <input type="number" id="cWidthNum" class="num"></label>
+      <label>左内边距 <input type="number" id="cPadL" class="num"></label>
+      <label>右内边距 <input type="number" id="cPadR" class="num"></label>
+      <label>上内边距 <input type="number" id="cPadT" class="num"></label>
+      <label>下内边距 <input type="number" id="cPadB" class="num"></label>
+      <label>水平间距 <input type="number" id="cGapX" class="num"></label>
+      <label>垂直间距 <input type="number" id="cGapY" class="num"></label>
+    </section>
+    <section>
+      <h2>内容块 <button id="btnAdd" class="mini">+ 新增</button></h2>
+      <ul id="blockList"></ul>
+    </section>
+  </aside>
+
+  <section id="canvasWrap">
+    <div id="canvasScroller">
+      <div id="stage"></div>
+    </div>
+    <div id="legend">
+      <span class="sw normal"></span>固有
+      <span class="sw grow"></span>拉伸
+      <span class="sw shrink"></span>压缩
+      <span class="sw squeezed"></span>被挤压
+      <span class="sw overflow"></span>溢出
+      <span class="sw pinned"></span>固定
+    </div>
+  </section>
+
+  <aside id="rightPanel">
+    <section>
+      <h2>冲突清单 <span id="conflictCount" class="count"></span></h2>
+      <ul id="conflictList"></ul>
+    </section>
+    <section id="editorSection">
+      <h2>块属性 <span id="edName"></span></h2>
+      <div id="editor"></div>
+    </section>
+    <section>
+      <h2>约束依据</h2>
+      <div id="reasons"></div>
+    </section>
+  </aside>
+</main>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

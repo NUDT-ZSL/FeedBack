@@ -1,0 +1,11 @@
+{
+  "container": { "width": 560, "padL": 20, "padR": 20, "padT": 16, "padB": 16, "gapX": 12, "gapY": 10 },
+  "blocks": [
+    { "id": "title", "name": "标题", "width": 220, "height": 40, "grow": 1, "shrink": 1, "minW": 140, "maxW": 520, "canBreakBefore": false, "baseline": 32 },
+    { "id": "badge", "name": "角标", "width": 72, "height": 24, "grow": 0, "shrink": 1, "minW": 56, "maxW": 120, "canBreakBefore": true, "baseline": 19 },
+    { "id": "cover", "name": "封面图", "width": 200, "height": 130, "grow": 0, "shrink": 1, "minW": 120, "maxW": 520, "canBreakBefore": true, "baseline": 130 },
+    { "id": "intro", "name": "简介", "width": 280, "height": 64, "grow": 1, "shrink": 2, "minW": 160, "maxW": 520, "canBreakBefore": true, "baseline": 50 },
+    { "id": "meta", "name": "元信息", "width": 150, "height": 28, "grow": 0, "shrink": 1, "minW": 110, "maxW": 300, "canBreakBefore": true, "baseline": 22 },
+    { "id": "action", "name": "操作区", "width": 180, "height": 36, "grow": 0, "shrink": 0, "minW": 180, "maxW": 180, "canBreakBefore": true, "baseline": 30 }
+  ]
+}

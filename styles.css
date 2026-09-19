@@ -1,0 +1,90 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0; font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: #f4f5f7; color: #24292f; height: 100vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; background: #24292f; color: #fff;
+}
+header h1 { font-size: 15px; margin: 0; }
+header .spacer { flex: 1; }
+button {
+  background: #fff; border: 1px solid #c8ccd2; border-radius: 4px;
+  padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+button:hover { background: #eef1f4; }
+button.mini { padding: 1px 7px; font-size: 11px; }
+.badge { font-size: 12px; color: #8be9b8; }
+.badge.mismatch { color: #ff9c9c; }
+
+main { flex: 1; display: flex; min-height: 0; }
+aside {
+  width: 250px; background: #fff; border-right: 1px solid #dde1e6;
+  overflow-y: auto; padding: 10px 12px; flex-shrink: 0;
+}
+#rightPanel { border-right: none; border-left: 1px solid #dde1e6; width: 300px; }
+section { margin-bottom: 16px; }
+h2 { font-size: 12px; text-transform: uppercase; color: #6a737d; margin: 0 0 8px; }
+aside label { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+aside label input[type=range] { flex: 1; }
+.num { width: 62px; }
+.count { color: #d0342c; }
+
+#blockList { list-style: none; margin: 0; padding: 0; }
+#blockList li {
+  padding: 5px 8px; border: 1px solid #dde1e6; border-radius: 4px;
+  margin-bottom: 4px; cursor: pointer; display: flex; justify-content: space-between;
+}
+#blockList li.sel { border-color: #0366d6; background: #eaf3ff; }
+#blockList li .del { color: #b00; cursor: pointer; padding: 0 4px; }
+#blockList li .st { font-size: 11px; color: #6a737d; }
+
+#canvasWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#canvasScroller { flex: 1; overflow: auto; padding: 20px; }
+#stage { position: relative; }
+.container-box {
+  position: relative; background: #fff; border: 2px solid #57606a;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+.pad-guide { position: absolute; background: rgba(3,102,214,.06); pointer-events: none; }
+.line-guide { position: absolute; left: 0; right: 0; border-top: 1px dashed #c8ccd2; pointer-events: none; }
+.baseline-guide { position: absolute; left: 0; right: 0; border-top: 1px dotted #d63384; pointer-events: none; }
+.blk {
+  position: absolute; border: 1.5px solid; border-radius: 3px;
+  font-size: 11px; padding: 2px 4px; overflow: hidden; cursor: pointer;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.blk.sel { outline: 2px solid #0366d6; outline-offset: 1px; z-index: 5; }
+.blk.normal   { background: #eef1f4; border-color: #8c959f; }
+.blk.grow     { background: #dcf5e3; border-color: #2da44e; }
+.blk.shrink   { background: #fff3d6; border-color: #bf8700; }
+.blk.squeezed { background: #ffe2cc; border-color: #d4580a; }
+.blk.overflow { background: #ffd9d7; border-color: #d0342c; }
+.blk.pinned   { background: #e4dcff; border-color: #6a4fd8; }
+.blk .dim { color: #57606a; font-size: 10px; }
+
+#legend { padding: 6px 20px; background: #fff; border-top: 1px solid #dde1e6; font-size: 12px; }
+.sw { display: inline-block; width: 12px; height: 12px; border: 1.5px solid; border-radius: 2px;
+      margin: 0 4px 0 12px; vertical-align: -2px; }
+.sw.normal { background:#eef1f4; border-color:#8c959f; } .sw.grow { background:#dcf5e3; border-color:#2da44e; }
+.sw.shrink { background:#fff3d6; border-color:#bf8700; } .sw.squeezed { background:#ffe2cc; border-color:#d4580a; }
+.sw.overflow { background:#ffd9d7; border-color:#d0342c; } .sw.pinned { background:#e4dcff; border-color:#6a4fd8; }
+
+#conflictList { list-style: none; margin: 0; padding: 0; }
+#conflictList li {
+  border: 1px solid #f3c1bf; background: #fff5f5; border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 6px; cursor: pointer; font-size: 12px;
+}
+#conflictList li:hover { background: #ffeceb; }
+#conflictList .sides { color: #6a737d; font-size: 11px; margin-top: 3px; }
+#conflictList .none { border-color: #dde1e6; background: #f6f8fa; color: #6a737d; cursor: default; }
+
+#editor label { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; }
+#editor label span { width: 76px; color: #57606a; }
+#editor input[type=number] { width: 70px; }
+#reasons { font-size: 12px; color: #374151; }
+#reasons .empty { color: #8c959f; }
+#reasons li { margin-bottom: 3px; }
+#reasons ul { margin: 4px 0; padding-left: 18px; }
