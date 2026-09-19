@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>创作版本回看工作台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Microsoft YaHei","Segoe UI",sans-serif; background:#f4f5f7; color:#24292f; }
+  header { background:#1f2733; color:#fff; padding:10px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  header .spacer { flex:1; }
+  button { cursor:pointer; border:1px solid #c9d1d9; background:#fff; border-radius:6px; padding:5px 12px; font-size:13px; }
+  button:hover { background:#eef1f4; }
+  button.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+  button.danger { background:#dc2626; border-color:#dc2626; color:#fff; }
+  header button { background:#2d3a4d; color:#e6ebf2; border-color:#44506a; }
+  header button:hover { background:#3a4a61; }
+  #cachebar { background:#fff8e1; border-bottom:1px solid #ead9a0; padding:6px 18px; font-size:12.5px; color:#6b5b16; min-height:30px; }
+  main { display:grid; grid-template-columns: minmax(420px,1.2fr) minmax(380px,1fr); gap:10px; padding:10px; height:calc(100vh - 92px); }
+  .col { display:flex; flex-direction:column; gap:10px; min-height:0; overflow:auto; }
+  .card { background:#fff; border:1px solid #dde1e6; border-radius:8px; padding:10px 12px; }
+  .card h2 { font-size:14px; margin:0 0 8px; color:#374151; }
+  #graphWrap { flex:1; overflow:auto; min-height:280px; }
+  svg text { font-size:11px; }
+  .node circle { cursor:pointer; stroke:#fff; stroke-width:1.5; }
+  .node.selected circle { stroke:#111; stroke-width:3; }
+  .node text { pointer-events:none; }
+  .edge { stroke:#9aa4b2; stroke-width:1.5; fill:none; }
+  .edge.missing { stroke:#dc2626; stroke-dasharray:4 3; }
+  .edge.cycle { stroke:#dc2626; stroke-width:2; }
+  .tag { font-size:10px; fill:#fff; }
+  #problems .item { padding:5px 8px; border-radius:5px; margin-bottom:5px; font-size:12.5px; }
+  #problems .item.err { background:#fdecec; border:1px solid #f3b4b4; color:#8f1d1d; }
+  #problems .item.warn { background:#fff4e0; border:1px solid #f0cf9a; color:#8a5a12; }
+  #problems .ok { color:#1a7f37; font-size:12.5px; }
+  .diffcols { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .diffcol { border:1px solid #e2e6ea; border-radius:6px; padding:8px; background:#fafbfc; min-height:60px; }
+  .diffcol h3 { margin:0 0 6px; font-size:12.5px; }
+  .diffcol li { font-size:12.5px; margin-bottom:4px; }
+  .basis { font-size:12px; color:#57606a; margin-top:8px; }
+  .basis code { background:#eef1f4; padding:1px 5px; border-radius:4px; margin-right:3px; }
+  #editor label { display:block; font-size:12px; color:#57606a; margin-top:6px; }
+  #editor input, #editor textarea, #editor select { width:100%; padding:5px 7px; border:1px solid #c9d1d9; border-radius:5px; font-size:13px; font-family:inherit; }
+  #editor textarea { resize:vertical; min-height:52px; }
+  .btnrow { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .hint { font-size:12px; color:#8a5a12; background:#fff4e0; border:1px solid #f0cf9a; border-radius:5px; padding:5px 8px; margin-top:8px; }
+  .selinfo { font-size:12.5px; color:#57606a; margin-bottom:6px; }
+  .selinfo b { color:#111; }
+</style>
+</head>
+<body>
+<header>
+  <h1>创作版本回看工作台</h1>
+  <button id="btnLoad">载入版本记录(JSON)</button>
+  <button id="btnExport">导出当前记录</button>
+  <button id="btnSample">载入示例数据</button>
+  <span class="spacer"></span>
+  <span id="stat" style="font-size:12.5px;color:#9fb0c8"></span>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+</header>
+<div id="cachebar">对比结论缓存：0 条</div>
+<main>
+  <div class="col">
+    <div class="card" id="graphCard">
+      <h2>版本血缘视图（点击节点进行选择，选两个版本自动对比）</h2>
+      <div id="graphWrap"></div>
+    </div>
+    <div class="card" id="problemsCard">
+      <h2>问题标记</h2>
+      <div id="problems"></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <h2>版本对比</h2>
+      <div id="compare"></div>
+    </div>
+    <div class="card" id="editor">
+      <h2>补录 / 修正版本记录</h2>
+      <label>版本标识（唯一）</label><input id="fId" placeholder="如 v13">
+      <label>父版本（留空表示根版本）</label><input id="fParent" list="idList" placeholder="父版本标识">
+      <datalist id="idList"></datalist>
+      <label>作者</label><input id="fAuthor">
+      <label>提交时间</label><input id="fTime" placeholder="2026-09-19 10:00">
+      <label>改动摘要</label><textarea id="fSummary"></textarea>
+      <div class="btnrow">
+        <button class="primary" id="btnSave">保存（新增或修正）</button>
+        <button class="danger" id="btnRetract">撤销该版本</button>
+        <button id="btnRestore">恢复该版本</button>
+        <button id="btnAcceptParent">接受建议的新父版本</button>
+      </div>
+      <div class="hint" id="pendingHint" style="display:none"></div>
+    </div>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
