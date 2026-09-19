@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>媒体生产队列工作台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>媒体生产队列工作台</h1>
+  <div class="toolbar">
+    <label>处理通道数 <input type="number" id="channel-count" min="1" max="8" value="3"></label>
+    <button id="btn-schedule" class="primary">调度 / 重排</button>
+    <button id="btn-check">一致性校验</button>
+    <button id="btn-demo">载入示例批次</button>
+    <button id="btn-baddemo">载入异常示例</button>
+    <button id="btn-clear" class="danger">清空</button>
+  </div>
+</header>
+
+<div id="errors" class="errors hidden"></div>
+
+<main>
+  <section class="panel" id="panel-input">
+    <h2>任务录入</h2>
+    <form id="asset-form" class="row">
+      <input id="f-new-asset" placeholder="素材标识，如 V-107" required>
+      <button type="submit">登记素材</button>
+    </form>
+    <p class="muted">已登记素材：<span id="asset-list"></span></p>
+    <form id="task-form">
+      <div class="row"><label>任务 ID <input id="f-id" required></label>
+      <label>素材 <select id="f-asset"></select></label></div>
+      <div class="row"><label>加工类型 <select id="f-type">
+        <option>转码</option><option>剪辑</option><option>字幕</option><option>混流</option><option>压制</option>
+      </select></label></div>
+      <div class="row">
+        <label>预计耗时 <input id="f-duration" type="number" min="1" value="3" required></label>
+        <label>优先级(1-9) <input id="f-priority" type="number" min="1" max="9" value="3" required></label>
+      </div>
+      <fieldset><legend>前置依赖（可多选）</legend><div id="f-deps" class="deps"></div></fieldset>
+      <button type="submit" class="primary">录入任务</button>
+    </form>
+  </section>
+
+  <section class="panel wide">
+    <h2>任务队列</h2>
+    <div id="stats" class="stats"></div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>素材</th><th>类型</th><th>耗时</th><th>优先级</th><th>依赖</th><th>状态</th><th>通道 / 时段</th><th>操作</th>
+      </tr></thead>
+      <tbody id="task-rows"></tbody>
+    </table>
+  </section>
+
+  <section class="panel wide">
+    <h2>通道占用</h2>
+    <div id="gantt"></div>
+  </section>
+
+  <section class="panel">
+    <h2>失败与重试</h2>
+    <div id="failures"></div>
+  </section>
+
+  <section class="panel">
+    <h2>调度日志</h2>
+    <div id="log" class="log"></div>
+  </section>
+</main>
+
+<script src="scheduler.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

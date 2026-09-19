@@ -1,0 +1,9 @@
+{
+  "name": "media-production-queue",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local offline media production queue workbench",
+  "scripts": {
+    "test": "node tests/scheduler.test.js && node tests/app.smoke.js && node tests/app.flow.js"
+  }
+}
