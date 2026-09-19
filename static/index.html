@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>反馈需求线索聚类</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0;
+         background: #f4f5f7; color: #222; }
+  header { background: #2f54eb; color: #fff; padding: 12px 20px;
+           display: flex; align-items: center; gap: 16px;
+           flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { display: flex; gap: 16px; padding: 16px; align-items: flex-start; }
+  .panel { background: #fff; border-radius: 8px; padding: 14px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #left { width: 340px; flex: none; }
+  #right { flex: 1; min-width: 0; }
+  textarea, input, select { width: 100%; margin: 4px 0; padding: 6px;
+           border: 1px solid #ccc; border-radius: 4px; font: inherit; }
+  button { padding: 6px 12px; border: 0; border-radius: 4px;
+           background: #2f54eb; color: #fff; cursor: pointer; }
+  button.ghost { background: #eee; color: #333; }
+  button.danger { background: #cf1322; }
+  .group { border: 1px solid #e0e0e0; border-radius: 8px;
+           margin-bottom: 12px; }
+  .group-head { padding: 10px 12px; cursor: pointer;
+           display: flex; justify-content: space-between; gap: 8px; }
+  .group-head:hover { background: #f0f5ff; }
+  .rep { font-weight: 600; }
+  .kw { color: #2f54eb; font-size: 12px; }
+  .group-body { display: none; border-top: 1px solid #eee;
+           padding: 10px 12px; }
+  .group.open .group-body { display: block; }
+  .item { border: 1px solid #eee; border-radius: 6px; padding: 8px;
+           margin: 6px 0; background: #fafafa; }
+  .meta { color: #888; font-size: 12px; }
+  .tag { background: #e6f7ff; border: 1px solid #91d5ff;
+         border-radius: 3px; padding: 0 4px; font-size: 12px; }
+  .evi { background: #fffbe6; border: 1px solid #ffe58f;
+         border-radius: 6px; padding: 8px; margin: 6px 0;
+         font-size: 13px; }
+  .boundary { background: #fff1f0; border: 1px solid #ffa39e;
+         border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+  .pinned { color: #fa8c16; font-size: 12px; }
+  .row { display: flex; gap: 6px; align-items: center;
+         flex-wrap: wrap; }
+  .row > * { width: auto; }
+  h3 { margin: 6px 0; font-size: 15px; }
+  #ops { font-size: 12px; color: #666; max-height: 160px;
+         overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>反馈需求线索聚类（离线）</h1>
+  <span class="row">
+    <label>相似度阈值 <span id="thVal"></span></label>
+    <input type="range" id="threshold" min="0.1" max="0.8" step="0.01"
+           style="width:160px">
+  </span>
+  <button id="resetBtn" class="ghost">重置人工调整</button>
+  <span id="stats"></span>
+</header>
+<main>
+  <div id="left">
+    <div class="panel">
+      <h3>新增反馈</h3>
+      <input id="fSource" placeholder="来源，如 客服/问卷/App评价">
+      <textarea id="fText" rows="3" placeholder="反馈原文"></textarea>
+      <input id="fTags" placeholder="标签（逗号分隔，可空）">
+      <button id="addBtn">添加</button>
+      <h3>操作日志</h3>
+      <div id="ops"></div>
+    </div>
+  </div>
+  <div id="right">
+    <div id="boundaryBox"></div>
+    <div id="groups"></div>
+  </div>
+</main>
+<script>
+let STATE = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+async function api(path, method, body) {
+  const opt = { method: method || "GET" };
+  if (body !== undefined) {
+    opt.headers = { "Content-Type": "application/json" };
+    opt.body = JSON.stringify(body);
+  }
+  const r = await fetch(path, opt);
+  const data = await r.json();
+  if (!r.ok) alert(data.error || "请求失败");
+  return data;
+}
+
+async function refresh() {
+  STATE = await api("/api/state");
+  render();
+}
+
+function render() {
+  $("threshold").value = STATE.threshold;
+  $("thVal").textContent = Number(STATE.threshold).toFixed(2);
+  $("stats").textContent = "共 " + STATE.item_count + " 条反馈 / "
+    + STATE.groups.length + " 个问题簇";
+
+  // boundary warnings (requirement: keep borderline merge evidence)
+  $("boundaryBox").innerHTML = STATE.boundary_pairs.map(bp => `
+    <div class="boundary">
+      <b>边界提示：</b>${esc(bp.note)}<br>
+      簇 ${bp.group_a + 1} ↔ 簇 ${bp.group_b + 1}，
+      相似度 ${bp.similarity}，共同特征：${esc(bp.evidence.join("、"))}
+      <div class="row" style="margin-top:6px">
+        <button onclick="doMerge(${bp.group_a},${bp.group_b})">
+          合并这两簇</button>
+      </div>
+    </div>`).join("");
+
+  $("groups").innerHTML = STATE.groups.map(g => `
+    <div class="group" id="grp${g.gid}">
+      <div class="group-head" onclick="toggle(${g.gid})">
+        <div>
+          <div class="rep">簇 ${g.gid + 1}：${esc(g.representative)}</div>
+          <div class="kw">关键词：${esc(g.keywords.join(" / "))}
+            ｜ ${g.members.length} 条反馈</div>
+        </div>
+        <div class="row" onclick="event.stopPropagation()">
+          <select id="mergeSel${g.gid}">
+            <option value="">合并到…</option>
+            ${STATE.groups.filter(o => o.gid !== g.gid).map(o =>
+              `<option value="${o.gid}">簇 ${o.gid + 1}</option>`).join("")}
+          </select>
+          <button class="ghost" onclick="doMergeSel(${g.gid})">合并</button>
+        </div>
+      </div>
+      <div class="group-body">
+        ${g.members.map(m => renderItem(g, m)).join("")}
+        ${renderEvidence(g)}
+        <div class="row">
+          <button class="ghost" onclick="doSplit(${g.gid})">
+            拆分选中项为新簇</button>
+        </div>
+      </div>
+    </div>`).join("");
+
+  $("ops").innerHTML = STATE.ops.slice().reverse().map(o =>
+    `<div>${esc(o.time)} ${esc(o.op)} ${esc(JSON.stringify(
+      o.item || o.target || o.extracted || o.a || ""))}</div>`).join("")
+    || "（暂无人工调整）";
+}
+
+function renderItem(g, m) {
+  const pinned = g.evidence.manually_pinned.includes(m.id);
+  return `<div class="item">
+    <div>${esc(m.text)} ${pinned ? '<span class="pinned">[人工固定]</span>'
+      : ""}</div>
+    <div class="meta">来源：${esc(m.source)} ｜ 时间：${esc(m.time)}
+      ${(m.tags || []).map(t => `<span class="tag">${esc(t)}</span>`)
+        .join(" ")}</div>
+    <div class="row">
+      <input type="checkbox" class="splitCk" value="${m.id}">
+      <select id="mv${m.id}">
+        <option value="">移动到…</option>
+        ${STATE.groups.filter(o => o.gid !== g.gid).map(o =>
+          `<option value="${o.gid}">簇 ${o.gid + 1}</option>`).join("")}
+      </select>
+      <button class="ghost" onclick="doMove('${m.id}')">移动</button>
+      <button class="ghost" onclick="doEdit('${m.id}')">编辑</button>
+      <button class="danger" onclick="doDelete('${m.id}')">删除</button>
+    </div>
+  </div>`;
+}
+
+function renderEvidence(g) {
+  const ev = g.evidence;
+  const pairs = ev.top_pairs.map(p =>
+    `<div>“${esc(short(p.a))}” ↔ “${esc(short(p.b))}”
+      相似度 ${p.similarity}，共同特征：${esc(p.common_terms.join("、"))}
+    </div>`).join("");
+  const merges = ev.merge_log.map(m =>
+    `<div>自动归并（相似度 ${m.similarity}）：依据
+      ${esc(m.evidence.join("、"))}</div>`).join("");
+  return `<div class="evi"><b>判定依据</b>${pairs}${merges}</div>`;
+}
+
+function short(iid) {
+  for (const g of STATE.groups)
+    for (const m of g.members)
+      if (m.id === iid)
+        return m.text.length > 12 ? m.text.slice(0, 12) + "…" : m.text;
+  return iid;
+}
+function toggle(gid) {
+  document.getElementById("grp" + gid).classList.toggle("open");
+}
+
+async function doMove(iid) {
+  const gid = $("mv" + iid).value;
+  if (gid === "") return alert("请选择目标簇");
+  await api("/api/move", "POST",
+            { item: iid, target_gid: Number(gid) });
+  await refresh();
+}
+
+async function doMerge(a, b) {
+  await api("/api/merge", "POST", { gid_a: a, gid_b: b });
+  await refresh();
+}
+
+async function doMergeSel(gid) {
+  const other = $("mergeSel" + gid).value;
+  if (other === "") return alert("请选择要合并的另一簇");
+  await doMerge(gid, Number(other));
+}
+
+async function doSplit(gid) {
+  const cks = document.querySelectorAll(
+    "#grp" + gid + " .splitCk:checked");
+  const ids = Array.from(cks).map(c => c.value);
+  if (!ids.length) return alert("请先勾选要拆出的反馈");
+  await api("/api/split", "POST", { gid: gid, item_ids: ids });
+  await refresh();
+}
+
+async function doEdit(iid) {
+  let cur = null;
+  for (const g of STATE.groups)
+    for (const m of g.members) if (m.id === iid) cur = m;
+  const text = prompt("修改反馈原文：", cur.text);
+  if (text === null) return;
+  const tags = prompt("标签（逗号分隔）：",
+                      (cur.tags || []).join(","));
+  await api("/api/feedback/" + iid, "PUT", {
+    text: text,
+    tags: (tags || "").split(",").map(s => s.trim()).filter(Boolean),
+  });
+  await refresh();
+}
+
+async function doDelete(iid) {
+  if (!confirm("确定删除该反馈？")) return;
+  await api("/api/feedback/" + iid, "DELETE");
+  await refresh();
+}
+
+$("addBtn").onclick = async () => {
+  const text = $("fText").value.trim();
+  if (!text) return alert("请填写反馈原文");
+  await api("/api/feedback", "POST", {
+    source: $("fSource").value.trim(),
+    text: text,
+    tags: $("fTags").value.split(",").map(s => s.trim())
+      .filter(Boolean),
+  });
+  $("fText").value = "";
+  await refresh();
+};
+
+$("threshold").onchange = async e => {
+  await api("/api/threshold", "POST",
+            { threshold: Number(e.target.value) });
+  await refresh();
+};
+
+$("resetBtn").onclick = async () => {
+  if (!confirm("清除全部人工调整，恢复纯自动聚类？")) return;
+  await api("/api/reset", "POST", {});
+  await refresh();
+};
+
+refresh();
+</script>
+</body>
+</html>
