@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>三维空间标注审查工具(离线)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <span class="title">三维空间标注审查工具</span>
+  <span class="hint">拖拽旋转相机 · 滚轮缩放 · 点击对象/标注选中</span>
+  <button id="btnResetCam">重置相机</button>
+</header>
+<main>
+  <aside id="left">
+    <h2>空间对象层级</h2>
+    <div id="tree"></div>
+    <h2>对象操作(先选中)</h2>
+    <div class="ops">
+      <div class="row">
+        <button data-move="1,0,0">+X</button><button data-move="-1,0,0">-X</button>
+        <button data-move="0,1,0">+Y</button><button data-move="0,-1,0">-Y</button>
+        <button data-move="0,0,1">+Z</button><button data-move="0,0,-1">-Z</button>
+      </div>
+      <div class="row">
+        <button data-rot="0,15,0">绕Y +15°</button><button data-rot="0,-15,0">绕Y -15°</button>
+        <button data-rot="15,0,0">绕X +15°</button>
+      </div>
+      <div class="row">
+        <button data-scale="1.2">放大 1.2x</button><button data-scale="0.8">缩小 0.8x</button>
+      </div>
+      <div class="row">
+        <select id="reparentTarget"></select>
+        <button id="btnReparent">改挂父对象</button>
+      </div>
+      <div class="row">
+        <button id="btnDelete" class="danger">删除对象</button>
+      </div>
+    </div>
+    <h2>新增标注</h2>
+    <div class="ops">
+      <input id="annId" placeholder="标注 id(唯一)">
+      <input id="annAnchor" placeholder="锚点 x,y,z(局部) 如 0,0.5,0">
+      <input id="annText" placeholder="正文">
+      <input id="annSource" placeholder="来源 如 审阅人A" value="审阅人A">
+      <button id="btnAddAnn">挂载到选中对象</button>
+      <button id="btnConflict">模拟另一来源矛盾提交</button>
+    </div>
+    <h2>新增关系</h2>
+    <div class="ops">
+      <input id="relFrom" placeholder="从标注 id">
+      <input id="relTo" placeholder="到标注 id">
+      <select id="relType"><option value="reference">引用</option><option value="dependency">从属</option></select>
+      <button id="btnAddRel">建立关系</button>
+    </div>
+  </aside>
+  <section id="center">
+    <canvas id="view"></canvas>
+  </section>
+  <aside id="right">
+    <h2>标注列表(当前视图)</h2>
+    <div id="annList"></div>
+    <h2>冲突记录</h2>
+    <div id="conflictList"></div>
+  </aside>
+</main>
+<footer>
+  <h2>事件日志(拒绝原因 / 冲突 / 失效)</h2>
+  <div id="log"></div>
+</footer>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
