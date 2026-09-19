@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>离线战斗结算追溯台</title>
+    <link rel="stylesheet" href="./src/ui/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>离线战斗结算追溯台</h1>
+        <p>载入单位、技能、效果、规则与有序行动；全程在本机浏览器运行。</p>
+      </div>
+      <div class="actions">
+        <button id="runButton">增量续算</button>
+        <button id="verifyButton" class="secondary">全量重算比对</button>
+        <button id="baselineButton" class="secondary">设为新基线</button>
+        <button id="sampleButton" class="secondary">恢复示例</button>
+        <button id="importButton" class="secondary">导入</button>
+        <button id="exportButton" class="secondary">导出</button>
+        <input id="fileInput" type="file" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel editor-panel">
+        <div class="panel-title">
+          <h2>输入数据 / 规则参数</h2>
+          <span id="parseState"></span>
+        </div>
+        <textarea id="editor" spellcheck="false"></textarea>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="summary-grid">
+          <article>
+            <span>续算起点</span>
+            <strong id="startIndex">-</strong>
+          </article>
+          <article>
+            <span>复用 / 重算行动</span>
+            <strong id="reuseInfo">-</strong>
+          </article>
+          <article>
+            <span>最终状态哈希</span>
+            <strong id="finalHash">-</strong>
+          </article>
+          <article>
+            <span>一致性</span>
+            <strong id="consistency">-</strong>
+          </article>
+        </div>
+        <div id="issues" class="issues"></div>
+        <h2>战斗后单位状态</h2>
+        <div id="units" class="units"></div>
+        <h2>结算时间线</h2>
+        <div id="timeline" class="timeline"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/ui/app.js"></script>
+  </body>
+</html>
