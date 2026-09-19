@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分片计算调度工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>分片计算调度工作台</h1>
+  <p class="subtitle">离线运行 · 页面可见时按片推进 · 隐藏时暂停保位 · 恢复后从暂停点续起</p>
+  <div class="engine-bar">
+    <span id="engineState" class="badge ok">调度运行中</span>
+    <span id="pageState" class="badge ok">页面可见</span>
+    <label>单帧额度 <input id="frameBudget" type="number" min="0" step="1" value="6"></label>
+    <label>分片大小 <input id="shardSize" type="number" min="1" step="1" value="10"><small>（对新任务生效）</small></label>
+    <label>步进间隔(ms) <input id="stepInterval" type="number" min="30" step="10" value="250"></label>
+    <button id="toggleEngine">暂停调度</button>
+    <button id="toggleVisibility">模拟页面隐藏</button>
+    <button id="clearFinished">清理已结束任务</button>
+  </div>
+</header>
+<main>
+  <section class="panel">
+    <h2>提交任务</h2>
+    <form id="addForm">
+      <input id="taskId" placeholder="任务标识（唯一）" required>
+      <input id="totalWork" type="number" placeholder="总工作量（正数）" required>
+      <input id="priority" type="number" placeholder="优先级（数字，越大越先）" value="0">
+      <button type="submit">提交任务</button>
+    </form>
+    <details>
+      <summary>批量导入：每行一条，格式「标识,总工作量,优先级」（优先级可省略）</summary>
+      <textarea id="batchText" rows="4" placeholder="task-1,40,5&#10;task-2,25,3"></textarea>
+      <button id="batchAdd" type="button">批量提交</button>
+    </details>
+    <div id="formErrors" class="errors"></div>
+  </section>
+  <section class="panel">
+    <h2>任务队列 <span id="queueMeta" class="meta"></span></h2>
+    <table id="taskTable">
+      <thead><tr>
+        <th>顺序</th><th>标识</th><th>优先级</th><th>状态</th>
+        <th>进度（已完成/总量）</th><th>暂停位置</th><th>顺延原因</th><th>最近事件</th><th>操作</th>
+      </tr></thead>
+      <tbody id="taskTableBody"></tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <h2>分片详情 <span id="shardTaskLabel" class="meta"></span></h2>
+    <div id="shardPanel" class="shards"></div>
+  </section>
+  <section class="panel">
+    <h2>事件日志</h2>
+    <ul id="eventLog" class="log"></ul>
+  </section>
+</main>
+<script src="scheduler.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
