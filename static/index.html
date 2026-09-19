@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>运维日志链可信性核查</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>运维日志链可信性核查</h1>
+  <div class="toolbar">
+    <button id="btn-sample">载入示例数据</button>
+    <input id="load-path" placeholder="日志文件路径（JSONL）">
+    <button id="btn-load">载入文件</button>
+    <button id="btn-verify">全量校验</button>
+    <button id="btn-first-bad" disabled>定位首个可疑</button>
+    <label><input type="checkbox" id="filter-bad"> 只看可疑/受影响</label>
+  </div>
+</header>
+
+<section id="summary" class="summary hidden">
+  <span id="sum-total"></span><span id="sum-ok" class="ok"></span>
+  <span id="sum-mismatch" class="mismatch"></span>
+  <span id="sum-suspicious" class="suspicious"></span>
+  <span id="sum-affected" class="affected"></span>
+  <span id="sum-range"></span><span id="sum-incr"></span>
+</section>
+
+<main>
+  <table id="chain-table" class="hidden">
+    <thead><tr>
+      <th>顺序号</th><th>时间</th><th>来源</th><th>正文</th>
+      <th>前序</th><th>校验值</th><th>状态</th><th>裁决</th>
+    </tr></thead>
+    <tbody id="chain-body"></tbody>
+  </table>
+
+  <aside id="detail" class="hidden">
+    <h2><span id="detail-title">记录详情</span><button id="detail-close">×</button></h2>
+    <div id="detail-status"></div>
+    <h3>原始内容</h3>
+    <pre id="detail-raw"></pre>
+    <h3>校验依据差异</h3>
+    <div class="diffrow"><label>期望校验值</label><code id="detail-expected"></code></div>
+    <div class="diffrow"><label>实际校验值</label><code id="detail-actual"></code></div>
+    <ul id="detail-reasons"></ul>
+    <h3>对后续链条的影响</h3>
+    <p id="detail-impact"></p>
+    <h3>裁决</h3>
+    <div class="adj-form">
+      <select id="adj-verdict">
+        <option value="confirmed_tampered">确认被篡改</option>
+        <option value="accepted">接受现状（以当前内容为准）</option>
+        <option value="false_alarm">误报</option>
+        <option value="pending">待进一步调查</option>
+      </select>
+      <input id="adj-note" placeholder="备注">
+      <button id="adj-save">保存裁决</button>
+    </div>
+    <div id="adj-current"></div>
+    <h3>修改记录（仅重算受影响区间）</h3>
+    <div class="edit-form">
+      <label>正文 <input id="edit-body"></label>
+      <label>新顺序号 <input id="edit-seq" type="number"></label>
+      <label>校验值 <input id="edit-checksum" placeholder="留空则不改动"></label>
+      <label><input type="checkbox" id="edit-recompute"> 重算本条校验值</label>
+      <label><input type="checkbox" id="edit-recompute-chain"> 从本条起重算全链校验值</label>
+      <button id="edit-save">提交修改并增量校验</button>
+    </div>
+    <div id="edit-result"></div>
+  </aside>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

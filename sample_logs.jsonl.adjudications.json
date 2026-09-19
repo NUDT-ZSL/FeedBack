@@ -1,0 +1,10 @@
+{
+  "adjudications": {
+    "1012": {
+      "verdict": "confirmed_tampered",
+      "note": "登录来源 IP 被改动",
+      "context_checksum": "e574bc3ff87e2dc33d891a8810c9bbcdfd3ac31fe5471674e7a9242a94cd873e",
+      "updated_at": "2026-09-20T01:06:40"
+    }
+  }
+}
