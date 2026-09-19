@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>版式推演工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.5 "Microsoft YaHei", "PingFang SC", sans-serif;
+         background: #f1f5f9; color: #1e293b; }
+  header { background: #0f172a; color: #e2e8f0; padding: 8px 16px; }
+  header h1 { font-size: 16px; margin: 0 0 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .controls label { display: flex; align-items: center; gap: 4px; }
+  .controls input[type=number] { width: 64px; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 4px;
+           padding: 4px 10px; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  button.ghost { background: #475569; }
+  #modeBadge { margin-left: auto; padding: 2px 10px; border-radius: 10px;
+               background: #166534; color: #dcfce7; font-size: 12px; }
+  #modeBadge.bad { background: #991b1b; color: #fee2e2; }
+  main { display: grid; grid-template-columns: 360px 1fr 300px; gap: 10px; padding: 10px; }
+  section, aside { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+                   padding: 8px; min-height: 200px; }
+  h2 { font-size: 13px; margin: 0 0 8px; color: #475569; display: flex;
+       justify-content: space-between; align-items: center; }
+  /* 块编辑器 */
+  #blockEditor { overflow-y: auto; max-height: calc(100vh - 150px); }
+  .card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; margin-bottom: 8px; }
+  .card.sel { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b; }
+  .card .head { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+  .card .head input[name=name] { flex: 1; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; }
+  .grid label { display: flex; flex-direction: column; font-size: 11px; color: #64748b; }
+  .grid input { width: 100%; }
+  .checks { display: flex; gap: 12px; margin-top: 4px; font-size: 12px; }
+  .del { background: #dc2626; padding: 2px 8px; }
+  input { border: 1px solid #cbd5e1; border-radius: 3px; padding: 2px 4px; font: inherit; }
+  /* 画布 */
+  #canvasScroll { overflow: auto; max-height: calc(100vh - 320px); background: #e2e8f0;
+                  border-radius: 4px; padding: 12px; }
+  #canvas { position: relative; background: #fff; border: 1px solid #94a3b8; margin: 0 auto; }
+  #padGuide { position: absolute; border: 1px dashed #94a3b8; pointer-events: none; }
+  .blk { position: absolute; background: #dbeafe; border: 1px solid #3b82f6;
+         border-radius: 3px; overflow: hidden; cursor: pointer; font-size: 11px;
+         padding: 2px 4px; color: #1e3a8a; }
+  .blk .dim { color: #64748b; font-size: 10px; display: block; }
+  .blk.fixed { border-color: #7c3aed; border-width: 2px; background: #ede9fe; }
+  .blk.squeezed { background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 6px, #fff 6px, #fff 12px);
+                  border-color: #dc2626; }
+  .blk.overflow { outline: 2px dashed #dc2626; outline-offset: 1px; }
+  .blk.sel { outline: 2px solid #f59e0b; outline-offset: 1px; z-index: 5; }
+  .legend { font-size: 11px; color: #64748b; margin-top: 6px; }
+  /* 冲突清单 */
+  #conflictPanel { margin-top: 10px; }
+  #conflictList { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; }
+  #conflictList li { border-left: 3px solid #dc2626; background: #fef2f2; margin-bottom: 4px;
+                     padding: 4px 8px; cursor: pointer; border-radius: 0 4px 4px 0; }
+  #conflictList li.y { border-left-color: #d97706; background: #fffbeb; }
+  #conflictList .tag { font-weight: 600; margin-right: 6px; }
+  #conflictList .none { border: 0; background: none; color: #16a34a; cursor: default; }
+  /* 约束依据 */
+  #rationale { font-size: 12px; }
+  #rationale .geo { background: #f1f5f9; border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+  #rationale ul { margin: 4px 0; padding-left: 18px; }
+  #rationale .flag { display: inline-block; padding: 0 6px; border-radius: 8px;
+                     font-size: 11px; margin-right: 4px; }
+  .flag.sq { background: #fee2e2; color: #b91c1c; }
+  .flag.ov { background: #fecaca; color: #7f1d1d; }
+  .flag.fx { background: #ede9fe; color: #5b21b6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>版式推演工具（本地离线）</h1>
+  <div class="controls">
+    <label>容器宽 <input id="cWidth" type="number" min="80" step="10"></label>
+    <label>内边距 <input id="cPadding" type="number" min="0"></label>
+    <label>间距 <input id="cGap" type="number" min="0"></label>
+    <label>行距 <input id="cLineGap" type="number" min="0"></label>
+    <button id="btnSample" class="ghost">载入示例</button>
+    <button id="btnLoad" class="ghost">导入 JSON</button>
+    <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <button id="btnExport" class="ghost">导出 JSON</button>
+    <span id="modeBadge"></span>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>内容块 <button id="btnAdd">+ 添加块</button></h2>
+    <div id="blockEditor"></div>
+  </section>
+  <section>
+    <h2>布局画布 <span id="hashView"></span></h2>
+    <div id="canvasScroll"><div id="canvas"></div></div>
+    <div class="legend">紫框=固定尺寸 · 红纹=被挤压 · 红虚线=溢出 · 黄框=当前选中（点击块查看约束依据）</div>
+    <div id="conflictPanel">
+      <h2>冲突清单 <span id="conflictCount"></span></h2>
+      <ul id="conflictList"></ul>
+    </div>
+  </section>
+  <aside>
+    <h2>约束依据</h2>
+    <div id="rationale">点击画布或左侧卡片中的块，查看其位置/尺寸的推导依据。</div>
+  </aside>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
