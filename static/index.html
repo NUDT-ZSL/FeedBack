@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>版本回看工作台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 "Microsoft YaHei",sans-serif; background:#14171c; color:#dde3ec; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:#1c2129; border-bottom:1px solid #2a3140; }
+  header h1 { font-size:16px; margin:0; }
+  button { background:#2b3648; color:#dde3ec; border:1px solid #3a4763; border-radius:6px; padding:5px 12px; cursor:pointer; }
+  button:hover { background:#37455e; }
+  button.primary { background:#2f6fed; border-color:#2f6fed; color:#fff; }
+  button.danger { background:#5a2b2b; border-color:#7a3a3a; }
+  input, select, textarea { background:#10141a; color:#dde3ec; border:1px solid #3a4763; border-radius:6px; padding:5px 8px; width:100%; }
+  main { display:grid; grid-template-columns: 1fr 400px; gap:10px; padding:10px; height:calc(100vh - 49px); }
+  .panel { background:#1c2129; border:1px solid #2a3140; border-radius:10px; padding:10px; overflow:auto; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:#8fa3c8; text-transform:uppercase; letter-spacing:1px; }
+  #right { display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .node { cursor:pointer; }
+  .node text { fill:#dde3ec; font-size:11px; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:8px; font-size:11px; margin-right:4px; }
+  .tag.problem { background:#5a2b2b; color:#ffb4b4; }
+  .tag.pending { background:#5a4a1e; color:#ffd98a; }
+  .tag.revoked { background:#333; color:#999; }
+  .tag.cache { background:#1e3a2a; color:#9adfb4; }
+  .tag.fresh { background:#1e2a4a; color:#9ab4ff; }
+  .diff-line { padding:3px 8px; border-left:3px solid #3a4763; margin:3px 0; white-space:pre-wrap; }
+  .diff-line.a { border-color:#e0704a; }
+  .diff-line.b { border-color:#4aa3e0; }
+  .diff-line.fork { border-color:#8fa3c8; color:#8fa3c8; }
+  .row { display:flex; gap:6px; margin:6px 0; align-items:center; }
+  .muted { color:#7c879c; font-size:12px; }
+  .prob { background:#2a1e1e; border:1px solid #5a2b2b; border-radius:8px; padding:6px 10px; margin:4px 0; }
+  .kept { color:#9adfb4; } .dropped { color:#ffb4b4; }
+  .ver-item { padding:4px 8px; border-radius:6px; margin:2px 0; cursor:pointer; }
+  .ver-item:hover { background:#232a36; }
+  .ver-item.selA { outline:2px solid #e0704a; }
+  .ver-item.selB { outline:2px solid #4aa3e0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>版本回看工作台</h1>
+  <span class="muted" id="stat"></span>
+  <span style="flex:1"></span>
+  <button id="btnAdd">补录版本</button>
+  <button id="btnReload">重新载入本地数据</button>
+</header>
+<main>
+  <div class="panel" id="graphPanel">
+    <h2>版本血缘视图(点击节点查看 / 双击设为对比A,Shift+双击设为B)</h2>
+    <svg id="graph" width="100%" height="92%"></svg>
+  </div>
+  <div id="right">
+    <div class="panel" id="comparePanel">
+      <h2>对比面板</h2>
+      <div class="row">
+        <select id="selA"></select><select id="selB"></select>
+        <button class="primary" id="btnCompare">对比</button>
+      </div>
+      <div id="compareResult" class="muted">选择两个版本后点击"对比"。</div>
+    </div>
+    <div class="panel" id="detailPanel">
+      <h2>选中版本</h2>
+      <div id="detail" class="muted">未选中。</div>
+    </div>
+    <div class="panel" id="problemPanel">
+      <h2>问题标记</h2>
+      <div id="problems" class="muted">无。</div>
+    </div>
+    <div class="panel" id="cachePanel">
+      <h2>对比结论缓存(修正后仅受影响项更新)</h2>
+      <div id="cacheInfo" class="muted">暂无缓存结论。</div>
+    </div>
+  </div>
+</main>
+<script>
+let STATE = null, SEL = null, A = null, B = null;
+const $ = id => document.getElementById(id);
+const api = async (path, body) => {
+  const opt = body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)};
+  const r = await fetch(path, opt);
+  return r.json();
+};
+
+async function refresh(keepCompare) {
+  STATE = await api("/api/state");
+  renderAll();
+  if (keepCompare && A && B) doCompare();
+}
+
+function depthOf(id, seen) {
+  const v = STATE.versions.find(x => x.id === id);
+  if (!v || !v.parent || seen.has(id)) return 0;
+  seen.add(id);
+  return 1 + depthOf(v.parent, seen);
+}
+
+function renderGraph() {
+  const svg = $("graph");
+  const vs = STATE.versions;
+  const cols = {};
+  vs.forEach(v => {
+    const d = depthOf(v.id, new Set());
+    (cols[d] = cols[d] || []).push(v);
+  });
+  const pos = {}, XW = 150, YH = 64;
+  Object.keys(cols).forEach(d => cols[d].forEach((v, i) => pos[v.id] = {x: 40 + d * XW, y: 40 + i * YH}));
+  let s = "";
+  vs.forEach(v => {
+    if (v.parent && pos[v.parent]) {
+      const p1 = pos[v.parent], p2 = pos[v.id];
+      const bad = (STATE.problems[v.id] || []).some(p => p.kind === "cycle");
+      s += `<line x1="${p1.x+44}" y1="${p1.y}" x2="${p2.x-44}" y2="${p2.y}" stroke="${bad ? "#a04444" : "#3a4763"}" stroke-width="2"/>`;
+    }
+  });
+  vs.forEach(v => {
+    const p = pos[v.id], prob = STATE.problems[v.id];
+    let fill = "#2b3648", stroke = "#4a5a78", dash = "";
+    if (v.revoked) { fill = "#26262a"; stroke = "#555"; dash = `stroke-dasharray="5 4"`; }
+    if (v.pending) { fill = "#4a3d1e"; stroke = "#c9a13b"; }
+    if (prob) { stroke = "#d05555"; }
+    if (v.id === A) stroke = "#e0704a";
+    if (v.id === B) stroke = "#4aa3e0";
+    const w = (v.id === A || v.id === B) ? 3.5 : 2;
+    s += `<g class="node" data-id="${v.id}">` +
+      `<rect x="${p.x-44}" y="${p.y-20}" rx="9" width="88" height="40" fill="${fill}" stroke="${stroke}" stroke-width="${w}" ${dash}/>` +
+      `<text x="${p.x}" y="${p.y-3}" text-anchor="middle" style="font-weight:bold">${v.id}</text>` +
+      `<text x="${p.x}" y="${p.y+12}" text-anchor="middle" style="fill:#8fa3c8;font-size:10px">${v.author}</text></g>`;
+  });
+  svg.innerHTML = s;
+  svg.querySelectorAll(".node").forEach(g => {
+    g.addEventListener("click", () => { SEL = g.dataset.id; renderAll(); });
+    g.addEventListener("dblclick", e => {
+      if (e.shiftKey) B = g.dataset.id; else A = g.dataset.id;
+      renderAll(); if (A && B) doCompare();
+    });
+  });
+}
+
+function renderAll() {
+  $("stat").textContent = `共 ${STATE.versions.length} 个版本 · 问题 ${Object.keys(STATE.problems).length} 个 · 缓存结论 ${Object.keys(STATE.cache).length} 条`;
+  renderGraph();
+  const opts = STATE.versions.map(v => `<option value="${v.id}">${v.id}(${v.author})</option>`).join("");
+  $("selA").innerHTML = opts; $("selB").innerHTML = opts;
+  if (A) $("selA").value = A; if (B) $("selB").value = B;
+  renderDetail(); renderProblems(); renderCache();
+}
+
+function renderDetail() {
+  const d = $("detail");
+  const v = STATE.versions.find(x => x.id === SEL);
+  if (!v) { d.innerHTML = '<span class="muted">未选中。</span>'; return; }
+  const tags = (STATE.problems[v.id] ? '<span class="tag problem">问题</span>' : "") +
+    (v.pending ? '<span class="tag pending">待处理</span>' : "") +
+    (v.revoked ? '<span class="tag revoked">已撤销</span>' : "");
+  d.innerHTML = `
+    <div>${tags}<b>${v.id}</b> · ${v.author} · ${v.time}</div>
+    <div class="muted">父版本: ${v.parent || "(根)"} ${v.pending_reason ? "· " + v.pending_reason : ""}</div>
+    <textarea id="editSummary" rows="2">${v.summary || ""}</textarea>
+    <div class="row">
+      <button class="primary" id="btnSave">修正摘要</button>
+      <button id="btnSetA">设为A</button><button id="btnSetB">设为B</button>
+      <button class="danger" id="btnRevoke">撤销该版本</button>
+    </div>
+    <div class="row" id="reparentRow" style="display:${v.pending ? "flex" : "none"}">
+      <select id="selNewParent"></select>
+      <button class="primary" id="btnReparent">指定新父版本</button>
+    </div>`;
+  $("btnSave").onclick = async () => {
+    await api(`/api/versions/${v.id}/update`, {summary: $("editSummary").value});
+    await refresh(true);
+  };
+  $("btnSetA").onclick = () => { A = v.id; renderAll(); };
+  $("btnSetB").onclick = () => { B = v.id; renderAll(); };
+  $("btnRevoke").onclick = async () => {
+    if (!confirm(`撤销 ${v.id}? 其直接后代将标记为待处理。`)) return;
+    await api(`/api/versions/${v.id}/revoke`, {});
+    await refresh(true);
+  };
+  if (v.pending) {
+    api(`/api/versions/${v.id}/candidates`, {}).then(r => {
+      $("selNewParent").innerHTML = r.candidates.map(c =>
+        `<option value="${c.id}">${c.id}(${c.author} · ${c.summary})</option>`).join("");
+    });
+    $("btnReparent").onclick = async () => {
+      await api(`/api/versions/${v.id}/reparent`, {new_parent: $("selNewParent").value});
+      await refresh(true);
+    };
+  }
+}
+
+function renderProblems() {
+  const p = $("problems"), keys = Object.keys(STATE.problems);
+  if (!keys.length) { p.innerHTML = '<span class="muted">无。</span>'; return; }
+  p.innerHTML = keys.map(k => STATE.problems[k].map(pr =>
+    `<div class="prob"><span class="tag problem">${k}</span>${pr.message}</div>`).join("")).join("");
+}
+
+function renderCache() {
+  const c = $("cacheInfo");
+  const keys = Object.keys(STATE.cache);
+  let html = keys.length
+    ? keys.map(k => `<div><span class="tag cache">缓存</span>${k.replace("|", " ↔ ")} <span class="muted">依据: ${STATE.cache[k].join(", ")}</span></div>`).join("")
+    : '<span class="muted">暂无缓存结论。</span>';
+  if (STATE.cache_log.length) {
+    const e = STATE.cache_log[0];
+    html += `<hr style="border-color:#2a3140"><div class="muted">最近变更 ${e.time} · 影响版本: ${e.changed.join(", ")}</div>` +
+      (e.invalidated.length ? `<div class="dropped">已更新: ${e.invalidated.join("、")}</div>` : "") +
+      (e.kept.length ? `<div class="kept">保持不变: ${e.kept.join("、")}</div>` : "");
+  }
+  c.innerHTML = html;
+}
+
+async function doCompare() {
+  A = $("selA").value; B = $("selB").value;
+  const r = await api("/api/compare", {a: A, b: B});
+  const el = $("compareResult");
+  if (r.error) { el.innerHTML = `<div class="prob">${r.error}</div>`; return; }
+  const badge = r.from_cache ? '<span class="tag cache">缓存命中</span>' : '<span class="tag fresh">新计算</span>';
+  el.innerHTML = `${badge} <span class="muted">计算于 ${r.computed_at}</span>` +
+    r.diff.map((l, i) => {
+      const cls = i === 0 ? "fork" : l.startsWith("[仅 " + r.a) ? "a" : l.startsWith("[仅 " + r.b) ? "b" : "fork";
+      return `<div class="diff-line ${cls}">${l}</div>`;
+    }).join("") +
+    `<div class="muted">差异依据版本: ${r.basis.join(" → ") || "无"}</div>`;
+  STATE = await api("/api/state");
+  renderCache(); renderGraph();
+}
+
+$("btnCompare").onclick = doCompare;
+$("btnReload").onclick = async () => { await api("/api/reload", {}); A = B = SEL = null; refresh(false); };
+$("btnAdd").onclick = async () => {
+  const id = prompt("版本标识(唯一):"); if (!id) return;
+  const parent = prompt("父版本标识(留空为根):") || "";
+  const author = prompt("作者:") || "佚名";
+  const summary = prompt("改动摘要:") || "";
+  const r = await api("/api/versions", {id, parent, author, summary});
+  if (r.error) alert(r.error);
+  await refresh(false);
+};
+refresh(false);
+</script>
+</body>
+</html>

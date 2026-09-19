@@ -1,0 +1,14 @@
+{
+  "versions": [
+    {"id": "v1", "parent": null, "author": "林产品", "time": "2026-09-01 09:00", "summary": "建立文档骨架与章节结构"},
+    {"id": "v2", "parent": "v1", "author": "王编辑", "time": "2026-09-02 10:30", "summary": "补写第一章市场背景"},
+    {"id": "v3", "parent": "v2", "author": "李编辑", "time": "2026-09-03 14:00", "summary": "新增第二章用户画像初稿"},
+    {"id": "v4", "parent": "v3", "author": "王编辑", "time": "2026-09-05 11:20", "summary": "修订用户画像数据口径"},
+    {"id": "v5", "parent": "v4", "author": "林产品", "time": "2026-09-07 16:40", "summary": "补写第三章竞品分析"},
+    {"id": "f1", "parent": "v2", "author": "赵编辑", "time": "2026-09-03 15:10", "summary": "分支:改写第一章为行业视角"},
+    {"id": "f2", "parent": "f1", "author": "赵编辑", "time": "2026-09-04 09:45", "summary": "分支:补充政策环境小节"},
+    {"id": "x1", "parent": "ghost9", "author": "外部顾问", "time": "2026-09-08 10:00", "summary": "附录数据来源说明(父记录缺失)"},
+    {"id": "c1", "parent": "c2", "author": "王编辑", "time": "2026-09-09 13:00", "summary": "第四章草稿(父指向异常)"},
+    {"id": "c2", "parent": "c1", "author": "李编辑", "time": "2026-09-09 13:05", "summary": "第四章批注(与 c1 互相指向)"}
+  ]
+}
