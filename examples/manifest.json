@@ -1,0 +1,64 @@
+{
+  "modules": [
+    {
+      "id": "app",
+      "fingerprint": "app-v1",
+      "deps": [
+        "web"
+      ],
+      "cache": {
+        "signature": "fe56542516ee6335"
+      }
+    },
+    {
+      "id": "core",
+      "fingerprint": "core-v1",
+      "deps": [],
+      "cache": {
+        "signature": "aa4c1aa1c20c9af9"
+      }
+    },
+    {
+      "id": "net",
+      "fingerprint": "net-v1",
+      "deps": [
+        "core"
+      ],
+      "cache": {
+        "signature": "711b0fdf29ec94af"
+      }
+    },
+    {
+      "id": "plugin",
+      "fingerprint": "plugin-v1",
+      "deps": [
+        "web",
+        "ghost-lib"
+      ],
+      "cache": {
+        "signature": "9be91b272cedfaf7"
+      }
+    },
+    {
+      "id": "util",
+      "fingerprint": "util-v1",
+      "deps": [
+        "core"
+      ],
+      "cache": {
+        "signature": "8629b457e962c9b4"
+      }
+    },
+    {
+      "id": "web",
+      "fingerprint": "web-v1",
+      "deps": [
+        "util",
+        "net"
+      ],
+      "cache": {
+        "signature": "e4923a93ffd11214"
+      }
+    }
+  ]
+}
