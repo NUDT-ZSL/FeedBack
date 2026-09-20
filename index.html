@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>年度预算分配推演台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>年度预算分配推演台</h1>
+  <div class="controls">
+    <label>总资金上限
+      <input id="budgetInput" type="number" min="0" step="50">
+    </label>
+    <button id="addBtn">＋ 新增项目</button>
+    <button id="sampleBtn">载入示例数据</button>
+  </div>
+</header>
+
+<div id="summary" class="summary"></div>
+<div id="conflicts"></div>
+
+<main>
+  <section class="panel">
+    <h2>项目申请</h2>
+    <table class="editor">
+      <thead><tr>
+        <th>ID</th><th>项目名称</th><th>申请金额</th><th>优先级</th><th>最低投入</th>
+        <th>前置项目</th><th>锁定金额</th><th>排除</th><th></th>
+      </tr></thead>
+      <tbody id="editorBody"></tbody>
+    </table>
+    <p class="hint">
+      前置项目填写项目 ID，多个用逗号分隔；前置未获足额支持时，本项目不进入可分配状态。
+      锁定金额留空表示不锁定；勾选“排除”后该项目不参与分配。任何修改都会立即重新推导。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>分配结果</h2>
+    <table class="results">
+      <thead><tr>
+        <th>项目</th><th>状态</th><th>投入金额</th><th>满足程度</th><th>较上次</th><th>主导约束</th>
+      </tr></thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
