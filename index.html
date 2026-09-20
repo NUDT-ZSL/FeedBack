@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地多维切片探索台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>本地多维切片探索台</h1>
+      <p>明细数据、聚合与发现记录均在当前浏览器内处理，不连接外部服务。</p>
+    </div>
+    <div class="dataset-actions">
+      <label class="file-button">
+        导入 CSV
+        <input id="fileInput" type="file" accept=".csv,text/csv">
+      </label>
+      <button id="sampleBtn" class="secondary" type="button">载入示例数据</button>
+      <span id="datasetMeta" class="dataset-meta"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel controls" aria-label="切片控制区">
+      <section class="control-section">
+        <h2>字段口径</h2>
+        <p class="hint">系统会自动识别维度和度量，也可以在这里调整。</p>
+        <div id="fieldList" class="field-list"></div>
+      </section>
+
+      <section class="control-section">
+        <h2>切片维度</h2>
+        <div id="dimensionList" class="check-list"></div>
+      </section>
+
+      <section class="control-section">
+        <h2>度量口径</h2>
+        <label class="single-control">
+          聚合方式
+          <select id="aggSelect">
+            <option value="sum">求和</option>
+            <option value="avg">平均值</option>
+            <option value="min">最小值</option>
+            <option value="max">最大值</option>
+            <option value="count">计数（行数）</option>
+          </select>
+        </label>
+        <div id="measureList" class="check-list"></div>
+      </section>
+
+      <section class="control-section">
+        <h2>筛选条件</h2>
+        <div id="filterList" class="filter-list"></div>
+      </section>
+
+      <section class="control-section">
+        <h2>可信度规则</h2>
+        <label class="single-control">
+          样本数低于
+          <input id="thresholdInput" type="number" min="1" max="100" style="width: 84px">
+          时标记为不可信
+        </label>
+        <button id="resetBtn" class="secondary wide" type="button">重置当前切片</button>
+      </section>
+    </aside>
+
+    <section class="panel results" aria-label="聚合结果区">
+      <div class="section-head">
+        <div>
+          <h2>聚合结果</h2>
+          <p id="querySummary" class="hint"></p>
+        </div>
+        <div class="legend"><span class="low-swatch"></span>样本数不足，单元格不可信</div>
+      </div>
+      <div id="invalidBanner" class="banner hidden"></div>
+      <div id="resultWrap" class="table-wrap"></div>
+    </section>
+
+    <aside class="panel findings" aria-label="发现记录区">
+      <div class="section-head findings-head">
+        <div>
+          <h2>发现记录</h2>
+          <p id="findingSummary" class="hint"></p>
+        </div>
+        <select id="findingFilter">
+          <option value="all">全部</option>
+          <option value="active">可复现</option>
+          <option value="invalid">已失效</option>
+          <option value="broken">有断链</option>
+        </select>
+      </div>
+      <div class="findings-toolbar">
+        <label><input id="showDeleted" type="checkbox"> 显示已删除记录</label>
+        <button id="clearFindingsBtn" class="text-danger" type="button">清空</button>
+      </div>
+      <div id="findingsList" class="findings-list"></div>
+    </aside>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div id="modal" class="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
