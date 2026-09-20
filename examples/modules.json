@@ -1,0 +1,13 @@
+{
+  "modules": [
+    {"id": "core", "fingerprint": "core-v1", "deps": [], "cache": "98e9e48f99c5"},
+    {"id": "utils", "fingerprint": "utils-v1", "deps": [], "cache": "54c432883ec7"},
+    {"id": "net", "fingerprint": "net-v1", "deps": ["core"], "cache": "29d3bc3ef9d5"},
+    {"id": "parser", "fingerprint": "parser-v1", "deps": ["core", "utils"], "cache": "f4bbfa911177"},
+    {"id": "app", "fingerprint": "app-v1", "deps": ["net", "parser"], "cache": "app-stale-marker"},
+    {"id": "broken", "fingerprint": "broken-v1", "deps": ["ghost-lib"]},
+    {"id": "frontend", "fingerprint": "frontend-v1", "deps": ["app", "broken"]},
+    {"id": "cyc-a", "fingerprint": "ca-v1", "deps": ["cyc-b"]},
+    {"id": "cyc-b", "fingerprint": "cb-v1", "deps": ["cyc-a"]}
+  ]
+}
