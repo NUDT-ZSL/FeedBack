@@ -1,0 +1,9 @@
+{
+  "name": "form-step-load",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线的多步骤表单认知负担推演工具",
+  "scripts": {
+    "test": "node --test tests/engine.test.js"
+  }
+}

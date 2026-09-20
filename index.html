@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>表单分步认知负担推演工具（本地离线）</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title-block">
+      <h1>表单分步认知负担推演</h1>
+      <p class="subtitle">调整字段归属、锁定或排除字段，整体沿依赖重推每步阅读量、必填压力与不可完成项</p>
+    </div>
+    <div class="toolbar">
+      <label class="switch"><input type="checkbox" id="autoConverge" checked> 自动收敛归属</label>
+      <button id="btnConverge" class="btn">手动收敛一次</button>
+      <button id="btnAddField" class="btn">＋ 新字段</button>
+      <button id="btnAddDep" class="btn">＋ 新依赖</button>
+      <button id="btnExport" class="btn ghost">导出 JSON</button>
+      <label class="btn ghost" for="fileImport">导入 JSON</label>
+      <input type="file" id="fileImport" accept=".json,application/json" hidden>
+      <button id="btnReset" class="btn danger">重置为示例</button>
+    </div>
+  </header>
+
+  <section class="overview" id="overview"></section>
+  <section class="global-alerts" id="globalAlerts"></section>
+
+  <main class="layout">
+    <section class="steps-wrap" id="steps"></section>
+    <aside class="side">
+      <div class="panel" id="excludedPanel"></div>
+      <div class="panel" id="conflictsPanel"></div>
+      <div class="panel config-panel">
+        <h3>推演参数</h3>
+        <label>步数 <input type="number" id="cfgSteps" min="1" max="12"></label>
+        <label>高阅读阈值 <input type="number" id="cfgRead" min="1" max="999"></label>
+        <label>高必填阈值 <input type="number" id="cfgRequired" min="1" max="99"></label>
+        <p class="hint">阅读量 = 本步字段阅读量 + 需回忆的更早步骤前置阅读量。</p>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="fieldDialog" class="dialog">
+    <form method="dialog" id="fieldForm">
+      <h3 id="fieldDialogTitle">编辑字段</h3>
+      <input type="hidden" id="f_id">
+      <label>字段标识 <input type="text" id="f_label" required></label>
+      <div class="row">
+        <label>归属步骤 <select id="f_step"></select></label>
+        <label>阅读量 <input type="number" id="f_weight" min="1" max="99" value="1"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="f_required"> 字段本身必填</label>
+        <label class="check"><input type="checkbox" id="f_locked"> 锁定步骤位置</label>
+        <label class="check"><input type="checkbox" id="f_excluded"> 排除出表单</label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="f_delete">删除字段</button>
+        <span class="spacer"></span>
+        <button value="cancel" class="btn ghost">取消</button>
+        <button value="ok" class="btn primary" id="f_save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="depDialog" class="dialog">
+    <form method="dialog" id="depForm">
+      <h3>字段依赖与填写要求</h3>
+      <input type="hidden" id="d_id">
+      <label>依赖方字段（谁需要前置值） <select id="d_source"></select></label>
+      <label>前置字段（被依赖） <select id="d_target"></select></label>
+      <label>对前置的填写要求 <select id="d_kind"></select></label>
+      <p class="hint">同一步骤内依赖视为可完成；前置排在更靠后步骤会阻断依赖方。</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="d_delete">删除依赖</button>
+        <span class="spacer"></span>
+        <button value="cancel" class="btn ghost">取消</button>
+        <button value="ok" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="src/engine.js"></script>
+  <script src="src/data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
