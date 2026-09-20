@@ -1,0 +1,26 @@
+{
+  "records": [
+    {
+      "record_id": "db-1",
+      "resource_id": "database-storage",
+      "timestamp": "2026-09-01T00:00:00Z",
+      "usage": 100,
+      "quota": 180
+    },
+    {
+      "record_id": "db-2",
+      "resource_id": "database-storage",
+      "timestamp": "2026-09-03T00:00:00Z",
+      "usage": 130,
+      "quota": 180
+    },
+    {
+      "record_id": "db-3",
+      "resource_id": "database-storage",
+      "timestamp": "2026-09-05T00:00:00Z",
+      "usage": 160,
+      "quota": 220,
+      "action": {"type": "expand", "amount": 40, "note": "add storage node"}
+    }
+  ]
+}
