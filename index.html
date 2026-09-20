@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>年度预算分配推演台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>年度预算分配推演台</h1>
+  <p class="subtitle">本地离线运行 · 资金上限 / 优先级 / 前置依赖联合推导</p>
+</header>
+
+<section class="controls">
+  <div class="control-group">
+    <label for="budgetInput">总资金上限（万元）</label>
+    <input type="number" id="budgetInput" min="0" step="1">
+  </div>
+  <div class="control-group stats">
+    <div>已分配：<strong id="statAllocated">0</strong> 万元</div>
+    <div>剩余：<strong id="statRemaining">0</strong> 万元</div>
+    <div>项目数：<strong id="statCount">0</strong></div>
+  </div>
+  <div class="control-group buttons">
+    <button id="addProjectBtn">+ 新增项目</button>
+    <button id="loadSampleBtn">载入示例数据</button>
+    <button id="clearAllBtn" class="danger">清空全部</button>
+  </div>
+</section>
+
+<section id="conflictPanel" class="conflicts hidden">
+  <h2>⚠ 冲突提示</h2>
+  <ul id="conflictList"></ul>
+</section>
+
+<section class="table-wrap">
+  <table id="projectTable">
+    <thead>
+      <tr>
+        <th>编号</th>
+        <th>项目名称</th>
+        <th>申请金额<br>(万元)</th>
+        <th>优先级<br><small>数字越大越优先</small></th>
+        <th>最低可接受<br>投入(万元)</th>
+        <th>前置项目<br><small>逗号分隔编号</small></th>
+        <th>锁定金额<br><small>留空=不锁定</small></th>
+        <th>排除</th>
+        <th>本次分配<br>(万元)</th>
+        <th>满足度</th>
+        <th>主要约束</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="projectTbody"></tbody>
+  </table>
+</section>
+
+<footer>
+  <p>分配规则：锁定金额优先扣除；其余项目按优先级从高到低分配，前置项目未获足额（达到申请金额）时该项目不可分配；
+  剩余资金不足以覆盖某项目最低投入时该项目本轮不获分配。每次修改后整体重新推导，因此手工锁定/排除后的结果与从头推导完全一致。</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
