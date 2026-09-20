@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>键盘任务流验证台</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#task-surface">跳到可操作任务</a>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">本地离线 · 纯键盘验证</p>
+      <h1>键盘任务流验证台</h1>
+      <p class="subtitle">实时记录焦点、语义标签、顺序冲突、焦点陷阱和步骤闸门。</p>
+    </div>
+    <div class="header-actions" role="group" aria-label="定义操作">
+      <button type="button" id="import-button">导入 JSON</button>
+      <button type="button" id="export-button">导出当前定义</button>
+      <button type="button" id="reset-button">重置演练记录</button>
+    </div>
+  </header>
+
+  <input type="file" id="file-input" accept=".json,application/json" hidden>
+
+  <section class="keyboard-help" aria-labelledby="help-title">
+    <h2 id="help-title">键盘操作</h2>
+    <p><kbd>Tab</kbd>/<kbd>Shift+Tab</kbd>移动焦点；<kbd>Enter</kbd>/<kbd>Space</kbd>操作控件。<kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd>切换步骤，<kbd>Alt+S</kbd>跳过当前步骤，<kbd>Alt+F</kbd>强制进入，<kbd>Alt+E</kbd>切换定义编辑器，<kbd>Alt+A</kbd>应用 JSON。焦点进入标记为“陷阱”的控件后，必须按 <kbd>Esc</kbd> 离开。</p>
+  </section>
+
+  <main class="app-grid">
+    <aside class="panel steps-panel" aria-labelledby="steps-title">
+      <div class="panel-heading">
+        <h2 id="steps-title">步骤</h2>
+        <span id="step-counter" class="counter"></span>
+      </div>
+      <ol id="step-list" class="step-list"></ol>
+      <div class="step-nav" role="group" aria-label="步骤前进后退">
+        <button type="button" id="previous-step">上一步 <span>Alt+←</span></button>
+        <button type="button" id="next-step">下一步 <span>Alt+→</span></button>
+      </div>
+    </aside>
+
+    <section class="panel task-panel" aria-labelledby="task-title">
+      <div class="panel-heading">
+        <div>
+          <h2 id="task-title">当前步骤</h2>
+          <p id="current-step-meta" class="muted"></p>
+        </div>
+        <div class="ruling-actions" role="group" aria-label="步骤裁决">
+          <button type="button" id="skip-step">临时跳过</button>
+          <button type="button" id="force-step">强制进入</button>
+        </div>
+      </div>
+      <div id="gate-banner" class="gate-banner" role="status"></div>
+      <form id="task-surface" class="task-surface" tabindex="-1" aria-label="当前步骤的可操作界面" aria-describedby="completion-status">
+        <div id="controls-root"></div>
+      </form>
+      <div id="completion-status" class="completion-status" aria-live="polite"></div>
+    </section>
+
+    <aside class="panel analysis-panel" aria-labelledby="path-title">
+      <h2 id="path-title">推导路径</h2>
+      <p id="incremental-status" class="muted"></p>
+      <ol id="path-list" class="path-list"></ol>
+      <h3>问题与不可达位置</h3>
+      <ul id="issue-list" class="issue-list"></ul>
+    </aside>
+
+    <aside class="panel focus-panel" aria-labelledby="focus-title">
+      <div class="panel-heading">
+        <h2 id="focus-title">实时焦点记录</h2>
+        <button type="button" id="clear-log">清空记录</button>
+      </div>
+      <div id="focus-now" class="focus-now" aria-live="polite">尚未记录焦点</div>
+      <ol id="focus-log" class="focus-log"></ol>
+    </aside>
+
+    <section id="editor-panel" class="panel editor-panel" aria-labelledby="editor-title" hidden>
+      <div class="panel-heading">
+        <div>
+          <h2 id="editor-title">任务流定义 JSON</h2>
+          <p class="muted">直接编辑后按 Alt+A。可定义控件、order/relations、before/after、completion 与 trap。</p>
+        </div>
+        <button type="button" id="apply-json">应用定义 <span>Alt+A</span></button>
+      </div>
+      <textarea id="definition-editor" spellcheck="false" aria-label="任务流定义 JSON"></textarea>
+      <div id="editor-message" class="editor-message" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="src/analyzer.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

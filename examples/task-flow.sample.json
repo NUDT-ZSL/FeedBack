@@ -1,0 +1,36 @@
+{
+  "name": "可导入任务流示例",
+  "steps": [
+    {
+      "id": "profile",
+      "name": "填写资料",
+      "order": ["name", "role", "save-profile"],
+      "controls": [
+        { "id": "name", "type": "textbox", "label": "姓名" },
+        { "id": "role", "type": "select", "label": "身份", "options": ["学生", "职场人士"] },
+        { "id": "save-profile", "type": "button", "label": "保存资料" }
+      ],
+      "completion": { "mode": "all", "controls": ["name", "role", "save-profile"] }
+    },
+    {
+      "id": "preferences",
+      "name": "偏好设置",
+      "controls": [
+        { "id": "newsletter", "type": "checkbox", "label": "订阅更新", "after": "theme" },
+        { "id": "theme", "type": "radio", "label": "使用深色主题" },
+        { "id": "continue-preferences", "type": "button", "label": "继续", "before": "theme" }
+      ],
+      "completion": { "mode": "all", "controls": ["theme", "continue-preferences"] }
+    },
+    {
+      "id": "review",
+      "name": "复核",
+      "controls": [
+        { "id": "open-modal", "type": "button", "label": "打开核对弹窗", "trap": true },
+        { "id": "modal-note", "type": "textbox" },
+        { "id": "finish", "type": "button", "label": "完成" }
+      ],
+      "completion": { "mode": "any", "controls": ["finish"] }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "keyboard-task-flow-validator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local offline keyboard-only multi-step task flow validator.",
+  "scripts": {
+    "test": "node --test tests/analyzer.test.js",
+    "check": "node --check src/analyzer.js && node --check src/app.js",
+    "browser:smoke": "node scripts/browser-smoke.mjs"
+  }
+}
