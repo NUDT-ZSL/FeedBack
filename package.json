@@ -1,0 +1,11 @@
+{
+  "name": "offline-sampling-chain-lab",
+  "version": "1.0.0",
+  "description": "本地离线设备采样链路推演与批次完整性判定工具",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 8765",
+    "test": "node --test"
+  }
+}

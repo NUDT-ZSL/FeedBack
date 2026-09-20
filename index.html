@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线采样链路推演台</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">LOCAL OFFLINE · DETERMINISTIC REPLAY</p>
+      <h1>设备采样链路推演台</h1>
+      <p class="subtitle">查看批次边界、缺口、断连续采点与冲突裁决；每次操作都通过事件重放得到与全量推演一致的结果。</p>
+    </div>
+    <div class="top-actions">
+      <span class="offline-pill">● 本地离线</span>
+      <button id="resetDemo" class="secondary">重置演示</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel chain-panel">
+      <div class="panel-head">
+        <div>
+          <h2>采集链路视图</h2>
+          <p id="pushInfo" class="hint">等待推演</p>
+        </div>
+        <select id="deviceFilter" aria-label="设备筛选"></select>
+      </div>
+      <div id="resumeStrip" class="resume-strip"></div>
+      <div id="batchTimeline" class="timeline"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>录入事件</h2>
+        <div class="tabs">
+          <button data-tab="sample" class="tab active">采样</button>
+          <button data-tab="connection" class="tab">连接</button>
+          <button data-tab="policy" class="tab">阈值</button>
+        </div>
+        <form id="eventForm" class="form"></form>
+      </section>
+
+      <section class="panel conflict-panel">
+        <h2>冲突裁决</h2>
+        <div id="conflictList"></div>
+      </section>
+
+      <section class="panel">
+        <h2>无法归属</h2>
+        <div id="unassignedList"></div>
+      </section>
+    </aside>
+  </main>
+
+  <section class="panel detail-panel">
+    <div class="panel-head">
+      <h2>批次证据与原始记录</h2>
+      <span id="selectedTitle" class="hint">选择一个批次查看依据</span>
+    </div>
+    <div id="batchDetail" class="detail-grid"></div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
