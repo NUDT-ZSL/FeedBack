@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>多步骤表单认知负担推演工具（离线）</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <h1>多步骤表单认知负担推演</h1>
+      <p class="subtitle">沿依赖闭包全量重推：每步阅读量 · 必填压力 · 跨步骤记忆 · 不可完成项</p>
+    </div>
+    <div class="toolbar">
+      <label class="step-count">步骤数
+        <input id="stepCountInput" type="number" min="1" max="20" value="5" />
+      </label>
+      <button id="convergeBtn" class="primary" title="按依赖与锁定重新收敛未锁定字段的归属">收敛分步</button>
+      <button id="addFieldBtn">+ 新字段</button>
+      <button id="addDepBtn">+ 新依赖</button>
+      <button id="resetBtn" class="ghost" title="恢复内置示例">重置示例</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board-wrap">
+      <div id="conflictBanner" class="conflict-banner hidden"></div>
+      <div id="board" class="board" aria-label="分步表单结构"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" id="conflictPanel">
+        <h2>冲突与依据</h2>
+        <div id="conflictList"></div>
+      </section>
+
+      <section class="panel" id="depPanel">
+        <h2>依赖关系</h2>
+        <div id="depList"></div>
+      </section>
+
+      <section class="panel hidden" id="editPanel">
+        <h2>编辑字段</h2>
+        <div id="editBody"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="modalHost"></div>
+  <script src="js/model.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

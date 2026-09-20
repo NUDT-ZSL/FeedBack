@@ -1,0 +1,27 @@
+{
+  "name": "form-cognitive-load-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/model.test.js && node tests/ui.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NUDT-ZSL/FeedBack.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NUDT-ZSL/FeedBack/issues"
+  },
+  "homepage": "https://github.com/NUDT-ZSL/FeedBack#readme",
+  "devDependencies": {
+    "jsdom": "^30.1.0"
+  }
+}
