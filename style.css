@@ -1,0 +1,84 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: #f4f6f8;
+  color: #222;
+}
+header {
+  background: #1f3a5f;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+header h1 { font-size: 18px; margin: 0; }
+.log { font-size: 13px; color: #ffd97a; }
+main {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 1.2fr;
+  gap: 12px;
+  padding: 12px;
+}
+.col {
+  background: #fff;
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+h2 { font-size: 15px; margin: 4px 0 8px; color: #1f3a5f; }
+h3 { font-size: 13px; margin: 12px 0 6px; color: #444; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { border: 1px solid #e2e7ee; padding: 4px 6px; text-align: left; }
+th { background: #eef2f7; }
+tbody tr { cursor: default; }
+#points-table tbody tr { cursor: pointer; }
+#points-table tbody tr:hover { background: #f0f6ff; }
+#points-table tbody tr.selected { background: #dbe9ff; }
+#points-table tbody tr.broken { color: #b3261e; }
+form label, .col > label {
+  display: block;
+  font-size: 12.5px;
+  margin: 6px 0;
+}
+input, select {
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid #c4cdd8;
+  border-radius: 4px;
+  width: 100%;
+  margin-top: 2px;
+}
+table input, table select { width: 100%; margin: 0; padding: 2px 4px; }
+button {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border: 1px solid #1f3a5f;
+  background: #1f3a5f;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 4px 4px 4px 0;
+}
+button:hover { background: #2c5282; }
+button.danger { background: #fff; color: #b3261e; border-color: #b3261e; }
+button.small { padding: 1px 6px; font-size: 12px; margin: 0 2px 0 0; }
+.btn-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.btn-row select { width: auto; flex: 1; margin: 0; }
+.issues { color: #b3261e; font-size: 12.5px; margin: 6px 0; }
+.issues div { margin: 2px 0; }
+#trace-summary { font-size: 13px; margin-bottom: 8px; }
+#trace-summary .final { font-weight: bold; color: #1f6f3d; }
+#trace-summary .refused { font-weight: bold; color: #b3261e; }
+#trace-table td.num { font-family: Consolas, monospace; font-size: 12px; }
+#trace-table tr.break-row td { background: #fdecea; color: #b3261e; font-weight: bold; }
+#trace-table tr.datum-row td { background: #fff8e1; }
+footer {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #667;
+}

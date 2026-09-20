@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>坐标转换与精度推演工具（本地离线）</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>坐标转换与精度推演工具</h1>
+  <div id="log" class="log">就绪</div>
+</header>
+<main>
+  <section class="col" id="points-panel">
+    <h2>点集合</h2>
+    <table id="points-table">
+      <thead><tr><th>名称</th><th>表示</th><th>基准</th><th>源精度(m)</th><th>链</th><th>结果</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h3 id="point-form-title">新增点</h3>
+    <form id="point-form">
+      <label>名称 <input name="name" required></label>
+      <label>坐标表示 <select name="rep"></select></label>
+      <label>参考基准 <input name="datum" list="datum-list" required></label>
+      <datalist id="datum-list"></datalist>
+      <label>纬度/Y <input name="lat" type="number" step="any" required></label>
+      <label>经度/X <input name="lng" type="number" step="any" required></label>
+      <label>来源精度(m) <input name="accuracy" type="number" step="any" min="0" required></label>
+      <label>转换链 <select name="chainId"></select></label>
+      <div class="btn-row">
+        <button type="submit">保存</button>
+        <button type="button" id="point-delete">删除</button>
+        <button type="button" id="point-reset">清空</button>
+      </div>
+    </form>
+  </section>
+  <section class="col" id="chains-panel">
+    <h2>转换链</h2>
+    <div class="btn-row">
+      <select id="chain-select"></select>
+      <button id="chain-add">新建链</button>
+      <button id="chain-del">删除链</button>
+    </div>
+    <label>链名称 <input id="chain-name"></label>
+    <div id="chain-issues" class="issues"></div>
+    <h3>转换步骤（按顺序执行）</h3>
+    <table id="steps-table">
+      <thead><tr><th>#</th><th>名称</th><th>源表示</th><th>目标表示</th><th>损失(m)</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="step-add">添加步骤</button>
+    <h3>基准校正参数（按点所属基准应用）</h3>
+    <table id="datum-table">
+      <thead><tr><th>基准</th><th>东移(m)</th><th>北移(m)</th><th>损失(m)</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="datum-add">添加基准校正</button>
+  </section>
+  <section class="col" id="trace-panel">
+    <h2>换算轨迹与精度来源</h2>
+    <div id="trace-summary">请选择左侧任一点。</div>
+    <table id="trace-table">
+      <thead><tr><th>环节</th><th>表示</th><th>输入坐标</th><th>输出坐标</th><th>精度变化(m)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+<footer>精度模型：各步骤误差相互独立，按平方和根(RSS)合成。所有数据仅保存在本机浏览器 localStorage。</footer>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
