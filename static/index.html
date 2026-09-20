@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>数据血缘推演台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>数据血缘推演台</h1>
+  <div id="legend"></div>
+  <span class="spacer"></span>
+  <button id="btn-new-dataset">+ 新建数据集</button>
+  <button id="btn-reset" class="warn">重置演示数据</button>
+</header>
+<main>
+  <aside id="list-panel">
+    <h2>数据集</h2>
+    <ul id="dataset-list"></ul>
+  </aside>
+  <section id="graph-panel">
+    <div class="hint">点击节点查看详情 / 发起变更; 边表示派生关系(上游 → 下游)</div>
+    <svg id="graph"></svg>
+  </section>
+  <aside id="side-panel">
+    <div id="detail"><p class="hint">在左侧或图中选择一个数据集</p></div>
+    <h2>诊断</h2>
+    <ul id="diagnostics"></ul>
+    <h2>操作日志</h2>
+    <ul id="events"></ul>
+  </aside>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
