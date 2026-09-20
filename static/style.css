@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; margin: 0;
+       background: #f4f6f8; color: #222; }
+header { background: #1f4e79; color: #fff; padding: 12px 20px;
+         display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; }
+header #meta { font-size: 12px; opacity: .85; }
+header .actions { margin-left: auto; display: flex; gap: 8px;
+                  align-items: center; }
+button { background: #2e75b6; color: #fff; border: 0; border-radius: 4px;
+         padding: 6px 14px; cursor: pointer; font-size: 13px; }
+button:hover { background: #1f5a8c; }
+button.small { padding: 2px 8px; font-size: 12px; }
+.panel { background: #fff; margin: 14px 20px; padding: 14px 18px;
+         border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.panel h2 { font-size: 15px; margin: 0 0 10px; color: #1f4e79; }
+.panel.warn { border-left: 4px solid #d9534f; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { border: 1px solid #dde3ea; padding: 5px 8px; text-align: left; }
+th { background: #eef3f8; }
+tr.conflict-row { background: #fdecea; }
+tr.rejected { color: #999; text-decoration: line-through; }
+tr.superseded { color: #b58900; }
+.tag { display: inline-block; padding: 1px 6px; border-radius: 3px;
+       font-size: 11px; margin-right: 4px; }
+.tag.bad { background: #d9534f; color: #fff; }
+.tag.ok { background: #5cb85c; color: #fff; }
+.tag.info { background: #5bc0de; color: #fff; }
+.forms { display: flex; gap: 30px; flex-wrap: wrap; }
+form h3 { margin: 0 0 8px; font-size: 13px; }
+form input, form select { display: block; margin-bottom: 6px; padding: 5px;
+                          width: 220px; font-size: 13px; }
+#toast { position: fixed; bottom: 20px; right: 20px; background: #333;
+         color: #fff; padding: 8px 16px; border-radius: 4px; display: none; }
+#chain { font-size: 13px; margin-bottom: 10px; color: #444; }
+#closure-gap { margin-top: 8px; font-size: 12px; color: #a00; }
+#anomalies li { margin-bottom: 4px; font-size: 13px; }
+.conflict-box { border: 1px solid #e0b4b4; background: #fff8f8;
+                border-radius: 4px; padding: 8px 12px; margin-bottom: 10px; }
+.conflict-box label { display: block; font-size: 13px; margin: 4px 0; }

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>物料循环去向推演工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>物料循环去向推演工具</h1>
+  <div id="meta"></div>
+  <div class="actions">
+    <button id="btn-full">全量重推</button>
+    <button id="btn-verify">一致性校验</button>
+    <span id="verify-result"></span>
+  </div>
+</header>
+
+<section class="panel">
+  <h2>去向闭合校验</h2>
+  <table id="closure-table"></table>
+  <div id="closure-gap"></div>
+</section>
+
+<section class="panel">
+  <h2>批次链路与去向推演</h2>
+  <div id="chain"></div>
+  <table id="batch-table"></table>
+</section>
+
+<section class="panel warn" id="conflict-panel">
+  <h2>冲突记录（全部保留，待裁决）</h2>
+  <div id="conflicts"></div>
+</section>
+
+<section class="panel warn" id="anomaly-panel">
+  <h2>链路异常</h2>
+  <ul id="anomalies"></ul>
+</section>
+
+<section class="panel">
+  <h2>流转记录（含历史版本，修正不删除原始记录）</h2>
+  <table id="record-table"></table>
+</section>
+
+<section class="panel">
+  <h2>登记</h2>
+  <div class="forms">
+    <form id="form-batch">
+      <h3>新批次</h3>
+      <input name="name" placeholder="批次名称" required>
+      <input name="input_qty" type="number" step="any" placeholder="投入量" required>
+      <input name="source" placeholder="来源">
+      <input name="initial_dest" placeholder="初始去向">
+      <button>登记批次</button>
+    </form>
+    <form id="form-record">
+      <h3>新流转记录</h3>
+      <select name="batch_id" required></select>
+      <input name="ts" placeholder="时刻 如 2026-09-20 10:00" required>
+      <input name="qty" type="number" step="any" placeholder="数量" required>
+      <select name="dest_type">
+        <option>回收</option><option>再利用</option>
+        <option>损耗</option><option>转出</option>
+      </select>
+      <select name="dest_batch"><option value="">（转出目标批次）</option></select>
+      <input name="note" placeholder="备注">
+      <button>登记记录</button>
+    </form>
+  </div>
+</section>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
