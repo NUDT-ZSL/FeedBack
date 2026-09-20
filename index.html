@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地多维切片发现台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>本地多维切片发现台</h1>
+      <p>载入明细数据，切换维度与筛选，把可回看的结论和依赖链留下来。</p>
+    </div>
+    <div class="dataset-actions">
+      <label class="button primary">
+        导入 CSV / TSV
+        <input id="fileInput" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+      </label>
+      <button id="sampleButton" class="button" type="button">恢复示例数据</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel controls" aria-label="切片设置">
+      <section>
+        <div class="section-title">
+          <h2>数据与字段</h2>
+          <span id="datasetStats" class="muted"></span>
+        </div>
+        <div id="schemaList" class="schema-list"></div>
+      </section>
+
+      <section>
+        <h2>参与切片的维度</h2>
+        <div id="dimensionPicker" class="check-list"></div>
+      </section>
+
+      <section>
+        <h2>度量口径</h2>
+        <label class="field">
+          <span>度量列</span>
+          <select id="measureSelect"></select>
+        </label>
+        <label class="field">
+          <span>聚合方式</span>
+          <select id="aggregationSelect">
+            <option value="sum">求和</option>
+            <option value="avg">平均值</option>
+            <option value="count">行数计数</option>
+            <option value="min">最小值</option>
+            <option value="max">最大值</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>可信最少样本数</span>
+          <input id="minSampleInput" type="number" min="1" step="1">
+        </label>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>筛选条件</h2>
+          <button id="resetFiltersButton" class="text-button" type="button">重置</button>
+        </div>
+        <div id="filterBuilder" class="filters"></div>
+      </section>
+    </aside>
+
+    <section class="panel results-panel" aria-label="聚合结果">
+      <div class="section-title">
+        <h2>聚合结果</h2>
+        <span id="resultSummary" class="muted"></span>
+      </div>
+      <div id="resultTableWrap" class="table-wrap"></div>
+    </section>
+
+    <aside class="panel findings-panel" aria-label="发现记录">
+      <div class="section-title">
+        <h2>发现记录</h2>
+        <span id="findingStats" class="muted"></span>
+      </div>
+      <div id="findingsList" class="findings"></div>
+    </aside>
+  </main>
+
+  <dialog id="findingDialog" class="finding-dialog">
+    <form method="dialog" id="findingForm">
+      <h2 id="dialogTitle">标记发现</h2>
+      <div id="dialogContext" class="dialog-context"></div>
+      <label class="field">
+        <span>发现标题</span>
+        <input id="findingTitle" required maxlength="120">
+      </label>
+      <label class="field">
+        <span>说明</span>
+        <textarea id="findingNote" rows="4" maxlength="1000" placeholder="记录这个结果意味着什么、后续要验证什么……"></textarea>
+      </label>
+      <fieldset class="reference-picker">
+        <legend>引用更早的发现</legend>
+        <div id="referencePicker"></div>
+      </fieldset>
+      <div class="dialog-actions">
+        <button value="cancel" class="button" type="submit">取消</button>
+        <button id="saveFindingButton" value="default" class="button primary" type="submit">保存发现</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
