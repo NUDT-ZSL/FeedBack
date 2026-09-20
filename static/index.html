@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>阅读消化推演台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>阅读消化推演台</h1>
+      <p>本地离线运行 · 动作留痕 · 冲突裁决 · 关系传播</p>
+    </div>
+    <button id="refreshBtn" class="ghost">刷新</button>
+  </header>
+
+  <main>
+    <section class="panel hero">
+      <div class="section-title">
+        <h2>接下来处理什么</h2>
+        <span id="stateSummary"></span>
+      </div>
+      <div id="nextList" class="next-list"></div>
+    </section>
+
+    <section class="layout">
+      <div class="panel">
+        <div class="section-title">
+          <h2>素材</h2>
+          <button id="newMaterialBtn">新增素材</button>
+        </div>
+        <div class="toolbar">
+          <input id="searchInput" placeholder="搜索标题 / 来源 / 主题">
+          <select id="statusFilter">
+            <option value="">全部状态</option>
+            <option value="conflict">待裁决</option>
+            <option value="in_progress">进行中</option>
+            <option value="not_started">未开始</option>
+            <option value="digested">已消化</option>
+          </select>
+        </div>
+        <div id="materialList" class="material-list"></div>
+      </div>
+
+      <div class="panel detail-panel">
+        <div id="emptyDetail" class="empty">
+          <h2>选择一份素材</h2>
+          <p>在这里查看阅读动作、消化依据、矛盾记录和关联链条。</p>
+        </div>
+        <div id="detail" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>冲突中心</h2>
+        <span>矛盾双方均保留，裁决前不更新结论</span>
+      </div>
+      <div id="conflictList" class="conflict-list"></div>
+    </section>
+  </main>
+
+  <dialog id="modal">
+    <form method="dialog" id="modalForm">
+      <h3 id="modalTitle"></h3>
+      <div id="modalBody"></div>
+      <menu>
+        <button value="cancel" class="ghost" formnovalidate>取消</button>
+        <button id="modalSubmit" value="default">保存</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

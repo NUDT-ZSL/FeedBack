@@ -1,0 +1,2 @@
+"""Local reading-digestion application."""
+
