@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>本地离线三维层级变换推演工具</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<header class="topbar">
+ <div><h1>三维层级变换推演</h1><p>旋转 / 均匀缩放 / 非均匀缩放 / 镜像一致性检查</p></div>
+ <div class="toolbar">
+  <button id="btnUndo" title="Ctrl+Z">撤销</button>
+  <button id="btnRedo" title="Ctrl+Y">重做</button>
+  <button id="btnAdd">新建对象</button>
+  <button id="btnDelete">删除子树</button>
+  <button id="btnExport">导出 JSON</button>
+  <button id="btnImport">导入 JSON</button>
+  <input id="fileImport" type="file" accept="application/json,.json" hidden>
+ </div>
+</header>
+<main class="layout">
+ <aside class="panel tree-panel">
+  <div class="panel-head"><h2>场景层级</h2><span id="summary"></span></div>
+  <div id="tree" class="tree"></div>
+  <div class="legend">
+   <span><i class="dot ok"></i>可信</span>
+   <span><i class="dot warn"></i>镜像提示</span>
+   <span><i class="dot bad"></i>不可信</span>
+   <span><i class="lock-dot"></i>最终姿态锁定</span>
+  </div>
+ </aside>
+ <section class="viewport">
+  <div id="canvasTools" class="canvas-tools">
+   <label><input id="showLinks" type="checkbox" checked> 父子连线</label>
+   <label><input id="showGrid" type="checkbox" checked> 地平面</label>
+   <span>左键拖对象 · 拖 XYZ 轴；空白左键旋转视角，滚轮缩放</span>
+  </div>
+  <canvas id="sceneCanvas"></canvas>
+  <div id="solverStatus" class="solver-status"></div>
+ </section>
+ <aside class="panel inspector">
+  <h2>检查器</h2>
+  <div id="detail"></div>
+ </aside>
+</main>
+<script src="src/math.js"></script>
+<script src="src/core.js"></script>
+<script src="src/scene.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
