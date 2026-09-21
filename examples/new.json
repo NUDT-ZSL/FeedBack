@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "nodes": [
+    {"id": "database", "attributes": {"schema": 5}},
+    {"id": "api", "attributes": {"version": "1.3.0"}},
+    {"id": "web", "attributes": {}},
+    {"id": "worker", "attributes": {}},
+    {"id": "reporting", "attributes": {}}
+  ],
+  "edges": [
+    {"from": "api", "to": "database", "attributes": {"kind": "runtime"}},
+    {"from": "web", "to": "api", "attributes": {"kind": "http"}},
+    {"from": "worker", "to": "database", "attributes": {"kind": "stream"}},
+    {"from": "reporting", "to": "database", "attributes": {"kind": "read"}}
+  ],
+  "controls": {
+    "locked": ["worker"],
+    "excluded": []
+  }
+}
+
