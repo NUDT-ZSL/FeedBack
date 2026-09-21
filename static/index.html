@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>移动模式复核工具</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>移动模式复核工具</h1>
+  <span id="verify-badge"></span>
+</header>
+<div id="layout">
+  <aside>
+    <section>
+      <h2>判定参数</h2>
+      <div id="params"></div>
+      <button id="apply-params">应用参数</button>
+    </section>
+    <section>
+      <h2>导入位置点</h2>
+      <textarea id="import-text" rows="6"
+        placeholder="CSV: target,time,lat,lon&#10;或 JSON 数组"></textarea>
+      <div class="row">
+        <button id="import-btn">导入</button>
+        <input type="file" id="import-file" accept=".csv,.json,.txt">
+      </div>
+      <button id="reset-btn" class="danger">清空全部数据</button>
+    </section>
+    <section>
+      <h2>同行关系变化</h2>
+      <div id="events"><p class="muted">尚无变更</p></div>
+    </section>
+  </aside>
+  <main>
+    <div id="timeline-wrap">
+      <svg id="timeline"></svg>
+    </div>
+    <div id="detail"><p class="muted">点击时间轴上的分段或同行区间查看依据点与判定参数</p></div>
+    <section>
+      <h2>位置点（可直接编辑，异常点保留并标记）</h2>
+      <div id="points-table"></div>
+    </section>
+  </main>
+</div>
+<script src="/timeline.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
