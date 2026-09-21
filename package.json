@@ -1,0 +1,11 @@
+{
+  "name": "long-term-asset-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地交互式长期资产价值轨迹与警戒线评估工作台",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test",
+    "test:browser": "node scripts/browser-smoke.js"
+  }
+}

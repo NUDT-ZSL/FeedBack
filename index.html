@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>长期资产价值轨迹工作台</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Local Asset Workbench</p>
+      <h1>长期资产价值轨迹工作台</h1>
+      <p class="subtitle">围绕初始投入、启用时间、使用年限、残值率与年度价值调整，实时计算账面价值和警戒触发点。</p>
+    </div>
+    <div class="top-actions">
+      <label class="warning-setting">
+        警戒比例
+        <span class="input-with-suffix">
+          <input id="warningRatio" type="number" min="0" max="100" step="1">
+          <span>%</span>
+        </span>
+      </label>
+      <button id="addAssetTop" class="button primary" type="button">新增资产</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="issuePanel" class="issue-panel hidden" aria-live="polite"></section>
+
+    <section class="metrics" aria-label="汇总指标">
+      <article class="metric-card">
+        <span>纳入汇总资产</span>
+        <strong id="validCount">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>排除资产</span>
+        <strong id="invalidCount">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>当前警戒资产</span>
+        <strong id="warningAssetCount">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>概览末年账面总值</span>
+        <strong id="latestTotal">—</strong>
+      </article>
+    </section>
+
+    <section class="panel overview-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>全部资产轨迹概览</h2>
+          <p>折线为各有效资产年末账面价值，灰色虚线为单项警戒线；面积为汇总年末账面价值。</p>
+        </div>
+      </div>
+      <div id="overviewChart" class="chart"></div>
+      <div class="table-wrap">
+        <table id="overviewTable">
+          <thead>
+            <tr>
+              <th>资产</th>
+              <th>启用年份</th>
+              <th>年限</th>
+              <th>初始投入</th>
+              <th>残值</th>
+              <th>末年账面价值</th>
+              <th>首次警戒年份</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel asset-list-panel">
+        <div class="panel-heading compact">
+          <h2>资产清单</h2>
+          <button id="addAssetSide" class="button small" type="button">新增</button>
+        </div>
+        <div id="assetList" class="asset-list"></div>
+      </aside>
+
+      <section class="panel detail-panel">
+        <div id="emptyDetail" class="empty-detail">
+          <h2>选择或新增一项资产</h2>
+          <p>左侧选择资产后，可编辑参数、追加年度调整并查看逐年明细。</p>
+        </div>
+        <div id="assetDetail" class="asset-detail hidden"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="src/calculator.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
