@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交接推演台 · Handover Reasoning</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">
+    <h1>交接推演台</h1>
+    <span class="subtitle">责任转移 · 上下文完整度推演（本地离线）</span>
+  </div>
+  <div class="global-stats">
+    <div class="stat">
+      <span class="stat-label">整体完整度</span>
+      <span id="global-completeness" class="stat-value">--%</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">一致性校验</span>
+      <span id="consistency-badge" class="badge badge-ok">未运行</span>
+    </div>
+  </div>
+  <div class="actions">
+    <button id="btn-add-item" class="btn">+ 新增事项</button>
+    <button id="btn-export" class="btn">导出 JSON</button>
+    <button id="btn-import" class="btn">导入 JSON</button>
+    <button id="btn-reset" class="btn btn-warn">重置示例</button>
+    <input type="file" id="import-file" accept=".json" hidden>
+  </div>
+</header>
+
+<main id="layout">
+  <section id="item-list-panel">
+    <h2>交接事项</h2>
+    <div id="item-list"></div>
+  </section>
+  <section id="detail-panel">
+    <div id="detail-empty" class="empty-hint">请选择左侧的交接事项查看详情</div>
+    <div id="detail-content" hidden></div>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- 新增事项对话框 -->
+<dialog id="add-item-dialog">
+  <form method="dialog" id="add-item-form">
+    <h3>新增交接事项</h3>
+    <label>标题 <input name="title" required></label>
+    <label>责任角色 <input name="role" required placeholder="如：值班运维"></label>
+    <label>前置依赖（逗号分隔的事项编号，可空） <input name="dependsOn" placeholder="如：H-01, H-03"></label>
+    <label>时效截止（可空） <input name="deadline" type="datetime-local"></label>
+    <label>来源说明 <input name="sourceNote" placeholder="如：交班记录 2026-09-21"></label>
+    <menu>
+      <button value="cancel" class="btn">取消</button>
+      <button value="ok" class="btn btn-primary">创建</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
