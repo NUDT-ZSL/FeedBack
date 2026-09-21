@@ -1,0 +1,12 @@
+{
+  "name": "clue-notes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "本地优先的个人知识笔记与可解释关联浏览工具",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test",
+    "verify": "node build.mjs && node --test"
+  }
+}

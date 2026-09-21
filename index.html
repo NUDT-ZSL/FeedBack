@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>线索笔记 · 本地知识关联工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">LOCAL KNOWLEDGE MAP</p>
+        <h1>线索笔记</h1>
+        <p class="subtitle">从一条笔记出发，沿共同标签与文本线索回看真正相关的内容。</p>
+      </div>
+      <button id="newNoteBtn" class="primary" type="button">＋ 新建笔记</button>
+    </header>
+
+    <main class="layout">
+      <aside class="panel list-panel" aria-label="笔记列表">
+        <div class="panel-title">
+          <h2>笔记</h2>
+          <span id="noteCount" class="count">0</span>
+        </div>
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="搜索标题、标签或正文" aria-label="搜索笔记">
+        </div>
+        <div id="noteList" class="note-list"></div>
+      </aside>
+
+      <section class="panel editor-panel">
+        <div class="editor-heading">
+          <div>
+            <p class="section-kicker">当前笔记</p>
+            <h2 id="editorTitleLabel">未选择笔记</h2>
+          </div>
+          <div class="editor-actions">
+            <button id="deleteBtn" class="ghost danger" type="button" hidden>删除</button>
+            <button id="saveBtn" class="primary" type="button">保存新笔记</button>
+          </div>
+        </div>
+
+        <form id="noteForm">
+          <label class="field">
+            <span>标题</span>
+            <input id="titleInput" maxlength="120" placeholder="例如：项目复盘会的关键决定" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>标签（用逗号、空格或顿号分隔）</span>
+            <input id="tagsInput" placeholder="例如：项目管理, 复盘, 效率" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>自由文本</span>
+            <textarea id="bodyInput" rows="11" placeholder="写下想法、摘录、问题或待办……"></textarea>
+          </label>
+          <p id="saveStatus" class="save-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <aside class="panel related-panel" aria-label="关联笔记">
+        <nav id="trailNav" class="trail" aria-label="浏览线索"></nav>
+        <div class="panel-title">
+          <h2>相关笔记</h2>
+        </div>
+        <div id="relatedList" class="related-list"></div>
+      </aside>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
