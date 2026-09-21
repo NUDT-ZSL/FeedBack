@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>语义树无障碍工作台</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace">跳到主工作区</a>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">本地离线 · 屏幕阅读器语义建模</p>
+      <h1>语义树无障碍工作台</h1>
+      <p class="subtitle">录入界面元素，调整父子归属与阅读顺序，并即时预览朗读序列和跳过项。</p>
+    </div>
+    <div class="header-actions">
+          <button id="sampleBtn" type="button" class="secondary">载入示例</button>
+      <button id="clearBtn" type="button" class="danger secondary">清空项目</button>
+    </div>
+  </header>
+
+  <main id="workspace" class="layout">
+    <section class="panel input-panel" aria-labelledby="entryTitle">
+      <h2 id="entryTitle">元素录入</h2>
+      <div class="tabs" role="tablist" aria-label="录入方式">
+        <button id="singleTab" type="button" role="tab" aria-selected="true" aria-controls="singleForm">单个录入</button>
+        <button id="bulkTab" type="button" role="tab" aria-selected="false" aria-controls="bulkForm" tabindex="-1">批量 JSON</button>
+      </div>
+
+      <form id="singleForm" class="entry-form" role="tabpanel" aria-labelledby="singleTab">
+        <label>元素 ID
+          <input id="elementId" name="id" required autocomplete="off" placeholder="例如 save-button">
+        </label>
+        <label>角色
+          <select id="elementRole" name="role" required></select>
+        </label>
+        <label>可读名称
+          <input id="elementName" name="name" required autocomplete="off" placeholder="例如 保存">
+        </label>
+        <label>父级 ID（根节点留空）
+          <input id="elementParent" name="parentId" autocomplete="off" list="parentOptions" placeholder="留空表示顶层">
+          <datalist id="parentOptions"></datalist>
+        </label>
+        <label>同级顺序
+          <input id="elementOrder" name="order" type="number" min="0" step="1" value="1" required>
+        </label>
+        <label class="check-row"><input id="elementHidden" type="checkbox"> 对辅助技术隐藏（aria-hidden）</label>
+        <button type="submit" class="primary">添加元素</button>
+      </form>
+
+      <form id="bulkForm" class="bulk-form" role="tabpanel" aria-labelledby="bulkTab" hidden>
+        <label for="bulkJson">粘贴元素数组或 <code>{ "elements": [...] }</code></label>
+        <textarea id="bulkJson" spellcheck="false" rows="13"></textarea>
+        <div class="button-row">
+          <button type="submit" class="primary">根据 JSON 构建初始树</button>
+          <button id="formatJsonBtn" type="button" class="secondary">格式化当前 JSON</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel tree-panel" aria-labelledby="treeTitle">
+      <div class="panel-heading">
+        <div>
+          <h2 id="treeTitle">语义树与关系调整</h2>
+          <p id="treeMeta" class="muted"></p>
+        </div>
+      </div>
+      <div id="conflictBox" class="conflict-box" role="alert" aria-live="assertive" hidden></div>
+      <div id="treeView" class="tree-view" tabindex="0" aria-label="当前语义树"></div>
+    </section>
+
+    <aside class="panel preview-panel" aria-labelledby="previewTitle">
+      <h2 id="previewTitle">朗读顺序预览</h2>
+      <div class="stats" id="planStats"></div>
+      <ol id="readingSequence" class="reading-list" aria-label="屏幕阅读器朗读序列"></ol>
+      <h3>被跳过的元素</h3>
+      <ul id="skippedList" class="skipped-list"></ul>
+    </aside>
+
+    <section class="panel history-panel" aria-labelledby="historyTitle">
+      <div class="panel-heading">
+        <div>
+          <h2 id="historyTitle">历史方案</h2>
+          <p class="muted">每次成功调整都会保存不可变快照；查看旧方案后仍可基于它继续派生新方案。</p>
+        </div>
+      </div>
+      <ol id="historyList" class="history-list"></ol>
+    </section>
+  </main>
+
+  <dialog id="editDialog" aria-labelledby="editTitle">
+    <form id="editForm" method="dialog">
+      <h2 id="editTitle">调整元素</h2>
+      <p id="editIdLine" class="muted"></p>
+      <label>角色<select id="editRole"></select></label>
+      <label>可读名称<input id="editName"></label>
+      <label>父级 ID（根节点留空）<input id="editParent" list="parentEditOptions"></label>
+      <datalist id="parentEditOptions"></datalist>
+      <label>同级顺序<input id="editOrder" type="number" min="0" step="1"></label>
+      <label class="check-row"><input id="editHidden" type="checkbox"> 对辅助技术隐藏</label>
+      <div class="button-row right">
+        <button value="cancel" type="button" class="secondary" id="cancelEditBtn">取消</button>
+        <button value="apply" type="submit" class="primary">应用调整</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="src/domain.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

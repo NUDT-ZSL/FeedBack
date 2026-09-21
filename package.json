@@ -1,0 +1,14 @@
+{
+  "name": "semantic-tree-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线的屏幕阅读器语义树整理与朗读顺序预览工具",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/domain.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
