@@ -1,0 +1,11 @@
+{
+  "name": "experience-link-guardian",
+  "version": "1.0.0",
+  "private": true,
+  "description": "经验条目关联推断、修订影响追踪与冲突保留工具",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "start": "node --env-file-if-exists=.env server.js"
+  }
+}

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>经验关联守护者</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>经验关联守护者</h1>
+      <p>在改写、合并、废弃中追踪关联理由、失效关系与双方冲突</p>
+    </div>
+    <div class="top-actions">
+      <button id="newEntryBtn" class="button">新建条目</button>
+      <button id="resetBtn" class="button ghost">重置示例</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <aside class="sidebar card">
+      <div class="stat-grid">
+        <div><strong id="statEntries">0</strong><span>条目</span></div>
+        <div><strong id="statReview">0</strong><span>待复核</span></div>
+        <div><strong id="statConflict">0</strong><span>冲突</span></div>
+        <div><strong id="statCandidate">0</strong><span>待判断</span></div>
+      </div>
+      <label class="search-box">
+        <span>搜索</span>
+        <input id="searchInput" placeholder="正文、标签或标题">
+      </label>
+      <div id="entryList" class="entry-list"></div>
+    </aside>
+
+    <section class="workspace">
+      <div id="detailPanel" class="card detail-panel"></div>
+
+      <div class="middle-column">
+        <section class="card graph-card">
+          <div class="section-heading">
+            <div>
+              <h2>关联图</h2>
+              <p>点击节点浏览条目；红色边为冲突，橙色边需要复核，虚线为失效</p>
+            </div>
+            <div id="graphLegend" class="legend"></div>
+          </div>
+          <svg id="graphSvg" role="img" aria-label="经验条目关系图"></svg>
+        </section>
+        <section class="card">
+          <h2>关联影响</h2>
+          <div id="impactPanel"></div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="right-column">
+        <section class="card">
+          <h2>待确认的潜在关联</h2>
+          <div id="candidatePanel"></div>
+        </section>
+        <section class="card">
+          <h2>冲突关系</h2>
+          <div id="conflictPanel"></div>
+        </section>
+    </aside>
+  </main>
+
+  <dialog id="entryDialog">
+    <form method="dialog" id="entryForm" class="dialog-form">
+      <h2 id="entryDialogTitle">新建条目</h2>
+      <input type="hidden" id="entryMode">
+      <label>标题<input id="entryTitle" required maxlength="80"></label>
+      <label>正文<textarea id="entryBody" rows="8" required placeholder="写清问题、判断依据、适用边界"></textarea></label>
+      <label>标签（逗号分隔）<input id="entryTags" placeholder="支付, 幂等, 重试"></label>
+      <label id="changeNoteWrap">修订说明<input id="entryNote" placeholder="本次为什么改写"></label>
+      <div id="mergeFields" class="dialog-fields hidden">
+        <label>合并到
+          <select id="mergeTarget"></select>
+        </label>
+      </div>
+      <div id="deprecateFields" class="dialog-fields hidden">
+        <label>废弃原因<input id="deprecateReason" placeholder="为什么不再适用"></label>
+        <label>承接条目<select id="supersededBy"></select></label>
+      </div>
+      <menu>
+        <button value="cancel" class="button ghost">取消</button>
+        <button id="entrySubmit" value="confirm" class="button primary">保存</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="linkDialog">
+    <form method="dialog" id="linkForm" class="dialog-form">
+      <h2>建立显式关联</h2>
+      <div class="dialog-fields">
+        <label>目标条目<select id="linkTarget"></select></label>
+        <label>关系
+          <select id="linkRelation"></select>
+        </label>
+      </div>
+      <label>关联说明<textarea id="linkNote" rows="4" placeholder="说明你为何建立该关系"></textarea></label>
+      <menu>
+        <button value="cancel" class="button ghost">取消</button>
+        <button value="confirm" class="button primary">建立</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" class="toast hidden"></div>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
