@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>区域仓网调拨工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>区域仓网调拨工作台</h1>
+  <p class="sub">多地点存量 · 在途 · 安全库存 · 未来需求 → 自动生成调拨方案与代价</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>地点库存与需求</h2>
+      <button id="add-loc" type="button">+ 新增地点</button>
+    </div>
+    <table id="loc-table">
+      <thead>
+        <tr>
+          <th>地点</th><th>现有存量</th><th>在途数量</th><th>安全库存</th>
+          <th>未来需求</th><th>净头寸</th><th>缺口</th><th>可支援</th>
+          <th>调出</th><th>调入</th><th>状态</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>运输参数与距离矩阵（公里）</h2></div>
+    <div class="weights">
+      <label>单位运费(元/件/公里) <input id="w-freight" type="number" step="0.1" min="0"></label>
+      <label>时效权重(元/件/天) <input id="w-time" type="number" step="1" min="0"></label>
+      <label>运输速度(公里/天) <input id="w-speed" type="number" step="10" min="1"></label>
+    </div>
+    <div id="dist-matrix" class="matrix"></div>
+  </section>
+
+  <section class="panel" id="summary-panel">
+    <div class="panel-head"><h2>全局汇总</h2></div>
+    <div id="banner" class="banner hidden"></div>
+    <div class="cards" id="summary-cards"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>建议调拨路径</h2></div>
+    <table id="transfer-table">
+      <thead>
+        <tr><th>调出</th><th>调入</th><th>数量</th><th>距离(km)</th>
+            <th>时效(天)</th><th>单位代价(元)</th><th>线路代价(元)</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="no-transfer" class="muted hidden">当前无需调拨。</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>取舍理由与说明</h2></div>
+    <ul id="explanations"></ul>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
