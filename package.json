@@ -1,0 +1,10 @@
+{
+  "name": "long-term-asset-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地长期资产投入、折旧、价值调整和警戒线交互式工作台",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}

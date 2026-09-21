@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>长期资产价值轨迹工作台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Local Asset Depreciation Workbench</p>
+      <h1>长期资产价值轨迹工作台</h1>
+      <p class="subtitle">直线法折旧 · 年末价值调整 · 逐年风险警戒 · 本地浏览器保存</p>
+    </div>
+    <div class="header-actions">
+      <label>警戒比例
+        <div class="percent-input"><input id="warningRatio" type="number" min="0" max="100" step="1"><span>%</span></div>
+      </label>
+      <button type="button" id="loadSamples" class="secondary">载入示例</button>
+      <button type="button" id="clearAll" class="secondary danger">清空</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="issuesPanel" class="issues-panel hidden"></section>
+
+    <section class="summary-grid" aria-label="资产汇总">
+      <article class="metric"><span>纳入汇总资产</span><strong id="metricValid">0</strong></article>
+      <article class="metric"><span>初始投入合计</span><strong id="metricCost">¥0</strong></article>
+      <article class="metric"><span>组合末年账面值</span><strong id="metricCurrent">¥0</strong></article>
+      <article class="metric risk"><span>已触发警戒资产</span><strong id="metricWarnings">0</strong></article>
+      <article class="metric invalid"><span>暂停汇总资产</span><strong id="metricInvalid">0</strong></article>
+    </section>
+
+    <section class="panel portfolio-panel">
+      <div class="section-title">
+        <div><h2>全部有效资产组合轨迹</h2><p>按自然年度汇总年末账面价值；存在问题的资产不会计入。</p></div>
+      </div>
+      <div id="portfolioChart" class="chart"></div>
+    </section>
+
+    <div class="workspace-grid">
+      <aside class="panel asset-list-panel">
+        <div class="section-title">
+          <div><h2>资产轨迹概览</h2><p>选择一项资产查看逐年明细</p></div>
+          <button type="button" id="addAsset">新增资产</button>
+        </div>
+        <div id="assetList" class="asset-list"></div>
+      </aside>
+
+      <section class="panel detail-panel">
+        <div id="detailEmpty" class="empty-state">新增或选择一项资产后，可在这里编辑参数、追加或撤销价值调整。</div>
+        <div id="assetDetail" class="hidden">
+          <div class="detail-header">
+            <div>
+              <h2 id="detailName">资产明细</h2>
+              <p id="detailMeta"></p>
+            </div>
+            <button type="button" id="deleteAsset" class="subtle danger">删除资产</button>
+          </div>
+
+          <form id="assetForm" class="asset-form">
+            <label>资产名称<input id="fieldName" required></label>
+            <label>初始投入（元）<input id="fieldCost" type="number" min="0" step="1000" required></label>
+            <label>启用年份<input id="fieldStart" type="number" min="1900" max="2200" step="1" required></label>
+            <label>使用年限（年）<input id="fieldLife" type="number" min="1" max="100" step="1" required></label>
+            <label>残值率（%）<input id="fieldSalvage" type="number" min="0" max="99.99" step="0.1" required></label>
+          </form>
+
+          <div id="assetErrors" class="asset-errors hidden"></div>
+
+          <div class="detail-grid">
+            <div class="subpanel">
+              <h3>价值调整</h3>
+              <p class="hint">调整在对应年份年末入账。负额表示减值/冲减，正额表示增值/补提；之后年度按新账面值继续折旧至原预计残值。</p>
+              <form id="adjustmentForm" class="adjustment-form">
+                <label>发生年份
+                  <select id="adjYear"></select>
+                </label>
+                <label>调整金额（元，带正负号）
+                  <input id="adjAmount" type="number" step="1000" placeholder="例如 -30000" required>
+                </label>
+                <button type="submit">追加调整</button>
+              </form>
+              <div id="adjustmentList" class="adjustment-list"></div>
+            </div>
+
+            <div class="subpanel">
+              <h3>单项资产价值轨迹</h3>
+              <div id="assetChart" class="chart small"></div>
+            </div>
+          </div>
+
+          <div class="subpanel table-wrap">
+            <h3>逐年明细</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>年份</th><th>年初账面值</th><th>本年折旧</th><th>调整前账面值</th>
+                  <th>价值调整</th><th>年末账面值</th><th>占初始投入</th><th>警戒状态 / 依据</th>
+                </tr>
+              </thead>
+              <tbody id="yearRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="model.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
