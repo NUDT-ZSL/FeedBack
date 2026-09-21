@@ -1,0 +1,14 @@
+{
+  "name": "skills-scoring-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "教练技能训练营多维评分工作台",
+  "scripts": {
+    "test": "node --test tests",
+    "smoke": "node scripts/browser-smoke.js",
+    "start": "node scripts/serve.js"
+  },
+  "devDependencies": {
+    "ws": "^8.21.3"
+  }
+}
