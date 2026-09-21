@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>多渠道反馈分流系统</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>多渠道反馈分流系统</h1>
+  <div class="actions">
+    <button id="btn-sample">导入示例数据</button>
+    <button id="btn-import">导入反馈</button>
+    <button id="btn-reset" class="danger">清空数据</button>
+  </div>
+</header>
+
+<div id="import-panel" class="hidden">
+  <p>每行一条:<code>来源|功能点|报告时间|原始文本</code>(时间可留空),或直接粘贴 JSON 数组。</p>
+  <textarea id="import-raw" rows="6" placeholder="工单|数据导出|2026-09-22 10:00|导出时报错失败"></textarea>
+  <button id="btn-do-import">确认导入</button>
+  <span id="import-msg"></span>
+</div>
+
+<main>
+  <section id="pending">
+    <h2>待处理视图 <span id="pending-count"></span></h2>
+    <div id="pending-list"></div>
+  </section>
+  <section id="board">
+    <h2>分流结果(按最终优先级排序)</h2>
+    <table>
+      <thead><tr>
+        <th>优先级</th><th>诉求</th><th>状态</th><th>去向</th><th>依据</th>
+      </tr></thead>
+      <tbody id="board-body"></tbody>
+    </table>
+  </section>
+</main>
+
+<section id="detail" class="hidden">
+  <h2>诉求详情 <button id="btn-close-detail">关闭</button></h2>
+  <div id="detail-body"></div>
+</section>
+
+<section id="audit">
+  <h2>裁定与操作记录</h2>
+  <ul id="audit-list"></ul>
+</section>
+
+<script src="/app.js"></script>
+</body>
+</html>
