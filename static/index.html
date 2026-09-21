@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>语义树与朗读顺序工具</title>
+<style>
+  :root { --bd:#c9c9c9; --bg:#f7f7f8; --accent:#1a5fb4; --err:#c01c28; }
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; margin:0;
+         background:var(--bg); color:#1c1c1e; }
+  header { background:#2e3436; color:#fff; padding:10px 16px; }
+  header h1 { font-size:17px; margin:0; }
+  header p { font-size:12px; margin:4px 0 0; color:#c8c8c8; }
+  main { display:grid; grid-template-columns: 340px 1fr 320px; gap:12px;
+         padding:12px; }
+  section { background:#fff; border:1px solid var(--bd); border-radius:6px;
+            padding:12px; }
+  h2 { font-size:14px; margin:0 0 10px; border-bottom:1px solid var(--bd);
+       padding-bottom:6px; }
+  label { display:block; font-size:12px; margin:8px 0 2px; color:#444; }
+  input, select, button { font-size:13px; padding:5px 7px; }
+  input, select { width:100%; border:1px solid var(--bd); border-radius:4px; }
+  button { border:1px solid var(--bd); background:#fff; border-radius:4px;
+           cursor:pointer; }
+  button:hover { background:#eee; }
+  button.primary { background:var(--accent); color:#fff;
+                   border-color:var(--accent); }
+  button.small { padding:1px 6px; font-size:12px; margin-left:4px; }
+  #conflict { display:none; background:#fdecec; border:1px solid var(--err);
+              color:var(--err); border-radius:6px; padding:10px 12px;
+              margin:12px; font-size:13px; white-space:pre-wrap; }
+  .tree-node { margin:2px 0 2px 16px; font-size:13px; }
+  .tree-row { display:flex; align-items:center; gap:6px; padding:3px 4px;
+              border-radius:4px; }
+  .tree-row:hover { background:#f0f4fa; }
+  .tree-row .eid { color:#888; font-size:11px; min-width:38px; }
+  .tree-row .role { color:var(--accent); }
+  .tree-row .nm { flex:1; }
+  .tree-row .nm.empty { color:var(--err); font-style:italic; }
+  .tree-row select, .tree-row input { width:auto; padding:1px 4px;
+                                      font-size:12px; }
+  ol.reading { margin:0; padding-left:22px; font-size:13px; }
+  ol.reading li { margin:3px 0; }
+  .skip-list { font-size:12px; color:#777; margin-top:10px; }
+  .skip-list li { margin:2px 0; }
+  #history-list { font-size:13px; margin:0; padding:0; list-style:none; }
+  #history-list li { padding:5px 8px; border-radius:4px; cursor:pointer;
+                     display:flex; gap:6px; }
+  #history-list li:hover { background:#f0f4fa; }
+  #history-list li.active { background:#e3ecfa; font-weight:600; }
+  #history-list .idx { color:#888; min-width:24px; }
+  .hint { font-size:11px; color:#888; margin-top:8px; line-height:1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>无障碍语义树与朗读顺序工具（本地离线）</h1>
+  <p>录入界面元素 → 构建语义树 → 调整归属/顺序/角色 → 实时预览屏幕阅读器朗读序列。非法调整会被阻止并指出冲突。</p>
+</header>
+<div id="conflict" role="alert"></div>
+<main>
+  <section>
+    <h2>1. 录入元素</h2>
+    <label for="f-id">元素 ID（留空自动生成）</label>
+    <input id="f-id" placeholder="如 btn-ok">
+    <label for="f-role">角色 role</label>
+    <select id="f-role"></select>
+    <label for="f-name">可读名称 accessible name</label>
+    <input id="f-name" placeholder="屏幕阅读器读出的名称">
+    <label for="f-parent">父元素（留空为顶层）</label>
+    <select id="f-parent"><option value="">（顶层）</option></select>
+    <div style="margin-top:10px">
+      <button class="primary" id="btn-add">添加元素</button>
+      <button id="btn-demo">载入示例</button>
+      <button id="btn-reset">清空</button>
+    </div>
+    <div class="hint">
+      规则：button/link/checkbox 等交互角色必须有可读名称；
+      presentation/none 角色不会被朗读；无名称的容器会被跳过。
+    </div>
+    <h2 style="margin-top:16px">4. 历史方案</h2>
+    <ul id="history-list"></ul>
+    <div class="hint">点击任意历史方案即可切回当时的语义树与朗读顺序；在旧方案上继续调整会产生新分支。</div>
+  </section>
+  <section>
+    <h2>2. 语义树（可直接调整归属 / 顺序 / 角色 / 名称）</h2>
+    <div id="tree"></div>
+  </section>
+  <section>
+    <h2>3. 朗读顺序预览</h2>
+    <ol class="reading" id="reading"></ol>
+    <div class="skip-list">
+      <strong>被跳过的元素：</strong>
+      <ul id="skipped"></ul>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
