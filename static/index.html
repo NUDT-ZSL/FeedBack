@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AutoDemo · 离线分块接收与转换</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; margin: 0;
+         background: #f3f5f7; color: #24292f; }
+  header { background: #1f2937; color: #fff; padding: 14px 24px;
+           display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  .global-ctl { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  main { max-width: 1080px; margin: 20px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid #e1e4e8; border-radius: 8px;
+          padding: 16px; margin-bottom: 16px; }
+  .add-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { border: 1px solid #d0d7de; background: #f6f8fa; border-radius: 6px;
+           padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { background: #eef1f4; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover { background: #1a5fd0; }
+  button.danger { background: #cf222e; border-color: #cf222e; color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  select, input[type=number] { padding: 5px 8px; border: 1px solid #d0d7de;
+                               border-radius: 6px; font-size: 13px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;
+            color: #57606a; margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .file-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .file-head .name { font-weight: 600; font-size: 15px; }
+  .meta { color: #57606a; font-size: 12px; }
+  .badge { padding: 2px 10px; border-radius: 12px; font-size: 12px; color: #fff; }
+  .st-receiving  { background: #0969da; }
+  .st-converting { background: #8250df; }
+  .st-paused     { background: #9a6700; }
+  .st-done       { background: #1a7f37; }
+  .st-failed     { background: #cf222e; }
+  .st-conflict   { background: #d4a017; }
+  .bar { height: 8px; background: #eaeef2; border-radius: 4px; overflow: hidden;
+         margin: 8px 0 2px; }
+  .bar > div { height: 100%; transition: width .3s; }
+  .bar.recv > div { background: #0969da; }
+  .bar.conv > div { background: #8250df; }
+  .bar-label { font-size: 11px; color: #57606a; display: flex;
+               justify-content: space-between; }
+  .grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+  .cell { width: 26px; height: 26px; border-radius: 4px; font-size: 10px;
+          display: flex; align-items: center; justify-content: center;
+          color: #fff; cursor: default; position: relative; }
+  .c-pending   { background: #afb8c1; }
+  .c-receiving { background: #0969da; animation: pulse 1s infinite alternate; }
+  .c-received  { background: #1a7f37; }
+  .c-failed    { background: #cf222e; cursor: pointer; }
+  .c-conflict  { background: #d4a017; cursor: pointer; }
+  .c-converted { box-shadow: inset 0 0 0 3px #8250df; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: .45; } }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .err { color: #cf222e; font-size: 12px; margin-top: 6px; }
+  .ok-msg { color: #1a7f37; font-size: 12px; margin-top: 6px; }
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                display: none; align-items: center; justify-content: center; }
+  .modal { background: #fff; border-radius: 8px; padding: 20px; width: 520px;
+           max-width: 92vw; }
+  .modal h3 { margin-top: 0; }
+  .diff-table { width: 100%; border-collapse: collapse; font-size: 13px;
+                margin: 10px 0; }
+  .diff-table td, .diff-table th { border: 1px solid #e1e4e8; padding: 6px 8px;
+                                   text-align: left; }
+  .diff-table th { background: #f6f8fa; }
+  .mono { font-family: Consolas, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AutoDemo · 离线分块接收与后台转换</h1>
+  <div class="global-ctl">
+    <label>故障注入率 <input type="number" id="failRate" min="0" max="100"
+        value="0" style="width:64px"> %</label>
+    <label>转换延时 <input type="number" id="convDelay" min="0" max="10"
+        step="0.1" value="0.5" style="width:64px"> s/段</label>
+    <button id="applyRate">应用</button>
+    <button id="failNext">下次接收必失败</button>
+    <span id="failNextTag" style="color:#ffd33d;font-size:12px;display:none">
+      已武装：下一个分段将失败</span>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <div class="add-form">
+      <input type="file" id="fileInput">
+      <label>分段大小
+        <select id="chunkSize">
+          <option value="65536">64 KB</option>
+          <option value="262144" selected>256 KB</option>
+          <option value="1048576">1 MB</option>
+          <option value="4194304">4 MB</option>
+        </select>
+      </label>
+      <button class="primary" id="addBtn">添加并开始接收</button>
+      <span class="meta">文件在浏览器本地切片，逐段上传；刷新页面后需重新选择同一文件才能继续上传。</span>
+    </div>
+    <div class="legend">
+      <span><i class="dot c-pending"></i>等待</span>
+      <span><i class="dot c-receiving"></i>接收中</span>
+      <span><i class="dot c-received"></i>已接收</span>
+      <span><i class="dot c-failed"></i>失败（点击重试）</span>
+      <span><i class="dot c-conflict"></i>冲突（点击裁决）</span>
+      <span><i class="dot c-received c-converted"></i>已转换（紫框）</span>
+    </div>
+  </div>
+  <div id="files"></div>
+</main>
+
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <h3>分段冲突裁决</h3>
+    <div id="modalBody"></div>
+    <div class="actions">
+      <button class="primary" id="keepNew">采用新内容</button>
+      <button id="keepOld">保留原有内容</button>
+      <button id="modalClose">稍后处理</button>
+    </div>
+  </div>
+</div>
+<script>
+const fileBlobs = {};      // fileId -> 本地 File 对象（用于切片/重试）
+const uploading = {};      // fileId -> 是否正在上传循环中
+let state = { files: [], settings: { fail_rate: 0, fail_next: false } };
+let conflictCtx = null;    // 当前裁决的 {fileId, idx}
+
+const FILE_STATUS_TEXT = {
+  receiving: "接收中", converting: "转换中", paused: "转换已中断",
+  done: "已完成", failed: "部分分段失败", conflict: "存在冲突待裁决",
+};
+const CHUNK_STATUS_TEXT = {
+  pending: "等待", receiving: "接收中", received: "已接收",
+  failed: "失败", conflict: "冲突",
+};
+
+function fmtSize(n) {
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+  if (n >= 1024) return (n / 1024).toFixed(1) + " KB";
+  return n + " B";
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  return res.json();
+}
+
+async function refresh() {
+  try {
+    state = await api("/api/state");
+    render();
+  } catch (e) { /* 服务暂时不可达时保持旧界面 */ }
+}
+
+function render() {
+  document.getElementById("failNextTag").style.display =
+    state.settings.fail_next ? "inline" : "none";
+  const root = document.getElementById("files");
+  root.innerHTML = "";
+  for (const f of state.files) root.appendChild(renderFile(f));
+}
+
+function renderFile(f) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const recvPct = Math.round(f.recv_progress * 100);
+  const convPct = Math.round(f.conv_progress * 100);
+  const head = document.createElement("div");
+  head.className = "file-head";
+  head.innerHTML =
+    '<span class="name"></span>' +
+    '<span class="badge st-' + f.status + '">' +
+      (FILE_STATUS_TEXT[f.status] || f.status) + "</span>" +
+    '<span class="meta">' + fmtSize(f.size) + " · 分段 " +
+      fmtSize(f.chunk_size) + " · 共 " + f.total_chunks + " 段</span>";
+  head.querySelector(".name").textContent = f.name;
+  card.appendChild(head);
+
+  const recvBar = document.createElement("div");
+  recvBar.innerHTML =
+    '<div class="bar recv"><div style="width:' + recvPct + '%"></div></div>' +
+    '<div class="bar-label"><span>接收进度 ' + f.received_count + "/" +
+      f.total_chunks + "</span><span>" + recvPct + "%</span></div>";
+  card.appendChild(recvBar);
+
+  const convBar = document.createElement("div");
+  convBar.innerHTML =
+    '<div class="bar conv"><div style="width:' + convPct + '%"></div></div>' +
+    '<div class="bar-label"><span>转换进度 ' + f.converted_count + "/" +
+      f.total_chunks + "</span><span>" + convPct + "%</span></div>";
+  card.appendChild(convBar);
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  for (const c of f.chunks) {
+    const cell = document.createElement("div");
+    cell.className = "cell c-" + c.status + (c.converted ? " c-converted" : "");
+    cell.textContent = c.idx;
+    let tip = "#" + c.idx + " " + (CHUNK_STATUS_TEXT[c.status] || c.status) +
+      " · 尝试 " + c.attempts + " 次";
+    if (c.checksum) tip += "\n校验和: " + c.checksum.slice(0, 16) + "…";
+    if (c.error) tip += "\n原因: " + c.error;
+    if (c.has_conflict) tip += "\n存在冲突，点击裁决";
+    cell.title = tip;
+    if (c.status === "failed")
+      cell.onclick = () => retryChunk(f.id, c.idx);
+    if (c.status === "conflict")
+      cell.onclick = () => openConflict(f.id, c);
+    grid.appendChild(cell);
+  }
+  card.appendChild(grid);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const mkBtn = (label, cls, fn, disabled) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.onclick = fn;
+    if (disabled) b.disabled = true;
+    actions.appendChild(b);
+  };
+  const hasWork = f.chunks.some(c => c.status === "pending" || c.status === "failed");
+  mkBtn("上传/继续接收", "primary", () => startUpload(f.id),
+        !hasWork || uploading[f.id]);
+  mkBtn("模拟冲突重传", "", () => simulateConflict(f.id),
+        !f.chunks.some(c => c.status === "received"));
+  if (f.status === "converting")
+    mkBtn("中断转换", "", () => api("/api/files/" + f.id + "/convert/stop",
+        { method: "POST" }).then(refresh));
+  if (f.status === "paused")
+    mkBtn("继续转换", "primary", () => api("/api/files/" + f.id + "/convert/start",
+        { method: "POST" }).then(refresh));
+  mkBtn("一致性校验", "", () => verifyFile(f.id), f.status !== "done");
+  if (f.status === "done") {
+    const a = document.createElement("a");
+    a.href = "/api/files/" + f.id + "/download";
+    a.innerHTML = "<button>下载转换产物</button>";
+    actions.appendChild(a);
+  }
+  mkBtn("删除", "danger", () => {
+    if (confirm("删除该任务及其全部分段数据？"))
+      api("/api/files/" + f.id + "/delete", { method: "POST" }).then(refresh);
+  });
+  card.appendChild(actions);
+
+  if (f.error) {
+    const e = document.createElement("div");
+    e.className = "err";
+    e.textContent = "错误：" + f.error;
+    card.appendChild(e);
+  }
+  const failedChunk = f.chunks.find(c => c.status === "failed" && c.error);
+  if (failedChunk) {
+    const e = document.createElement("div");
+    e.className = "err";
+    e.textContent = "分段 #" + failedChunk.idx + " 失败原因：" + failedChunk.error;
+    card.appendChild(e);
+  }
+  if (f.status === "done" && f.output_checksum) {
+    const ok = document.createElement("div");
+    ok.className = "ok-msg mono";
+    ok.textContent = "产物校验和: " + f.output_checksum;
+    card.appendChild(ok);
+  }
+  return card;
+}
+async function sha256Hex(buf) {
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getFileState(fid) { return state.files.find(f => f.id === fid); }
+
+async function uploadChunk(fid, idx, blob) {
+  const f = getFileState(fid);
+  const cs = f.chunk_size;
+  const part = blob.slice(idx * cs, Math.min((idx + 1) * cs, blob.size));
+  const buf = await part.arrayBuffer();
+  const sum = await sha256Hex(buf);
+  const res = await api("/api/files/" + fid + "/chunks/" + idx, {
+    method: "POST",
+    headers: { "X-Client-Checksum": sum, "Content-Type": "application/octet-stream" },
+    body: buf,
+  });
+  await refresh();
+  return res;
+}
+
+async function startUpload(fid) {
+  const blob = fileBlobs[fid];
+  if (!blob) {
+    alert("本地文件句柄已丢失（页面可能刷新过）。请重新选择同一文件后再继续。");
+    document.getElementById("fileInput").click();
+    return;
+  }
+  if (uploading[fid]) return;
+  uploading[fid] = true;
+  try {
+    const f = getFileState(fid);
+    for (const c of f.chunks) {
+      if (c.status === "pending" || c.status === "failed") {
+        await uploadChunk(fid, c.idx, blob);
+        // 失败后继续后续分段，失败分段稍后单独重试
+      }
+    }
+  } finally {
+    uploading[fid] = false;
+    refresh();
+  }
+}
+
+async function retryChunk(fid, idx) {
+  const blob = fileBlobs[fid];
+  if (!blob) {
+    alert("本地文件句柄已丢失，请重新选择同一文件后重试。");
+    document.getElementById("fileInput").click();
+    return;
+  }
+  await uploadChunk(fid, idx, blob);   // 只重传这一个失败分段
+}
+
+async function simulateConflict(fid) {
+  const f = getFileState(fid);
+  const blob = fileBlobs[fid];
+  if (!blob) {
+    alert("需要本地文件句柄，请先选择文件。");
+    document.getElementById("fileInput").click();
+    return;
+  }
+  const target = f.chunks.find(c => c.status === "received");
+  if (!target) return;
+  const cs = f.chunk_size;
+  const part = blob.slice(target.idx * cs, Math.min((target.idx + 1) * cs, blob.size));
+  const buf = await part.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  bytes[Math.floor(bytes.length / 2)] ^= 0xFF;   // 篡改一个字节，制造与记录不一致
+  const sum = await sha256Hex(bytes.buffer);
+  await api("/api/files/" + fid + "/chunks/" + target.idx, {
+    method: "POST",
+    headers: { "X-Client-Checksum": sum, "Content-Type": "application/octet-stream" },
+    body: bytes.buffer,
+  });
+  await refresh();
+}
+
+function openConflict(fid, chunk) {
+  conflictCtx = { fid, idx: chunk.idx };
+  const d = chunk.diff || {};
+  document.getElementById("modalBody").innerHTML =
+    "<p>分段 <b>#" + chunk.idx + "</b> 的新接收内容与先前记录不一致，双方均已保留。</p>" +
+    '<table class="diff-table">' +
+    "<tr><th></th><th>先前记录</th><th>新接收</th></tr>" +
+    "<tr><td>大小</td><td>" + fmtSize(d.old_len || 0) + "</td><td>" +
+      fmtSize(d.new_len || 0) + "</td></tr>" +
+    '<tr><td>校验和</td><td class="mono">' +
+      (chunk.checksum || "").slice(0, 20) + '…</td><td class="mono">' +
+      (chunk.conflict_checksum || "").slice(0, 20) + "…</td></tr>" +
+    "<tr><td>差异位置</td><td colspan='2'>第 " + d.first + " ~ " + d.last +
+      " 字节，共 " + d.diff_bytes + " 个字节不同</td></tr></table>" +
+    "<p class='meta'>裁决前后续处理暂停；裁决只影响该分段，其余已确认结果保持原样。</p>";
+  document.getElementById("modalMask").style.display = "flex";
+}
+
+async function resolveConflict(choice) {
+  if (!conflictCtx) return;
+  await api("/api/files/" + conflictCtx.fid + "/chunks/" + conflictCtx.idx +
+    "/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ choice }),
+    });
+  conflictCtx = null;
+  document.getElementById("modalMask").style.display = "none";
+  refresh();
+}
+
+async function verifyFile(fid) {
+  const r = await api("/api/files/" + fid + "/verify", { method: "POST" });
+  alert(r.message + (r.consistent ? "" : "\n重推: " + (r.expected || "") +
+    "\n增量: " + (r.actual || "")));
+}
+
+document.getElementById("addBtn").onclick = async () => {
+  const inp = document.getElementById("fileInput");
+  if (!inp.files.length) { alert("请先选择文件"); return; }
+  const file = inp.files[0];
+  const cs = parseInt(document.getElementById("chunkSize").value, 10);
+  const r = await api("/api/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size, chunk_size: cs }),
+  });
+  if (!r.ok) { alert(r.error); return; }
+  fileBlobs[r.id] = file;
+  await refresh();
+  startUpload(r.id);
+};
+
+document.getElementById("applyRate").onclick = async () => {
+  const v = parseFloat(document.getElementById("failRate").value) || 0;
+  const d = parseFloat(document.getElementById("convDelay").value) || 0;
+  await api("/api/settings", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fail_rate: v / 100, convert_delay: d }),
+  });
+  refresh();
+};
+
+document.getElementById("failNext").onclick = async () => {
+  await api("/api/settings", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fail_next: true }),
+  });
+  refresh();
+};
+
+document.getElementById("keepNew").onclick = () => resolveConflict("keep_new");
+document.getElementById("keepOld").onclick = () => resolveConflict("keep_old");
+document.getElementById("modalClose").onclick = () => {
+  conflictCtx = null;
+  document.getElementById("modalMask").style.display = "none";
+};
+
+refresh();
+setInterval(refresh, 800);
+</script>
+</body>
+</html>
