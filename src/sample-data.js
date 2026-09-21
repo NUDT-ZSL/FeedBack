@@ -1,0 +1,90 @@
+/* 内置离线样例。所有日期固定，便于在无网络环境复现。 */
+(function attachDemoModel(global) {
+  const model = {
+    now: "2026-09-22T09:00:00+08:00",
+    handoffs: [
+      {
+        id: "H1",
+        title: "生产故障值班权交接",
+        role: "SRE 值班人 → 二线值班人",
+        dependencies: [],
+        requiredContextKeys: ["runbook", "contact", "accessScope"],
+        timeCritical: "2 小时内必须可接手",
+        sourceNote: "值班记录 #INC-2048 与 IAM 临时授权单",
+      },
+      {
+        id: "H2",
+        title: "客户升级单继续跟进",
+        role: "客户成功经理 → 交付负责人",
+        dependencies: ["H1"],
+        requiredContextKeys: ["customerStatus", "slaWindow", "nextCommitment"],
+        timeCritical: "今天 15:00 前回复客户",
+        sourceNote: "CRM 工单、客户成功经理交接备注",
+      },
+      {
+        id: "H3",
+        title: "灰度发布观察与回滚准备",
+        role: "发布负责人 → 运维负责人",
+        dependencies: ["H2", "LEGACY-OPS"],
+        requiredContextKeys: ["releaseVersion", "rollbackPlan"],
+        timeCritical: "灰度窗口 10:00-12:00",
+        sourceNote: "发布单 REL-931，但引用了未导入的旧运维任务",
+      },
+      {
+        id: "H4",
+        title: "付款异常复核 A",
+        role: "财务专员 → 风控专员",
+        dependencies: ["H5"],
+        requiredContextKeys: ["paymentEvidence"],
+        timeCritical: "T+1 日结前",
+        sourceNote: "财务共享台账",
+      },
+      {
+        id: "H5",
+        title: "付款异常复核 B",
+        role: "风控专员 → 财务专员",
+        dependencies: ["H4"],
+        requiredContextKeys: ["riskConclusion"],
+        timeCritical: "T+1 日结前",
+        sourceNote: "风控案件系统",
+      },
+      {
+        id: "H6",
+        title: "外部供应商临时账号交接",
+        role: "采购接口人 → 安全管理员",
+        dependencies: [],
+        requiredContextKeys: ["vendorToken", "vendorContact"],
+        timeCritical: "令牌已过期，需重新签发",
+        sourceNote: "供应商邮件与密钥保险柜记录",
+      },
+      {
+        id: "H7",
+        title: "培训材料归档",
+        role: "培训负责人 → 知识库管理员",
+        dependencies: ["H6"],
+        requiredContextKeys: ["materialLocation"],
+        timeCritical: "本周内完成",
+        sourceNote: "知识库导出任务",
+      },
+    ],
+    contexts: [
+      { id: "C1", handoffId: "H1", key: "runbook", value: "https://wiki.internal/incident/2048", source: "值班记录", validUntil: "2026-09-30T18:00:00+08:00", note: "含故障定位与止血脚本" },
+      { id: "C2", handoffId: "H1", key: "contact", value: "值班群：生产故障二级群", source: "IM 群信息", validUntil: null, note: "二线可直接拉会" },
+      { id: "C3", handoffId: "H1", key: "accessScope", value: "只读生产监控 + 经审批重启服务", source: "IAM 临时授权单", validUntil: "2026-09-22T18:00:00+08:00", note: "禁止直接改库" },
+      { id: "C4", handoffId: "H2", key: "customerStatus", value: "客户已接受 15:00 前给出根因说明", source: "CRM 工单", validUntil: "2026-09-23T09:00:00+08:00", note: "工单优先级 P1" },
+      { id: "C5", handoffId: "H2", key: "slaWindow", value: "承诺 12:00 前恢复", source: "客户成功经理备注", validUntil: "2026-09-22T18:00:00+08:00", note: "与电话纪要冲突" },
+      { id: "C6", handoffId: "H2", key: "slaWindow", value: "承诺 15:00 前恢复", source: "客户电话纪要", validUntil: "2026-09-22T18:00:00+08:00", note: "与交接备注冲突" },
+      { id: "C7", handoffId: "H2", key: "nextCommitment", value: "发送 RCA 初稿并同步补偿方案", source: "CRM 跟进记录", validUntil: "2026-09-23T09:00:00+08:00", note: "" },
+      { id: "C8", handoffId: "H3", key: "releaseVersion", value: "payments-api@2026.09.22-r1", source: "构建系统", validUntil: "2026-09-22T12:30:00+08:00", note: "灰度包" },
+      { id: "C9", handoffId: "H3", key: "rollbackPlan", value: "回退到 2026.09.21-r4 并关闭灰度开关", source: "发布单 REL-931", validUntil: "2026-09-22T12:30:00+08:00", note: "" },
+      { id: "C10", handoffId: "H4", key: "paymentEvidence", value: "订单 PAY-7781 三要素核验通过，但支付渠道回调重复", source: "财务共享台账", validUntil: "2026-09-25T09:00:00+08:00", note: "" },
+      { id: "C11", handoffId: "H5", key: "riskConclusion", value: "暂无盗刷迹象，等待财务确认重复回调", source: "风控案件系统", validUntil: "2026-09-25T09:00:00+08:00", note: "" },
+      { id: "C12", handoffId: "H6", key: "vendorToken", value: "vpat_live_8H2...（已轮换前旧令牌）", source: "密钥保险柜 v3", validUntil: "2026-09-20T18:00:00+08:00", note: "不可继续使用" },
+      { id: "C13", handoffId: "H6", key: "vendorContact", value: "供应商值班：ops@vendor.example", source: "采购联系人表", validUntil: null, note: "" },
+      { id: "C14", handoffId: "H7", key: "materialLocation", value: "知识库 /交接培训/2026-09", source: "知识库导出任务", validUntil: "2026-10-31T18:00:00+08:00", note: "" },
+    ],
+  };
+
+  if (typeof module !== "undefined" && module.exports) module.exports = model;
+  global.DEMO_MODEL = model;
+})(typeof window !== "undefined" ? window : globalThis);

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线交接推演</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div>
+        <h1>离线交接推演</h1>
+        <p>沿责任与前置依赖判断上下文完整度、可信度和会随交接丢失的信息。</p>
+      </div>
+      <div class="toolbar">
+        <button class="secondary" id="importModel" type="button">导入事项 JSON</button>
+        <button class="secondary" id="exportState" type="button">导出裁决/修改</button>
+        <button class="secondary" id="resetDemo" type="button">恢复样例</button>
+        <input id="modelFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <section class="stats" id="stats" aria-label="总体统计"></section>
+
+    <div class="layout">
+      <section>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+            <h2 style="margin:0">交接事项列表</h2>
+            <span class="muted" id="evaluationClock"></span>
+          </div>
+          <div class="filters" id="filters" style="margin-top:12px"></div>
+          <div class="handoff-list" id="handoffList"></div>
+        </div>
+      </section>
+
+      <aside>
+        <section class="panel">
+          <h2>冲突裁决</h2>
+          <p class="muted">同一事项、同一上下文键出现不同值时，双方来源均保留；未裁决前相关事项保持阻塞。</p>
+          <div class="conflict-stack" id="conflictStack"></div>
+        </section>
+        <section class="panel">
+          <h2>本次增量重推</h2>
+          <div id="recomputeInfo" class="muted">尚未执行修改。</div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="editorBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+      <h2 id="editorTitle">调整上下文</h2>
+      <form id="contextForm">
+        <input type="hidden" id="contextId">
+        <div class="field">
+          <label for="contextValue">上下文内容</label>
+          <textarea id="contextValue" rows="4" required></textarea>
+        </div>
+        <div class="field">
+          <label for="contextSource">来源说明</label>
+          <input id="contextSource" required>
+        </div>
+        <div class="field">
+          <label for="contextValidUntil">失效时间（ISO；留空表示长期有效）</label>
+          <input id="contextValidUntil" placeholder="2026-09-30T18:00:00+08:00">
+        </div>
+        <label style="display:flex;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="contextActive" style="width:auto"> 启用该上下文（取消后视为随交接移除）
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="closeEditor">取消</button>
+          <button type="submit">保存并重推受影响链路</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="src/engine.js"></script>
+  <script src="src/sample-data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "offline-handoff-inference",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线交接上下文完整性与可信链路推演应用",
+  "scripts": {
+    "test": "node --test",
+    "start": "node scripts/serve.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
