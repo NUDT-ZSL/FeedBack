@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动上下文恢复工作台</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">续</div>
+        <div>
+          <h1>活动续接台</h1>
+          <p>离线上下文恢复</p>
+        </div>
+      </div>
+      <button id="newActivity" class="primary wide">新建活动</button>
+      <nav id="activityList" class="activity-list" aria-label="活动列表"></nav>
+      <div class="sidebar-footer">
+        <button id="exportData" class="ghost">导出数据</button>
+        <button id="importData" class="ghost">导入数据</button>
+        <button id="resetDemo" class="ghost danger-text">重置示例</button>
+        <input id="importFile" type="file" accept="application/json" hidden>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="workspace-header">
+        <div>
+          <p class="eyebrow">当前活动</p>
+          <h2 id="activityTitle">未选择活动</h2>
+          <p id="activityGoal" class="muted"></p>
+        </div>
+        <button id="editActivity" class="ghost">编辑活动</button>
+      </header>
+
+      <section id="statusBanner" class="status-banner"></section>
+
+      <div class="dashboard-grid">
+        <section class="panel recovery-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>续接线索</h3>
+              <p>根据时效与依赖推导恢复顺序</p>
+            </div>
+          </div>
+          <div id="anchors" class="anchors"></div>
+          <ol id="resumeSteps" class="resume-steps"></ol>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>冲突裁决</h3>
+              <p>矛盾上下文会保留双方，直到人工裁决</p>
+            </div>
+          </div>
+          <div id="conflicts" class="conflicts"></div>
+        </section>
+      </div>
+
+      <section class="panel entries-panel">
+        <div class="panel-heading entries-heading">
+          <div>
+            <h3>上下文条目</h3>
+            <p>素材、待办、临时想法与当前进度</p>
+          </div>
+          <button id="newEntry" class="primary">新增条目</button>
+        </div>
+        <div id="entryGrid" class="entry-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="entryDialog" class="dialog-card">
+    <form id="entryForm" method="dialog">
+      <h3 id="entryDialogTitle">新增上下文</h3>
+      <input type="hidden" id="entryId">
+      <label>标题<input id="entryTitle" required maxlength="80"></label>
+      <label>类型
+        <select id="entryKind">
+          <option value="todo">待办</option>
+          <option value="material">素材</option>
+          <option value="idea">临时想法</option>
+          <option value="progress">当前进度</option>
+        </select>
+      </label>
+      <label>来源<input id="entrySource" placeholder="会议、文档、聊天、手动记录"></label>
+      <label>失效时间<input id="entryValidUntil" type="datetime-local"></label>
+      <label>内容<textarea id="entryContent" rows="4"></textarea></label>
+      <label>依赖条目<select id="entryDeps" multiple size="5"></select></label>
+      <label>状态
+        <select id="entryStatus">
+          <option value="active">有效</option>
+          <option value="completed">完成</option>
+          <option value="cancelled">取消</option>
+          <option value="retired">归档</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost" formnovalidate>取消</button>
+        <button id="saveEntry" value="default" class="primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="activityDialog" class="dialog-card narrow">
+    <form id="activityForm" method="dialog">
+      <h3 id="activityDialogTitle">新建活动</h3>
+      <input type="hidden" id="activityEditId">
+      <label>名称<input id="activityNameInput" required maxlength="80"></label>
+      <label>目标<textarea id="activityGoalInput" rows="4"></textarea></label>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost" formnovalidate>取消</button>
+        <button class="primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="src/core.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

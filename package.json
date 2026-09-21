@@ -1,0 +1,11 @@
+{
+  "name": "activity-context-recovery-bench",
+  "version": "1.0.0",
+  "description": "本地离线活动上下文恢复工作台",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/start-server.js",
+    "test": "node --test"
+  }
+}
