@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>储能充放电方案对比决策工具</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--panel2:#273549;--fg:#e2e8f0;--mut:#94a3b8;--line:#334155;--bad:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 "Microsoft YaHei",system-ui,sans-serif;padding:16px}
+h1{font-size:20px;margin-bottom:4px}
+.sub{color:var(--mut);font-size:12px;margin-bottom:14px}
+.layout{display:flex;gap:16px;align-items:flex-start}
+.side{width:300px;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.panel h2{font-size:15px;margin-bottom:10px}
+.param{margin-bottom:12px}
+.param .row{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.param .val{color:#7dd3fc;font-weight:600}
+.param input[type=range]{width:100%;margin-top:4px;accent-color:#38bdf8}
+.lock{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:4px;margin-top:2px}
+.locked input[type=range]{opacity:.35;pointer-events:none}
+select,button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;width:100%}
+button{cursor:pointer}
+button:hover{border-color:#38bdf8}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;position:relative;border-top:4px solid #666}
+.card.sel{outline:2px solid #38bdf8}
+.card.bad{opacity:.78}
+.card .nm{font-weight:700;font-size:14px}
+.rank{position:absolute;top:8px;right:10px;font-size:12px;color:var(--mut)}
+.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;margin-left:6px;vertical-align:1px}
+.badge.ok{background:#064e3b;color:#6ee7b7}
+.badge.bad{background:#7f1d1d;color:#fca5a5}
+.big{font-size:22px;font-weight:700;margin:6px 0}
+.kv{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);padding:1px 0}
+.kv b{color:var(--fg);font-weight:600}
+.vio{font-size:11px;color:#fca5a5;margin-top:6px;border-top:1px dashed var(--line);padding-top:4px}
+.pref{box-shadow:0 0 0 2px #facc15 inset}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-bottom:10px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.srow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.srow .lb{width:120px;font-size:12px;color:var(--mut);text-align:right;flex:none}
+.sbar{flex:1;display:flex;height:22px;border-radius:5px;overflow:hidden;background:#0b1220}
+.seg{height:100%;position:relative;min-width:2px}
+.seg:hover{filter:brightness(1.3)}
+.seg .tp{position:absolute;top:0;left:3px;font-size:10px;color:#fff;opacity:.95;line-height:22px;white-space:nowrap;text-shadow:0 0 3px #000}
+.seg.prefseg{box-shadow:inset 0 0 0 2px #facc15}
+.flip{font-size:12px;color:#fbbf24;margin:3px 0 0 130px}
+.lockednote{flex:1;font-size:12px;color:var(--mut);font-style:italic}
+canvas{width:100%;background:#0b1220;border-radius:8px}
+</style>
+</head>
+<body>
+<h1>储能充放电方案对比决策工具</h1>
+<div class="sub">本地离线运行 · 调整左侧参数即时重算 · 点击方案卡片查看其调度曲线 · 敏感性区间按"其余参数保持当前值"扫描</div>
+<div class="layout">
+ <div class="side">
+  <h2 style="font-size:14px;margin-bottom:10px">关键参数</h2>
+  <div id="params"></div>
+  <h2 style="font-size:14px;margin:14px 0 8px">取舍偏好</h2>
+  <select id="prefSel"></select>
+  <div style="height:10px"></div>
+  <button id="resetBtn">重置全部参数与偏好</button>
+ </div>
+ <div class="main">
+  <div class="panel">
+   <h2>候选方案对比（按日净收益排序）</h2>
+   <div class="legend" id="legend"></div>
+   <div class="cards" id="cards"></div>
+   <div id="prefNote" style="margin-top:10px;font-size:12px;color:#fbbf24"></div>
+  </div>
+  <div class="panel">
+   <h2>敏感性与排序翻转区间（颜色=该参数区间内最优方案）</h2>
+   <div id="sens"></div>
+   <div id="flips"></div>
+  </div>
+  <div class="panel">
+   <h2 id="schedTitle">调度曲线</h2>
+   <canvas id="chart" width="960" height="330"></canvas>
+  </div>
+ </div>
+</div>
+<script>
+"use strict";
+// 时段类型: 0=谷 1=平 2=峰 (按小时)
+const TOU=[0,0,0,0,0,0,0,1,2,2,2,1,1,1,1,1,1,1,1,2,2,2,1,0];
+// 园区负荷曲线(占负荷峰值比例)
+const LOAD_SHAPE=[.35,.3,.3,.3,.35,.45,.55,.65,.8,.9,.95,.9,.7,.75,.85,.9,.95,.9,.85,.8,.7,.55,.45,.4];
+const TRANSFORMER_CAP=750; // 变压器/并网容量 kW
+const WORKDAYS=350;        // 年运行天数
+function mk(entries){const a=new Array(24).fill(0);for(const e of entries)for(let h=e[0];h<e[1];h++)a[h]=e[2];return a;}
+// 候选方案: sch 为24小时功率(kW), 正=放电 负=充电
+const SCHEMES=[
+ {id:"A",name:"方案A · 两充两放",color:"#3b82f6",cap:2000,power:500,eff:.88,minSoc:.1,maxSoc:.95,cycleLife:6000,replCost:900,cMul:1.0,
+  sch:mk([[0,6,-300],[8,11,330],[12,14,-200],[18,21,300]])},
+ {id:"B",name:"方案B · 一充一放",color:"#22c55e",cap:1500,power:400,eff:.9,minSoc:.15,maxSoc:.95,cycleLife:7000,replCost:950,cMul:.9,
+  sch:mk([[1,6,-260],[8,11,380]])},
+ {id:"C",name:"方案C · 长时平滑",color:"#f59e0b",cap:2500,power:300,eff:.9,minSoc:.1,maxSoc:.95,cycleLife:8000,replCost:880,cMul:.8,
+  sch:mk([[0,7,-300],[8,20,150]])},
+ {id:"D",name:"方案D · 大功率短时",color:"#a855f7",cap:2400,power:800,eff:.87,minSoc:.1,maxSoc:.9,cycleLife:4500,replCost:920,cMul:1.35,
+  sch:mk([[0,5,-400],[9,11,800],[12,14,-200],[19,21,240]])}
+];
+const PARAMS=[
+ {key:"peakPrice",label:"峰时电价",unit:"元/kWh",min:.6,max:1.8,step:.01,def:1.2,dig:2},
+ {key:"flatPrice",label:"平时电价",unit:"元/kWh",min:.3,max:1.0,step:.01,def:.7,dig:2},
+ {key:"valleyPrice",label:"谷时电价",unit:"元/kWh",min:.1,max:.6,step:.01,def:.35,dig:2},
+ {key:"loadPeak",label:"负荷峰值",unit:"kW",min:200,max:1200,step:10,def:600,dig:0},
+ {key:"degRate",label:"电池年衰减率",unit:"%",min:1,max:10,step:.1,def:4,dig:1}
+];
+const state={vals:{},locked:{},pref:"",sel:"A"};
+PARAMS.forEach(p=>{state.vals[p.key]=p.def;state.locked[p.key]=false;});
+function priceAt(h,v){const t=TOU[h];return t===0?v.valleyPrice:t===1?v.flatPrice:v.peakPrice;}
+// 单方案逐时仿真: 收益/成本/衰减 + 约束校验
+function evaluate(sc,v){
+ const r={vios:[],chg:0,dis:0,rev:0,cost:0,deg:0,net:0,cycles:0,soc:[]};
+ let soc=sc.cap*sc.minSoc;
+ for(let h=0;h<24;h++){
+  const p=sc.sch[h];
+  if(Math.abs(p)>sc.power+1e-9)r.vios.push("功率超限: "+h+"时 "+Math.abs(p)+"kW > 额定"+sc.power+"kW");
+  if(p<0){
+   soc+=-p*sc.eff; r.chg+=-p; r.cost+=-p*priceAt(h,v);
+   const grid=v.loadPeak*LOAD_SHAPE[h]+(-p);
+   if(grid>TRANSFORMER_CAP)r.vios.push("变压器容量超限: "+h+"时 并网"+Math.round(grid)+"kW > "+TRANSFORMER_CAP+"kW");
+  }else if(p>0){
+   soc-=p; r.dis+=p; r.rev+=p*priceAt(h,v);
+  }
+  r.soc.push(soc);
+  const pct=100*soc/sc.cap;
+  if(soc>sc.cap*sc.maxSoc+1e-6)r.vios.push("SOC越上限: "+h+"时末 "+pct.toFixed(0)+"% > "+(sc.maxSoc*100)+"%");
+  if(soc<sc.cap*sc.minSoc-1e-6)r.vios.push("SOC越下限: "+h+"时末 "+pct.toFixed(0)+"% < "+(sc.minSoc*100)+"%");
+ }
+ const dod=sc.maxSoc-sc.minSoc;
+ r.cycles=r.dis/(sc.cap*dod);
+ if(r.cycles>2.0001)r.vios.push("日循环次数超限: "+r.cycles.toFixed(2)+" > 2 次/日");
+ // 衰减成本: 更换成本/(寿命*DoD) 随年衰减率与倍率缩放
+ r.deg=r.dis*(sc.replCost/(sc.cycleLife*dod))*(v.degRate/4)*sc.cMul;
+ r.net=r.rev-r.cost-r.deg;
+ r.feasible=r.vios.length===0;
+ return r;
+}
+function rankAll(v){
+ const res=SCHEMES.map(sc=>({sc:sc,r:evaluate(sc,v)}));
+ res.sort((a,b)=>{
+  const fa=a.r.feasible?0:1,fb=b.r.feasible?0:1;
+  if(fa!==fb)return fa-fb;
+  return b.r.net-a.r.net;
+ });
+ res.forEach((x,i)=>{x.rank=i+1;});
+ return res;
+}
+// 敏感性扫描: 每个未锁定参数扫41点, 记录最优方案区间与翻转点
+function sensitivity(){
+ const out=[];
+ for(const p of PARAMS){
+  if(state.locked[p.key]){out.push({p:p,locked:true});continue;}
+  const N=40,pts=[];
+  for(let i=0;i<=N;i++){
+   const val=p.min+(p.max-p.min)*i/N;
+   const v=Object.assign({},state.vals);v[p.key]=val;
+   const ranked=rankAll(v);
+   pts.push({val:val,top:ranked[0].r.feasible?ranked[0].sc.id:"—"});
+  }
+  const segs=[],flips=[];
+  let cur={top:pts[0].top,from:pts[0].val};
+  for(let i=1;i<pts.length;i++){
+   if(pts[i].top!==cur.top){
+    cur.to=pts[i-1].val;segs.push(cur);
+    flips.push({at:pts[i].val,from:cur.top,to:pts[i].top});
+    cur={top:pts[i].top,from:pts[i].val};
+   }
+  }
+  cur.to=pts[pts.length-1].val;segs.push(cur);
+  out.push({p:p,segs:segs,flips:flips});
+ }
+ return out;
+}
+const $=id=>document.getElementById(id);
+function fmt(n,d){return n.toLocaleString("zh-CN",{maximumFractionDigits:d===undefined?0:d});}
+function colorOf(id){const s=SCHEMES.find(x=>x.id===id);return s?s.color:"#475569";}
+function render(){
+ const ranked=rankAll(state.vals);
+ $("legend").innerHTML=SCHEMES.map(s=>"<span><i style='background:"+s.color+"'></i>"+s.name+"</span>").join("");
+ $("cards").innerHTML=ranked.map(x=>{
+  const sc=x.sc,r=x.r;
+  const cls="card"+(state.pref===sc.id?" pref":"")+(r.feasible?"":" bad")+(state.sel===sc.id?" sel":"");
+  const badge=r.feasible?"<span class='badge ok'>可行</span>":"<span class='badge bad'>不可行</span>";
+  const vio=r.feasible?"":"<div class='vio'>"+r.vios.slice(0,4).join("<br>")+(r.vios.length>4?"<br>…共"+r.vios.length+"项":"")+"</div>";
+  return "<div class='"+cls+"' style='border-top-color:"+sc.color+"' data-id='"+sc.id+"'>"
+   +"<div class='nm'>"+sc.name+badge+"</div><div class='rank'>#"+x.rank+"</div>"
+   +"<div class='big' style='color:"+(r.feasible?"#7dd3fc":"#94a3b8")+"'>"+fmt(r.net)+" 元/日</div>"
+   +"<div class='kv'><span>年净收益(估)</span><b>"+fmt(r.net*WORKDAYS/10000,1)+" 万元</b></div>"
+   +"<div class='kv'><span>充电 / 放电</span><b>"+fmt(r.chg)+" / "+fmt(r.dis)+" kWh</b></div>"
+   +"<div class='kv'><span>电费价差收益</span><b>"+fmt(r.rev-r.cost)+" 元</b></div>"
+   +"<div class='kv'><span>电池衰减成本</span><b>"+fmt(r.deg)+" 元</b></div>"
+   +"<div class='kv'><span>日等效循环</span><b>"+r.cycles.toFixed(2)+" 次</b></div>"
+   +vio+"</div>";
+ }).join("");
+ document.querySelectorAll(".card").forEach(c=>{c.onclick=()=>{state.sel=c.dataset.id;render();};});
+ renderPrefNote(ranked);
+ renderSens();
+ drawChart();
+}
+function renderPrefNote(ranked){
+ const el=$("prefNote");
+ if(!state.pref){el.textContent="";return;}
+ const item=ranked.find(x=>x.sc.id===state.pref),best=ranked[0];
+ if(item.rank===1){
+  el.textContent="偏好方案 "+state.pref+" 当前即为最优（日净收益 "+fmt(item.r.net)+" 元）。";
+ }else if(item.r.feasible){
+  el.textContent="偏好方案 "+state.pref+" 当前排名第 "+item.rank+"，与最优方案 "+best.sc.id+" 相差 "+fmt(best.r.net-item.r.net)+" 元/日；其在何种参数区间占优见下方敏感性条（黄框段）。"
+ }else{
+  el.textContent="偏好方案 "+state.pref+" 当前不可行："+item.r.vios[0]+" 等 "+item.r.vios.length+" 项约束被突破。";
+ }
+}
+function renderSens(){
+ const data=sensitivity();
+ let html="",flipsHtml="";
+ for(const d of data){
+  if(d.locked){
+   html+="<div class='srow'><div class='lb'>"+d.p.label+"</div><div class='lockednote'>已锁定（固定为 "+state.vals[d.p.key]+d.p.unit+"），不参与翻转分析</div></div>";
+   continue;
+  }
+  const span=d.p.max-d.p.min;
+  const bar=d.segs.map(s=>{
+   const w=(s.to-s.from)/span*100;
+   const pf=state.pref===s.top?" prefseg":"";
+   return "<div class='seg"+pf+"' style='width:"+w+"%;background:"+colorOf(s.top)+"' title='"+s.from.toFixed(d.p.dig)+" ~ "+s.to.toFixed(d.p.dig)+" "+d.p.unit+"：最优 "+s.top+"'><span class='tp'>"+s.top+"</span></div>";
+  }).join("");
+  html+="<div class='srow'><div class='lb'>"+d.p.label+"<br><span style='font-size:10px'>"+d.p.min+" ~ "+d.p.max+" "+d.p.unit+"</span></div><div class='sbar'>"+bar+"</div></div>";
+  for(const f of d.flips){
+   flipsHtml+="<div class='flip'>⚠ "+d.p.label+" ≈ "+f.at.toFixed(d.p.dig)+" "+d.p.unit+" 附近：最优方案由 "+f.from+" 翻转为 "+f.to+"（其余参数保持当前值）</div>";
+  }
+ }
+ $("sens").innerHTML=html;
+ $("flips").innerHTML=flipsHtml||"<div style='font-size:12px;color:var(--mut)'>当前参数邻域内未发生最优方案翻转。</div>";
+}
+function drawChart(){
+ const cv=$("chart"),ctx=cv.getContext("2d");
+ const W=cv.width,H=cv.height;
+ ctx.clearRect(0,0,W,H);
+ const sc=SCHEMES.find(s=>s.id===state.sel);
+ const r=evaluate(sc,state.vals);
+ $("schedTitle").textContent="调度曲线 · "+sc.name+"（柱=充放电功率，绿线=SOC，底色=电价时段）";
+ const L=54,R=54,T=26,B=32,pw=(W-L-R)/24;
+ const maxP=Math.max(sc.power,Math.max.apply(null,sc.sch.map(Math.abs)))*1.1;
+ const y0=T+(H-T-B)/2,yScale=(H-T-B)/2/maxP;
+ const tierBg=["rgba(34,197,94,.10)","rgba(148,163,184,.10)","rgba(239,68,68,.14)"];
+ for(let h=0;h<24;h++){ctx.fillStyle=tierBg[TOU[h]];ctx.fillRect(L+h*pw,T,pw,H-T-B);}
+ ctx.strokeStyle="#475569";ctx.beginPath();ctx.moveTo(L,y0);ctx.lineTo(W-R,y0);ctx.stroke();
+ for(let h=0;h<24;h++){
+  const p=sc.sch[h];if(!p)continue;
+  ctx.fillStyle=p>0?"#fb923c":"#34d399";
+  const bh=p*yScale;
+  ctx.fillRect(L+h*pw+pw*.2,p>0?y0-bh:y0,pw*.6,Math.abs(bh));
+ }
+ ctx.strokeStyle="#4ade80";ctx.lineWidth=2;ctx.beginPath();
+ r.soc.forEach((s,h)=>{
+  const x=L+h*pw+pw/2,y=T+(1-s/sc.cap)*(H-T-B);
+  if(h)ctx.lineTo(x,y);else ctx.moveTo(x,y);
+ });
+ ctx.stroke();ctx.lineWidth=1;
+ ctx.fillStyle="#94a3b8";ctx.font="11px sans-serif";ctx.textAlign="center";
+ for(let h=0;h<24;h+=2)ctx.fillText(h+"时",L+h*pw+pw/2,H-12);
+ ctx.textAlign="right";
+ ctx.fillText("放电 +"+Math.round(maxP)+"kW",L-6,T+10);
+ ctx.fillText("充电 -"+Math.round(maxP)+"kW",L-6,H-B-4);
+ ctx.textAlign="left";
+ ctx.fillText("SOC 100%",W-R+6,T+10);
+ ctx.fillText("0%",W-R+6,H-B-4);
+ if(!r.feasible){
+  ctx.fillStyle="rgba(239,68,68,.95)";ctx.font="bold 13px sans-serif";
+  ctx.fillText("⚠ 当前参数下不可行: "+r.vios[0],L+8,T+16);
+ }
+}
+function syncParam(p){$("pv_"+p.key).textContent=state.vals[p.key].toFixed(p.dig)+" "+p.unit;}
+function buildSide(){
+ $("params").innerHTML=PARAMS.map(p=>
+  "<div class='param' id='pm_"+p.key+"'>"
+  +"<div class='row'><span>"+p.label+"</span><span class='val' id='pv_"+p.key+"'></span></div>"
+  +"<input type='range' id='ps_"+p.key+"' min='"+p.min+"' max='"+p.max+"' step='"+p.step+"'>"
+  +"<label class='lock'><input type='checkbox' id='pl_"+p.key+"'> 锁定该参数</label>"
+  +"</div>").join("");
+ PARAMS.forEach(p=>{
+  const s=$("ps_"+p.key);
+  s.value=state.vals[p.key];
+  s.oninput=()=>{state.vals[p.key]=parseFloat(s.value);syncParam(p);render();};
+  $("pl_"+p.key).onchange=e=>{
+   state.locked[p.key]=e.target.checked;
+   $("pm_"+p.key).classList.toggle("locked",e.target.checked);
+   render();
+  };
+  syncParam(p);
+ });
+ const sel=$("prefSel");
+ sel.innerHTML="<option value=''>无偏好（按收益排序）</option>"
+  +SCHEMES.map(s=>"<option value='"+s.id+"'>固定偏好："+s.name+"</option>").join("");
+ sel.onchange=()=>{state.pref=sel.value;render();};
+ $("resetBtn").onclick=()=>{
+  PARAMS.forEach(p=>{
+   state.vals[p.key]=p.def;state.locked[p.key]=false;
+   $("ps_"+p.key).value=p.def;$("pl_"+p.key).checked=false;
+   $("pm_"+p.key).classList.remove("locked");syncParam(p);
+  });
+  state.pref="";sel.value="";render();
+ };
+}
+buildSide();
+render();
+</script>
+</body>
+</html>
