@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>笔记关联本</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>笔记关联本</h1>
+    <p class="subtitle">录入零散笔记，顺着标签与文本线索发现真正的关联</p>
+  </header>
+
+  <main>
+    <section class="pane" id="left-pane">
+      <h2>新建笔记</h2>
+      <form id="note-form">
+        <label>标题
+          <input id="f-title" type="text" required placeholder="笔记标题" />
+        </label>
+        <label>标签（用逗号分隔）
+          <input id="f-tags" type="text" placeholder="例如：读书, 方法论" />
+        </label>
+        <label>正文
+          <textarea id="f-text" rows="5" placeholder="自由文本……"></textarea>
+        </label>
+        <button type="submit">保存笔记</button>
+      </form>
+
+      <h2>笔记列表 <span id="note-count" class="muted"></span></h2>
+      <ul id="note-list" class="note-list"></ul>
+    </section>
+
+    <section class="pane" id="right-pane">
+      <div id="breadcrumb" class="breadcrumb hidden">
+        <button id="btn-back" type="button">← 返回上一条</button>
+        <span id="crumb-path"></span>
+      </div>
+      <div id="detail-empty" class="muted">从左侧选择一条笔记，查看它的关联。</div>
+      <div id="detail" class="hidden">
+        <h2 id="d-title"></h2>
+        <div id="d-tags" class="tag-row"></div>
+        <p id="d-text" class="note-text"></p>
+
+        <details id="edit-box">
+          <summary>编辑这条笔记</summary>
+          <form id="edit-form">
+            <label>标题 <input id="e-title" type="text" required /></label>
+            <label>标签（用逗号分隔） <input id="e-tags" type="text" /></label>
+            <label>正文 <textarea id="e-text" rows="4"></textarea></label>
+            <div class="btn-row">
+              <button type="submit">保存修改</button>
+              <button type="button" id="btn-delete" class="danger">删除笔记</button>
+            </div>
+          </form>
+        </details>
+
+        <h3>相关笔记</h3>
+        <div id="related"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="relations.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
