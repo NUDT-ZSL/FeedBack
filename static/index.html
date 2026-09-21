@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>经验条目关联管理</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>经验条目关联管理</h1>
+  <div class="header-actions">
+    <button id="btn-new" class="primary">+ 新建条目</button>
+    <button id="btn-reset" title="清空全部修改，恢复种子数据">重置数据</button>
+  </div>
+</header>
+<div id="layout">
+  <aside>
+    <div id="entry-list"></div>
+    <h2>变更动态</h2>
+    <div id="event-feed"></div>
+  </aside>
+  <main id="detail"><p class="placeholder">请选择左侧条目查看详情</p></main>
+</div>
+
+<div id="modal-mask" class="hidden">
+  <div id="modal">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modal-ok" class="primary">确定</button>
+      <button id="modal-cancel">取消</button>
+    </div>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
