@@ -1,0 +1,9 @@
+{
+  "name": "offline-workorder-sync",
+  "version": "1.0.0",
+  "description": "Offline-first work order editor with ordered op sync and field-level conflict resolution",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

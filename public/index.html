@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>现场工单 · 离线编辑与同步</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">现场工单 · 离线优先</div>
+    <div class="conn" id="connBadge">
+      <span class="dot" id="connDot"></span>
+      <span id="connText">检测中…</span>
+    </div>
+    <div class="top-actions">
+      <button id="toggleNetBtn" class="btn warn">模拟断网</button>
+      <button id="syncBtn" class="btn primary" disabled>立即同步</button>
+      <button id="resetBtn" class="btn ghost" title="重置服务端演示数据">重置演示数据</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="col list-col">
+      <h2>工单列表</h2>
+      <div id="woList" class="wo-list"></div>
+    </section>
+
+    <section class="col edit-col">
+      <h2>工单编辑 <span id="editVersion" class="ver"></span></h2>
+      <div id="editorEmpty" class="empty">请选择左侧工单</div>
+      <div id="editor" class="editor hidden">
+        <label class="field">
+          <span class="flabel">标题 <span class="badge pending hidden" data-pending="title">待同步</span></span>
+          <input id="fTitle" type="text" data-field="title" />
+        </label>
+        <label class="field">
+          <span class="flabel">正文 <span class="badge pending hidden" data-pending="body">待同步</span></span>
+          <textarea id="fBody" rows="6" data-field="body"></textarea>
+        </label>
+        <label class="field">
+          <span class="flabel">负责人 <span class="badge pending hidden" data-pending="assignee">待同步</span></span>
+          <input id="fAssignee" type="text" data-field="assignee" />
+        </label>
+        <div class="edit-actions">
+          <button id="serverEditBtn" class="btn ghost" title="模拟另一终端直接在服务端修改当前工单">模拟服务端变更</button>
+        </div>
+      </div>
+
+      <div id="conflictPanel" class="conflicts hidden">
+        <h3>冲突裁决 <span id="conflictCount" class="badge conflict"></span></h3>
+        <p class="hint">以下字段在服务端已被他人修改，请选择保留哪一方，或手工输入合并结果。未列出的字段不受影响。</p>
+        <div id="conflictList"></div>
+        <div class="edit-actions">
+          <button id="applyResolveBtn" class="btn primary">提交裁决</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="col log-col">
+      <h2>本地操作记录 <span id="opCount" class="badge">0</span></h2>
+      <p class="hint">断网期间的每次编辑都会按顺序记录。重连后按序提交；同一字段只以最终意图参与合并，中间过程可展开回看。</p>
+      <div id="opLog" class="op-log"></div>
+      <h2>同步结果</h2>
+      <div id="syncLog" class="sync-log"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
