@@ -1,0 +1,10 @@
+{
+  "name": "emission-plan-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线减排计划阶段目标、措施结果与偏差校准工具",
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "start": "node -e \"require('node:http'); console.log('直接双击 index.html 即可离线使用；也可运行 npx http-server -p 8080')\""
+  }
+}

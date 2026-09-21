@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>减排计划偏差校准台</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>减排计划偏差校准台</h1>
+    <p>沿阶段前置链计算累计进度、偏差来源和不可信结论；调整后只失效受影响阶段，并可对照完整重推。</p>
+  </header>
+
+  <div class="toolbar">
+    <label>当前考核期
+      <select id="periodSelect"></select>
+    </label>
+    <label><input type="checkbox" id="recomputeCheck"> 每次更新后对照完整重推</label>
+    <span class="spacer"></span>
+    <button id="importJson">导入 JSON</button>
+    <button id="exportJson">导出当前结果</button>
+    <button id="resetDemo">恢复演示数据</button>
+  </div>
+  <div id="toast" class="toast"></div>
+
+  <main class="layout">
+    <div class="column">
+      <section class="panel">
+        <h2>总体概览</h2>
+        <div class="panel-body" id="summary"></div>
+      </section>
+      <section class="panel">
+        <h2>阶段进度与校准操作</h2>
+        <div class="panel-body" id="phaseList"></div>
+      </section>
+    </div>
+
+    <aside class="column">
+      <section class="panel">
+        <h2>最近一次调整的受影响范围</h2>
+        <div class="panel-body" id="affectedList"></div>
+      </section>
+      <section class="panel">
+        <h2>数据完整性反馈</h2>
+        <div class="panel-body" id="issueList"></div>
+      </section>
+      <section class="panel">
+        <h2>本地 JSON 数据</h2>
+        <div class="panel-body">
+          <textarea id="jsonInput" class="json-box" spellcheck="false"></textarea>
+          <p class="empty">数据保存在当前浏览器 localStorage 中，不需要服务器或网络连接。</p>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="src/engine.js"></script>
+  <script src="src/sample-data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
