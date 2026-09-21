@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动上下文恢复工作台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LOCAL OFFLINE · CONTEXT RESUME</p>
+        <h1>活动上下文恢复工作台</h1>
+      </div>
+      <div class="top-actions">
+        <span id="nowClock" class="clock"></span>
+        <button id="refreshNow" type="button" class="secondary">按当前时间重推</button>
+        <button id="resetDemo" type="button" class="danger-ghost">恢复示例</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar panel">
+        <div class="panel-title-row">
+          <h2>活动</h2>
+          <span id="activityCount" class="count"></span>
+        </div>
+        <form id="activityForm" class="activity-form">
+          <input id="activityName" maxlength="40" placeholder="新活动名称" required>
+          <button type="submit">新增</button>
+        </form>
+        <div id="activityList" class="activity-list"></div>
+      </aside>
+
+      <section class="workspace">
+        <div class="activity-header panel">
+          <div>
+            <div class="badge-line">
+              <span id="activityStatus" class="badge"></span>
+              <span id="activityMeta" class="muted"></span>
+            </div>
+            <h2 id="activityTitle"></h2>
+            <p id="activityDescription" class="muted"></p>
+          </div>
+          <div id="latestProgress" class="latest-progress"></div>
+        </div>
+
+        <div id="warningBanner" class="warning-banner hidden"></div>
+
+        <div class="cards-grid">
+          <section class="panel resume-panel">
+            <div class="panel-title-row">
+              <h2>续接线索</h2>
+              <span id="resumeMode" class="count"></span>
+            </div>
+            <div id="resumeList" class="resume-list"></div>
+          </section>
+
+          <section class="panel issues-panel">
+            <div class="panel-title-row">
+              <h2>不可信诊断</h2>
+              <span id="issueCount" class="count"></span>
+            </div>
+            <div id="issueList" class="issue-list"></div>
+          </section>
+        </div>
+
+        <section class="panel conflicts-panel">
+          <div class="panel-title-row">
+            <h2>冲突与裁决</h2>
+            <span id="conflictCount" class="count"></span>
+          </div>
+          <div id="conflictList" class="conflict-list"></div>
+        </section>
+
+        <section class="panel entry-panel">
+          <div class="panel-title-row">
+            <h2>上下文条目</h2>
+            <span id="entryCount" class="count"></span>
+          </div>
+
+          <form id="entryForm" class="entry-form">
+            <input type="hidden" id="entryId">
+            <div class="form-grid">
+              <label>标题
+                <input id="entryTitle" maxlength="80" required placeholder="例如：核对新版截图">
+              </label>
+              <label>类型
+                <select id="entryType">
+                  <option value="todo">待办</option>
+                  <option value="material">素材</option>
+                  <option value="idea">想法</option>
+                  <option value="progress">当前进度</option>
+                </select>
+              </label>
+              <label>来源
+                <input id="entrySource" maxlength="60" placeholder="会议、文件、聊天或手工记录">
+              </label>
+              <label>失效时间（可留空）
+                <input id="entryExpiresAt" type="datetime-local">
+              </label>
+            </div>
+            <label>内容
+              <textarea id="entryContent" rows="3" placeholder="保存当前事实、待办动作或临时想法"></textarea>
+            </label>
+            <label>依赖条目（可多选；先完成被依赖项）
+              <select id="entryDependencies" multiple size="4"></select>
+            </label>
+            <div class="form-actions">
+              <button type="submit" id="saveEntry">保存条目</button>
+              <button type="button" id="cancelEdit" class="secondary hidden">取消修正</button>
+            </div>
+          </form>
+
+          <div class="conflict-create">
+            <h3>标记两条上下文相互矛盾</h3>
+            <form id="conflictForm" class="conflict-form">
+              <select id="conflictA" required></select>
+              <select id="conflictB" required></select>
+              <input id="conflictReason" maxlength="100" placeholder="冲突点，例如：交付格式相反" required>
+              <button type="submit">标记冲突</button>
+            </form>
+          </div>
+
+          <div id="entryList" class="entry-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
