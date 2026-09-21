@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>区域仓网调拨工作台</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Regional Inventory Relay</p>
+        <h1>区域仓网调拨工作台</h1>
+        <p class="subtitle">实时识别供需缺口，按优先级与综合代价生成可执行调拨路径。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="resetBtn" class="btn secondary" type="button">恢复示例</button>
+        <button id="exportBtn" class="btn secondary" type="button">导出方案</button>
+        <button id="printBtn" class="btn primary" type="button">打印 / 存档</button>
+      </div>
+    </header>
+
+    <section class="settings-panel" aria-label="全局参数">
+      <label>计划窗口（天）<input id="horizonDays" type="number" min="1" step="1"></label>
+      <label>每公里每件成本（元）<input id="distanceRate" type="number" min="0" step="0.01"></label>
+      <label>每天每件时效成本（元）<input id="timeRate" type="number" min="0" step="0.01"></label>
+      <div class="formula">综合单位代价 = 单位运费 + 距离 × 距离费率 + 调拨时效 × 时效费率</div>
+    </section>
+
+    <section class="kpi-grid" aria-label="全局概览">
+      <article class="kpi-card"><span>总缺口</span><strong id="kpiGap">0</strong><em>件</em></article>
+      <article class="kpi-card"><span>可消解</span><strong id="kpiFulfilled">0</strong><em>件</em></article>
+      <article class="kpi-card"><span>未平衡</span><strong id="kpiUnresolved">0</strong><em>件</em></article>
+      <article class="kpi-card"><span>可调出余量</span><strong id="kpiSurplus">0</strong><em>件</em></article>
+      <article class="kpi-card"><span>总代价</span><strong id="kpiCost">¥0</strong><em>运输 + 时效</em></article>
+      <article class="kpi-card" id="balanceCard"><span>平衡状态</span><strong id="kpiBalance">—</strong><em id="kpiBalanceNote"></em></article>
+    </section>
+
+    <div id="warningBanner" class="warning-banner" hidden></div>
+
+    <main class="content-grid">
+      <section class="panel locations-panel">
+        <div class="panel-heading">
+          <div><h2>地点供需</h2><p>直接编辑任一数值，方案会立即重算。</p></div>
+          <button id="addLocationBtn" class="btn small" type="button">新增地点</button>
+        </div>
+        <div class="table-wrap">
+          <table id="locationsTable">
+            <thead>
+              <tr>
+                <th>优先级</th><th>地点</th><th>当前存量</th><th>在途</th><th>安全库存</th><th>未来需求</th>
+                <th>缺口</th><th>建议</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel plan-panel">
+        <div class="panel-heading">
+          <div><h2>建议调拨路径</h2><p>最小费用流自动比较距离、运费与时效。</p></div>
+        </div>
+        <div id="shipmentsList" class="shipment-list"></div>
+      </section>
+    </main>
+
+    <section class="panel lanes-panel">
+      <div class="panel-heading">
+        <div><h2>调拨线路与代价</h2><p>维护从支援地点到需求地点的运输参数。</p></div>
+        <button id="addLaneBtn" class="btn small" type="button">新增线路</button>
+      </div>
+      <div class="table-wrap">
+        <table id="lanesTable">
+          <thead><tr><th>调出</th><th>调入</th><th>距离 km</th><th>单位运费</th><th>时效 天</th><th>综合单位代价</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel priority-panel">
+      <div class="panel-heading"><div><h2>优先级与取舍说明</h2><p>P1 实际缺货优先于 P2 安全库存缺口；同级按缺口率、绝对缺口排序。</p></div></div>
+      <div id="priorityList" class="priority-list"></div>
+    </section>
+  </div>
+  <script src="js/engine.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Browser Harness</title>
+<pre id="result">RUNNING</pre>
+<iframe id="app" src="../index.html" style="width:1400px;height:1000px"></iframe>
+<script>
+  const frame = document.getElementById("app");
+  let stage = 0;
+  frame.addEventListener("load", () => {
+    setTimeout(() => {
+      const doc = frame.contentDocument;
+      if (stage === 0) {
+        frame.contentWindow.localStorage.clear();
+        stage = 1;
+        frame.src = "../index.html?fresh=" + Date.now();
+        return;
+      }
+      const southInput = doc.querySelector('#locationsTable input[data-id="B"][data-field="demand"]');
+      if (!southInput) throw new Error("missing demand input");
+      southInput.value = "200";
+      southInput.dispatchEvent(new (frame.contentWindow.InputEvent || InputEvent)("input", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        inputType: "insertText",
+        data: "200"
+      }));
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (doc.getElementById("kpiGap").textContent.trim() === "240" || Date.now() - started > 1500) {
+          clearInterval(timer);
+        const result = {
+          stage,
+          inputValue: doc.querySelector('#locationsTable input[data-id="B"][data-field="demand"]').value,
+          stored: frame.contentWindow.localStorage.getItem("regional-relay-workbench-v1"),
+          listenerAvailable: doc.getElementById("locationsTable") !== null,
+          gap: doc.getElementById("kpiGap").textContent.trim(),
+          unresolved: doc.getElementById("kpiUnresolved").textContent.trim(),
+          balance: doc.getElementById("kpiBalance").textContent.trim(),
+          warningVisible: !doc.getElementById("warningBanner").hidden,
+          rowHtml: doc.querySelector("tr[data-location-row='B']").outerHTML.slice(0, 500),
+          changedRow: !!doc.querySelector("tr[data-location-row='B'].row-changed"),
+          changedGap: !!doc.querySelector("tr[data-location-row='B'] td .changed"),
+          recommendation: doc.querySelector("[data-location-row='B'] .recommendation").textContent.trim()
+        };
+        document.getElementById("result").textContent = JSON.stringify(result);
+        document.title = result.gap === "240" && result.changedRow && result.changedGap ? "PASS" : "FAIL";
+        }
+      }, 50);
+    }, 300);
+  });
+</script>
