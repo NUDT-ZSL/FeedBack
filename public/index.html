@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线工单同步台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>离线工单同步台</h1>
+    <div class="conn" id="conn"></div>
+    <div class="actions">
+      <button id="btn-toggle" class="mini"></button>
+      <button id="btn-sync" class="primary">立即同步</button>
+      <button id="btn-reset" class="mini danger">重置演示</button>
+    </div>
+  </header>
+  <main>
+    <aside id="list"></aside>
+    <section class="center">
+      <div id="conflicts"></div>
+      <div id="editor"></div>
+    </section>
+    <section class="right">
+      <div id="ops"></div>
+      <div id="log"><h3>同步日志</h3><div id="log-body"></div></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
