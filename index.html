@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>技能训练营评分工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>技能训练营评分工作台</h1>
+    <div class="student-picker">
+      <label for="studentSelect">学员</label>
+      <select id="studentSelect"></select>
+      <input id="newStudentName" type="text" placeholder="新学员姓名" />
+      <button id="addStudentBtn" type="button">添加</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-label="评分录入">
+      <h2>逐项打分</h2>
+      <p class="hint">留空表示该维度缺分，将按方案中的缺省策略处理。</p>
+      <div id="scoreRows"></div>
+    </section>
+
+    <section class="panel" aria-label="评分结果">
+      <h2>总分与等级</h2>
+      <div class="total-box">
+        <div class="total-score"><span id="totalScore">--</span><small>分</small></div>
+        <div class="total-grade" id="totalGrade">--</div>
+      </div>
+      <div id="gradeChangeBanner" class="grade-change hidden" role="alert"></div>
+      <h3>评价依据</h3>
+      <ul id="explanationList" class="explanation"></ul>
+    </section>
+
+    <section class="panel" aria-label="评分方案">
+      <h2>评分方案</h2>
+      <div class="weight-status">
+        <span>权重合计：<strong id="weightSum">--</strong></span>
+        <span id="weightStatus" class="badge"></span>
+        <button id="normalizeBtn" type="button" class="hidden">归一化到 100</button>
+      </div>
+      <div id="schemeRows"></div>
+      <h3>总分等级划分</h3>
+      <div id="overallBands"></div>
+    </section>
+
+    <section class="panel" aria-label="等级变化对照">
+      <h2>等级变化对照</h2>
+      <p class="hint">权重或分数调整导致总分跨越等级边界时，自动保留改动前后的依据。</p>
+      <div id="changeLog" class="change-log"></div>
+    </section>
+  </main>
+
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

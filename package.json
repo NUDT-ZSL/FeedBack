@@ -1,0 +1,15 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node test/engine.test.js && node test/ui.smoke.test.js",
+    "start": "python -m http.server 8000"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
