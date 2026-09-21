@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>AutoDemo 离线分段接收与转换</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">LOCAL ONLY · INDEXEDDB · WEB WORKER</p>
+      <h1>离线分段接收与后台转换</h1>
+      <p>大文件按有序分段接收；失败只重试失败段；冲突保留双方；转换按检查点继续。</p>
+    </div>
+  </header>
+
+  <main class="shell">
+    <form id="add-form" class="add-panel">
+      <label class="file-picker">
+        <span>选择待处理文件</span>
+        <input id="file-input" type="file" multiple required>
+      </label>
+      <label class="size-field">
+        <span>分段大小（字节，默认 65536）</span>
+        <input id="chunk-size" type="number" min="1" step="1" placeholder="65536">
+      </label>
+      <button class="primary" type="submit">添加并开始接收</button>
+    </form>
+
+    <div class="legend">
+      <span class="badge status-waiting">等待</span>
+      <span class="badge status-receiving">接收中</span>
+      <span class="badge status-received">已接收</span>
+      <span class="badge status-failed">失败</span>
+      <span class="badge status-conflict">冲突</span>
+      <span class="badge status-converting">转换中</span>
+    </div>
+
+    <div id="notice"></div>
+    <section id="jobs" aria-live="polite"></section>
+  </main>
+
+  <script src="js/core.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

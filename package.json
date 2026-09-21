@@ -1,0 +1,10 @@
+{
+  "name": "autodemo-offline-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线的大文件分段接收、冲突裁决和可恢复转换演示应用",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check js/core.js && node --check js/db.js && node --check js/app.js"
+  }
+}
