@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>储能调度方案离线对比台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>储能调度方案离线对比台</h1>
+      <p>调整电价、负荷、衰减与偏好，即时重算收益、可行性和排序翻转区间。</p>
+    </div>
+    <div class="toolbar">
+      <button id="scenarioBase" type="button">基准情景</button>
+      <button id="scenarioStress" type="button">高价尖峰</button>
+      <button id="scenarioSoft" type="button">低负荷情景</button>
+      <button id="resetBtn" type="button" class="ghost">恢复示例</button>
+      <button id="exportBtn" type="button" class="ghost">导出 JSON</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel controls" aria-label="参数与偏好">
+      <h2>关键参数</h2>
+      <div id="paramControls"></div>
+
+      <h2>取舍偏好</h2>
+      <label class="field">
+        <span>净收益权重 <b id="ecoWeightLabel"></b></span>
+        <input id="ecoWeight" type="range" min="0" max="100" value="50">
+      </label>
+      <label class="field">
+        <span>安全裕度权重 <b id="safeWeightLabel"></b></span>
+        <input id="safeWeight" type="range" min="0" max="100" value="30">
+      </label>
+      <label class="field">
+        <span>削峰权重 <b id="peakWeightLabel"></b></span>
+        <input id="peakWeight" type="range" min="0" max="100" value="20">
+      </label>
+      <label class="field">
+        <span>固定执行方案</span>
+        <select id="pinnedPlan"></select>
+      </label>
+      <p class="hint">三项权重按相对比例归一化；固定方案会锁定执行建议，排序和翻转仍按原始综合分展示。锁定的参数不参与情景切换和敏感性扫描。</p>
+      <details>
+        <summary>编辑分时基准电价（元/kWh）</summary>
+        <div id="priceEditor" class="price-grid"></div>
+      </details>
+      <details>
+        <summary>编辑 24 小时原始负荷（kW）</summary>
+        <div id="loadEditor" class="price-grid"></div>
+      </details>
+    </aside>
+
+    <section class="panel comparison" aria-label="方案对比">
+      <div class="section-head">
+        <h2>候选方案并排对比</h2>
+        <button id="addPlanBtn" type="button">新增方案</button>
+      </div>
+      <div id="cards" class="cards"></div>
+      <div class="table-wrap">
+        <table id="metricsTable"></table>
+      </div>
+      <h2>24 小时功率曲线</h2>
+      <div id="chart" class="chart"></div>
+      <div id="planEditor"></div>
+    </section>
+
+    <aside class="panel sensitivity" aria-label="敏感性分析">
+      <h2>敏感性与翻转区间</h2>
+      <p class="hint">区间经自适应二分细化；端点保留两位小数。扫描范围外不外推。</p>
+      <div id="sensitivityList"></div>
+    </aside>
+  </main>
+
+  <script src="data.js"></script>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
