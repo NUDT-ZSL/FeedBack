@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地牢生成与连通性检查工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; background: #101218; color: #dfe3ea; }
+  header { padding: 12px 20px; background: #171a22; border-bottom: 1px solid #2a2e3a; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  main { display: flex; gap: 16px; padding: 16px 20px; align-items: flex-start; flex-wrap: wrap; }
+  .panel { background: #171a22; border: 1px solid #2a2e3a; border-radius: 8px; padding: 14px 16px; }
+  #controls { width: 300px; flex: none; }
+  #controls label { display: block; font-size: 12px; color: #9aa3b2; margin-top: 10px; }
+  #controls input { width: 100%; padding: 6px 8px; margin-top: 3px; background: #0f1117; color: #dfe3ea;
+    border: 1px solid #333947; border-radius: 5px; font-size: 13px; }
+  #controls input.invalid { border-color: #e05252; }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; }
+  .btns { display: flex; gap: 8px; margin-top: 14px; }
+  button { flex: 1; padding: 8px 0; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  #genBtn { background: #3b7ddd; color: #fff; }
+  #genBtn:hover { background: #4a8ae8; }
+  #seedBtn { background: #2a2e3a; color: #cfd6e2; flex: 0 0 96px; }
+  #seedBtn:hover { background: #353b4a; }
+  #errorBox { display: none; margin-top: 12px; padding: 10px 12px; background: #3a1d1d; border: 1px solid #7a3030;
+    border-radius: 6px; color: #ffb4b4; font-size: 13px; white-space: pre-line; }
+  #noticeBox { display: none; margin-top: 12px; padding: 10px 12px; background: #3a2f16; border: 1px solid #7a5f22;
+    border-radius: 6px; color: #ffd98a; font-size: 13px; white-space: pre-line; }
+  #summary { margin-top: 14px; font-size: 13px; line-height: 1.9; }
+  #summary .k { color: #9aa3b2; display: inline-block; width: 96px; }
+  #unreach { margin-top: 12px; font-size: 13px; }
+  #unreach ul { margin: 6px 0 0; padding-left: 18px; }
+  #unreach li { margin: 3px 0; }
+  #mapWrap { flex: 1; min-width: 480px; }
+  #mapPanel { display: inline-block; }
+  canvas { display: block; background: #0b0c10; border-radius: 6px; image-rendering: pixelated; }
+  #legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: #aeb6c4; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  #emptyHint { color: #6b7280; font-size: 14px; padding: 40px 20px; }
+</style>
+</head>
+<body>
+<header><h1>程序化地牢生成 · 连通性检查工具</h1></header>
+<main>
+  <section id="controls" class="panel">
+    <label>种子（相同输入必然得到相同地图）</label>
+    <input id="seed" type="text" value="demo-1">
+    <div class="row">
+      <div><label>地图宽度</label><input id="width" type="number" value="60" min="24" max="160"></div>
+      <div><label>地图高度</label><input id="height" type="number" value="40" min="24" max="160"></div>
+    </div>
+    <div class="row">
+      <div><label>房间数量</label><input id="roomCount" type="number" value="10" min="2" max="60"></div>
+      <div><label>额外走廊数</label><input id="extraCorridors" type="number" value="3" min="0" max="30"></div>
+    </div>
+    <div class="row">
+      <div><label>最小房间尺寸</label><input id="minRoomSize" type="number" value="4" min="3" max="20"></div>
+      <div><label>最大房间尺寸</label><input id="maxRoomSize" type="number" value="9" min="3" max="24"></div>
+    </div>
+    <div class="row">
+      <div><label>水域比例 (0~0.5)</label><input id="waterRatio" type="number" value="0.06" min="0" max="0.5" step="0.01"></div>
+      <div><label>岩浆比例 (0~0.5)</label><input id="lavaRatio" type="number" value="0.03" min="0" max="0.5" step="0.01"></div>
+    </div>
+    <label>目标点数量</label>
+    <input id="targetCount" type="number" value="5" min="1" max="20">
+    <div class="btns">
+      <button id="genBtn">生成地牢</button>
+      <button id="seedBtn" title="换一个随机种子">随机种子</button>
+    </div>
+    <div id="errorBox"></div>
+    <div id="noticeBox"></div>
+    <div id="summary"></div>
+    <div id="unreach"></div>
+  </section>
+  <section id="mapWrap">
+    <div id="mapPanel" class="panel">
+      <canvas id="map" width="900" height="600"></canvas>
+      <div id="legend">
+        <span><span class="sw" style="background:#c9b48a"></span>可通行地面</span>
+        <span><span class="sw" style="background:#2f6fd0"></span>水域（不可通行）</span>
+        <span><span class="sw" style="background:#d8542e"></span>岩浆（不可通行）</span>
+        <span><span class="sw" style="background:rgba(224,64,64,.6)"></span>不可达区域</span>
+        <span><span class="sw" style="background:#3ecf6e"></span>出生点</span>
+        <span><span class="sw" style="background:#39c5d6"></span>可达目标</span>
+        <span><span class="sw" style="background:#e04040"></span>不可达目标</span>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="dungeon.js"></script>
+<script>
+(function () {
+  'use strict';
+  var TILE = Dungeon.TILE;
+  var canvas = document.getElementById('map');
+  var ctx = canvas.getContext('2d');
+  var errorBox = document.getElementById('errorBox');
+  var noticeBox = document.getElementById('noticeBox');
+  var summaryEl = document.getElementById('summary');
+  var unreachEl = document.getElementById('unreach');
+  var prevTargets = null;
+  var debounceTimer = null;
+
+  var FIELDS = ['seed', 'width', 'height', 'roomCount', 'minRoomSize', 'maxRoomSize',
+    'extraCorridors', 'waterRatio', 'lavaRatio', 'targetCount'];
+  var NUM_FIELDS = FIELDS.slice(1);
+
+  function readParams() {
+    var p = { seed: document.getElementById('seed').value.trim() };
+    NUM_FIELDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      var v = parseFloat(el.value);
+      p[id] = isNaN(v) ? NaN : v;
+    });
+    return p;
+  }
+
+  function markInvalidFields() {
+    var p = readParams();
+    var errors = Dungeon.validateParams(p);
+    NUM_FIELDS.concat(['seed']).forEach(function (id) {
+      document.getElementById(id).classList.remove('invalid');
+    });
+    return errors;
+  }
+
+  function clearOutput() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    summaryEl.innerHTML = '';
+    unreachEl.innerHTML = '';
+    noticeBox.style.display = 'none';
+    noticeBox.textContent = '';
+  }
+
+  function showError(errors) {
+    errorBox.style.display = 'block';
+    errorBox.textContent = '参数不合法，未生成地图：\n' + errors.map(function (e) { return '· ' + e; }).join('\n');
+  }
+
+  function blockedReason(code) {
+    return { water: '被水域阻断', lava: '被岩浆阻断',
+      corridor: '走廊未连通（结构缺陷）', terrain: '被复合地形阻断' }[code] || '未知原因';
+  }
+
+  function renderSummary(result) {
+    var s = result.stats;
+    var pct = Math.round(s.reachableRatio * 100);
+    summaryEl.innerHTML =
+      '<div><span class="k">本次种子</span>' + escapeHtml(s.seed) + '</div>' +
+      '<div><span class="k">房间数</span>' + s.roomCount + '</div>' +
+      '<div><span class="k">走廊数</span>' + s.corridorCount + '</div>' +
+      '<div><span class="k">地面 / 水 / 岩浆</span>' + s.floorTiles + ' / ' + s.waterTiles + ' / ' + s.lavaTiles + ' 格</div>' +
+      '<div><span class="k">可达目标</span>' + s.reachableTargets + ' / ' + s.totalTargets + '（' + pct + '%）</div>';
+  }
+
+  function renderUnreachable(result) {
+    var bad = result.targets.filter(function (t) { return !t.reachable; });
+    if (!bad.length) {
+      unreachEl.innerHTML = '<span style="color:#3ecf6e">所有目标点均可从出生点到达。</span>';
+      return;
+    }
+    var html = '<span style="color:#ff9a9a">不可达目标 ' + bad.length + ' 个：</span><ul>';
+    bad.forEach(function (t) {
+      html += '<li>目标 #' + t.id + '（x=' + t.x + ', y=' + t.y + '）：' + blockedReason(t.blockedBy) + '</li>';
+    });
+    unreachEl.innerHTML = html + '</ul>';
+  }
+
+  function renderChangeNotice(result) {
+    if (!prevTargets) return;
+    var msgs = [];
+    result.targets.forEach(function (t) {
+      var before = prevTargets[t.id - 1];
+      if (before && before.reachable && !t.reachable) {
+        msgs.push('目标 #' + t.id + '（x=' + t.x + ', y=' + t.y + '）由可达变为不可达：' + blockedReason(t.blockedBy));
+      } else if (before && !before.reachable && t.reachable) {
+        msgs.push('目标 #' + t.id + '（x=' + t.x + ', y=' + t.y + '）恢复可达');
+      }
+    });
+    if (msgs.length) {
+      noticeBox.style.display = 'block';
+      noticeBox.textContent = '参数修改后的可达性变化：\n' + msgs.join('\n');
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function renderMap(result) {
+    var w = result.width, h = result.height;
+    var cell = Math.max(4, Math.floor(Math.min(920 / w, 640 / h)));
+    canvas.width = w * cell;
+    canvas.height = h * cell;
+    var colors = {};
+    colors[TILE.WALL] = '#15161c';
+    colors[TILE.FLOOR] = '#c9b48a';
+    colors[TILE.WATER] = '#2f6fd0';
+    colors[TILE.LAVA] = '#d8542e';
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var i = y * w + x;
+        ctx.fillStyle = colors[result.grid[i]];
+        ctx.fillRect(x * cell, y * cell, cell, cell);
+        if (result.grid[i] === TILE.FLOOR && !result.reachableGrid[i]) {
+          ctx.fillStyle = 'rgba(224,64,64,0.55)';
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    }
+    function marker(cx, cy, color, r) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx * cell + cell / 2, cy * cell + cell / 2, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    result.targets.forEach(function (t) {
+      marker(t.x, t.y, t.reachable ? '#39c5d6' : '#e04040', cell * 0.45);
+      ctx.fillStyle = '#0b0c10';
+      ctx.font = 'bold ' + Math.max(8, cell * 0.55) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(t.id), t.x * cell + cell / 2, t.y * cell + cell / 2 + 0.5);
+    });
+    marker(result.spawn.x, result.spawn.y, '#3ecf6e', cell * 0.5);
+    ctx.strokeStyle = '#0b0c10';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(result.spawn.x * cell + cell / 2, result.spawn.y * cell + cell / 2, cell * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function regenerate() {
+    clearOutput();
+    errorBox.style.display = 'none';
+    var p = readParams();
+    var errors = markInvalidFields();
+    if (errors.length) { showError(errors); prevTargets = null; return; }
+    var result;
+    try {
+      result = Dungeon.generate(p);
+    } catch (e) {
+      showError(e.validationErrors || [e.message]);
+      prevTargets = null;
+      return;
+    }
+    renderMap(result);
+    renderSummary(result);
+    renderChangeNotice(result);
+    renderUnreachable(result);
+    prevTargets = result.targets;
+  }
+
+  function scheduleRegenerate() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(regenerate, 250);
+  }
+
+  function loadFromUrl() {
+    var q = new URLSearchParams(location.search);
+    FIELDS.forEach(function (id) {
+      if (q.has(id)) document.getElementById(id).value = q.get(id);
+    });
+  }
+
+  FIELDS.forEach(function (id) {
+    document.getElementById(id).addEventListener('input', scheduleRegenerate);
+  });
+  document.getElementById('genBtn').addEventListener('click', regenerate);
+  document.getElementById('seedBtn').addEventListener('click', function () {
+    document.getElementById('seed').value = 'seed-' + Math.floor(Math.random() * 1000000);
+    regenerate();
+  });
+
+  loadFromUrl();
+  regenerate();
+})();
+</script>
+</body>
+</html>
