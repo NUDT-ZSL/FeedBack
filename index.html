@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资产价值周期推演工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>资产价值周期推演</h1>
+  <div class="toolbar">
+    <button id="btnAddAsset">＋ 新增资产</button>
+    <button id="btnRecomputeAll">整体重推</button>
+    <button id="btnExport">导出 JSON</button>
+    <button id="btnImport">导入 JSON</button>
+    <input type="file" id="fileImport" accept=".json" hidden>
+    <span id="consistencyBadge" class="badge ok" title="增量重推结果与整体重推的比对">一致性：—</span>
+  </div>
+</header>
+<main>
+  <aside id="assetListPanel">
+    <h2>资产列表</h2>
+    <ul id="assetList"></ul>
+  </aside>
+  <section id="detailPanel">
+    <p class="empty-hint">请选择或新增一项资产</p>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
