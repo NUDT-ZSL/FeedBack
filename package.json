@@ -1,0 +1,9 @@
+{
+  "name": "offline-context-aware-search",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local offline context-aware batched search browser demo.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

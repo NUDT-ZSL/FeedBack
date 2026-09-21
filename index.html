@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线上下文感知检索</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>上下文感知分批检索</h1>
+      <p>批次只渲染给它出生时的上下文；切走不取消，切回可继续复用。</p>
+    </div>
+    <div class="mode-pill">本地离线 · 零依赖</div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel contexts">
+      <div class="panel-title">
+        <h2>浏览上下文</h2>
+        <span id="contextCount">0</span>
+      </div>
+      <div id="contextList" class="context-list"></div>
+    </aside>
+
+    <section class="workspace">
+      <form id="searchForm" class="panel search-panel">
+        <label>关键词
+          <input id="queryInput" autocomplete="off" placeholder="试试：检索、数据、视频">
+        </label>
+        <label>类型
+          <select id="typeSelect">
+            <option value="all">全部</option>
+            <option value="doc">文档</option>
+            <option value="media">媒体</option>
+            <option value="dataset">数据集</option>
+          </select>
+        </label>
+        <label>页码
+          <input id="pageInput" type="number" min="1" value="1">
+        </label>
+        <button type="submit">提交检索</button>
+      </form>
+
+      <div id="notices"></div>
+
+      <section class="panel current-panel">
+        <div class="result-head">
+          <div>
+            <h2 id="currentTitle">尚未提交检索</h2>
+            <p id="currentMeta">提交后可在批次返回途中继续改关键词、筛选或翻页。</p>
+          </div>
+          <div class="actions">
+            <label class="switch-line">
+              <input id="conflictToggle" type="checkbox">
+              下一次模拟同位置矛盾
+            </label>
+            <button id="retriggerBtn" type="button" hidden>重新触发该上下文</button>
+          </div>
+        </div>
+        <div id="progress"></div>
+        <div id="results" class="results"></div>
+        <div id="batchInspector"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="src/core.js"></script>
+  <script src="src/mock-source.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
