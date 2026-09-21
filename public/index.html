@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线现场笔记</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>离线现场笔记</h1>
+      <p>断网可编辑，重连按顺序提交，冲突先解释再由人工决定。</p>
+    </div>
+    <div class="network-card">
+      <span id="networkDot" class="dot offline"></span>
+      <div>
+        <strong id="networkState">检测中</strong>
+        <small id="lastSync">尚未同步</small>
+      </div>
+      <button id="toggleNetwork" class="secondary">切到离线</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel editor-panel">
+      <div class="panel-title">
+        <h2 id="editorTitle">新建现场笔记</h2>
+        <button id="newNote" class="secondary small">新建</button>
+      </div>
+      <label>标题 <input id="titleInput" maxlength="120" placeholder="例如：3 号泵站巡检"></label>
+      <label>内容 <textarea id="contentInput" rows="14" placeholder="无网络时也可以记录；保存后进入本地待提交队列。"></textarea></label>
+      <div class="actions">
+        <button id="saveNote">保存到本地并排队</button>
+        <button id="deleteNote" class="danger" hidden>删除此笔记</button>
+      </div>
+      <p class="hint">本地编辑立即保存在浏览器 LocalStorage；提交成功前不会覆盖服务端。</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>笔记列表</h2>
+        <button id="refreshNotes" class="secondary small">刷新服务端</button>
+      </div>
+      <div id="noteList" class="note-list"></div>
+    </section>
+
+    <section class="panel queue-panel">
+      <div class="panel-title">
+        <h2>待提交队列</h2>
+        <div>
+          <label class="inline"><input id="slowSubmit" type="checkbox"> 每次提交延迟 2.5 秒</label>
+          <button id="clearFinished" class="secondary small">清除已完成</button>
+        </div>
+      </div>
+      <div id="queueList" class="queue-list"></div>
+    </section>
+  </main>
+
+  <section id="conflictDock" class="conflict-dock" hidden></section>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/sync-core.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

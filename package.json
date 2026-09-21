@@ -1,0 +1,14 @@
+{
+  "name": "offline-field-notes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "可离线使用、支持重连同步与冲突解释的现场笔记应用",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
