@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线延迟预算归因</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>端到端延迟预算归因</h1>
+      <p class="subtitle">离线分析 · 独占耗时 / 共同占用 / 预算超支定位</p>
+    </div>
+    <div id="batchSummary" class="batch-summary">加载中…</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="toolbar">
+        <button id="reloadButton" type="button">重新加载样例</button>
+        <button id="reanalyzeButton" type="button" class="primary">重新分析</button>
+      </div>
+      <div class="search-row">
+        <input id="searchInput" type="search" placeholder="筛选请求 ID / 名称">
+      </div>
+      <div id="requestList" class="request-list" aria-label="请求列表"></div>
+    </aside>
+
+    <section class="content">
+      <div id="feedback" class="feedback hidden"></div>
+
+      <section class="panel budget-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>阶段预算（毫秒）</h2>
+            <p>调整后点击“应用预算并分析”。留空表示该阶段不设置预算。</p>
+          </div>
+          <button id="applyBudgetsButton" type="button" class="primary">应用预算并分析</button>
+        </div>
+        <div id="budgetEditor" class="budget-grid"></div>
+      </section>
+
+      <section id="detail" class="panel">
+        <div class="empty-state">正在加载本地样例数据…</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

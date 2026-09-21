@@ -1,0 +1,72 @@
+{
+  "description": "Sample end-to-end request traces for offline latency budget analysis. Numeric timestamps are milliseconds.",
+  "default_budgets": {
+    "dns": 8,
+    "connect": 20,
+    "request_send": 12,
+    "queue": 18,
+    "database": 35,
+    "cache": 20,
+    "service": 55,
+    "response_download": 25
+  },
+  "requests": [
+    {
+      "id": "req-sequential",
+      "name": "Sequential healthy request",
+      "fragments": [
+        {"id": "f1", "stage": "dns", "start": 0, "end": 5},
+        {"id": "f2", "stage": "connect", "start": 5, "end": 22},
+        {"id": "f3", "stage": "service", "start": 22, "end": 70},
+        {"id": "f4", "stage": "response_download", "start": 70, "end": 92}
+      ]
+    },
+    {
+      "id": "req-overlap-gap",
+      "name": "Parallel cache/database work with a gap",
+      "fragments": [
+        {"id": "f1", "stage": "queue", "start": 0, "end": 20},
+        {"id": "f2", "stage": "cache", "start": 10, "end": 28},
+        {"id": "f3", "stage": "database", "start": 38, "end": 90},
+        {"id": "f4", "stage": "service", "start": 45, "end": 100},
+        {"id": "f5", "stage": "response_download", "start": 90, "end": 108}
+      ]
+    },
+    {
+      "id": "req-budget-overrun",
+      "name": "Database overrun hidden partly by concurrency",
+      "fragments": [
+        {"id": "f1", "stage": "connect", "start": 0, "end": 18},
+        {"id": "f2", "stage": "database", "start": 25, "end": 92},
+        {"id": "f3", "stage": "service", "start": 30, "end": 95},
+        {"id": "f4", "stage": "response_download", "start": 110, "end": 133}
+      ]
+    },
+    {
+      "id": "req-nested",
+      "name": "Invalid nested instrumentation",
+      "fragments": [
+        {"id": "f1", "stage": "service", "start": 0, "end": 100},
+        {"id": "f2", "stage": "database", "start": 15, "end": 70},
+        {"id": "f3", "stage": "response_download", "start": 100, "end": 120}
+      ]
+    },
+    {
+      "id": "req-inverted",
+      "name": "Invalid inverted timestamp",
+      "fragments": [
+        {"id": "f1", "stage": "queue", "start": 20, "end": 5},
+        {"id": "f2", "stage": "service", "start": 25, "end": 60}
+      ]
+    },
+    {
+      "id": "req-same-stage-overlap",
+      "name": "Same-stage overlapping fragments",
+      "fragments": [
+        {"id": "f1", "stage": "database", "start": 0, "end": 30},
+        {"id": "f2", "stage": "database", "start": 20, "end": 52},
+        {"id": "f3", "stage": "service", "start": 35, "end": 80}
+      ]
+    }
+  ]
+}
