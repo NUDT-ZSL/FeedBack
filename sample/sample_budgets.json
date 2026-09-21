@@ -1,0 +1,8 @@
+{
+  "queue": 25,
+  "auth": 60,
+  "business": 100,
+  "db": 100,
+  "cache": 50,
+  "render": 70
+}

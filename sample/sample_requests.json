@@ -1,0 +1,70 @@
+{
+  "description": "Synthetic end-to-end request traces for offline latency budget analysis.",
+  "requests": [
+    {
+      "id": "req-001",
+      "name": "Checkout / happy path",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 20},
+        {"id": "s2", "name": "auth", "start_ms": 20, "end_ms": 70},
+        {"id": "s3", "name": "business", "start_ms": 70, "end_ms": 180},
+        {"id": "s4", "name": "db", "start_ms": 180, "end_ms": 300},
+        {"id": "s5", "name": "render", "start_ms": 300, "end_ms": 360}
+      ]
+    },
+    {
+      "id": "req-002",
+      "name": "Checkout / parallel dependencies",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 15},
+        {"id": "s2", "name": "auth", "start_ms": 15, "end_ms": 85},
+        {"id": "s3", "name": "business", "start_ms": 85, "end_ms": 250},
+        {"id": "s4", "name": "db", "start_ms": 110, "end_ms": 310},
+        {"id": "s5", "name": "cache", "start_ms": 95, "end_ms": 260},
+        {"id": "s6", "name": "render", "start_ms": 310, "end_ms": 390}
+      ]
+    },
+    {
+      "id": "req-003",
+      "name": "Search / idle gap and retry",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 10},
+        {"id": "s2", "name": "auth", "start_ms": 10, "end_ms": 45},
+        {"id": "s3", "name": "business", "start_ms": 80, "end_ms": 140},
+        {"id": "s4", "name": "db", "start_ms": 140, "end_ms": 200},
+        {"id": "s5", "name": "db", "start_ms": 200, "end_ms": 285},
+        {"id": "s6", "name": "render", "start_ms": 285, "end_ms": 330}
+      ]
+    },
+    {
+      "id": "req-004",
+      "name": "Checkout / nested instrumentation",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 20},
+        {"id": "s2", "name": "business", "start_ms": 20, "end_ms": 260},
+        {"id": "s3", "name": "db", "start_ms": 70, "end_ms": 210},
+        {"id": "s4", "name": "render", "start_ms": 260, "end_ms": 320}
+      ]
+    },
+    {
+      "id": "req-005",
+      "name": "Search / clock inversion",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 25},
+        {"id": "s2", "name": "auth", "start_ms": 50, "end_ms": 25},
+        {"id": "s3", "name": "render", "start_ms": 50, "end_ms": 90}
+      ]
+    },
+    {
+      "id": "req-006",
+      "name": "Profile / point event",
+      "segments": [
+        {"id": "s1", "name": "queue", "start_ms": 0, "end_ms": 12},
+        {"id": "s2", "name": "auth", "start_ms": 12, "end_ms": 58},
+        {"id": "s3", "name": "business", "start_ms": 58, "end_ms": 140},
+        {"id": "s4", "name": "cache", "start_ms": 140, "end_ms": 140},
+        {"id": "s5", "name": "render", "start_ms": 140, "end_ms": 190}
+      ]
+    }
+  ]
+}

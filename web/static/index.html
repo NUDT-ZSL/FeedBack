@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>延迟预算归因分析</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>延迟预算归因分析</h1>
+      <p>离线端到端请求时序 · 重叠共同占用均摊 · 异常不做误导性归因</p>
+    </div>
+    <div class="actions">
+      <label class="file-button">
+        加载本地 JSON
+        <input id="load-file" type="file" accept=".json,application/json">
+      </label>
+      <button id="reload-sample" type="button" class="secondary">重新载入样例</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel sidebar">
+      <div class="panel-head">
+        <h2>请求列表</h2>
+        <span id="batch-summary" class="muted"></span>
+      </div>
+      <div id="request-list" class="request-list" aria-live="polite"></div>
+    </aside>
+
+    <section class="panel detail">
+      <div id="global-error" class="error-banner hidden" role="alert"></div>
+      <div class="detail-head">
+        <div>
+          <h2 id="request-title">选择一条请求</h2>
+          <p id="request-meta" class="muted"></p>
+        </div>
+        <span id="request-status" class="status-pill"></span>
+      </div>
+
+      <div id="anomalies" class="anomaly-list"></div>
+
+      <section class="subpanel">
+        <div class="subpanel-head">
+          <h3>阶段预算</h3>
+          <div class="actions">
+            <button id="reset-budgets" type="button" class="secondary">恢复样例预算</button>
+            <button id="apply-budgets" type="button">应用并重新分析</button>
+          </div>
+        </div>
+        <div id="budget-editor" class="budget-grid"></div>
+      </section>
+
+      <section class="subpanel">
+        <h3>时间线与共同占用</h3>
+        <div id="timeline-summary" class="metric-row"></div>
+        <div id="timeline" class="timeline"></div>
+        <div id="segment-table-wrap"></div>
+      </section>
+
+      <section class="subpanel">
+        <h3>归因与预算超支</h3>
+        <div id="stage-table-wrap"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
