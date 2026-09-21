@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线异步检索浏览</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">LOCAL OFFLINE · CONTEXT SAFE BATCHING</p>
+      <h1>本地离线异步检索浏览</h1>
+      <p>结果批次与产生时的浏览上下文绑定，切换后后台到达的数据只回源缓存，不覆盖当前视图。</p>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel controls" aria-label="检索控制">
+      <label>关键词
+        <input id="query" value="合同 风险" autocomplete="off">
+      </label>
+      <label>筛选
+        <select id="filter">
+          <option value="all">全部</option>
+          <option value="doc">文档</option>
+          <option value="image">图片</option>
+          <option value="log">日志</option>
+        </select>
+      </label>
+      <label>页码
+        <input id="page" type="number" min="1" value="1">
+      </label>
+      <button id="search" class="primary">提交检索</button>
+      <button id="retry">重新触发当前</button>
+      <button id="conflict">注入同位置矛盾批次</button>
+    </section>
+
+    <section class="panel contexts" aria-label="浏览上下文">
+      <h2>浏览上下文</h2>
+      <div id="contexts" class="tabs"></div>
+    </section>
+
+    <div class="grid">
+      <section class="panel current">
+        <div class="section-head">
+          <h2>当前视图</h2>
+          <span id="summary" class="summary"></span>
+        </div>
+        <div class="progress" aria-label="加载进度">
+          <div id="progressFill"></div>
+        </div>
+        <p id="progressText" class="muted"></p>
+        <div id="results" class="results"></div>
+      </section>
+
+      <aside class="panel side">
+        <h2>当前上下文批次</h2>
+        <ul id="batches" class="batches"></ul>
+        <h2>过期与后台到达</h2>
+        <ul id="stale" class="stale"></ul>
+      </aside>
+    </div>
+  </main>
+
+  <script src="core.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

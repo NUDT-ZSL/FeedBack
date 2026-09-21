@@ -1,0 +1,10 @@
+{
+  "name": "offline-context-search-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local offline asynchronous search browser with context-bound batches.",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check core.js && node --check data.js && node --check app.js"
+  }
+}
