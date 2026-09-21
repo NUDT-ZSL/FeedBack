@@ -1,0 +1,10 @@
+{
+  "name": "movement-pattern-review",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地离线位置序列停留、移动与同行关系复核工具",
+  "scripts": {
+    "start": "python -m http.server 8765",
+    "test": "node tests/run-tests.js && node tests/browser-smoke.js"
+  }
+}

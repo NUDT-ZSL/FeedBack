@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>移动模式复核台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>移动模式复核台</h1>
+      <p id="summary">离线载入中……</p>
+    </div>
+    <div class="toolbar">
+      <label class="file-button">导入 CSV/JSON
+        <input id="fileInput" type="file" accept=".csv,.json,application/json,text/csv">
+      </label>
+      <button id="pasteBtn" type="button">批量粘贴</button>
+      <button id="sampleBtn" type="button">载入样例</button>
+      <button id="addPointBtn" type="button">新增点</button>
+      <button id="exportBtn" type="button">导出结论</button>
+    </div>
+  </header>
+
+  <section class="params" aria-label="判定参数">
+    <label>聚集半径 <input id="clusterRadius" type="number" min="5" step="5"> m</label>
+    <label>最短停留 <input id="minStayDuration" type="number" min="1" step="10"> s</label>
+    <label>同行距离 <input id="companionRadius" type="number" min="5" step="5"> m</label>
+    <label>稳定同行 <input id="stableCompanionDuration" type="number" min="1" step="30"> s</label>
+    <label>最大插补空档 <input id="maxTrackingGap" type="number" min="1" step="10"> s</label>
+    <label>漂移速度 <input id="driftSpeed" type="number" min="1" step="1"> m/s</label>
+    <button id="resetParams" type="button">恢复参数</button>
+    <span id="incrementalNote" class="muted"></span>
+  </section>
+
+  <main class="layout">
+    <section class="left-panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="timeline" type="button">时间轴</button>
+        <button class="tab" data-tab="map" type="button">空间示意</button>
+        <button class="tab" data-tab="points" type="button">数据点 <span id="pointCount"></span></button>
+        <button class="tab" data-tab="anomalies" type="button">异常 <span id="anomalyCount"></span></button>
+        <button class="tab" data-tab="diff" type="button">同行变更 <span id="diffCount"></span></button>
+      </nav>
+      <div id="timelineView" class="tab-view active"></div>
+      <div id="mapView" class="tab-view"></div>
+      <div id="pointsView" class="tab-view"></div>
+      <div id="anomaliesView" class="tab-view"></div>
+      <div id="diffView" class="tab-view"></div>
+    </section>
+    <aside id="detailPanel" class="detail-panel"></aside>
+  </main>
+
+  <dialog id="pasteDialog">
+    <form method="dialog" class="dialog-card">
+      <h2>批量导入 CSV</h2>
+      <p>列：id,targetId,time,lat,lon。time 支持 ISO 或 “YYYY-MM-DD HH:mm:ss”。</p>
+      <textarea id="pasteText" rows="10"></textarea>
+      <menu>
+        <button value="cancel">取消</button>
+        <button id="pasteConfirm" value="confirm">导入</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="js/sample.js"></script>
+  <script src="js/analysis.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
