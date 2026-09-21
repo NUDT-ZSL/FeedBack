@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>三维结构部件锚定标注</title>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <header>
+          <h1>结构部件标注</h1>
+          <p>在部件表面点击创建局部锚点</p>
+        </header>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>场景</h2>
+            <div class="actions">
+              <button id="addPart" type="button">新建部件</button>
+              <button id="importParts" type="button">导入 JSON</button>
+              <button id="exportScene" type="button">导出</button>
+            </div>
+          </div>
+          <input id="importFile" type="file" accept="application/json,.json" hidden />
+          <div class="field-row">
+            <label><input id="annotateMode" type="checkbox" checked /> 表面点选标注</label>
+            <button id="resetCamera" type="button" class="secondary">重置视角</button>
+          </div>
+          <p class="hint">左键旋转，右键平移，滚轮缩放。关闭标注模式后可点选部件；拖拽控件可移动/旋转部件。</p>
+        </section>
+
+        <section class="panel">
+          <h2>部件</h2>
+          <div id="partList" class="list"></div>
+          <div id="partEditor" class="editor" hidden></div>
+        </section>
+
+        <section class="panel">
+          <h2>标注</h2>
+          <div id="annotationList" class="list"></div>
+          <div id="annotationEditor" class="editor" hidden></div>
+        </section>
+      </aside>
+
+      <main id="viewport" tabindex="0">
+        <canvas id="scene"></canvas>
+        <svg id="leaders" aria-hidden="true">
+          <defs>
+            <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="currentColor"></path>
+            </marker>
+          </defs>
+        </svg>
+        <div id="labelLayer"></div>
+        <div id="invalidLayer" class="invalid-layer"></div>
+        <div id="statusBar" class="status"></div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
