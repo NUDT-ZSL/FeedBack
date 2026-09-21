@@ -1,0 +1,10 @@
+{
+  "name": "dungeon-accessibility-checker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic procedural dungeon generator with reachability validation.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>程序化地牢连通性检查器</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Procedural Dungeon QA</p>
+      <h1>程序化地牢生成与可达性检查器</h1>
+      <p>调整种子或地形参数后即时重算，红色覆盖表示出生点无法到达的开放格。</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel controls">
+      <form id="controls-form">
+        <label class="wide">
+          种子
+          <input name="seed" type="text" autocomplete="off" spellcheck="false">
+        </label>
+        <button type="button" id="random-seed" class="secondary">随机种子</button>
+        <button type="button" id="reset-params" class="secondary">恢复默认</button>
+
+        <label>地图宽度 <input name="width" type="number" min="12" max="80" required></label>
+        <label>地图高度 <input name="height" type="number" min="12" max="60" required></label>
+        <label>房间数量 <input name="roomCount" type="number" min="2" max="40" required></label>
+        <label>目标数量 <input name="targetCount" type="number" min="1" max="39" required></label>
+        <label>最小房间边长 <input name="minRoomSize" type="number" min="3" max="10" required></label>
+        <label>最大房间边长 <input name="maxRoomSize" type="number" min="3" max="12" required></label>
+        <label>走廊宽度 <input name="corridorWidth" type="number" min="1" max="3" required></label>
+        <label class="checkbox"><input name="ensureReachable" type="checkbox" checked> 强制目标可达</label>
+
+        <fieldset class="wide terrain">
+          <legend>开放区域地形分布（总和须为 100%）</legend>
+          <label>地面 % <input name="floorPercent" type="number" min="0" max="100" step="1" required></label>
+          <label>草地 % <input name="grassPercent" type="number" min="0" max="100" step="1" required></label>
+          <label>水域 % <input name="waterPercent" type="number" min="0" max="49" step="1" required></label>
+        </fieldset>
+        <button class="wide primary" type="submit">重新生成</button>
+      </form>
+    </aside>
+
+    <section class="workspace">
+      <div id="status" class="status"></div>
+      <div class="map-wrap panel">
+        <canvas id="map-canvas" width="960" height="600" aria-label="生成的地牢地图"></canvas>
+      </div>
+      <div class="legend panel" aria-label="图例">
+        <span><i class="wall"></i>墙体</span>
+        <span><i class="floor"></i>地面</span>
+        <span><i class="grass"></i>草地（可通行）</span>
+        <span><i class="water"></i>水域（阻挡）</span>
+        <span><i class="spawn"></i>出生点</span>
+        <span><i class="target"></i>目标</span>
+        <span><i class="blocked"></i>不可达</span>
+      </div>
+    </section>
+
+    <aside class="panel side-panel">
+      <h2>生成摘要</h2>
+      <p class="seed-line">本次种子：<strong id="seed-output">-</strong></p>
+      <div id="summary" class="metrics"></div>
+      <h2>目标点位置</h2>
+      <ul id="target-list" class="target-list"></ul>
+    </aside>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
