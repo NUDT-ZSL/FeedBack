@@ -1,0 +1,14 @@
+{
+  "name": "cashflow-scenario-lab",
+  "version": "1.0.0",
+  "description": "本地家庭/小团队资金计划与叠加情景推演工具",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
