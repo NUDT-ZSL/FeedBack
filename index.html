@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>组件变体与约束管理台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">组件变体与约束管理台 <span class="tag">离线版</span></div>
+  <div class="comp-switch">
+    <label>组件</label>
+    <select id="compSelect"></select>
+    <button id="btnAddComp" class="btn">＋新建</button>
+    <button id="btnRenameComp" class="btn">重命名</button>
+    <button id="btnDelComp" class="btn danger">删除</button>
+  </div>
+  <div class="io">
+    <button id="btnExport" class="btn">导出 JSON</button>
+    <button id="btnImport" class="btn">导入 JSON</button>
+    <input type="file" id="fileImport" accept=".json" hidden>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel" id="panelDims">
+    <h2>属性维度</h2>
+    <div id="dimList"></div>
+    <form id="formAddDim" class="addrow">
+      <input id="inpDimName" placeholder="新维度名，如：尺寸" required>
+      <button class="btn" type="submit">＋维度</button>
+    </form>
+  </section>
+
+  <section class="panel" id="panelCons">
+    <h2>约束规则</h2>
+    <form id="formAddCon" class="con-form">
+      <select id="selConType">
+        <option value="mutex">互斥：A 与 B 不可共存</option>
+        <option value="requires">依赖：选 A 必须选 B</option>
+      </select>
+      <div class="con-grid">
+        <select id="selDimA"></select><select id="selValA"></select>
+        <select id="selDimB"></select><select id="selValB"></select>
+      </div>
+      <button class="btn primary" type="submit">＋添加约束</button>
+    </form>
+    <div id="conList"></div>
+  </section>
+
+  <section class="panel wide" id="panelEval">
+    <h2>组合判定</h2>
+    <div id="picker" class="picker"></div>
+    <div id="verdict" class="verdict"></div>
+    <div class="statsbar" id="statsBar"></div>
+    <div class="tabletools">
+      <label>筛选</label>
+      <select id="selFilter">
+        <option value="all">全部组合</option>
+        <option value="valid">仅有效</option>
+        <option value="invalid">仅被排除</option>
+        <option value="untrusted">仅不可信</option>
+      </select>
+    </div>
+    <div id="comboTable" class="combotable"></div>
+  </section>
+</main>
+
+<div id="toasts" class="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
