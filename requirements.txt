@@ -1,0 +1,5 @@
+flask>=3.0
+numpy>=1.26
+scikit-learn>=1.4
+# 句向量相似度（可选；缺失时自动降级为 TF-IDF 字符 n-gram）
+sentence-transformers>=2.7

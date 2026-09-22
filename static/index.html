@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用户反馈聚类与需求线索</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+         background: #f4f6fa; color: #1f2937; }
+  header { background: #1e3a5f; color: #fff; padding: 14px 24px;
+           display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  .stat { background: rgba(255,255,255,.14); border-radius: 6px;
+          padding: 4px 12px; font-size: 13px; }
+  .stat b { font-size: 16px; }
+  #resetBtn { margin-left: auto; background: #b33939; color: #fff; border: 0;
+              border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  .wrap { max-width: 1280px; margin: 18px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px 18px;
+          margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .card h2 { font-size: 15px; margin: 0 0 12px; color: #1e3a5f; }
+  textarea { width: 100%; min-height: 90px; border: 1px solid #d4dae3;
+             border-radius: 6px; padding: 8px; font-size: 13px; resize: vertical; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
+           padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  button.ghost { background: #eef2f7; color: #374151; }
+  button.warn { background: #b33939; }
+  button:disabled { opacity: .5; cursor: default; }
+  select { border: 1px solid #d4dae3; border-radius: 6px; padding: 4px 6px;
+           font-size: 12px; }
+  .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px;
+          align-items: start; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+  .cluster { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; }
+  .cluster-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                  background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+                  border-radius: 8px 8px 0 0; flex-wrap: wrap; }
+  .cid { font-weight: 700; color: #2563eb; }
+  .size-badge { background: #2563eb; color: #fff; border-radius: 10px;
+                padding: 1px 9px; font-size: 12px; }
+  .label { font-size: 13px; color: #374151; }
+  .kw { font-size: 11px; color: #6b7280; }
+  .kw span { background: #eef2f7; border-radius: 4px; padding: 1px 6px;
+             margin-right: 4px; }
+  .member { display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+            border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+  .member:last-child { border-bottom: 0; }
+  .fid { color: #9ca3af; font-size: 11px; min-width: 34px; }
+  .member .txt { flex: 1; }
+  .cluster-actions { display: flex; gap: 8px; padding: 8px 12px;
+                     background: #fbfdff; border-top: 1px solid #e2e8f0;
+                     border-radius: 0 0 8px 8px; align-items: center; }
+  .conflict { border: 1px solid #f3c1c1; background: #fff7f7; border-radius: 8px;
+              padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
+  .conflict .pair { margin: 6px 0; }
+  .conflict .sim { color: #b33939; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef2f7; }
+  th { color: #6b7280; font-weight: 600; font-size: 12px; }
+  .src-list { font-size: 12px; color: #6b7280; }
+  .log-item { font-size: 12px; color: #4b5563; padding: 5px 0;
+              border-bottom: 1px dashed #e5e7eb; }
+  .tag { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px;
+         margin-right: 6px; background: #e0e7ff; color: #3730a3; }
+  .tag.cannot_link { background: #fee2e2; color: #991b1b; }
+  .muted { color: #9ca3af; font-size: 12px; }
+  #importReport { font-size: 12px; color: #047857; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>用户反馈聚类工作台</h1>
+  <span class="stat">反馈 <b id="statFb">0</b></span>
+  <span class="stat">问题簇 <b id="statCl">0</b></span>
+  <span class="stat">待决冲突 <b id="statCf">0</b></span>
+  <span class="stat">需求线索 <b id="statLd">0</b></span>
+  <span class="stat" id="statMeta">相似度引擎 -</span>
+  <button id="resetBtn" onclick="doReset()">清空全部</button>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>1. 导入反馈（每行一条）</h2>
+    <textarea id="pasteBox" placeholder="在此粘贴用户反馈，每行一条；或选择本地文件导入"></textarea>
+    <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
+      <button onclick="doImport()">粘贴导入</button>
+      <input type="file" id="fileInput" accept=".txt,.csv">
+      <button class="ghost" onclick="doImportFile()">从文件导入</button>
+      <span class="muted">导入后立即自动聚类并展示每条反馈的初始归属</span>
+    </div>
+    <div id="importReport"></div>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="card"><h2>2. 问题簇（自动聚类 + 人工修订）</h2>
+        <div id="clusters"><span class="muted">暂无数据，请先导入反馈。</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card"><h2>3. 相似冲突待裁决</h2><div id="conflicts">
+        <span class="muted">暂无冲突。</span></div></div>
+      <div class="card"><h2>4. 需求线索（按簇规模排序）</h2><div id="leads">
+        <span class="muted">暂无线索。</span></div></div>
+      <div class="card"><h2>5. 修订决策日志</h2><div id="decisions">
+        <span class="muted">暂无人工决策。</span></div></div>
+    </div>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
