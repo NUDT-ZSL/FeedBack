@@ -1,0 +1,91 @@
+:root {
+  --font-size: 30px;
+  --line-height: 1.9;
+  --stage-w: 100%;
+  --bg: #faf8f4;
+  --fg: #1a1a1a;
+  --accent: #0b5fff;
+  --marker-bg: #fff0b3;
+  --toolbar-bg: #efece6;
+}
+body.dark {
+  --bg: #121212;
+  --fg: #f2f2f2;
+  --accent: #8fb0ff;
+  --marker-bg: #4a4310;
+  --toolbar-bg: #1e1e1e;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--toolbar-bg);
+  flex-wrap: wrap;
+  font-size: 15px;
+}
+.brand { font-weight: 700; margin-right: 0.5rem; }
+.sep { width: 1px; height: 1.4em; background: currentColor; opacity: 0.3; }
+button, select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--accent); color: var(--accent); }
+#font-slider { width: 140px; }
+#font-label { min-width: 4ch; }
+#stage-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+}
+#stage {
+  width: var(--stage-w);
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 0 1.2rem;
+}
+#article {
+  column-count: 1;
+  column-gap: 2.5em;
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  padding: 0.8em 0 60vh;
+  text-align: justify;
+}
+#article p { margin: 0 0 1em; overflow-wrap: anywhere; }
+.s {
+  border-left: 0.18em solid transparent;
+  padding-left: 0.3em;
+  margin-left: -0.48em;
+  border-radius: 0.15em;
+}
+.s.marker {
+  background: var(--marker-bg);
+  border-left-color: var(--accent);
+}
+#statusbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--toolbar-bg);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+}
