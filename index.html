@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>现场装配三维工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <header id="toolbar">
+    <span class="brand">装配三维工作台</span>
+    <button id="btn-load" title="加载带层级与包围体的场景模型 JSON">加载模型…</button>
+    <input type="file" id="file-input" accept=".json,application/json" hidden />
+    <span class="sep"></span>
+    <button id="btn-reset-view">复位视角</button>
+    <span class="hint">左键旋转 / 滚轮缩放 / 右键平移 / 点击拾取 / Tab 切换被挡候选</span>
+  </header>
+  <div id="main">
+    <aside id="tree-panel">
+      <div class="panel-title">层级树</div>
+      <div id="tree"></div>
+    </aside>
+    <div id="viewport-wrap">
+      <canvas id="viewport"></canvas>
+      <div id="occlusion-banner" class="hidden"></div>
+    </div>
+    <aside id="info-panel">
+      <div class="panel-title">拾取结果</div>
+      <div id="pick-info" class="muted">尚未选中零件</div>
+      <div class="panel-title">射线候选（按由近到远）</div>
+      <ul id="candidate-list"></ul>
+    </aside>
+  </div>
+  <footer id="statusbar"><span id="status">就绪</span></footer>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

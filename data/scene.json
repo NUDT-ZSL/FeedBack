@@ -1,0 +1,24 @@
+{
+  "name": "主轴箱装配体（示例）",
+  "parts": [
+    { "id": "root", "name": "主轴箱装配体", "parentId": null, "group": true },
+
+    { "id": "housing-asm", "name": "外壳总成", "parentId": "root", "group": true },
+    { "id": "housing", "name": "外壳体", "parentId": "housing-asm", "opaque": true,  "color": "#8a94a6", "box": { "min": [-3, 0.5, -2], "max": [3, 4.5, 2] } },
+    { "id": "window",  "name": "观察窗(透明)", "parentId": "housing-asm", "opaque": false, "color": "#7fd4ff", "box": { "min": [-1.5, 1.5, 1.9], "max": [1.5, 3.5, 2.0] } },
+    { "id": "plate",   "name": "铭牌", "parentId": "housing-asm", "opaque": true,  "color": "#c0a060", "box": { "min": [1.8, 3.6, 1.95], "max": [2.8, 4.2, 2.05] } },
+
+    { "id": "drive-asm", "name": "传动系", "parentId": "root", "group": true },
+    { "id": "shaft",      "name": "主轴",   "parentId": "drive-asm", "opaque": true, "color": "#d95f43", "box": { "min": [-2.5, 2.0, -0.3], "max": [2.5, 2.6, 0.3] } },
+    { "id": "gear-big",   "name": "大齿轮", "parentId": "drive-asm", "opaque": true, "color": "#e0a458", "box": { "min": [-0.4, 0.9, -1.4], "max": [0.4, 3.7, 1.4] } },
+    { "id": "gear-small", "name": "小齿轮", "parentId": "drive-asm", "opaque": true, "color": "#e0c458", "box": { "min": [1.2, 1.6, -0.8], "max": [1.9, 3.0, 0.8] } },
+    { "id": "bearing-l",  "name": "左轴承", "parentId": "drive-asm", "opaque": true, "color": "#9b5de5", "box": { "min": [-2.6, 1.7, -0.6], "max": [-2.0, 2.9, 0.6] } },
+    { "id": "bearing-r",  "name": "右轴承", "parentId": "drive-asm", "opaque": true, "color": "#9b5de5", "box": { "min": [2.0, 1.7, -0.6], "max": [2.6, 2.9, 0.6] } },
+
+    { "id": "elec-asm", "name": "电气总成", "parentId": "root", "group": true },
+    { "id": "pcb",    "name": "控制板", "parentId": "elec-asm", "opaque": true, "color": "#2a9d8f", "box": { "min": [-2.4, 1.0, -1.8], "max": [-0.6, 3.4, -1.6] } },
+    { "id": "cable",  "name": "线束",   "parentId": "elec-asm", "opaque": true, "color": "#577590", "box": { "min": [-0.6, 3.2, -1.7], "max": [1.4, 3.6, -0.9] } },
+
+    { "id": "base", "name": "底座", "parentId": "root", "opaque": true, "color": "#4a5568", "box": { "min": [-3.5, 0, -2.5], "max": [3.5, 0.5, 2.5] } }
+  ]
+}
