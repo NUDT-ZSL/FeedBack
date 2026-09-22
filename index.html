@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素材渠道适配工作台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>素材渠道适配工作台</h1>
+  <div class="topbar-actions">
+    <button id="btn-load-sample" class="btn">载入示例数据</button>
+    <button id="btn-export" class="btn">导出 JSON</button>
+    <label class="btn btn-file">导入 JSON<input type="file" id="file-import" accept=".json" hidden></label>
+    <button id="btn-reset" class="btn btn-danger">清空数据</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左栏:素材 -->
+  <section class="panel" id="panel-assets">
+    <h2>素材库</h2>
+    <div id="asset-list" class="item-list"></div>
+    <details class="editor" id="asset-editor" open>
+      <summary>新增 / 编辑素材</summary>
+      <form id="asset-form">
+        <input type="hidden" id="asset-id">
+        <label>名称 <input id="asset-name" required></label>
+        <label>用途标签(逗号分隔) <input id="asset-tags" placeholder="横幅, 产品图"></label>
+        <div class="row">
+          <label>原始宽 <input id="asset-w" type="number" min="1" required></label>
+          <label>原始高 <input id="asset-h" type="number" min="1" required></label>
+        </div>
+        <label>格式
+          <select id="asset-format">
+            <option>jpg</option><option>png</option><option>webp</option><option>gif</option><option>svg</option>
+          </select>
+        </label>
+        <fieldset>
+          <legend>可裁切区域(取图范围, px)</legend>
+          <div class="row">
+            <label>X <input id="asset-cx" type="number" value="0"></label>
+            <label>Y <input id="asset-cy" type="number" value="0"></label>
+          </div>
+          <div class="row">
+            <label>宽 <input id="asset-cw" type="number" min="1"></label>
+            <label>高 <input id="asset-ch" type="number" min="1"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>关键内容区域(需保留, px)</legend>
+          <div class="row">
+            <label>X <input id="asset-kx" type="number" value="0"></label>
+            <label>Y <input id="asset-ky" type="number" value="0"></label>
+          </div>
+          <div class="row">
+            <label>宽 <input id="asset-kw" type="number" min="1"></label>
+            <label>高 <input id="asset-kh" type="number" min="1"></label>
+          </div>
+        </fieldset>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">保存素材</button>
+          <button type="button" id="asset-cancel" class="btn">取消编辑</button>
+        </div>
+      </form>
+    </details>
+  </section>
+
+  <!-- 中栏:预览与结论 -->
+  <section class="panel panel-wide" id="panel-preview">
+    <h2>适配预览 <span id="preview-subtitle" class="subtitle"></span></h2>
+    <div id="preview-empty" class="empty-hint">请选择左侧素材与右侧渠道查看适配结论</div>
+    <canvas id="preview-canvas" width="640" height="480"></canvas>
+    <div id="legend" class="legend">
+      <span><i class="sw sw-crop"></i>可裁切区域</span>
+      <span><i class="sw sw-key"></i>关键内容区域</span>
+      <span><i class="sw sw-plan"></i>裁切方案</span>
+      <span><i class="sw sw-safe"></i>安全边距区</span>
+    </div>
+    <div id="verdict-box"></div>
+    <div id="compromise-box"></div>
+  </section>
+
+  <!-- 右栏:渠道 -->
+  <section class="panel" id="panel-channels">
+    <h2>渠道规格</h2>
+    <p class="hint">勾选多个渠道可查看折中裁切方案</p>
+    <div id="channel-list" class="item-list"></div>
+    <details class="editor" id="channel-editor" open>
+      <summary>新增 / 编辑渠道规格</summary>
+      <form id="channel-form">
+        <input type="hidden" id="channel-id">
+        <label>渠道名称 <input id="channel-name" required></label>
+        <div class="row">
+          <label>目标宽 <input id="channel-w" type="number" min="1" required></label>
+          <label>目标高 <input id="channel-h" type="number" min="1" required></label>
+        </div>
+        <label>安全边距(px, 目标分辨率下) <input id="channel-margin" type="number" min="0" value="0"></label>
+        <label>接受格式(逗号分隔) <input id="channel-formats" placeholder="jpg, png, webp"></label>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">保存渠道</button>
+          <button type="button" id="channel-cancel" class="btn">取消编辑</button>
+        </div>
+      </form>
+    </details>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
