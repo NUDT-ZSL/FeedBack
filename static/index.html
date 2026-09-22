@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoDemo 生产队列</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>素材成片生产队列</h1>
+      <p>依赖约束 · 多机排程 · 故障隔离 · 分段恢复</p>
+    </div>
+    <div class="clock">
+      <span id="clock">第 0 分钟</span>
+      <span id="makespan" class="muted"></span>
+      <button id="toggleSim">暂停时钟</button>
+      <button id="tickOnce">推进 1 分钟</button>
+      <button id="resetQueue">重置</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-title">
+        <h2>机器</h2>
+        <span class="hint">暂停后不抢占正在执行的任务，空闲任务自动改派</span>
+      </div>
+      <div id="machines" class="machine-grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>任务队列</h2>
+        <div>
+          <label class="upload">
+            载入清单
+            <input id="manifestFile" type="file" accept=".json,application/json">
+          </label>
+          <span id="orderBadge" class="badge"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>任务</th><th>状态</th><th>机器</th><th>时长</th>
+              <th>依赖</th><th>素材</th><th>基线时间</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tasks"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div class="panel">
+        <h2>素材替换影响分析</h2>
+        <div class="form-row">
+          <select id="materialSelect"></select>
+          <input id="newVersion" value="v2" placeholder="新版本">
+          <button id="analyze">分析影响</button>
+        </div>
+        <div id="impact" class="impact muted">选择素材后，可先只分析直接取用者和全部下游影响。</div>
+        <div class="form-row">
+          <button id="confirmRerun" class="primary">替换并重跑所选</button>
+          <button id="confirmKeep">替换但接受旧结果</button>
+          <button id="acceptStale">放行当前过期结果</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>推进与恢复日志</h2>
+        <div id="events" class="events"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="taskDialog">
+    <form method="dialog">
+      <h3>模拟任务失败</h3>
+      <p id="dialogTask"></p>
+      <label>失败原因
+        <input id="failureReason" value="素材损坏，编码器返回非零退出码">
+      </label>
+      <menu>
+        <button value="cancel">取消</button>
+        <button id="confirmFail" value="default">确认失败</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

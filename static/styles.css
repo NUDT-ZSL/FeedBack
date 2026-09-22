@@ -1,0 +1,71 @@
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 22px 28px; background: linear-gradient(120deg, #111827, #1e3a8a);
+  border-bottom: 1px solid #334155;
+}
+h1 { margin: 0 0 4px; font-size: 24px; }
+h2 { margin: 0; font-size: 17px; }
+p { margin: 0; color: #cbd5e1; }
+main { padding: 20px 28px 40px; display: grid; gap: 18px; }
+button, .upload {
+  border: 1px solid #475569; background: #1e293b; color: #e2e8f0;
+  border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit;
+}
+button:hover, .upload:hover { border-color: #60a5fa; }
+button.primary { background: #2563eb; border-color: #3b82f6; }
+input, select {
+  background: #0f172a; color: #e2e8f0; border: 1px solid #475569;
+  border-radius: 8px; padding: 8px 10px; font: inherit;
+}
+label { display: grid; gap: 6px; }
+.clock { display: flex; align-items: center; gap: 10px; }
+.clock span:first-child { font-weight: 700; color: #93c5fd; }
+.panel {
+  background: #111827; border: 1px solid #263244; border-radius: 14px;
+  padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18);
+}
+.panel-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
+.hint, .muted { color: #94a3b8; font-size: 13px; }
+.machine-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
+.machine-card { border: 1px solid #334155; border-radius: 12px; padding: 12px; background: #0b1220; }
+.machine-card.paused { border-color: #f59e0b; background: #231a0c; }
+.machine-card h3 { margin: 0 0 8px; display: flex; justify-content: space-between; }
+.machine-meta { color: #94a3b8; font-size: 13px; margin-bottom: 10px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #1f2937; vertical-align: top; }
+th { color: #93c5fd; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.waiting { color: #93c5fd; background: #172554; }
+.running { color: #4ade80; background: #052e16; }
+.blocked { color: #fbbf24; background: #422006; }
+.failed { color: #f87171; background: #450a0a; }
+.completed { color: #86efac; background: #14241a; }
+.stale-note { display: block; margin-top: 5px; color: #fbbf24; font-size: 12px; }
+.accepted { color: #86efac; }
+.badge { border: 1px solid #334155; border-radius: 999px; padding: 5px 10px; }
+.badge.ok { border-color: #22c55e; color: #86efac; }
+.badge.bad { border-color: #ef4444; color: #fca5a5; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.form-row { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+.impact { border: 1px solid #334155; background: #0b1220; border-radius: 10px; padding: 12px; line-height: 1.7; }
+.task-option { display: flex; gap: 8px; align-items: center; margin: 4px 0; color: #dbeafe; }
+.events { max-height: 330px; overflow: auto; display: grid; gap: 8px; }
+.event { border-left: 3px solid #475569; padding: 7px 10px; background: #0b1220; border-radius: 6px; }
+.event.success { border-color: #22c55e; }
+.event.error { border-color: #ef4444; }
+.event.warning { border-color: #f59e0b; }
+dialog { background: #111827; color: #e2e8f0; border: 1px solid #475569; border-radius: 14px; width: min(520px, 92vw); }
+dialog::backdrop { background: rgba(2,6,23,.7); }
+menu { display: flex; justify-content: flex-end; gap: 10px; padding: 0; }
+.dep { color: #cbd5e1; font-size: 12px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } header { align-items: flex-start; gap: 12px; flex-direction: column; } }

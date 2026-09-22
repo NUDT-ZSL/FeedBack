@@ -1,0 +1,23 @@
+{
+  "machines": [
+    {"id": "M1", "name": "剪辑机-1", "availability": [{"start": "08:00", "end": "20:00"}]},
+    {"id": "M2", "name": "包装机-2", "availability": [{"start": "09:00", "end": "21:00"}]},
+    {"id": "M3", "name": "审核机-3", "availability": [{"start": "08:30", "end": "22:00"}]}
+  ],
+  "materials": [
+    {"id": "A", "name": "口播原片", "version": "v1", "path": "assets/A.mp4"},
+    {"id": "B", "name": "字幕表", "version": "v1", "path": "assets/B.csv"},
+    {"id": "C", "name": "品牌片头", "version": "v1", "path": "assets/C.mov"},
+    {"id": "I1", "name": "粗剪时间线", "version": "generated", "path": "out/I1.kdenlive"},
+    {"id": "I2", "name": "包装成片", "version": "generated", "path": "out/I2.mp4"},
+    {"id": "I3", "name": "备用粗剪", "version": "generated", "path": "out/I3.kdenlive"}
+  ],
+  "tasks": [
+    {"id": "ingest", "name": "入库与校验", "duration": 1, "materials": ["A", "B", "C"], "machines": ["M1", "M2"]},
+    {"id": "rough_a", "name": "主版本粗剪", "duration": 3, "depends_on": ["ingest"], "materials": ["A", "B"], "produces": "I1", "machines": ["M1"]},
+    {"id": "rough_b", "name": "备用版粗剪", "duration": 2, "depends_on": ["ingest"], "materials": ["A"], "produces": "I3", "machines": ["M2"]},
+    {"id": "package", "name": "包装合成", "duration": 2, "materials": ["C", "I1"], "produces": "I2", "machines": ["M2"]},
+    {"id": "subtitle_check", "name": "字幕质检", "duration": 1, "materials": ["B", "I3"], "machines": ["M1", "M3"]},
+    {"id": "review", "name": "终审出片", "duration": 1, "materials": ["I2", "I3"], "machines": ["M3"]}
+  ]
+}
