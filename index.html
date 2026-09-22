@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>配置发布与撤回离线推演台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>配置发布与撤回离线推演台</h1>
+      <p>规则从编辑区进入发布链路，按作用范围、优先级与生效批次推导；多候选必须人工裁决。</p>
+    </div>
+    <div class="summary">
+      <span>冲突 <b id="conflictCount">0</b></span>
+      <span>不可信目标 <b id="untrustedCount">0</b></span>
+      <span>最近重推 <b id="affectedBadge">全量</b></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel timeline-panel">
+      <div class="section-title">
+        <div><h2>发布时间轴</h2><p id="currentTitle">—</p></div>
+        <button id="verifyButton" type="button">一致性校验</button>
+      </div>
+      <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>规则编辑区</h2><p>编辑后发布为新版本；撤回保留审计记录。</p></div>
+        <div><button id="newRuleButton" type="button">新建规则</button>
+        <button id="resetButton" type="button">重置样例</button></div>
+      </div>
+      <div id="rulesList" class="rules"></div>
+      <div id="ruleEditor" class="editor" style="display:none">
+        <h3 id="editorTitle"></h3>
+        <label>配置键<input id="ruleKey" placeholder="timeout_ms"></label>
+        <label>配置值<input id="ruleValue" placeholder="1200"></label>
+        <label>优先级<input id="rulePriority" type="number" step="1"></label>
+        <label>生效批次<input id="ruleBatch" placeholder="b1"></label>
+        <label>作用批次（逗号分隔，AND 要求目标批次在列表中）<input id="ruleScopeBatches" placeholder="b1,b2"></label>
+        <label>标签条件（逗号分隔，全部具备；留空为不限）<input id="ruleScopeLabels" placeholder="tier:edge,region:cn"></label>
+        <div class="actions editor-actions">
+          <button id="publishButton" type="button">发布规则</button>
+          <button id="saveDraftButton" type="button" class="secondary">仅保存草稿</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>批次可信性</h2><p>未就绪、缺失或被规则引用的异常批次不会被静默跳过。</p></div>
+      </div>
+      <div id="batchPanel" class="batches"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>目标当前配置</h2><p>每个目标、每个键展示全部候选、选择依据、当前版本与冲突状态。</p></div>
+        <label class="filter">筛选
+          <select id="filterState">
+            <option value="all">全部</option>
+            <option value="conflict">仅冲突</option>
+            <option value="untrusted">仅不可信</option>
+            <option value="affected">仅最近涉及</option>
+          </select>
+        </label>
+      </div>
+      <div id="targets" class="targets"></div>
+    </section>
+
+    <section class="panel">
+      <h2>操作记录</h2>
+      <div id="logs" class="logs"></div>
+    </section>
+  </main>
+
+  <script src="engine.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

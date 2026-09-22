@@ -1,0 +1,15 @@
+{
+  "name": "config-rollout-offline-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline interactive simulator for staged configuration release, conflict arbitration, withdrawal and incremental recomputation.",
+  "scripts": {
+    "test": "node engine.test.js",
+    "test:browser": "node browser-smoke.js",
+    "test:all": "node engine.test.js && node browser-smoke.js",
+    "start": "node -e \"require('child_process').exec('cmd /c start \"\" index.html')\""
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
