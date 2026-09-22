@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>易读 · 低视力阅读排版工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="toolbar">
+  <div class="tb-row">
+    <span class="brand">易读</span>
+    <label class="btn file-btn">
+      导入文档
+      <input type="file" id="fileInput" accept=".txt,.md,.text,.textile,.log" hidden>
+    </label>
+    <button class="btn" id="sampleBtn" type="button">载入示例</button>
+    <span class="sep"></span>
+    <button class="btn" id="fontMinus" type="button" title="缩小字号 (-)">A-</button>
+    <input type="range" id="fontSize" min="16" max="72" step="1" value="24" aria-label="字号">
+    <button class="btn" id="fontPlus" type="button" title="放大字号 (+)">A+</button>
+    <span id="fontSizeLabel" class="readonly-label">24px</span>
+  </div>
+  <div class="tb-row">
+    <label class="ctl">行高
+      <input type="range" id="lineHeight" min="1.4" max="2.6" step="0.05" value="1.9">
+    </label>
+    <label class="ctl">栏宽
+      <input type="range" id="measure" min="20" max="60" step="1" value="34">
+    </label>
+    <label class="ctl">分栏
+      <select id="columns">
+        <option value="1" selected>单栏</option>
+        <option value="2">双栏</option>
+      </select>
+    </label>
+    <label class="ctl">主题
+      <select id="theme">
+        <option value="light" selected>浅色</option>
+        <option value="dark">深色</option>
+        <option value="contrast">高对比</option>
+      </select>
+    </label>
+    <span class="sep"></span>
+    <span id="posLabel" class="readonly-label">未加载文档</span>
+  </div>
+</header>
+
+<div id="marker" aria-hidden="true" title="当前阅读位置">&#9654;</div>
+
+<main id="reader-wrap">
+  <article id="reader" aria-live="off">
+    <p class="placeholder">点击「导入文档」选择本地长文（.txt / .md），或点击「载入示例」。</p>
+  </article>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
