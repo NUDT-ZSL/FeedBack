@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>成片生产队列控制台</title>
+<style>
+  :root { --bg:#0f1420; --panel:#1a2233; --line:#2a3550; --txt:#dbe4f5;
+          --muted:#8594b3; --accent:#4d8dff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:14px 22px;
+           border-bottom:1px solid var(--line); background:#121828; }
+  h1 { font-size:17px; margin:0; }
+  #clock { color:var(--muted); font-variant-numeric:tabular-nums; }
+  button { background:#263350; color:var(--txt); border:1px solid #39486e;
+           border-radius:5px; padding:3px 10px; cursor:pointer; font-size:12px; }
+  button:hover { background:#31416a; }
+  button.warn { border-color:#b3474d; }
+  button.ok { border-color:#3d8a5f; }
+  .spacer { flex:1; }
+  main { padding:18px 22px; display:grid; gap:18px; }
+  h2 { font-size:13px; color:var(--muted); margin:0 0 10px;
+       text-transform:uppercase; letter-spacing:1px; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:9px;
+          padding:12px 14px; min-width:230px; }
+  .card.paused { border-color:#b3474d; }
+  .card.off { opacity:.55; }
+  .card h3 { margin:0 0 6px; font-size:14px; display:flex; gap:8px; align-items:center; }
+  .sub { color:var(--muted); font-size:12px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel);
+          border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line);
+           font-size:13px; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; padding:1px 9px; border-radius:20px; font-size:12px;
+           white-space:nowrap; }
+  .waiting { background:#3a4564; }
+  .running { background:#1d4e89; color:#cfe3ff; }
+  .blocked { background:#5a3a1d; color:#ffd9ad; }
+  .failed { background:#6b2328; color:#ffd3d5; }
+  .done { background:#1f4d36; color:#bdf0d2; }
+  .affected { background:#5c4a12; color:#ffe9a8; }
+  .bar { width:110px; height:6px; background:#2a3550; border-radius:4px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .tag { color:var(--muted); font-size:11px; }
+  #order { font-size:12px; color:#a9c2ef; min-height:20px; }
+  #log { max-height:170px; overflow:auto; background:#121828; border:1px solid var(--line);
+         border-radius:8px; padding:8px 12px; font:12px/1.7 Consolas,monospace;
+         color:#9fb3d8; }
+  .pending { border-color:#a8842a !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>成片生产队列控制台</h1>
+  <span id="clock"></span>
+  <span id="doneflag"></span>
+  <span class="spacer"></span>
+  <button class="warn" onclick="post('/api/queue/reset')">重置队列</button>
+</header>
+<main>
+  <section>
+    <h2>机器</h2>
+    <div id="machines" class="cards"></div>
+  </section>
+  <section>
+    <h2>素材</h2>
+    <div id="materials" class="cards"></div>
+  </section>
+  <section>
+    <h2>任务队列</h2>
+    <table>
+      <thead><tr><th>ID</th><th>任务</th><th>状态</th><th>进度</th>
+      <th>所在机器</th><th>预计完成</th><th>前置</th><th>取用素材</th><th>操作</th></tr></thead>
+      <tbody id="tasks"></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>完成顺序（失败重试后与无故障运行保持一致）</h2>
+    <div id="order"></div>
+  </section>
+  <section>
+    <h2>事件日志</h2>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+const LABEL = {waiting:"等待",running:"进行中",blocked:"受阻",
+  failed:"失败",done:"完成",affected:"待裁决"};
+
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function post(url){
+  try { await fetch(url, {method:"POST"}); } catch(e) {}
+  refresh();
+}
+
+function renderMachines(ms){
+  document.getElementById("machines").innerHTML = ms.map(m => {
+    const cls = "card" + (m.paused ? " paused" : "") + (!m.in_window && !m.paused ? " off" : "");
+    const state = m.paused
+      ? '<span class="badge failed">已暂停</span>'
+      : (m.running
+          ? '<span class="badge running">运行: '+esc(m.running)+'</span>'
+          : (m.in_window
+              ? '<span class="badge waiting">空闲</span>'
+              : '<span class="badge blocked">非可用时段</span>'));
+    const btn = m.paused
+      ? '<button class="ok" onclick="post(\'/api/machine/'+m.id+'/resume\')">恢复</button>'
+      : '<button class="warn" onclick="post(\'/api/machine/'+m.id+'/pause\')">暂停</button>';
+    const wins = m.windows.map(w => w[0]+"-"+w[1]).join(", ");
+    return '<div class="'+cls+'"><h3>'+esc(m.name)+
+      ' <span class="tag">'+esc(m.type)+'</span></h3>'+
+      '<div class="sub" style="margin-bottom:8px">'+state+
+      ' 可用时段: '+wins+'</div>'+btn+'</div>';
+  }).join("");
+}
+
+function renderOrder(orders){
+  document.getElementById("order").textContent =
+    orders.length ? orders.join("  →  ") : "（尚无完成任务）";
+}
+
+async function refresh(){
+  try {
+    const s = await (await fetch("/api/state")).json();
+    document.getElementById("clock").textContent = "模拟时钟 t=" + s.now + "s";
+    document.getElementById("doneflag").innerHTML = s.finished
+      ? '<span class="badge done">整批完成</span>' : "";
+    renderMachines(s.machines);
+    renderMaterials(s.materials);
+    renderTasks(s.tasks);
+    renderOrder(s.completion_order);
+    document.getElementById("log").innerHTML =
+      s.log.map(esc).join("<br>");
+  } catch(e) {
+    document.getElementById("clock").textContent = "后端连接中…";
+  }
+}
+
+refresh();
+setInterval(refresh, 500);
+</script>
+</body>
+</html>
+
+function renderMaterials(ms){
+  document.getElementById("materials").innerHTML = ms.map(m => {
+    const note = m.pending
+      ? '<div class="sub" style="color:#ffd98f;margin:6px 0">受影响: '+
+        esc(m.affected.join(", ") || "无已执行任务")+'</div>'+
+        '<button class="ok" onclick="post(\'/api/material/'+m.id+'/decision?rerun=1\')">全部重跑</button> '+
+        '<button onclick="post(\'/api/material/'+m.id+'/decision?rerun=0\')">保留旧产出</button>'
+      : '<div class="sub" style="margin-top:6px">当前版本 v'+m.version+'</div>';
+    return '<div class="card'+(m.pending ? " pending" : "")+'"><h3>'+
+      esc(m.name)+' <span class="tag">'+esc(m.id)+'</span></h3>'+
+      '<button onclick="post(\'/api/material/'+m.id+'/replace\')">替换素材</button>'+note+'</div>';
+  }).join("");
+}
+
+function renderTasks(ts){
+  document.getElementById("tasks").innerHTML = ts.map(t => {
+    let acts = "";
+    if (t.status === "running")
+      acts += '<button class="warn" onclick="post(\'/api/task/'+t.id+'/fail\')">模拟失败</button> ';
+    if (t.status === "failed")
+      acts += '<button class="ok" onclick="post(\'/api/task/'+t.id+'/retry\')">重试</button>';
+    if (t.status === "affected")
+      acts = '<span class="tag">素材 '+esc(t.affected_by)+' 待裁决</span>';
+    const bar = (t.status === "running" || t.status === "done")
+      ? '<div class="bar"><i style="width:'+t.progress+'%"></i></div>' : "";
+    return '<tr><td>'+esc(t.id)+'</td><td>'+esc(t.name)+
+      ' <span class="tag">'+t.duration+'s</span></td>'+
+      '<td><span class="badge '+t.status+'">'+LABEL[t.status]+'</span></td>'+
+      '<td>'+bar+'</td><td>'+esc(t.machine ?? "-")+'</td>'+
+      '<td>'+(t.finish_at ?? "-")+'</td>'+
+      '<td class="tag">'+esc(t.deps.join(",") || "-")+'</td>'+
+      '<td class="tag">'+esc(t.uses.join(",") || "-")+'</td><td>'+acts+'</td></tr>';
+  }).join("");
+}

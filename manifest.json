@@ -1,0 +1,28 @@
+{
+  "materials": [
+    {"id": "m_intro", "name": "片头模板"},
+    {"id": "m_broll", "name": "B-roll 素材包"},
+    {"id": "m_bgm", "name": "背景音乐"},
+    {"id": "m_cut_a", "name": "粗剪A(中间产物)"},
+    {"id": "m_cut_b", "name": "粗剪B(中间产物)"}
+  ],
+  "machines": [
+    {"id": "gpu1", "name": "渲染机-1", "type": "gpu", "windows": [[0, 9999]]},
+    {"id": "gpu2", "name": "渲染机-2", "type": "gpu", "windows": [[0, 60], [80, 9999]]},
+    {"id": "cpu1", "name": "转码机-1", "type": "cpu", "windows": [[0, 9999]]}
+  ],
+  "tasks": [
+    {"id": "t01", "name": "片头合成", "duration": 8, "uses": ["m_intro"], "produces": ["m_cut_a"], "machine_type": "gpu"},
+    {"id": "t02", "name": "B-roll 转码", "duration": 6, "uses": ["m_broll"], "machine_type": "cpu"},
+    {"id": "t03", "name": "粗剪B", "duration": 10, "uses": ["m_broll"], "produces": ["m_cut_b"], "machine_type": "gpu", "depends_on": ["t02"]},
+    {"id": "t04", "name": "正片A合成", "duration": 12, "uses": ["m_cut_a", "m_bgm"], "machine_type": "gpu"},
+    {"id": "t05", "name": "正片B合成", "duration": 12, "uses": ["m_cut_b", "m_bgm"], "machine_type": "gpu"},
+    {"id": "t06", "name": "字幕压制A", "duration": 6, "machine_type": "cpu", "depends_on": ["t04"]},
+    {"id": "t07", "name": "字幕压制B", "duration": 6, "machine_type": "cpu", "depends_on": ["t05"]},
+    {"id": "t08", "name": "成片A导出", "duration": 5, "machine_type": "cpu", "depends_on": ["t06"]},
+    {"id": "t09", "name": "成片B导出", "duration": 5, "machine_type": "cpu", "depends_on": ["t07"]},
+    {"id": "t10", "name": "预告片剪辑", "duration": 9, "uses": ["m_cut_a", "m_cut_b"], "machine_type": "gpu"},
+    {"id": "t11", "name": "预告片导出", "duration": 4, "machine_type": "cpu", "depends_on": ["t10"]},
+    {"id": "t12", "name": "海报图渲染", "duration": 7, "uses": ["m_intro"], "machine_type": "gpu"}
+  ]
+}
