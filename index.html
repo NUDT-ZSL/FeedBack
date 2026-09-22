@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>运营实验效果比较台</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; color: #222; font-size: 13px; }
+header { background: #1f3a5f; color: #fff; padding: 10px 18px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+header h1 { font-size: 17px; font-weight: 600; }
+header .spacer { flex: 1; }
+header label { font-size: 12px; opacity: .9; }
+header input { width: 56px; padding: 2px 4px; border: none; border-radius: 3px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge.ok { background: #1e8e5a; color: #fff; }
+.badge.bad { background: #c0392b; color: #fff; }
+.badge.warn { background: #e67e22; color: #fff; }
+.badge.info { background: #2980b9; color: #fff; }
+.badge.lock { background: #8e44ad; color: #fff; }
+button { cursor: pointer; border: 1px solid #c5cbd3; background: #fff; border-radius: 4px; padding: 3px 10px; font-size: 12px; }
+button:hover { background: #eef3f9; }
+button.primary { background: #1f6fb2; color: #fff; border-color: #1f6fb2; }
+button.danger { color: #c0392b; }
+button.small { padding: 1px 6px; font-size: 11px; }
+main { display: grid; grid-template-columns: 340px 320px 1fr; gap: 10px; padding: 10px; align-items: start; }
+.panel { background: #fff; border: 1px solid #dde2e8; border-radius: 6px; }
+.panel > h2 { font-size: 14px; padding: 8px 12px; border-bottom: 1px solid #e8ecf1; background: #f7f9fb; border-radius: 6px 6px 0 0; display:flex; justify-content:space-between; align-items:center;}
+.panel .body { padding: 8px 12px; }
+.card { border: 1px solid #e3e8ee; border-radius: 5px; padding: 8px; margin-bottom: 8px; }
+.card h3 { font-size: 13px; margin-bottom: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.muted { color: #777; font-size: 11px; }
+.obs { border-left: 3px solid #b9c4d0; padding: 4px 8px; margin: 5px 0; background: #fafbfc; }
+.obs.conflict { border-left-color: #e67e22; background: #fff8ef; }
+.obs.auth { border-left-color: #1e8e5a; }
+.obs.superseded { opacity: .55; border-left-color: #999; }
+.obs .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+form.inline { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; padding: 6px; background: #f4f7fa; border-radius: 4px; }
+form.inline input, form.inline select { padding: 3px 5px; border: 1px solid #c9d1da; border-radius: 3px; font-size: 12px; }
+form.inline input[type=number] { width: 74px; }
+form.inline input[type=date] { width: 128px; }
+form.inline input[type=text] { width: 110px; }
+.seg-check { display: block; font-size: 12px; margin: 2px 0; }
+.verdict { border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; border: 1px solid #dde2e8; }
+.verdict.win { border-left: 5px solid #1e8e5a; }
+.verdict.lose { border-left: 5px solid #c0392b; }
+.verdict.flat { border-left: 5px solid #7f8c8d; }
+.verdict.na { border-left: 5px solid #e67e22; background: #fffaf3; }
+.verdict h3 { font-size: 14px; margin-bottom: 4px; }
+.issue { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 3px; font-size: 11px; background: #fdecea; color: #a93226; border: 1px solid #f5b7b1; }
+.confbar { height: 8px; background: #e6eaef; border-radius: 4px; overflow: hidden; margin: 4px 0; }
+.confbar > div { height: 100%; background: linear-gradient(90deg, #e67e22, #1e8e5a); }
+.kv { font-size: 12px; color: #444; line-height: 1.7; }
+.kv b { color: #111; }
+#conflictSummary { padding: 6px 12px; background: #fff4e5; border-bottom: 1px solid #f0dcb8; font-size: 12px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>运营实验效果比较台</h1>
+  <span id="consistencyBadge" class="badge ok">增量=全量 ✓</span>
+  <span id="baselineBadge"></span>
+  <span class="spacer"></span>
+  <label>最小进入 <input id="cfgMinEntries" type="number" min="0"></label>
+  <label>最小转化 <input id="cfgMinConv" type="number" min="0"></label>
+  <label>显著性α <input id="cfgAlpha" type="number" step="0.01" min="0.001" max="0.5" style="width:64px"></label>
+  <button id="btnReset" class="danger">重置演示数据</button>
+</header>
+<div id="conflictSummary"></div>
+<main>
+  <section class="panel" id="segPanel">
+    <h2>受众分组与观测 <button class="small primary" id="btnAddSeg">+ 分组</button></h2>
+    <div class="body" id="segList"></div>
+  </section>
+  <section class="panel" id="varPanel">
+    <h2>策略变体 <button class="small primary" id="btnAddVar">+ 变体</button></h2>
+    <div class="body" id="varList"></div>
+  </section>
+  <section class="panel" id="conclPanel">
+    <h2>效果结论与可信度</h2>
+    <div class="body">
+      <div style="margin-bottom:8px">
+        对照变体：<select id="controlSelect"></select>
+        <span class="muted">（结论实时随数据/裁决/锁定更新）</span>
+      </div>
+      <div id="verdicts"></div>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+const LS_KEY = "expbench_v1";
+let _uid = 1;
+function uid(p){ return p + Date.now().toString(36) + (_uid++); }
+
+function seedState(){
+  const s1={id:"segA",name:"新客·安卓",definition:"注册≤30天 且 安卓"};
+  const s2={id:"segB",name:"老客·安卓",definition:"注册>30天 且 安卓"};
+  const s3={id:"segC",name:"新客·iOS",definition:"注册≤30天 且 iOS"};
+  return {
+    segments:[s1,s2,s3],
+    observations:[
+      {id:"o1",segmentId:"segA",source:"埋点平台",entries:1200,conversions:96,start:"2026-08-01",end:"2026-08-31",status:"active",authoritative:false},
+      {id:"o2",segmentId:"segA",source:"客服回传",entries:1180,conversions:101,start:"2026-08-01",end:"2026-08-31",status:"active",authoritative:false},
+      {id:"o3",segmentId:"segB",source:"埋点平台",entries:2600,conversions:338,start:"2026-08-01",end:"2026-08-31",status:"active",authoritative:false},
+      {id:"o4",segmentId:"segC",source:"埋点平台",entries:45,conversions:3,start:"2026-09-10",end:"2026-09-20",status:"active",authoritative:false}
+    ],
+    variants:[
+      {id:"vA",name:"对照·原策略",segmentIds:["segA","segB"]},
+      {id:"vB",name:"策略B·券包",segmentIds:["segA","segB"]},
+      {id:"vC",name:"策略C·Push",segmentIds:["segA","segC"]}
+    ],
+    baselineSegmentId:null,
+    settings:{minEntries:200,minConversions:10,alpha:0.05}
+  };
+}
+
+function loadState(){
+  try{ const raw=localStorage.getItem(LS_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+  return null;
+}
+let state = loadState() || seedState();
+let cache = {};                 // variantId -> 增量计算结果
+let consistency = {ok:true, affected:[]};
+
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function segById(id){ return state.segments.find(s=>s.id===id); }
+function varById(id){ return state.variants.find(v=>v.id===id); }
+function activeObs(segId){ return state.observations.filter(o=>o.segmentId===segId && o.status==="active"); }
+function authoritativeObs(segId){
+  const list = activeObs(segId);
+  if(list.length===1) return list[0];
+  const a = list.find(o=>o.authoritative);
+  return a || null;   // 多源未裁决 -> 无权威观测，该分组暂不计入
+}
+function pct(x){ return x==null ? "—" : (x*100).toFixed(2)+"%"; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+// ---------- 冲突检测：保留全部来源，仅标注，不静默择一 ----------
+function detectConflicts(){
+  const out = [];
+  for(const seg of state.segments){
+    const list = activeObs(seg.id);
+    if(list.length > 1){
+      const b = list[0];
+      const differ = list.some(o=> o.entries!==b.entries || o.conversions!==b.conversions || o.start!==b.start || o.end!==b.end);
+      out.push({type:"multi-source", segId:seg.id, count:list.length, differ:differ,
+        resolved: !!list.find(o=>o.authoritative)});
+    }
+    const users = state.variants.filter(v=>v.segmentIds.includes(seg.id));
+    if(users.length > 1)
+      out.push({type:"shared", segId:seg.id, variantIds:users.map(u=>u.id)});
+  }
+  return out;
+}
+
+// ---------- 单变体效果计算（基准锁定时仅取锁定分组口径） ----------
+function computeVariantMetrics(v){
+  const locked = state.baselineSegmentId;
+  const segIds = locked ? v.segmentIds.filter(id=>id===locked) : v.segmentIds;
+  let entries=0, conv=0, winStart=null, winEnd=null;
+  const used=[], pending=[];
+  for(const id of segIds){
+    const o = authoritativeObs(id);
+    if(!o){ pending.push(id); continue; }
+    entries += o.entries; conv += o.conversions;
+    used.push({segId:id, obsId:o.id});
+    winStart = winStart==null || o.start>winStart ? o.start : winStart;
+    winEnd   = winEnd==null   || o.end<winEnd     ? o.end   : winEnd;
+  }
+  const defs = segIds.map(id=>{ const s=segById(id); return s? s.definition:"?"; }).sort();
+  return {
+    variantId:v.id, entries:entries, conversions:conv,
+    rate: entries>0 ? conv/entries : null,
+    used:used, pending:pending, defs:defs,
+    winStart:winStart, winEnd:winEnd,
+    internalOverlap: winStart==null || winStart<=winEnd,
+    uncovered: locked && !v.segmentIds.includes(locked)
+  };
+}
+function computeAll(){
+  const r={};
+  for(const v of state.variants) r[v.id]=computeVariantMetrics(v);
+  return r;
+}
+// 口径偏移：锁定基准后变体指标与未锁定全量口径的差异
+function lockShift(v){
+  if(!state.baselineSegmentId) return null;
+  const saved = state.baselineSegmentId;
+  state.baselineSegmentId = null;
+  const full = computeVariantMetrics(v);
+  state.baselineSegmentId = saved;
+  const cur = cache[v.id];
+  if(!cur) return null;
+  if(full.entries !== cur.entries || full.conversions !== cur.conversions)
+    return {from:full.entries, to:cur.entries};
+  return null;
+}
+
+// ---------- 增量重算：只刷新受影响变体，再与全量重算比对 ----------
+function recomputeAffected(changedSegIds, reason){
+  const affected = state.variants.filter(v=>
+    v.segmentIds.some(id=>changedSegIds.includes(id))).map(v=>v.id);
+  for(const id of affected) cache[id] = computeVariantMetrics(varById(id));
+  for(const v of state.variants) if(!cache[v.id]) cache[v.id]=computeVariantMetrics(v);
+  const full = computeAll();
+  const ok = state.variants.every(v=> JSON.stringify(cache[v.id])===JSON.stringify(full[v.id]));
+  consistency = {ok:ok, affected:affected, reason:reason||""};
+  save(); render();
+}
+function recomputeAll(reason){
+  cache = computeAll();
+  consistency = {ok:true, affected:state.variants.map(v=>v.id), reason:reason||"全量重算"};
+  save(); render();
+}
+// ---------- 统计：双比例 z 检验 ----------
+function normCdf(z){
+  const t = 1/(1+0.2316419*Math.abs(z));
+  const d = 0.3989422804014327*Math.exp(-z*z/2);
+  const p = d*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  return z>0 ? 1-p : p;
+}
+function zTest(x1,n1,x2,n2){
+  if(n1===0||n2===0) return null;
+  const p=(x1+x2)/(n1+n2), se=Math.sqrt(p*(1-p)*(1/n1+1/n2));
+  if(se===0) return {z:0,p:1};
+  const z=(x2/n2-x1/n1)/se;
+  return {z:z, p:2*(1-normCdf(Math.abs(z)))};
+}
+
+// ---------- 两两比较结论：区分 样本量不足 / 时段不重叠 / 口径不一致 ----------
+function compare(controlId, testId){
+  const A=cache[controlId], B=cache[testId];
+  const s=state.settings, issues=[];
+  const insA = A.entries<s.minEntries || A.conversions<s.minConversions;
+  const insB = B.entries<s.minEntries || B.conversions<s.minConversions;
+  if(insA||insB) issues.push({kind:"样本量不足",
+    detail:(insA?("对照 "+A.entries+"进入/"+A.conversions+"转化 "):"")+(insB?("实验 "+B.entries+"进入/"+B.conversions+"转化"):"")});
+  const overlap = A.winStart && B.winStart && A.winStart<=B.winEnd && B.winStart<=A.winEnd;
+  if(!overlap) issues.push({kind:"时段不重叠",
+    detail:"对照 "+(A.winStart||"?")+"~"+(A.winEnd||"?")+" vs 实验 "+(B.winStart||"?")+"~"+(B.winEnd||"?")});
+  if(JSON.stringify(A.defs)!==JSON.stringify(B.defs))
+    issues.push({kind:"分组口径不一致", detail:"对照口径["+A.defs.join("；")+"] ≠ 实验口径["+B.defs.join("；")+"]"});
+  if(A.pending.length||B.pending.length)
+    issues.push({kind:"存在未裁决冲突", detail:"对照待裁决 "+A.pending.length+" 组，实验待裁决 "+B.pending.length+" 组"});
+  if(A.uncovered||B.uncovered)
+    issues.push({kind:"未覆盖基准分组", detail:"该变体不含锁定基准分组，无法按锁定口径比较"});
+
+  let verdict="na", zt=null, conf=null, grade="低";
+  const hard = issues.some(i=> i.kind==="时段不重叠" || i.kind==="未覆盖基准分组");
+  if(A.rate!=null && B.rate!=null && !hard){
+    zt = zTest(A.conversions,A.entries,B.conversions,B.entries);
+    conf = 1-zt.p;
+    const sig = zt.p < s.alpha;
+    if(issues.length===0){
+      verdict = sig ? (zt.z>0?"win":"lose") : "flat";
+      grade = conf>=0.95?"高":(conf>=0.8?"中":"低");
+    } else {
+      verdict = "na";
+      grade = issues.some(i=>i.kind==="样本量不足") ? "低" : "中";
+    }
+  }
+  return {A:A,B:B,issues:issues,verdict:verdict,zt:zt,conf:conf,grade:grade,
+    lift:(A.rate&&B.rate!=null)? (B.rate-A.rate)/A.rate : null};
+}
+// ---------- 渲染：分组面板 ----------
+function renderSegments(conflicts){
+  const el = document.getElementById("segList");
+  let html = "";
+  for(const seg of state.segments){
+    const cfl = conflicts.filter(c=>c.segId===seg.id);
+    const locked = state.baselineSegmentId===seg.id;
+    html += '<div class="card"><h3>'+esc(seg.name)
+      + (locked? ' <span class="badge lock">基准已锁定</span>':'')
+      + cfl.map(c=> c.type==="multi-source"
+          ? (c.resolved? ' <span class="badge info">多源已裁决</span>' : ' <span class="badge warn">观测冲突×'+c.count+'</span>')
+          : ' <span class="badge info">被'+c.variantIds.length+'个变体共享</span>').join("")
+      + '</h3><div class="muted">口径：'+esc(seg.definition)+'</div>';
+    const obs = state.observations.filter(o=>o.segmentId===seg.id);
+    for(const o of obs){
+      const cls = o.status!=="active" ? "superseded" : (o.authoritative? "auth" : (obs.filter(x=>x.status==="active").length>1? "conflict":""));
+      html += '<div class="obs '+cls+'"><div class="row"><b>'+esc(o.source)+'</b> '
+        + o.entries+'进入 / '+o.conversions+'转化 / '+o.start+'~'+o.end
+        + (o.authoritative?' <span class="badge ok">权威</span>':'')
+        + (o.status!=="active"?' <span class="badge">已作废(保留)</span>':'')
+        + '</div><div class="row">'
+        + (o.status==="active" && !o.authoritative ? '<button class="small" data-act="auth" data-id="'+o.id+'">采信为权威</button>':'')
+        + '<button class="small" data-act="edit" data-id="'+o.id+'">修正</button>'
+        + (o.status==="active" ? '<button class="small danger" data-act="void" data-id="'+o.id+'">作废</button>'
+                               : '<button class="small" data-act="restore" data-id="'+o.id+'">恢复</button>')
+        + '</div></div>';
+    }
+    html += '<form class="inline" data-seg="'+seg.id+'">'
+      + '<input name="source" type="text" placeholder="来源" required>'
+      + '<input name="entries" type="number" placeholder="进入" min="0" required>'
+      + '<input name="conversions" type="number" placeholder="转化" min="0" required>'
+      + '<input name="start" type="date" required><input name="end" type="date" required>'
+      + '<button class="small primary">+ 观测</button></form>';
+    html += '<div class="row" style="margin-top:4px">'
+      + '<button class="small" data-lock="'+seg.id+'">'+(locked?"解除基准锁定":"锁定为基准")+'</button>'
+      + '<button class="small danger" data-delseg="'+seg.id+'">删除分组</button></div>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+// ---------- 渲染：变体面板 ----------
+function renderVariants(){
+  const el = document.getElementById("varList");
+  let html = "";
+  for(const v of state.variants){
+    const m = cache[v.id];
+    html += '<div class="card"><h3>'+esc(v.name)
+      + (m && m.uncovered ? ' <span class="badge warn">未覆盖基准</span>':'')
+      + '</h3><div class="kv">合计：<b>'+(m?m.entries:0)+'</b> 进入 / <b>'+(m?m.conversions:0)+'</b> 转化，转化率 <b>'+(m?pct(m.rate):"—")+'</b>'
+      + (m && m.pending.length? '；<span style="color:#e67e22">'+m.pending.length+' 组待裁决未计入</span>':'')
+      + (m && m.winStart? '<br>观测窗口：'+m.winStart+' ~ '+m.winEnd+(m.internalOverlap?'':' <span class="badge bad">内部时段不重叠</span>'):'')
+      + '</div>';
+    for(const s of state.segments){
+      html += '<label class="seg-check"><input type="checkbox" data-var="'+v.id+'" data-seg="'+s.id+'"'
+        + (v.segmentIds.includes(s.id)?" checked":"") + '> '+esc(s.name)+'</label>';
+    }
+    html += '<button class="small danger" data-delvar="'+v.id+'" style="margin-top:4px">删除变体</button></div>';
+  }
+  el.innerHTML = html;
+}
+// ---------- 渲染：结论面板 ----------
+let controlId = null;
+function renderVerdicts(){
+  const sel = document.getElementById("controlSelect");
+  if(!controlId || !varById(controlId)) controlId = state.variants[0] ? state.variants[0].id : null;
+  sel.innerHTML = state.variants.map(v=>'<option value="'+v.id+'"'+(v.id===controlId?" selected":"")+'>'+esc(v.name)+'</option>').join("");
+  const box = document.getElementById("verdicts");
+  let html = "";
+  for(const v of state.variants){
+    if(v.id===controlId) continue;
+    const r = compare(controlId, v.id);
+    const title = {win:"显著优于对照",lose:"显著劣于对照",flat:"无显著差异",na:"暂不可判定"}[r.verdict];
+    html += '<div class="verdict '+r.verdict+'"><h3>'+esc(v.name)+' vs 对照：'+title+'</h3>';
+    for(const i of r.issues) html += '<span class="issue">'+i.kind+'：'+esc(i.detail)+'</span>';
+    if(r.conf!=null){
+      html += '<div class="confbar"><div style="width:'+(r.conf*100).toFixed(1)+'%"></div></div>'
+        + '<div class="kv">可信度 <b>'+(r.conf*100).toFixed(1)+'%</b>（'+r.grade+'）'
+        + '｜p='+r.zt.p.toFixed(4)+'｜提升 '+(r.lift!=null?(r.lift*100).toFixed(2)+"%":"—")
+        + '｜对照 '+pct(r.A.rate)+' → 实验 '+pct(r.B.rate)+'</div>';
+    } else {
+      html += '<div class="kv">可信度 <b>'+r.grade+'</b>：'+ (r.issues[0]? r.issues[0].kind : "数据不足") +'</div>';
+    }
+    const shift = lockShift(v);
+    if(shift) html += '<div class="kv" style="color:#8e44ad">⚠ 基准锁定带来口径偏移：该比较仅基于锁定分组，样本由 '+shift.from+' → '+shift.to+'</div>';
+    html += '<div class="muted">依据：对照 '+r.A.entries+'进入/'+r.A.conversions+'转化（'+r.A.used.length+'组） vs 实验 '+r.B.entries+'进入/'+r.B.conversions+'转化（'+r.B.used.length+'组）；显著性阈值 α='+state.settings.alpha+'</div>';
+    html += '</div>';
+  }
+  box.innerHTML = html || '<div class="muted">请至少保留两个变体。</div>';
+}
+
+function render(){
+  const conflicts = detectConflicts();
+  const open = conflicts.filter(c=> c.type==="multi-source" && !c.resolved);
+  const cs = document.getElementById("conflictSummary");
+  if(conflicts.length){
+    cs.style.display="block";
+    cs.innerHTML = "冲突监测："+open.length+" 组观测待裁决，"
+      + conflicts.filter(c=>c.type==="shared").length+" 个分组被多变体共享（全部来源已保留，见各分组卡片）。";
+  } else cs.style.display="none";
+  const b = document.getElementById("consistencyBadge");
+  b.className = "badge "+(consistency.ok?"ok":"bad");
+  b.textContent = consistency.ok ? "增量=全量 ✓（"+consistency.affected.length+"个变体增量更新）" : "增量与全量不一致 ✗";
+  const bb = document.getElementById("baselineBadge");
+  const bs = state.baselineSegmentId && segById(state.baselineSegmentId);
+  bb.innerHTML = bs ? '<span class="badge lock">基准：'+esc(bs.name)+'</span>' : "";
+  document.getElementById("cfgMinEntries").value = state.settings.minEntries;
+  document.getElementById("cfgMinConv").value = state.settings.minConversions;
+  document.getElementById("cfgAlpha").value = state.settings.alpha;
+  renderSegments(conflicts);
+  renderVariants();
+  renderVerdicts();
+}
+// ---------- 事件 ----------
+document.getElementById("segList").addEventListener("click", e=>{
+  const t = e.target;
+  if(t.dataset.act){
+    const o = state.observations.find(x=>x.id===t.dataset.id);
+    if(!o) return;
+    if(t.dataset.act==="auth"){ activeObs(o.segmentId).forEach(x=>x.authoritative=false); o.authoritative=true; }
+    if(t.dataset.act==="void"){ o.status="void"; o.authoritative=false; }
+    if(t.dataset.act==="restore"){ o.status="active"; }
+    if(t.dataset.act==="edit"){
+      const en = prompt("进入人数：", o.entries); if(en===null) return;
+      const cv = prompt("转化人数：", o.conversions); if(cv===null) return;
+      o.entries=Math.max(0,parseInt(en)||0); o.conversions=Math.max(0,parseInt(cv)||0);
+    }
+    recomputeAffected([o.segmentId], "观测变更");
+  }
+  if(t.dataset.lock){
+    state.baselineSegmentId = (state.baselineSegmentId===t.dataset.lock)? null : t.dataset.lock;
+    recomputeAll("基准锁定变更");
+  }
+  if(t.dataset.delseg){
+    const id=t.dataset.delseg;
+    state.segments = state.segments.filter(s=>s.id!==id);
+    state.variants.forEach(v=> v.segmentIds=v.segmentIds.filter(x=>x!==id));
+    if(state.baselineSegmentId===id) state.baselineSegmentId=null;
+    recomputeAll("删除分组");
+  }
+});
+document.getElementById("segList").addEventListener("submit", e=>{
+  e.preventDefault();
+  const f=e.target, seg=f.dataset.seg;
+  state.observations.push({id:uid("o"),segmentId:seg,source:f.source.value||"手工录入",
+    entries:+f.entries.value, conversions:+f.conversions.value,
+    start:f.start.value, end:f.end.value, status:"active", authoritative:false});
+  recomputeAffected([seg], "新增观测");
+});
+document.getElementById("varList").addEventListener("change", e=>{
+  const t=e.target;
+  if(t.dataset.var){
+    const v=varById(t.dataset.var);
+    if(t.checked) v.segmentIds.push(t.dataset.seg);
+    else v.segmentIds=v.segmentIds.filter(x=>x!==t.dataset.seg);
+    recomputeAffected([t.dataset.seg], "变体归属变更");
+  }
+});
+document.getElementById("varList").addEventListener("click", e=>{
+  if(e.target.dataset.delvar){
+    state.variants = state.variants.filter(v=>v.id!==e.target.dataset.delvar);
+    delete cache[e.target.dataset.delvar];
+    recomputeAll("删除变体");
+  }
+});
+document.getElementById("btnAddSeg").onclick = ()=>{
+  const n=prompt("分组名称："); if(!n) return;
+  const d=prompt("口径定义（如：注册≤30天 且 安卓）：")||"未定义";
+  state.segments.push({id:uid("seg"),name:n,definition:d});
+  recomputeAll("新增分组");
+};
+document.getElementById("btnAddVar").onclick = ()=>{
+  const n=prompt("变体名称："); if(!n) return;
+  state.variants.push({id:uid("v"),name:n,segmentIds:[]});
+  recomputeAll("新增变体");
+};
+document.getElementById("controlSelect").addEventListener("change", e=>{ controlId=e.target.value; render(); });
+document.getElementById("btnReset").onclick = ()=>{ state=seedState(); controlId=null; recomputeAll("重置"); };
+["cfgMinEntries","cfgMinConv","cfgAlpha"].forEach(id=>{
+  document.getElementById(id).addEventListener("change", ()=>{
+    state.settings.minEntries=+document.getElementById("cfgMinEntries").value||0;
+    state.settings.minConversions=+document.getElementById("cfgMinConv").value||0;
+    state.settings.alpha=+document.getElementById("cfgAlpha").value||0.05;
+    recomputeAll("阈值调整");
+  });
+});
+
+recomputeAll("初始化");
+</script>
+</body>
+</html>
