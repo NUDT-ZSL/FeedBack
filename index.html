@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>组件变体与约束管理台</title>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--line:#263049;--fg:#e6ebf5;--mut:#8b96ad;--ok:#34d399;--bad:#f87171;--warn:#fbbf24;--acc:#60a5fa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:16px;margin:0}
+h2{font-size:13px;margin:0 0 8px;color:var(--mut);letter-spacing:.06em}
+#status{margin-left:auto;font-size:12px;color:var(--warn)}
+#app{display:grid;grid-template-columns:360px 1fr;gap:14px;padding:14px 18px;align-items:start}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+button{background:#22304b;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.danger{color:var(--bad)}
+input,select{background:#0d1320;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;max-width:150px}
+.row{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:4px;background:#22304b;border-radius:12px;padding:1px 8px;margin:2px;font-size:12px}
+.chip b{cursor:pointer;color:var(--bad)}
+.axis{border:1px dashed var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
+.con{border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:13px}
+.con.broken{border-color:var(--warn);background:#2a2210}
+.con.off{opacity:.55}
+.badge{display:inline-block;border-radius:10px;padding:1px 10px;font-size:12px;font-weight:600}
+.b-ok{background:#0c3b2e;color:var(--ok)}
+.b-bad{background:#3b1414;color:var(--bad)}
+.b-warn{background:#3a2d08;color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+tr.inv td{color:var(--bad)}
+tr.unt td{color:var(--warn)}
+.reason{border-left:3px solid var(--line);padding:4px 10px;margin:6px 0;background:#121829;border-radius:0 6px 6px 0}
+.reason.violated,.reason.unmet{border-color:var(--bad)}
+.reason.untrusted{border-color:var(--warn)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#22304b;border:1px solid var(--acc);padding:8px 16px;border-radius:8px;display:none;z-index:9}
+.mut{color:var(--mut);font-size:12px}
+#compList{list-style:none;margin:0 0 8px;padding:0}
+#compList li{padding:5px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between}
+#compList li.on{background:#22304b}
+#compList li:hover{background:#1b2740}
+.filters button.on{border-color:var(--acc);color:var(--acc)}
+</style>
+</head>
+<body>
+<header><h1>组件变体与约束管理台</h1><span class="mut">离线单文件 · 数据保存在本机浏览器</span><span id="status"></span></header>
+<div id="app">
+<aside>
+<section><h2>组件</h2><ul id="compList"></ul>
+<div class="row"><input id="newComp" placeholder="新组件名" size="12"><button id="addComp">新增</button></div></section>
+<section><h2>属性维度</h2><div id="axes"></div>
+<div class="row"><input id="newAxis" placeholder="维度名,如 尺寸" size="12"><button id="addAxis">添加维度</button></div></section>
+<section><h2>约束(互斥 / 依赖)</h2><div id="cons"></div>
+<div class="row"><select id="cType"><option value="excludes">互斥:两者不能同选</option><option value="requires">依赖:前者要求后者</option></select></div>
+<div class="row"><select id="cAxisA"></select><select id="cValA"></select></div>
+<div class="row"><select id="cAxisB"></select><select id="cValB"></select><button id="addCon">添加约束</button></div></section>
+</aside>
+<main>
+<section><h2>组合判定</h2><div id="picker" class="row"></div><div id="verdict"></div></section>
+<section><h2>全部组合 <span id="comboStats" class="mut"></span></h2>
+<div class="row filters" id="filters"><button data-f="all" class="on">全部</button><button data-f="valid">有效</button><button data-f="invalid">无效</button><button data-f="untrusted">不可信</button><button id="reset" class="danger" style="margin-left:auto">重置示例数据</button></div>
+<div id="tableWrap"></div></section>
+</main>
+</div>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const LS='variantlab.v1';
+const SEP='\x00';
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+let filter='all',sel={};
+const cache=new Map();
+
+function seed(){
+ const a1=uid(),a2=uid(),a3=uid(),b1=uid(),b2=uid();
+ const btn={id:uid(),name:'Button',axes:[
+  {id:a1,name:'尺寸',values:['sm','md','lg']},
+  {id:a2,name:'状态',values:['default','hover','disabled']},
+  {id:a3,name:'主题',values:['light','dark']}],
+  constraints:[
+   {id:uid(),type:'excludes',a:{axis:a2,value:'disabled'},b:{axis:a3,value:'dark'},enabled:true},
+   {id:uid(),type:'requires',a:{axis:a2,value:'hover'},b:{axis:a3,value:'light'},enabled:true}]};
+ const inp={id:uid(),name:'Input',axes:[
+  {id:b1,name:'尺寸',values:['md','lg']},
+  {id:b2,name:'状态',values:['default','error','disabled']}],constraints:[]};
+ return {components:[btn,inp],active:btn.id};
+}
+function save(){try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}}
+function load(){try{const s=JSON.parse(localStorage.getItem(LS));return s&&s.components&&s.components.length?s:null;}catch(e){return null}}
+let state=load()||seed();
+const comp=()=>state.components.find(c=>c.id===state.active)||state.components[0];
+
+const refOk=(c,r)=>{const a=c.axes.find(x=>x.id===r.axis);return !!(a&&a.values.includes(r.value));};
+const axName=(c,id)=>{const a=c.axes.find(x=>x.id===id);return a?a.name:'(已删除维度)';};
+const refLabel=(c,r)=>axName(c,r.axis)+' = '+r.value;
+const cLabel=(c,con)=>(con.type==='excludes'?'互斥 ':'依赖 ')+refLabel(c,con.a)+(con.type==='excludes'?' ⊗ ':' → ')+refLabel(c,con.b);
+const nodeOf=r=>r.axis+SEP+r.value;
+
+// Tarjan SCC:找出依赖约束构成的闭环
+function cycleInfo(c){
+ const adj=new Map();
+ for(const con of c.constraints){
+  if(con.type!=='requires'||!con.enabled)continue;
+  if(!refOk(c,con.a)||!refOk(c,con.b))continue;
+  const A=nodeOf(con.a),B=nodeOf(con.b);
+  if(!adj.has(A))adj.set(A,[]);
+  adj.get(A).push({to:B,id:con.id});
+  if(!adj.has(B))adj.set(B,[]);
+ }
+ let idx=0;const num={},low={},st=[],on=new Set(),sccs=[];
+ function sc(v){num[v]=low[v]=idx++;st.push(v);on.add(v);
+  for(const e of adj.get(v)||[]){const w=e.to;
+   if(num[w]===undefined){sc(w);low[v]=Math.min(low[v],low[w]);}
+   else if(on.has(w))low[v]=Math.min(low[v],num[w]);}
+  if(low[v]===num[v]){const s=[];let w;do{w=st.pop();on.delete(w);s.push(w);}while(w!==v);sccs.push(s);}}
+ for(const v of adj.keys())if(num[v]===undefined)sc(v);
+ const badNodes=new Set(),badCons=new Set();
+ for(const s of sccs){
+  const self=s.length===1&&(adj.get(s[0])||[]).some(e=>e.to===s[0]);
+  if(s.length>1||self){const S=new Set(s);s.forEach(n=>badNodes.add(n));
+   for(const n of s)for(const e of adj.get(n)||[])if(S.has(e.to))badCons.add(e.id);}}
+ return {badNodes,badCons};
+}
+
+// 判定一个组合:返回结论与全部判定依据
+function evaluate(c,combo){
+ const reasons=[],cyc=cycleInfo(c);
+ const inCycle=[...cyc.badNodes].some(n=>{const i=n.indexOf(SEP);return combo[n.slice(0,i)]===n.slice(i+1);});
+ for(const con of c.constraints){
+  if(!con.enabled)continue;
+  const okA=refOk(c,con.a),okB=refOk(c,con.b);
+  const inA=okA&&combo[con.a.axis]===con.a.value;
+  const inB=okB&&combo[con.b.axis]===con.b.value;
+  if(!okA||!okB){
+   if((!okA&&!okB)||inA||inB)reasons.push({kind:'untrusted',cid:con.id,text:'约束「'+cLabel(c,con)+'」引用了不存在的取值,无法判定,该组合结论不可信'});
+   continue;}
+  if(cyc.badCons.has(con.id)){
+   if(inCycle)reasons.push({kind:'untrusted',cid:con.id,text:'依赖约束「'+cLabel(c,con)+'」构成闭环,该组合结论不可信'});
+   continue;}
+  if(con.type==='excludes'&&inA&&inB)reasons.push({kind:'violated',cid:con.id,text:'违反互斥约束:'+cLabel(c,con)});
+  else if(con.type==='requires'&&inA&&!inB)reasons.push({kind:'unmet',cid:con.id,text:'依赖未满足:'+refLabel(c,con.a)+' 要求同时选择 '+refLabel(c,con.b)});
+ }
+ const hard=reasons.some(r=>r.kind==='violated'||r.kind==='unmet');
+ const unt=reasons.some(r=>r.kind==='untrusted');
+ return {verdict:hard?'invalid':(unt?'untrusted':'valid'),reasons};
+}
+
+// 组合结论缓存:约束/取值变化时只失效受影响的组合
+const cacheFor=c=>{if(!cache.has(c.id))cache.set(c.id,new Map());return cache.get(c.id);};
+const keyOf=(c,combo)=>c.axes.map(a=>combo[a.id]).join('\x01');
+function getEval(c,combo){const m=cacheFor(c),k=keyOf(c,combo);let r=m.get(k);if(!r){r=evaluate(c,combo);m.set(k,r);}return r;}
+function invalidateValues(c,values){const m=cacheFor(c);for(const k of [...m.keys()]){const parts=k.split('\x01');if(values.some(v=>parts.includes(v)))m.delete(k);}}
+function enumerate(c){let out=[{}];for(const a of c.axes){const nx=[];for(const o of out)for(const v of a.values){const p=Object.assign({},o);p[a.id]=v;nx.push(p);}out=nx;}return out;}
+const affectedCount=(c,values)=>enumerate(c).filter(combo=>values.some(v=>Object.values(combo).includes(v))).length;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2600);}
+function setStatus(m){$('#status').textContent=m;}
+
+function renderComps(){
+ $('#compList').innerHTML=state.components.map(c=>
+  `<li data-id="${c.id}" class="${c.id===comp().id?'on':''}"><span>${esc(c.name)}</span><b data-del="${c.id}" title="删除组件" style="color:var(--bad);cursor:pointer">×</b></li>`).join('');
+}
+
+function renderAxes(){const c=comp();
+ $('#axes').innerHTML=c.axes.length?c.axes.map(a=>
+  `<div class="axis"><div class="row"><b>${esc(a.name)}</b><span class="mut">${a.values.length} 个取值</span><button data-delaxis="${a.id}" class="danger" style="margin-left:auto">删除维度</button></div>
+  <div>${a.values.map(v=>`<span class="chip">${esc(v)}<b data-delval="${a.id}|${esc(v)}" title="删除取值">×</b></span>`).join('')}</div>
+  <div class="row"><input size="10" placeholder="新取值" data-newval="${a.id}"><button data-addval="${a.id}">添加</button></div></div>`).join('')
+ :'<div class="mut">暂无维度,请先添加</div>';
+}
+
+function fillVals(selEl,axisId){const a=comp().axes.find(x=>x.id===axisId);
+ $(selEl).innerHTML=a?a.values.map(v=>`<option>${esc(v)}</option>`).join(''):'';}
+
+function renderCons(){const c=comp();
+ $('#cons').innerHTML=c.constraints.length?c.constraints.map(con=>{
+  const broken=!refOk(c,con.a)||!refOk(c,con.b);
+  return `<div class="con ${broken?'broken':''} ${con.enabled?'':'off'}"><label><input type="checkbox" data-toggle="${con.id}" ${con.enabled?'checked':''}> ${esc(cLabel(c,con))}</label> ${broken?'<span class="badge b-warn">引用失效</span>':''}<button data-delcon="${con.id}" class="danger" style="float:right">删除</button></div>`;}).join('')
+ :'<div class="mut">暂无约束</div>';
+ const opts=c.axes.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+ $('#cAxisA').innerHTML=opts;$('#cAxisB').innerHTML=opts;
+ fillVals('#cValA',$('#cAxisA').value);fillVals('#cValB',$('#cAxisB').value);
+}
+
+function currentCombo(){const c=comp(),combo={};for(const a of c.axes)combo[a.id]=sel[a.id];return combo;}
+
+function renderPicker(){const c=comp();
+ for(const a of c.axes)if(!a.values.includes(sel[a.id]))sel[a.id]=a.values[0];
+ $('#picker').innerHTML=c.axes.map(a=>`<label>${esc(a.name)} <select data-axis="${a.id}">${a.values.map(v=>`<option ${sel[a.id]===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`).join('');
+ renderVerdict();
+}
+
+function renderVerdict(){const c=comp();
+ if(!c.axes.length||c.axes.some(a=>!a.values.length)){$('#verdict').innerHTML='<span class="mut">请先为每个维度添加至少一个取值</span>';return;}
+ const r=getEval(c,currentCombo());
+ const badge=r.verdict==='valid'?'<span class="badge b-ok">有效变体</span>':r.verdict==='invalid'?'<span class="badge b-bad">无效组合</span>':'<span class="badge b-warn">不可信</span>';
+ const rows=r.reasons.map(x=>{const con=c.constraints.find(k=>k.id===x.cid);
+  return `<div class="reason ${x.kind}">${esc(x.text)} ${con?`<button data-toggle="${con.id}">${con.enabled?'停用该约束':'启用该约束'}</button>`:''}</div>`;}).join('');
+ $('#verdict').innerHTML=`<div class="row">${badge}<span class="mut">${r.reasons.length?'共 '+r.reasons.length+' 条判定依据(全部保留,可停用约束后重新收敛)':'未被任何约束排除'}</span></div>${rows}`;
+}
+
+function renderTable(){const c=comp();
+ if(!c.axes.length||c.axes.some(a=>!a.values.length)){$('#comboStats').textContent='';$('#tableWrap').innerHTML='<div class="mut">维度或取值不足,无法枚举组合</div>';return;}
+ const rows=enumerate(c).map(combo=>({combo,r:getEval(c,combo)}));
+ const cnt={valid:0,invalid:0,untrusted:0};rows.forEach(x=>cnt[x.r.verdict]++);
+ $('#comboStats').textContent=`共 ${rows.length} 个组合 · 有效 ${cnt.valid} · 无效 ${cnt.invalid} · 不可信 ${cnt.untrusted}`;
+ const show=rows.filter(x=>filter==='all'||x.r.verdict===filter),cap=500;
+ let html='<table><tr>'+c.axes.map(a=>`<th>${esc(a.name)}</th>`).join('')+'<th>结论</th><th>判定依据</th></tr>';
+ for(const x of show.slice(0,cap)){
+  const cls=x.r.verdict==='invalid'?'inv':(x.r.verdict==='untrusted'?'unt':'');
+  const badge=x.r.verdict==='valid'?'<span class="badge b-ok">有效</span>':x.r.verdict==='invalid'?'<span class="badge b-bad">无效</span>':'<span class="badge b-warn">不可信</span>';
+  html+=`<tr class="${cls}">`+c.axes.map(a=>`<td>${esc(x.combo[a.id])}</td>`).join('')+`<td>${badge}</td><td class="mut">${x.r.reasons.map(r=>esc(r.text)).join('<br>')||'—'}</td></tr>`;}
+ html+='</table>';
+ if(show.length>cap)html+=`<div class="mut">仅显示前 ${cap} 条,共 ${show.length} 条匹配</div>`;
+ $('#tableWrap').innerHTML=html;
+}
+
+function renderAll(){renderComps();renderAxes();renderCons();renderPicker();renderTable();save();}
+function afterStructural(msg){const c=comp();cacheFor(c).clear();renderAll();setStatus(msg+':组合空间已变化,全部组合已重新评估');}
+function afterConstraint(msg,values){const c=comp();const n=affectedCount(c,values);invalidateValues(c,values);renderAll();setStatus(msg+':仅重新评估受影响的 '+n+' 个组合');}
+
+$('#addComp').onclick=()=>{const n=$('#newComp').value.trim();if(!n)return toast('请输入组件名');
+ const c={id:uid(),name:n,axes:[],constraints:[]};state.components.push(c);state.active=c.id;sel={};$('#newComp').value='';renderAll();setStatus('已新增组件 '+n);};
+
+$('#compList').onclick=e=>{
+ const del=e.target.dataset.del;
+ if(del){if(state.components.length<2)return toast('至少保留一个组件');
+  state.components=state.components.filter(c=>c.id!==del);cache.delete(del);
+  if(state.active===del)state.active=state.components[0].id;sel={};renderAll();setStatus('组件已删除');return;}
+ const li=e.target.closest('li[data-id]');if(li){state.active=li.dataset.id;sel={};renderAll();}};
+
+$('#addAxis').onclick=()=>{const n=$('#newAxis').value.trim();if(!n)return toast('请输入维度名');
+ comp().axes.push({id:uid(),name:n,values:[]});$('#newAxis').value='';afterStructural('已添加维度「'+n+'」');};
+
+$('#axes').onclick=e=>{
+ const d=e.target.dataset,c=comp();
+ if(d.delaxis){c.axes=c.axes.filter(a=>a.id!==d.delaxis);afterStructural('维度已删除');return;}
+ if(d.delval){const i=d.delval.indexOf('|'),ax=d.delval.slice(0,i),v=d.delval.slice(i+1);
+  const a=c.axes.find(x=>x.id===ax);if(!a)return;a.values=a.values.filter(x=>x!==v);
+  const vals=new Set([v]);
+  for(const con of c.constraints)if(con.a.value===v||con.b.value===v){vals.add(con.a.value);vals.add(con.b.value);}
+  afterConstraint('取值「'+v+'」已删除,引用它的约束已标记失效',[...vals]);return;}
+ if(d.addval){const inp=document.querySelector('input[data-newval="'+d.addval+'"]'),v=inp.value.trim();
+  if(!v)return toast('请输入取值');const a=c.axes.find(x=>x.id===d.addval);
+  if(a.values.includes(v))return toast('取值已存在');a.values.push(v);afterStructural('已添加取值「'+v+'」');return;}};
+
+$('#addCon').onclick=()=>{const c=comp();
+ if(!c.axes.length)return toast('请先添加维度');
+ const con={id:uid(),type:$('#cType').value,
+  a:{axis:$('#cAxisA').value,value:$('#cValA').value},
+  b:{axis:$('#cAxisB').value,value:$('#cValB').value},enabled:true};
+ if(!con.a.axis||!con.a.value||!con.b.axis||!con.b.value)return toast('请先为维度添加取值');
+ c.constraints.push(con);afterConstraint('约束已添加',[con.a.value,con.b.value]);};
+
+document.addEventListener('click',e=>{
+ const d=e.target.dataset||{};
+ if(d.toggle){const c=comp(),con=c.constraints.find(x=>x.id===d.toggle);if(!con)return;
+  con.enabled=!con.enabled;
+  afterConstraint('约束已'+(con.enabled?'启用':'停用')+',结论已重新收敛',[con.a.value,con.b.value]);return;}
+ if(d.delcon){const c=comp(),con=c.constraints.find(x=>x.id===d.delcon);if(con)c.constraints=c.constraints.filter(x=>x.id!==con.id);
+  afterConstraint('约束已删除',con?[con.a.value,con.b.value]:[]);return;}});
+
+$('#cAxisA').onchange=()=>fillVals('#cValA',$('#cAxisA').value);
+$('#cAxisB').onchange=()=>fillVals('#cValB',$('#cAxisB').value);
+
+$('#picker').onchange=e=>{const ax=e.target.dataset.axis;if(!ax)return;sel[ax]=e.target.value;renderVerdict();};
+
+$('#filters').onclick=e=>{
+ if(e.target.id==='reset'){if(confirm('确定重置为示例数据?')){state=seed();cache.clear();sel={};filter='all';renderAll();setStatus('已重置为示例数据');}return;}
+ const f=e.target.dataset.f;if(!f)return;filter=f;
+ document.querySelectorAll('#filters button[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+ renderTable();};
+
+renderAll();
+</script>
+</body>
+</html>
