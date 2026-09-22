@@ -1,0 +1,116 @@
+{
+ "groups": {
+  "g1": {
+   "id": "g1",
+   "name": "新客-AppPush",
+   "audience_key": "新客",
+   "definition": "近30天新注册且未下单",
+   "version": "v1",
+   "entrants": 1200,
+   "conversions": 96,
+   "period_start": "2026-08-01",
+   "period_end": "2026-08-31",
+   "source": "投放平台A"
+  },
+  "g2": {
+   "id": "g2",
+   "name": "老客-短信",
+   "audience_key": "老客",
+   "definition": "历史有单且90天未复购",
+   "version": "v1",
+   "entrants": 800,
+   "conversions": 88,
+   "period_start": "2026-08-01",
+   "period_end": "2026-08-31",
+   "source": "CRM"
+  },
+  "g3": {
+   "id": "g3",
+   "name": "新客-AppPush(宽口径)",
+   "audience_key": "新客",
+   "definition": "近60天新注册（含已下单）",
+   "version": "v2",
+   "entrants": 500,
+   "conversions": 60,
+   "period_start": "2026-08-15",
+   "period_end": "2026-09-15",
+   "source": "投放平台A"
+  },
+  "g4": {
+   "id": "g4",
+   "name": "对照-新客",
+   "audience_key": "新客",
+   "definition": "近30天新注册且未下单",
+   "version": "v1",
+   "entrants": 1500,
+   "conversions": 105,
+   "period_start": "2026-08-01",
+   "period_end": "2026-08-31",
+   "source": "投放平台A"
+  },
+  "g5": {
+   "id": "g5",
+   "name": "小众兴趣包",
+   "audience_key": "兴趣包",
+   "definition": "小众兴趣标签人群",
+   "version": "v1",
+   "entrants": 40,
+   "conversions": 6,
+   "period_start": "2026-08-01",
+   "period_end": "2026-08-31",
+   "source": "投放平台B"
+  }
+ },
+ "variants": {
+  "v6": {
+   "id": "v6",
+   "name": "变体A-优惠券",
+   "description": "满100减20券"
+  },
+  "v7": {
+   "id": "v7",
+   "name": "变体B-满减",
+   "description": "满200减50"
+  },
+  "v8": {
+   "id": "v8",
+   "name": "对照组",
+   "description": "不干预"
+  }
+ },
+ "memberships": [
+  {
+   "variant_id": "v6",
+   "group_id": "g1",
+   "status": "active"
+  },
+  {
+   "variant_id": "v6",
+   "group_id": "g2",
+   "status": "active"
+  },
+  {
+   "variant_id": "v6",
+   "group_id": "g3",
+   "status": "active"
+  },
+  {
+   "variant_id": "v7",
+   "group_id": "g3",
+   "status": "active"
+  },
+  {
+   "variant_id": "v7",
+   "group_id": "g5",
+   "status": "active"
+  },
+  {
+   "variant_id": "v8",
+   "group_id": "g4",
+   "status": "active"
+  }
+ ],
+ "resolutions": {},
+ "baseline_group": "g4",
+ "seq": 8
+}

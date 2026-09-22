@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>运营实验比较台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>运营实验比较台</h1>
+  <div id="consistency" class="badge"></div>
+  <button id="demoBtn" title="载入内置演示数据">载入演示数据</button>
+</header>
+
+<section id="baselineBar"></section>
+
+<main>
+  <div class="col">
+    <h2>受众分组</h2>
+    <form id="groupForm">
+      <input type="hidden" id="g_id">
+      <label>名称<input id="g_name" required></label>
+      <label>口径标识<input id="g_key" placeholder="如：新客"></label>
+      <label>口径版本<input id="g_version" value="v1"></label>
+      <label>口径描述<input id="g_def" placeholder="人群定义"></label>
+      <label>进入人数<input id="g_entrants" type="number" min="0" value="0"></label>
+      <label>转化人数<input id="g_conv" type="number" min="0" value="0"></label>
+      <label>观测开始<input id="g_start" type="date"></label>
+      <label>观测结束<input id="g_end" type="date"></label>
+      <label>来源<input id="g_source" placeholder="数据来源"></label>
+      <div class="row">
+        <button type="submit">保存分组</button>
+        <button type="button" id="g_reset">清空</button>
+      </div>
+    </form>
+    <div id="groupList"></div>
+  </div>
+
+  <div class="col">
+    <h2>策略变体</h2>
+    <form id="variantForm">
+      <label>变体名称<input id="v_name" required></label>
+      <label>策略说明<input id="v_desc"></label>
+      <button type="submit">新建变体</button>
+    </form>
+    <div id="variantList"></div>
+    <h2>冲突</h2>
+    <div id="conflictList"></div>
+  </div>
+
+  <div class="col">
+    <h2>效果结论</h2>
+    <div id="conclusionList"></div>
+  </div>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
