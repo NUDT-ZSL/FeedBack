@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地理围栏推演工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>地理围栏推演工具</h1>
+  <div class="toolbar">
+    <button id="btnPan" class="mode active">平移/编辑</button>
+    <button id="btnDraw" class="mode">绘制围栏</button>
+    <button id="btnImport">导入轨迹</button>
+    <button id="btnSample">加载示例</button>
+    <button id="btnReplay">重新推演</button>
+    <button id="btnClearTrack">清空轨迹</button>
+  </div>
+</header>
+<main>
+  <aside id="left">
+    <section>
+      <h2>围栏列表</h2>
+      <div id="fenceList"></div>
+      <div id="fenceEditor" class="hidden">
+        <h3>围栏配置</h3>
+        <label>名称 <input id="fName" type="text"></label>
+        <label>颜色 <input id="fColor" type="color"></label>
+        <label>优先级(小者优先) <input id="fPriority" type="number" value="1" min="0"></label>
+        <fieldset>
+          <legend>规则</legend>
+          <label><input id="rEnter" type="checkbox"> 进入事件</label>
+          <label><input id="rExit" type="checkbox"> 离开事件</label>
+          <label><input id="rDwell" type="checkbox"> 停留超时
+            <input id="rDwellSec" type="number" value="60" min="1"> 秒</label>
+          <label><input id="rOverspeed" type="checkbox"> 超速
+            <input id="rSpeed" type="number" value="50" min="1"> km/h</label>
+          <label>最小停留确认(防抖)
+            <input id="rMinDwell" type="number" value="5" min="0"> 秒</label>
+          <label>最小离开确认(防抖)
+            <input id="rMinExit" type="number" value="5" min="0"> 秒</label>
+        </fieldset>
+        <button id="btnDeleteFence" class="danger">删除围栏</button>
+      </div>
+    </section>
+    <section>
+      <h2>轨迹导入</h2>
+      <p class="hint">支持 CSV（time,lat,lng）或 JSON 数组，粘贴后点击导入。</p>
+      <textarea id="trackInput" rows="6" placeholder="2026-09-22T08:00:00Z,31.2304,121.4737"></textarea>
+      <input id="fileInput" type="file" accept=".csv,.json,.txt">
+      <div id="skippedBox" class="hidden">
+        <h3>已跳过的无效点</h3>
+        <ul id="skippedList"></ul>
+      </div>
+    </section>
+  </aside>
+  <section id="mapWrap">
+    <canvas id="map"></canvas>
+    <div id="mapHint"></div>
+  </section>
+  <aside id="right">
+    <h2>事件时间轴 <span id="eventCount"></span></h2>
+    <div id="timeline"></div>
+  </aside>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: #f4f6f8; color: #222; height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 16px; padding: 8px 16px;
+  background: #1f3a5f; color: #fff; }
+header h1 { font-size: 18px; margin: 0; }
+.toolbar button { margin-right: 6px; padding: 6px 12px; border: 1px solid #4a6a92;
+  background: #2c4f7c; color: #fff; border-radius: 4px; cursor: pointer; }
+.toolbar button:hover { background: #3a639a; }
+.toolbar button.active { background: #ffb020; color: #222; border-color: #ffb020; }
+main { flex: 1; display: flex; min-height: 0; }
+aside { width: 300px; overflow-y: auto; background: #fff; padding: 10px;
+  border-right: 1px solid #ddd; }
+#right { border-right: none; border-left: 1px solid #ddd; width: 340px; }
+aside h2 { font-size: 14px; margin: 8px 0; color: #1f3a5f; }
+aside h3 { font-size: 13px; margin: 8px 0 4px; }
+#mapWrap { flex: 1; position: relative; min-width: 0; }
+#map { width: 100%; height: 100%; display: block; background: #e8eef3; cursor: grab; }
+#map.drawing { cursor: crosshair; }
+#mapHint { position: absolute; left: 10px; bottom: 10px; background: rgba(0,0,0,.65);
+  color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; pointer-events: none; }
+label { display: block; margin: 6px 0; font-size: 13px; }
+input[type=text], input[type=number] { width: 90px; padding: 2px 4px; }
+input[type=text] { width: 100%; }
+fieldset { border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+textarea { width: 100%; font-family: Consolas, monospace; font-size: 12px; }
+button.danger { background: #c0392b; color: #fff; border: none; padding: 6px 12px;
+  border-radius: 4px; cursor: pointer; margin-top: 8px; }
+.fence-item { display: flex; align-items: center; gap: 6px; padding: 5px 6px;
+  border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 13px; }
+.fence-item.selected { border-color: #1f3a5f; background: #eaf1f9; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.hint { font-size: 12px; color: #777; }
+.hidden { display: none !important; }
+#skippedBox { margin-top: 8px; background: #fff6e5; border: 1px solid #f0c36d;
+  border-radius: 4px; padding: 6px; font-size: 12px; }
+#skippedList { margin: 4px 0; padding-left: 18px; max-height: 140px; overflow-y: auto; }
+.event { border-left: 4px solid #999; background: #fff; border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 6px; cursor: pointer; font-size: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.event:hover { background: #f0f6ff; }
+.event .head { display: flex; justify-content: space-between; font-weight: 600; }
+.event .reason { color: #555; margin-top: 3px; line-height: 1.4; }
+.event.enter { border-color: #2e9e4f; }
+.event.exit { border-color: #c0392b; }
+.event.dwell { border-color: #e67e22; }
+.event.overspeed { border-color: #8e44ad; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 8px; color: #fff;
+  font-size: 11px; }
+.badge.enter { background: #2e9e4f; } .badge.exit { background: #c0392b; }
+.badge.dwell { background: #e67e22; } .badge.overspeed { background: #8e44ad; }
+.suppressed { margin-top: 4px; padding: 4px 6px; background: #f3f3f3;
+  border-radius: 4px; color: #888; }
