@@ -1,0 +1,10 @@
+{
+  "name": "local-cargo-loading-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地交互式货物装载规划台",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}

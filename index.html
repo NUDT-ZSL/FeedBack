@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地交互式装载规划台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>交互式装载规划台</h1>
+      <p>容器最少化 · 关系约束 · 逐层承重校验 · 三维落点展示</p>
+    </div>
+    <div class="actions">
+      <button id="loadSample">载入示例</button>
+      <button id="importBtn">导入 JSON</button>
+      <button id="exportBtn">导出方案/数据</button>
+      <button id="replanBtn" class="primary">重新规划</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel data-panel">
+      <section>
+        <div class="section-title"><h2>容器</h2><button id="addContainer" class="small">新增</button></div>
+        <div id="containerEditor" class="editor"></div>
+      </section>
+      <section>
+        <div class="section-title"><h2>货物</h2><button id="addCargo" class="small">新增</button></div>
+        <div class="table-wrap"><table id="cargoTable"></table></div>
+      </section>
+      <section>
+        <div class="section-title"><h2>关系</h2><button id="addRelation" class="small">新增</button></div>
+        <div id="relationEditor" class="editor"></div>
+      </section>
+      <section class="settings">
+        <h2>求解设置</h2>
+        <label>最小支撑面积比例
+          <input id="supportRatio" type="number" min="0.5" max="1" step="0.05">
+        </label>
+      </section>
+    </aside>
+
+    <section class="panel workspace">
+      <div id="summary" class="summary"></div>
+      <div id="conflicts" class="conflicts"></div>
+      <div id="recommend"></div>
+      <div class="content-grid">
+        <div>
+          <h2>容器方案</h2>
+          <div id="binCards" class="bin-cards"></div>
+        </div>
+        <div id="binDetail" class="bin-detail"></div>
+      </div>
+    </section>
+  </main>
+  <script src="js/core.js"></script>
+  <script src="js/pack.js"></script>
+  <script src="js/planner.js"></script>
+  <script src="js/sample.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
