@@ -1,0 +1,17 @@
+{
+  "name": "delivery-adaptation-workbench",
+  "version": "1.0.0",
+  "description": "本地交互式设计素材渠道交付适配工作台",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "design-ops",
+    "crop",
+    "channel-specs",
+    "workbench"
+  ],
+  "license": "MIT"
+}
