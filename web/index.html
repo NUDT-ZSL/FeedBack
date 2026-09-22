@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>离线风格规范审查工具</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family:"Microsoft YaHei",sans-serif; font-size:14px; color:#222;
+       height:100vh; display:flex; flex-direction:column; }
+header { padding:8px 16px; background:#1f2937; color:#fff; display:flex; align-items:center; gap:12px; }
+header h1 { font-size:16px; margin:0; }
+header .stats { font-size:12px; color:#a5f3fc; }
+button { cursor:pointer; border:1px solid #cbd5e1; background:#fff; border-radius:4px; padding:4px 10px; }
+main { flex:1; display:flex; min-height:0; }
+#chapters { width:210px; border-right:1px solid #e2e8f0; overflow-y:auto; }
+#chapters .ch { padding:8px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9;
+                display:flex; justify-content:space-between; gap:6px; }
+#chapters .ch.active { background:#eff6ff; font-weight:bold; }
+.badge { background:#dc2626; color:#fff; border-radius:8px; font-size:11px; padding:0 6px; }
+.badge.ok { background:#16a34a; }
+#content { flex:1; overflow-y:auto; padding:16px 24px; }
+#content h2 { margin-top:0; }
+#doctext { white-space:pre-wrap; line-height:1.9; }
+.hl { background:#fde68a; border-bottom:2px solid #d97706; cursor:pointer; padding:0 1px; }
+.hl.multi { background:#fca5a5; border-bottom-color:#dc2626; }
+#evidence { border-top:1px solid #e2e8f0; margin-top:12px; padding-top:8px; }
+.ev { border:1px solid #e2e8f0; border-left:4px solid #d97706; margin:6px 0;
+      padding:6px 10px; border-radius:4px; background:#fffbeb; }
+.ev .r { font-weight:bold; }
+#rules { width:360px; border-left:1px solid #e2e8f0; overflow-y:auto; padding:10px; }
+.rule { border:1px solid #e2e8f0; border-radius:4px; margin-bottom:8px; padding:6px 8px; }
+.rule .head { display:flex; justify-content:space-between; gap:6px; }
+.st-pass { color:#16a34a; } .st-violation { color:#dc2626; } .st-untrusted { color:#d97706; }
+.reason { font-size:12px; color:#92400e; background:#fef3c7; padding:4px 6px;
+          border-radius:4px; margin-top:4px; }
+.vitem { font-size:12px; color:#7f1d1d; margin:2px 0; }
+#editor { display:none; position:fixed; top:5%; left:10%; right:10%; bottom:5%;
+          background:#fff; border:1px solid #94a3b8; box-shadow:0 8px 30px rgba(0,0,0,.3);
+          padding:12px; z-index:10; flex-direction:column; }
+#editor textarea { flex:1; font-family:Consolas,monospace; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>离线风格规范审查工具</h1>
+  <span class="stats" id="stats"></span>
+  <span style="flex:1"></span>
+  <button id="btnEdit">编辑规范</button>
+  <button id="btnReload">重新载入文档</button>
+</header>
+<main>
+  <div id="chapters"></div>
+  <div id="content">
+    <h2 id="chtitle"></h2>
+    <div id="doctext"></div>
+    <div id="evidence"></div>
+  </div>
+  <div id="rules"></div>
+</main>
+<div id="editor">
+  <p>编辑风格规范（JSON）。保存后仅重推受影响的章节结论，并自动与整体重推校验一致性。</p>
+  <textarea id="rulejson"></textarea>
+  <p style="text-align:right">
+    <span id="editerr" style="color:#dc2626"></span>
+    <button id="btnApply">应用修改</button>
+    <button id="btnCancel">取消</button>
+  </p>
+</div>
+<script>
+let STATE = null;
+let currentChapter = null;
+let currentEvidence = [];
+
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+async function loadState() {
+  const r = await fetch("/api/state");
+  STATE = await r.json();
+  if (!currentChapter || !STATE.chapters.find(c => c.id === currentChapter))
+    currentChapter = STATE.chapters.length ? STATE.chapters[0].id : null;
+  renderAll();
+}
+
+function chapterResults(cid) { return STATE.results.filter(r => r.chapter_id === cid); }
+
+function renderAll() { renderStats(); renderChapters(); renderContent(); renderRules(); }
+
+function renderStats() {
+  const s = STATE.stats;
+  document.getElementById("stats").textContent =
+    "本次重推 " + s.recomputed + " 项 · 复用缓存 " + s.reused + " 项 · " +
+    (STATE.consistent ? "与整体重推一致 ✓" : "与整体重推不一致 ✗");
+}
+
+function renderChapters() {
+  const el = document.getElementById("chapters");
+  el.innerHTML = "";
+  for (const c of STATE.chapters) {
+    const bad = chapterResults(c.id).filter(r => r.status === "violation").length;
+    const div = document.createElement("div");
+    div.className = "ch" + (c.id === currentChapter ? " active" : "");
+    div.innerHTML = "<span>" + esc(c.id) + " " + esc(c.title) + "</span>" +
+      (bad ? '<span class="badge">' + bad + "</span>" : '<span class="badge ok">✓</span>');
+    div.onclick = () => { currentChapter = c.id; renderAll(); };
+    el.appendChild(div);
+  }
+}
+
+function renderContent() {
+  const c = STATE.chapters.find(x => x.id === currentChapter);
+  document.getElementById("chtitle").textContent = c ? (c.id + " " + c.title) : "（文档无章节）";
+  const el = document.getElementById("doctext");
+  document.getElementById("evidence").innerHTML = "";
+  currentEvidence = [];
+  if (!c) { el.textContent = ""; return; }
+  // 收集本章全部违反位置；同一位置触发多条规范时全部保留
+  const spans = [];
+  for (const r of chapterResults(c.id))
+    for (const v of r.violations)
+      if (v.end > v.start) {
+        spans.push({ s: v.start, e: v.end, idx: currentEvidence.length });
+        currentEvidence.push({ rule: r.rule_id, v: v });
+      }
+  const bounds = new Set([0, c.text.length]);
+  spans.forEach(sp => { bounds.add(sp.s); bounds.add(sp.e); });
+  const pts = [...bounds].sort((a, b) => a - b);
+  let html = "";
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const seg = esc(c.text.slice(a, b));
+    const cover = spans.filter(sp => sp.s <= a && sp.e >= b);
+    if (!cover.length) { html += seg; continue; }
+    const idxs = cover.map(sp => sp.idx).join(",");
+    html += '<span class="hl' + (cover.length > 1 ? " multi" : "") +
+            '" data-idx="' + idxs + '">' + seg + "</span>";
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".hl").forEach(sp => {
+    sp.onclick = () => showEvidence(sp.dataset.idx.split(",").map(Number));
+  });
+}
+
+function showEvidence(idxs) {
+  const box = document.getElementById("evidence");
+  const ruleName = id => {
+    const r = STATE.rules.find(r => r.id === id);
+    return r ? (r.id + " " + (r.name || "")) : id;
+  };
+  box.innerHTML = "<b>该位置触发的全部规范依据（" + idxs.length + " 条）：</b>" +
+    idxs.map(i => {
+      const e = currentEvidence[i];
+      return '<div class="ev"><span class="r">' + esc(ruleName(e.rule)) + "</span>：" +
+        "命中「" + esc(e.v.matched) + "」 — " + esc(e.v.detail) + "<br>" +
+        "<small>章节：" + esc(e.v.chapter_title) + " · 上下文：" + esc(e.v.snippet) + "</small></div>";
+    }).join("");
+}
+function renderRules() {
+  const el = document.getElementById("rules");
+  const label = { pass: "✔ 符合", violation: "✘ 违反", untrusted: "⚠ 不可信" };
+  let html = "<h3>本章规范结论</h3>";
+  for (const r of chapterResults(currentChapter)) {
+    const rule = STATE.rules.find(x => x.id === r.rule_id) || {};
+    html += '<div class="rule"><div class="head"><b>' + esc(r.rule_id) + " " +
+      esc(rule.name || "") + '</b><span class="st-' + r.status + '">' +
+      label[r.status] + "</span></div>";
+    if (r.status === "untrusted")
+      html += '<div class="reason">' + esc(r.reason) + "</div>";
+    for (const v of (r.violations || []))
+      html += '<div class="vitem">▸ 「' + esc(v.matched || "(章节级)") + "」 " +
+              esc(v.snippet) + "</div>";
+    html += "</div>";
+  }
+  const missing = STATE.results.filter(r => !STATE.chapters.find(c => c.id === r.chapter_id));
+  if (missing.length) {
+    html += "<h3>不可信结论（规范目标缺失）</h3>";
+    for (const r of missing)
+      html += '<div class="rule"><div class="head"><b>' + esc(r.rule_id) +
+        '</b><span class="st-untrusted">⚠ 不可信</span></div><div class="reason">' +
+        esc(r.reason) + "</div></div>";
+  }
+  el.innerHTML = html;
+}
+
+document.getElementById("btnEdit").onclick = () => {
+  document.getElementById("rulejson").value = JSON.stringify({ rules: STATE.rules }, null, 2);
+  document.getElementById("editor").style.display = "flex";
+};
+document.getElementById("btnCancel").onclick = () =>
+  document.getElementById("editor").style.display = "none";
+document.getElementById("btnApply").onclick = async () => {
+  let payload;
+  try { payload = JSON.parse(document.getElementById("rulejson").value); }
+  catch (e) { document.getElementById("editerr").textContent = "JSON 解析失败：" + e.message; return; }
+  const r = await fetch("/api/rules", { method: "POST", body: JSON.stringify(payload) });
+  const data = await r.json();
+  if (data.error) { document.getElementById("editerr").textContent = data.error; return; }
+  STATE = data;
+  document.getElementById("editor").style.display = "none";
+  document.getElementById("editerr").textContent = "";
+  renderAll();
+};
+document.getElementById("btnReload").onclick = async () => {
+  const r = await fetch("/api/reload", { method: "POST" });
+  STATE = await r.json();
+  renderAll();
+};
+
+loadState();
+</script>
+</body>
+</html>

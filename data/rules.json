@@ -1,0 +1,74 @@
+{
+  "rules": [
+    {
+      "id": "T1",
+      "type": "terminology",
+      "name": "术语：用户",
+      "preferred": "用户",
+      "forbidden": [
+        "使用者",
+        "客户"
+      ]
+    },
+    {
+      "id": "T2",
+      "type": "terminology",
+      "name": "术语：界面",
+      "preferred": "界面",
+      "forbidden": [
+        "介面"
+      ]
+    },
+    {
+      "id": "O1",
+      "type": "tone",
+      "name": "语气：避免感叹号",
+      "pattern": "[！!]",
+      "description": "应保持客观中立的书面语气，避免使用感叹号"
+    },
+    {
+      "id": "O2",
+      "type": "tone",
+      "name": "语气：避免第一人称",
+      "pattern": "我们|咱们",
+      "description": "应使用客观陈述，避免第一人称口吻"
+    },
+    {
+      "id": "C1",
+      "type": "consistency",
+      "name": "一致性：称谓全文统一",
+      "canonical": "用户",
+      "variants": [
+        "使用者",
+        "客户"
+      ]
+    },
+    {
+      "id": "C2",
+      "type": "section_presence",
+      "name": "结构：每章须有小结",
+      "pattern": "小结"
+    },
+    {
+      "id": "T9",
+      "type": "terminology",
+      "name": "术语：附录用语（指向缺失章节）",
+      "preferred": "附录",
+      "forbidden": [
+        "附錄"
+      ],
+      "chapters": [
+        "ch9"
+      ]
+    },
+    {
+      "id": "C9",
+      "type": "consistency",
+      "name": "一致性：云同步称谓（目标不存在）",
+      "canonical": "云同步",
+      "variants": [
+        "云端同步"
+      ]
+    }
+  ]
+}
