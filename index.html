@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>配置发布推演台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.5 "Microsoft YaHei",sans-serif; background:#0f1420; color:#dde3f0; }
+  header { padding:10px 16px; background:#161d2e; border-bottom:1px solid #2a3350; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; color:#7fb4ff; }
+
+  .btn { background:#243b6b; color:#cfe0ff; border:1px solid #3a5a9f; border-radius:4px; padding:4px 10px; cursor:pointer; }
+  .btn:hover { background:#2f4c8a; }
+  .btn.warn { background:#6b3a23; border-color:#8a5a3f; }
+  .btn.gray { background:#2a2f3d; }
+  main { display:grid; grid-template-columns: 380px 340px 1fr; gap:10px; padding:10px; }
+  section { background:#161d2e; border:1px solid #2a3350; border-radius:6px; padding:10px; margin-bottom:10px; }
+  section h2 { font-size:13px; margin:0 0 8px; color:#9db8e8; border-bottom:1px solid #2a3350; padding-bottom:5px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { border:1px solid #2a3350; padding:3px 6px; text-align:left; vertical-align:top; }
+  th { background:#1c2540; color:#9db8e8; }
+  input,select { background:#0f1420; color:#dde3f0; border:1px solid #3a4560; border-radius:3px; padding:3px 5px; font-size:12px; }
+  input:focus { outline:1px solid #7fb4ff; }
+  .formrow { display:flex; gap:6px; margin-bottom:6px; flex-wrap:wrap; align-items:center; }
+  .formrow label { color:#8fa3c8; }
+  .tag { display:inline-block; padding:0 6px; border-radius:8px; font-size:11px; }
+  .tag.pub { background:#1d4d2b; color:#9fe6b0; }
+  .tag.draft { background:#3d3d2a; color:#e0d28a; }
+  .tag.wd { background:#4a2330; color:#f0a8b8; }
+  .cell { cursor:pointer; min-width:70px; }
+  .cell.conflict { background:#5a2a2a; }
+  .cell.adjud { background:#2a4a5a; }
+  .cell.none { color:#667; }
+  .ver { color:#8fd0ff; font-size:11px; }
+  .trust-ok { color:#9fe6b0; } .trust-bad { color:#ff9a9a; }
+  #log { max-height:220px; overflow:auto; font-size:12px; }
+  #log div { border-bottom:1px dashed #263050; padding:2px 0; }
+  .chain { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .chain .node { background:#1c2540; border:1px solid #35507f; border-radius:4px; padding:4px 10px; }
+  .chain .arrow { color:#7fb4ff; }
+  .cand { border:1px solid #35507f; border-radius:4px; padding:6px; margin:4px 0; background:#141b2c; }
+  .muted { color:#7787a8; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>配置发布推演台</h1>
+  <span>当前时刻（批次步进）:</span>
+  <input id="step" type="number" min="1" value="1" style="width:56px">
+  <button class="btn" onclick="setStep(1)">应用</button>
+  <button class="btn gray" onclick="loadSample()">载入示例</button>
+  <button class="btn gray" onclick="resetAll()">清空</button>
+  <span id="chainInfo" class="muted"></span>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>① 规则编辑区</h2>
+      <div class="formrow">
+        <label>键 <input id="rKey" style="width:90px" placeholder="feature.x"></label>
+        <label>值 <input id="rVal" style="width:70px" placeholder="on"></label>
+      </div>
+      <div class="formrow">
+        <label>作用范围 <input id="rScope" style="width:150px" placeholder="env=prod,region=cn"></label>
+      </div>
+      <div class="formrow">
+        <label>优先级 <input id="rPri" type="number" value="10" style="width:60px"></label>
+        <label>生效批次 <input id="rBatch" type="number" value="1" min="1" style="width:60px"></label>
+      </div>
+      <div class="formrow">
+        <button class="btn" onclick="addRule()">加入编辑区</button>
+        <span class="muted">规则先入编辑区(草稿)，发布后进入链路</span>
+      </div>
+      <table id="ruleTable"></table>
+    </section>
+    <section>
+      <h2>发布链路</h2>
+      <div class="chain" id="chain"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>② 目标清单</h2>
+      <div class="formrow">
+        <label>ID <input id="tId" style="width:56px" placeholder="T1"></label>
+        <label>批次 <input id="tBatch" type="number" value="1" min="1" style="width:52px"></label>
+        <label>就绪 <input id="tReady" type="checkbox" checked></label>
+      </div>
+      <div class="formrow">
+        <label>标签 <input id="tLabels" style="width:170px" placeholder="env=prod,region=cn"></label>
+        <button class="btn" onclick="addTarget()">添加目标</button>
+      </div>
+      <table id="targetTable"></table>
+    </section>
+    <section>
+      <h2>③ 批次可信度</h2>
+      <div id="trust"></div>
+    </section>
+    <section>
+      <h2>事件日志</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>④ 各目标生效版本（点击单元格查看候选与裁决）</h2>
+      <table id="matrix"></table>
+    </section>
+    <section id="detailSec" style="display:none">
+      <h2>候选详情 / 冲突裁决</h2>
+      <div id="detail"></div>
+    </section>
+  </div>
+</main>
+<script src="engine.js"></script>
+<script>/* ================= 状态 ================= */
+let state = { targets: [], rules: [], overrides: {} };
+let step = 1, versionSeq = 0, ruleSeq = 0, targetSeq = 0;
+let selected = null; // {targetId, key}
+const logs = [];
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logs.unshift('[' + t + '] ' + msg);
+  if (logs.length > 80) logs.pop();
+  renderLog();
+}
+function parseKV(s) {
+  const o = {};
+  (s || '').split(',').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+  });
+  return o;
+}
+function kvStr(o) {
+  return Object.keys(o).map(k => k + '=' + o[k]).join(',') || '(全部)';
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ================= 规则操作 ================= */
+function addRule() {
+  const key = document.getElementById('rKey').value.trim();
+  const val = document.getElementById('rVal').value;
+  if (!key) { alert('键不能为空'); return; }
+  ruleSeq++;
+  state.rules.push({ id: 'R' + ruleSeq, key: key, value: val,
+    scope: parseKV(document.getElementById('rScope').value),
+    priority: +document.getElementById('rPri').value || 0,
+    batch: Math.max(1, +document.getElementById('rBatch').value || 1),
+    status: 'draft', version: 0 });
+  log('规则 R' + ruleSeq + ' 进入编辑区（草稿）');
+  renderAll();
+}
+function publishRule(id) {
+  const r = state.rules.find(x => x.id === id);
+  r.status = 'published'; r.version = ++versionSeq;
+  log('发布 ' + id + '（版本 v' + r.version + '，键 ' + r.key + '，范围 ' + kvStr(r.scope) +
+      '，P=' + r.priority + '，批次 B' + r.batch + '）→ 进入发布链路');
+  renderAll();
+}
+function withdrawRule(id) {
+  const r = state.rules.find(x => x.id === id);
+  const affected = Engine.affectedTargets(state, r);
+  r.status = 'withdrawn';
+  const inc = Engine.incrementalDerive(state, step, affected);
+  // 清理失效裁决
+  Object.keys(state.overrides).forEach(k => { if (state.overrides[k] === id) delete state.overrides[k]; });
+  log('撤回 ' + id + '：仅增量重推受影响目标 [' + (affected.join(',') || '无') + ']，与整体重推' +
+      (inc.consistent ? '一致 ✓' : '不一致 ✗ (' + inc.diffs.join(',') + ')'));
+  renderAll();
+}
+function editScope(id) {
+  const r = state.rules.find(x => x.id === id);
+  const ns = prompt('新的作用范围（k=v，逗号分隔；空=全部）', kvStr(r.scope) === '(全部)' ? '' : kvStr(r.scope));
+  if (ns === null) return;
+  const oldScope = JSON.parse(JSON.stringify(r.scope));
+  const affected = Engine.affectedTargets(state, Object.assign({}, r, { scope: parseKV(ns) }), oldScope);
+  r.scope = parseKV(ns);
+  if (r.status === 'published') {
+    const inc = Engine.incrementalDerive(state, step, affected);
+    log('调整 ' + id + ' 作用范围 → ' + kvStr(r.scope) + '：增量重推 [' + (affected.join(',') || '无') +
+        ']，与整体重推' + (inc.consistent ? '一致 ✓' : '不一致 ✗'));
+  } else {
+    log('调整 ' + id + ' 作用范围 → ' + kvStr(r.scope));
+  }
+  renderAll();
+}
+function delRule(id) {
+  const r = state.rules.find(x => x.id === id);
+  if (r.status === 'published') { alert('已发布规则请先撤回再删除'); return; }
+  state.rules = state.rules.filter(x => x.id !== id);
+  log('删除规则 ' + id);
+  renderAll();
+}
+
+/* ================= 目标操作 ================= */
+function addTarget() {
+  const id = document.getElementById('tId').value.trim();
+  if (!id) { alert('目标 ID 不能为空'); return; }
+  if (state.targets.some(t => t.id === id)) { alert('目标 ID 已存在'); return; }
+  state.targets.push({ id: id,
+    batch: Math.max(1, +document.getElementById('tBatch').value || 1),
+    ready: document.getElementById('tReady').checked,
+    labels: parseKV(document.getElementById('tLabels').value) });
+  log('添加目标 ' + id);
+  renderAll();
+}
+function toggleReady(id) {
+  const t = state.targets.find(x => x.id === id);
+  t.ready = !t.ready;
+  log('目标 ' + id + (t.ready ? ' 已就绪' : ' 标记为未就绪 → 所在批次不可信'));
+  renderAll();
+}
+function delTarget(id) {
+  state.targets = state.targets.filter(x => x.id !== id);
+  Object.keys(state.overrides).forEach(k => { if (k.indexOf(id + '|') === 0) delete state.overrides[k]; });
+  log('删除目标 ' + id);
+  renderAll();
+}
+function setStep() {
+  step = Math.max(1, +document.getElementById('step').value || 1);
+  log('时刻推进到批次步进 ' + step + '，重新推导');
+  renderAll();
+}/* ================= 渲染 ================= */
+function renderRules() {
+  let h = '<tr><th>ID</th><th>键=值</th><th>范围</th><th>P</th><th>B</th><th>状态</th><th>操作</th></tr>';
+  state.rules.forEach(r => {
+    const st = r.status === 'published' ? '<span class="tag pub">已发布 v' + r.version + '</span>'
+      : r.status === 'draft' ? '<span class="tag draft">草稿</span>'
+      : '<span class="tag wd">已撤回</span>';
+    let ops = '';
+    if (r.status === 'draft') ops = '<button class="btn" onclick="publishRule(\'' + r.id + '\')">发布</button> ';
+    if (r.status === 'published') ops = '<button class="btn warn" onclick="withdrawRule(\'' + r.id + '\')">撤回</button> ';
+    ops += '<button class="btn gray" onclick="editScope(\'' + r.id + '\')">改范围</button> ';
+    ops += '<button class="btn gray" onclick="delRule(\'' + r.id + '\')">删</button>';
+    h += '<tr><td>' + r.id + '</td><td>' + esc(r.key) + '=' + esc(r.value) + '</td><td>' + esc(kvStr(r.scope)) +
+         '</td><td>' + r.priority + '</td><td>' + r.batch + '</td><td>' + st + '</td><td>' + ops + '</td></tr>';
+  });
+  document.getElementById('ruleTable').innerHTML = h;
+}
+function renderTargets() {
+  let h = '<tr><th>ID</th><th>批次</th><th>就绪</th><th>标签</th><th></th></tr>';
+  state.targets.forEach(t => {
+    h += '<tr><td>' + esc(t.id) + '</td><td>B' + t.batch + '</td><td>' +
+      '<input type="checkbox" ' + (t.ready ? 'checked' : '') + ' onclick="toggleReady(\'' + esc(t.id) + '\')"></td><td>' +
+      esc(kvStr(t.labels)) + '</td><td><button class="btn gray" onclick="delTarget(\'' + esc(t.id) + '\')">删</button></td></tr>';
+  });
+  document.getElementById('targetTable').innerHTML = h;
+}
+function renderChain(d) {
+  const drafts = state.rules.filter(r => r.status === 'draft').length;
+  const pubs = state.rules.filter(r => r.status === 'published').length;
+  const wds = state.rules.filter(r => r.status === 'withdrawn').length;
+  let conflicts = 0;
+  Object.values(d.results).forEach(keys => Object.values(keys).forEach(c => { if (c.conflict) conflicts++; }));
+  const badBatches = d.trust.filter(t => t.reached && !t.trusted).length;
+  document.getElementById('chain').innerHTML =
+    '<span class="node">编辑区 草稿 ' + drafts + '</span><span class="arrow">→</span>' +
+    '<span class="node">已发布 ' + pubs + '</span><span class="arrow">→</span>' +
+    '<span class="node">范围匹配/分批生效 (步进 ' + step + ')</span><span class="arrow">→</span>' +
+    '<span class="node" style="color:' + (conflicts ? '#ff9a9a' : '#9fe6b0') + '">冲突 ' + conflicts + '</span>' +
+    '<span class="node" style="color:' + (badBatches ? '#ff9a9a' : '#9fe6b0') + '">不可信批次 ' + badBatches + '</span>' +
+    '<span class="node">已撤回 ' + wds + '</span>';
+}
+function renderTrust(d) {
+  let h = '';
+  d.trust.forEach(t => {
+    const cls = t.trusted ? 'trust-ok' : 'trust-bad';
+    const mark = t.trusted ? '✓ 可信' : '✗ 不可信';
+    h += '<div class="' + cls + '">批次 B' + t.batch + (t.reached ? '' : '（未到）') + '：' + mark + '</div>';
+    t.problems.forEach(p => { h += '<div class="trust-bad" style="padding-left:14px">· ' + esc(p) + '</div>'; });
+  });
+  document.getElementById('trust').innerHTML = h || '<span class="muted">暂无批次</span>';
+}
+function renderMatrix(d) {
+  let h = '<tr><th>目标</th>' + d.keys.map(k => '<th>' + esc(k) + '</th>').join('') + '</tr>';
+  state.targets.forEach(t => {
+    h += '<tr><td>' + esc(t.id) + ' <span class="muted">B' + t.batch + (t.ready ? '' : ' 未就绪') + '</span></td>';
+    d.keys.forEach(k => {
+      const c = (d.results[t.id] || {})[k];
+      if (!c) { h += '<td class="cell none">—</td>'; return; }
+      const cls = c.conflict ? 'cell conflict' : c.adjudicated ? 'cell adjud' : 'cell';
+      let body;
+      if (c.conflict) body = '⚠ 冲突(' + c.candidates.length + ')';
+      else if (c.effective) body = esc(c.effective.value) + ' <span class="ver">v' + c.effective.version + (c.adjudicated ? ' 裁决' : '') + '</span>';
+      else body = '<span class="none">—</span>';
+      h += '<td class="' + cls + '" onclick="selectCell(\'' + esc(t.id) + '\',\'' + esc(k) + '\')">' + body + '</td>';
+    });
+    h += '</tr>';
+  });
+  document.getElementById('matrix').innerHTML = h;
+}
+function renderLog() {
+  document.getElementById('log').innerHTML = logs.map(esc).map(s => '<div>' + s + '</div>').join('');
+}
+function renderAll() {
+  const d = Engine.deriveAll(state, step);
+  renderRules(); renderTargets(); renderChain(d); renderTrust(d); renderMatrix(d);
+  if (selected) renderDetail(d);
+}/* ================= 候选详情与裁决 ================= */
+function selectCell(tid, key) {
+  selected = { targetId: tid, key: key };
+  renderAll();
+}
+function renderDetail(d) {
+  const sec = document.getElementById('detailSec');
+  const c = (d.results[selected.targetId] || {})[selected.key];
+  if (!c) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  const t = state.targets.find(x => x.id === selected.targetId);
+  let h = '<div><b>' + esc(selected.targetId) + '</b>（标签 ' + esc(kvStr(t.labels)) + '，批次 B' + t.batch +
+          '）键 <b>' + esc(selected.key) + '</b> @ 步进 ' + step + '</div>';
+  h += '<div class="muted">依据：' + esc(c.reason) + '</div>';
+  if (c.candidates.length === 0) { h += '<div class="muted">无候选规则</div>'; }
+  c.candidates.forEach(rid => {
+    const r = state.rules.find(x => x.id === rid);
+    const isEff = c.effective && c.effective.ruleId === rid;
+    h += '<div class="cand">' +
+      '<b>' + rid + '</b> v' + r.version + '　值=<b>' + esc(r.value) + '</b>　P=' + r.priority +
+      '　批次 B' + r.batch + '　范围 ' + esc(kvStr(r.scope)) +
+      (isEff ? ' <span class="tag pub">当前生效</span>' : '') +
+      ' <button class="btn" onclick="adjudicate(\'' + rid + '\')">裁决选定</button></div>';
+  });
+  if (state.overrides[selected.targetId + '|' + selected.key]) {
+    h += '<button class="btn gray" onclick="clearAdjud()">清除裁决（恢复自动推导）</button>';
+  }
+  document.getElementById('detail').innerHTML = h;
+}
+function adjudicate(rid) {
+  state.overrides[selected.targetId + '|' + selected.key] = rid;
+  log('用户裁决：' + selected.targetId + ' / ' + selected.key + ' → ' + rid);
+  renderAll();
+}
+function clearAdjud() {
+  delete state.overrides[selected.targetId + '|' + selected.key];
+  log('清除裁决：' + selected.targetId + ' / ' + selected.key + '，恢复自动推导');
+  renderAll();
+}
+
+/* ================= 示例与初始化 ================= */
+function loadSample() {
+  state = {
+    targets: [
+      { id: 'T1', batch: 1, ready: true,  labels: { env: 'prod', region: 'cn' } },
+      { id: 'T2', batch: 1, ready: false, labels: { env: 'prod', region: 'us' } },
+      { id: 'T3', batch: 2, ready: true,  labels: { env: 'stg',  region: 'cn' } },
+      { id: 'T4', batch: 2, ready: true,  labels: { env: 'prod', region: 'cn' } }
+    ],
+    rules: [
+      { id: 'R1', key: 'feature.x', value: 'on',  scope: { env: 'prod' },  priority: 10, batch: 1, status: 'published', version: 1 },
+      { id: 'R2', key: 'feature.x', value: 'off', scope: { region: 'us' }, priority: 20, batch: 1, status: 'published', version: 2 },
+      { id: 'R3', key: 'feature.x', value: 'tie', scope: { env: 'prod' },  priority: 10, batch: 1, status: 'published', version: 3 },
+      { id: 'R4', key: 'feature.y', value: 'a',   scope: {},               priority: 5,  batch: 2, status: 'published', version: 4 },
+      { id: 'R5', key: 'feature.z', value: '1',   scope: { env: 'ghost' }, priority: 5,  batch: 2, status: 'published', version: 5 },
+      { id: 'R6', key: 'feature.y', value: 'b',   scope: { env: 'stg' },   priority: 7,  batch: 2, status: 'draft',     version: 0 }
+    ],
+    overrides: {}
+  };
+  ruleSeq = 6; targetSeq = 4; versionSeq = 5; step = 2; selected = null;
+  document.getElementById('step').value = 2;
+  log('载入示例：R1/R3 在 T1 上并列冲突待裁决；T2 未就绪使 B1 不可信；R5 范围指向缺失使 B2 不可信');
+  renderAll();
+}
+function resetAll() {
+  state = { targets: [], rules: [], overrides: {} };
+  ruleSeq = 0; targetSeq = 0; versionSeq = 0; step = 1; selected = null;
+  document.getElementById('step').value = 1;
+  log('已清空');
+  renderAll();
+}
+loadSample();
+</script>
+</body>
+</html>
