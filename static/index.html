@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>离线笔记 · 断网编辑 / 重连同步 / 冲突解决</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>离线笔记</h1>
+  <div class="net">
+    <span id="netDot" class="dot on"></span>
+    <span id="netLabel">在线</span>
+    <label class="switch">
+      <input type="checkbox" id="netToggle" checked>
+      <span>模拟网络</span>
+    </label>
+    <button id="syncNowBtn">立即同步</button>
+  </div>
+</header>
+<main>
+  <aside id="left">
+    <button id="newNoteBtn">＋ 新建笔记</button>
+    <ul id="noteList"></ul>
+  </aside>
+  <section id="editor">
+    <div id="editorEmpty" class="empty">请选择或新建一条笔记</div>
+    <div id="editorBody" hidden>
+      <input id="noteTitle" placeholder="标题">
+      <textarea id="noteContent" placeholder="正文，断网时也可以编辑"></textarea>
+      <div class="editorBar">
+        <span id="noteMeta"></span>
+        <button id="serverEditBtn" title="模拟另一个客户端在服务端改了这条笔记">模拟服务端被他人修改</button>
+        <button id="deleteBtn" class="danger">删除</button>
+      </div>
+    </div>
+  </section>
+  <aside id="right">
+    <h2>待提交队列 <span id="queueCount"></span></h2>
+    <ul id="queueList"></ul>
+    <h2>冲突 <span id="conflictCount"></span></h2>
+    <ul id="conflictList"></ul>
+    <h2>同步日志</h2>
+    <ul id="logList"></ul>
+  </aside>
+</main>
+<div id="conflictPanel" hidden>
+  <div class="panel">
+    <h2>冲突详情</h2>
+    <p id="conflictReason" class="reason"></p>
+    <div class="diffCols">
+      <div>
+        <h3 id="localHead">本地版本</h3>
+        <div id="diffLocal" class="diffBox"></div>
+      </div>
+      <div>
+        <h3 id="serverHead">服务端版本</h3>
+        <div id="diffServer" class="diffBox"></div>
+      </div>
+    </div>
+    <div id="mergeArea" hidden>
+      <h3>手动合并结果</h3>
+      <input id="mergeTitle">
+      <textarea id="mergeContent" rows="8"></textarea>
+    </div>
+    <div class="panelBtns">
+      <button id="keepLocalBtn">保留本地</button>
+      <button id="keepServerBtn">保留服务端</button>
+      <button id="mergeBtn">手动合并</button>
+      <button id="mergeSubmitBtn" hidden>提交合并结果</button>
+      <button id="closePanelBtn" class="ghost">稍后处理</button>
+    </div>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
