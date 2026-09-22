@@ -1,0 +1,4 @@
+id,name,quantity,release,deadline,priority,depends_on,allowed_devices
+T1,粗加工批次,175,06:00,12:30,1,,CNC-01;CNC-02
+T2,精加工与装配,135,07:00,18:00,2,T1,CNC-01;CNC-02;ASM-01
+T3,成品包装,110,08:00,20:00,2,T2,PKG-01;ASM-01

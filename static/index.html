@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>车间一日调度推演</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>车间一日调度推演</h1>
+      <p>导入设备与任务后，直接调整时间轴上的启停、档位和工作窗口。</p>
+    </div>
+    <div class="imports">
+      <label>设备 CSV<input id="devicesFile" type="file" accept=".csv,text/csv"></label>
+      <label>任务 CSV<input id="tasksFile" type="file" accept=".csv,text/csv"></label>
+      <label>过渡 CSV<input id="transitionsFile" type="file" accept=".csv,text/csv"></label>
+      <button id="resetBtn" type="button">恢复样例</button>
+      <button id="exportBtn" type="button">导出方案 CSV</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" id="cards"></section>
+
+    <section class="panel conflict-panel" id="conflictPanel" hidden>
+      <div class="panel-title">
+        <h2>截止冲突</h2>
+        <button id="useAlternativeBtn" type="button">查看/采用下方替代安排</button>
+      </div>
+      <div id="conflictList"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>实时功率与电费曲线</h2>
+        <div class="legend">
+          <span><i class="power"></i>功率 kW</span>
+          <span><i class="cost"></i>电费 元/5分钟</span>
+        </div>
+      </div>
+      <canvas id="chart" width="1200" height="240"></canvas>
+      <div id="hoverInfo" class="hover-info">移动到曲线上查看时段明细</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>设备时间轴</h2>
+        <p>点击生产块可改档位、启停时间或删除；空白处按下方设备面板新增。</p>
+      </div>
+      <div class="timeline-wrap">
+        <div id="timelineHours" class="timeline-hours"></div>
+        <div id="timeline" class="timeline"></div>
+      </div>
+    </section>
+
+    <section class="grid-two">
+      <section class="panel">
+        <h2>设备面板</h2>
+        <div id="devicePanels"></div>
+      </section>
+      <section class="panel">
+        <h2>任务与依赖</h2>
+        <div id="taskTable"></div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>新增手动安排</h2>
+        <p>手动安排会锁定；调度器只补齐剩余产量，并自动保留过渡时间。</p>
+      </div>
+      <div class="editor-grid">
+        <label>任务<select id="editTask"></select></label>
+        <label>设备<select id="editDevice"></select></label>
+        <label>档位<select id="editMode"></select></label>
+        <label>启动<input id="editStart" type="time" value="09:00" step="300"></label>
+        <label>停止<input id="editEnd" type="time" value="10:00" step="300"></label>
+        <button id="addEditBtn" type="button">锁定此安排</button>
+      </div>
+    </section>
+
+    <section class="panel" id="alternativePanel" hidden>
+      <h2>仍可交付的替代安排</h2>
+      <p id="alternativeNote"></p>
+      <div id="alternativeSummary"></div>
+    </section>
+  </main>
+
+  <dialog id="segmentDialog">
+    <form method="dialog" class="segment-form">
+      <h2>调整生产块</h2>
+      <p id="segmentMeta"></p>
+      <label>档位<select id="dialogMode"></select></label>
+      <label>启动<input id="dialogStart" type="time" step="300"></label>
+      <label>停止<input id="dialogEnd" type="time" step="300"></label>
+      <div class="dialog-actions">
+        <button value="cancel">取消</button>
+        <button id="deleteSegmentBtn" value="delete" type="button">删除手动块</button>
+        <button id="saveSegmentBtn" value="save" type="button">保存调整</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

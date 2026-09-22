@@ -1,0 +1,5 @@
+id,name,modes,shift_start,shift_end,max_run_slots,maintenance_window
+CNC-01,一号加工中心,"LOW:8,12;HIGH:15,22",06:00,22:00,150,12:00-13:00
+CNC-02,二号加工中心,"LOW:7,10;HIGH:14,20",07:00,21:00,120,
+ASM-01,装配台 A,"LOW:5,10;FAST:11,18",06:30,20:00,96,15:00-15:30
+PKG-01,包装线,"LOW:4,14;HIGH:8,26",08:00,22:00,100,
