@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>分段上传与转换</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<h1>大文件分段上传与后台转换</h1>
+
+<section class="card">
+  <input type="file" id="fileInput">
+  <button id="startBtn">开始上传</button>
+  <button id="pauseBtn" disabled>暂停</button>
+  <button id="resumeBtn" disabled>继续</button>
+  <span id="sessionInfo"></span>
+</section>
+
+<section class="card">
+  <h2>上传进度 <span id="uploadPct"></span></h2>
+  <div class="bar"><div id="uploadBar" class="fill"></div></div>
+  <div id="chunkGrid" class="grid"></div>
+  <div id="chunkMsg" class="msg"></div>
+</section>
+
+<section class="card">
+  <h2>转换阶段 <span id="convStatus"></span></h2>
+  <div class="bar"><div id="convBar" class="fill conv"></div></div>
+  <div>
+    <button id="resumeConvBtn" disabled>从失败点恢复转换</button>
+    <input id="failIdx" type="number" min="0" placeholder="分段号" style="width:80px">
+    <button id="failAtBtn" title="演示用：让转换在指定分段失败">模拟转换失败</button>
+    <a id="downloadLink" href="#" style="display:none">下载结果文件</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>状态变化记录</h2>
+  <ul id="eventLog" class="log"></ul>
+</section>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

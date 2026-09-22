@@ -1,0 +1,24 @@
+body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 900px;
+       margin: 24px auto; padding: 0 16px; color: #222; }
+h1 { font-size: 22px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px;
+        margin-bottom: 16px; background: #fff; }
+.bar { height: 14px; background: #eee; border-radius: 7px; overflow: hidden;
+       margin: 8px 0; }
+.fill { height: 100%; width: 0; background: #3b82f6; transition: width .2s; }
+.fill.conv { background: #10b981; }
+.grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.cell { width: 34px; height: 26px; border-radius: 4px; font-size: 11px;
+        display: flex; align-items: center; justify-content: center;
+        background: #e5e7eb; color: #555; cursor: default; }
+.cell.uploading { background: #bfdbfe; }
+.cell.done { background: #86efac; color: #14532d; }
+.cell.failed { background: #fca5a5; color: #7f1d1d; cursor: pointer; }
+.msg { color: #b91c1c; font-size: 13px; margin-top: 6px; min-height: 18px; }
+.log { max-height: 220px; overflow-y: auto; font-size: 13px; padding-left: 18px; }
+.log li { margin: 2px 0; }
+.log .error { color: #b91c1c; }
+button { padding: 5px 12px; margin: 2px; }
+#sessionInfo { margin-left: 10px; color: #666; font-size: 13px; }
+#downloadLink { margin-left: 10px; font-weight: bold; color: #047857; }
