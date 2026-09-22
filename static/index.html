@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>批注锚点重映射</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #24292f; }
+  header { background: #2d333b; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .meta { font-size: 12px; color: #9da7b3; }
+  header button { margin-left: auto; }
+  main { display: flex; gap: 16px; padding: 16px 24px; align-items: flex-start; }
+  .panel { background: #fff; border: 1px solid #d8dde3; border-radius: 8px; }
+  #doc-panel { flex: 1.4; padding: 20px 24px; min-width: 0; }
+  #side-panel { flex: 1; padding: 16px; min-width: 0; }
+  #document { white-space: pre-wrap; line-height: 2.1; font-size: 15px; }
+  .hl { border-radius: 3px; padding: 1px 0; cursor: pointer; border-bottom: 2px solid transparent; }
+  .hl.resolved { background: #d3f9d8; border-bottom-color: #2f9e44; }
+  .hl.pending { background: #fff3bf; border-bottom-color: #f08c00; }
+  .hl.selected { outline: 2px solid #4c6ef5; }
+  .legend { font-size: 12px; color: #666; margin-bottom: 10px; display: flex; gap: 14px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+  .legend .l-resolved::before { background: #d3f9d8; border: 1px solid #2f9e44; }
+  .legend .l-pending::before { background: #fff3bf; border: 1px solid #f08c00; }
+  .legend .l-invalid::before { background: #ffe3e3; border: 1px solid #c92a2a; }
+  .comment-card { border: 1px solid #e1e5ea; border-left: 4px solid #adb5bd; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; cursor: pointer; font-size: 13px; }
+  .comment-card.resolved { border-left-color: #2f9e44; }
+  .comment-card.pending { border-left-color: #f08c00; }
+  .comment-card.invalid { border-left-color: #c92a2a; opacity: .75; }
+  .comment-card.selected { box-shadow: 0 0 0 2px #4c6ef5; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; color: #fff; }
+  .badge.resolved { background: #2f9e44; }
+  .badge.pending { background: #f08c00; }
+  .badge.invalid { background: #c92a2a; }
+  .quote { background: #f1f3f5; border-radius: 4px; padding: 4px 8px; margin: 6px 0; font-size: 12px; color: #495057; }
+  .quote del { color: #c92a2a; }
+  .card-actions { margin-top: 8px; display: none; gap: 8px; }
+  .comment-card.pending.selected .card-actions { display: flex; }
+  button { border: 1px solid #ced4da; background: #fff; border-radius: 5px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  button.primary { background: #4c6ef5; border-color: #4c6ef5; color: #fff; }
+  button.danger { color: #c92a2a; border-color: #c92a2a; }
+  button:hover { filter: brightness(.95); }
+  #edit-panel { margin: 0 24px 16px; padding: 14px 16px; font-size: 13px; }
+  #edit-panel form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #edit-panel input, #edit-panel select { padding: 4px 8px; border: 1px solid #ced4da; border-radius: 5px; font-size: 13px; }
+  #edit-panel input[type=number] { width: 80px; }
+  #edit-panel input[name=text] { width: 260px; }
+  .hint { color: #868e96; font-size: 12px; margin-top: 6px; }
+  #error { color: #c92a2a; font-size: 12px; margin-top: 6px; min-height: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>批注锚点重映射演示</h1>
+  <span class="meta" id="edit-count"></span>
+  <button onclick="resetAll()">重置场景</button>
+</header>
+<main>
+  <div class="panel" id="doc-panel">
+    <div class="legend">
+      <span class="l-resolved">已解决</span>
+      <span class="l-pending">待确认</span>
+      <span class="l-invalid">失效（不再高亮）</span>
+    </div>
+    <div id="document"></div>
+  </div>
+  <div class="panel" id="side-panel">
+    <h3 style="margin-top:0">批注列表</h3>
+    <div id="comments"></div>
+  </div>
+</main>
+<div class="panel" id="edit-panel">
+  <b>追加编辑操作</b>（位置基于上方最新文档的字符偏移）
+  <form id="edit-form">
+    <select name="kind">
+      <option value="insert">插入</option>
+      <option value="delete">删除</option>
+      <option value="replace">替换</option>
+    </select>
+    位置 <input type="number" name="pos" min="0" value="0" required>
+    长度 <input type="number" name="length" min="0" value="0">
+    文本 <input type="text" name="text" placeholder="插入/替换的文本">
+    <button type="submit" class="primary">应用编辑</button>
+  </form>
+  <div class="hint">删除/替换操作会用到“长度”；插入操作忽略长度。应用后所有批注位置会自动重映射。</div>
+  <div id="error"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
