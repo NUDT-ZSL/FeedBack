@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多渠道反馈分流台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>多渠道反馈分流台</h1>
+  <div class="actions">
+    <button id="btn-import" class="primary">导入反馈</button>
+    <button id="btn-sample">载入示例数据</button>
+    <button id="btn-reset" class="danger">清空数据</button>
+  </div>
+</header>
+
+<section id="summary"></section>
+
+<main>
+  <section id="board"></section>
+  <aside>
+    <h2>裁定与操作记录</h2>
+    <ul id="audit"></ul>
+  </aside>
+</main>
+
+<dialog id="import-dialog">
+  <h3>导入反馈条目</h3>
+  <p class="hint">每行一条 JSON，字段：source（来源）、text（原始文本，必填）、feature（涉及功能点）、reported_at（报告时间，ISO 格式，可省略）。</p>
+  <textarea id="import-text" rows="10" placeholder='{"source":"工单","feature":"数据导出","text":"导出报表时系统崩溃","reported_at":"2026-09-22T09:00:00+08:00"}'></textarea>
+  <div class="dialog-actions">
+    <button id="import-submit" class="primary">导入</button>
+    <button id="import-cancel">取消</button>
+  </div>
+  <p id="import-error" class="error"></p>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

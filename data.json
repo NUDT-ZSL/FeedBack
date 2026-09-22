@@ -1,0 +1,412 @@
+{
+ "items": {
+  "fb-f39c2c47": {
+   "id": "fb-f39c2c47",
+   "source": "工单",
+   "text": "导出报表时系统崩溃，数据丢失，无法使用，请尽快处理",
+   "feature": "数据导出",
+   "reported_at": "2026-09-22T03:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-f0ac8714": {
+   "id": "fb-f0ac8714",
+   "source": "社区",
+   "text": "导出报表直接闪退报错，希望尽快修复导出功能",
+   "feature": "数据导出",
+   "reported_at": "2026-09-21T02:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-8c4d73fa": {
+   "id": "fb-8c4d73fa",
+   "source": "客服记录",
+   "text": "客户反馈导出报表失败，报错提示文件生成异常",
+   "feature": "数据导出",
+   "reported_at": "2026-09-20T06:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-dd4ac1aa": {
+   "id": "fb-dd4ac1aa",
+   "source": "社区",
+   "text": "希望保留深色模式的自动切换，很好用很方便",
+   "feature": "深色模式",
+   "reported_at": "2026-09-21T22:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-b3976387": {
+   "id": "fb-b3976387",
+   "source": "工单",
+   "text": "建议去掉深色模式自动切换，很难用，经常闪眼睛",
+   "feature": "深色模式",
+   "reported_at": "2026-09-21T12:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-6613ec8b": {
+   "id": "fb-6613ec8b",
+   "source": "客服记录",
+   "text": "有用户希望关闭深色模式自动切换，也有用户希望保留，反馈不一致",
+   "feature": "深色模式",
+   "reported_at": "2026-09-21T06:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-61a6a35b": {
+   "id": "fb-61a6a35b",
+   "source": "工单",
+   "text": "建议消息通知默认开启，太安静了容易错过工单",
+   "feature": "消息通知",
+   "reported_at": "2026-09-22T05:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-53913a4f": {
+   "id": "fb-53913a4f",
+   "source": "社区",
+   "text": "能不能优化一下通知设置，希望增加免打扰时段",
+   "feature": "消息通知",
+   "reported_at": "2026-09-19T10:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-aea6d0be": {
+   "id": "fb-aea6d0be",
+   "source": "客服记录",
+   "text": "用户担心账号存在安全风险，建议加强二次验证",
+   "feature": "账号安全",
+   "reported_at": "2026-09-22T06:56:02+08:00",
+   "imported_at": "2026-09-22T08:56:02+08:00"
+  },
+  "fb-acab73bc": {
+   "id": "fb-acab73bc",
+   "source": "工单",
+   "text": "导出报表又崩溃了，客户数据丢失严重",
+   "feature": "数据导出",
+   "reported_at": "2026-09-22T10:00:00+08:00",
+   "imported_at": "2026-09-22T08:56:33+08:00"
+  }
+ },
+ "demands": {
+  "dm-66cbc582": {
+   "id": "dm-66cbc582",
+   "title": "导出报表时系统崩溃，数据丢失，无法使用，请尽快处理",
+   "feature": "数据导出",
+   "status": "needs_reconfirm",
+   "items": [
+    "fb-f39c2c47",
+    "fb-f0ac8714",
+    "fb-8c4d73fa",
+    "fb-acab73bc"
+   ],
+   "merge_rationales": [
+    {
+     "item_id": "fb-f0ac8714",
+     "similarity": 0.371,
+     "shared_terms": [
+      "导出",
+      "出导",
+      "出报",
+      "数据",
+      "据导",
+      "报表"
+     ],
+     "matched_feature": "数据导出",
+     "confirmed": null,
+     "time": "2026-09-22T08:56:02+08:00"
+    },
+    {
+     "item_id": "fb-8c4d73fa",
+     "similarity": 0.354,
+     "shared_terms": [
+      "导出",
+      "出报",
+      "报错",
+      "数据",
+      "据导",
+      "报表"
+     ],
+     "matched_feature": "数据导出",
+     "confirmed": null,
+     "time": "2026-09-22T08:56:02+08:00"
+    },
+    {
+     "item_id": "fb-acab73bc",
+     "similarity": 0.457,
+     "shared_terms": [
+      "丢失",
+      "导出",
+      "出导",
+      "出报",
+      "数据",
+      "据丢"
+     ],
+     "matched_feature": "数据导出",
+     "confirmed": null,
+     "time": "2026-09-22T08:56:33+08:00"
+    }
+   ],
+   "contradictions": [],
+   "adjudication": null,
+   "adjudication_history": [
+    {
+     "disposition": "立即修复",
+     "priority": "P0",
+     "note": "核心流程崩溃",
+     "operator": "张三",
+     "time": "2026-09-22T08:56:32+08:00",
+     "basis_item_ids": [
+      "fb-f39c2c47",
+      "fb-f0ac8714",
+      "fb-8c4d73fa"
+     ],
+     "invalidated_at": "2026-09-22T08:56:33+08:00",
+     "invalidated_by_item": "fb-acab73bc"
+    }
+   ],
+   "created_at": "2026-09-22T08:56:02+08:00"
+  },
+  "dm-ea1c31e3": {
+   "id": "dm-ea1c31e3",
+   "title": "希望保留深色模式的自动切换，很好用很方便",
+   "feature": "深色模式",
+   "status": "pending",
+   "items": [
+    "fb-dd4ac1aa",
+    "fb-b3976387",
+    "fb-6613ec8b"
+   ],
+   "merge_rationales": [
+    {
+     "item_id": "fb-b3976387",
+     "similarity": 0.435,
+     "shared_terms": [
+      "，很",
+      "色模",
+      "动切",
+      "换，",
+      "深色",
+      "切换"
+     ],
+     "matched_feature": "深色模式",
+     "confirmed": true,
+     "time": "2026-09-22T08:56:02+08:00"
+    },
+    {
+     "item_id": "fb-6613ec8b",
+     "similarity": 0.478,
+     "shared_terms": [
+      "色模",
+      "希望",
+      "动切",
+      "切换",
+      "换，",
+      "深色"
+     ],
+     "matched_feature": "深色模式",
+     "confirmed": null,
+     "time": "2026-09-22T08:56:02+08:00"
+    }
+   ],
+   "contradictions": [
+    {
+     "item_a": "fb-dd4ac1aa",
+     "text_a": "希望保留深色模式的自动切换，很好用很方便",
+     "item_b": "fb-b3976387",
+     "text_b": "建议去掉深色模式自动切换，很难用，经常闪眼睛",
+     "claim_a": "保留、好用、很方便",
+     "claim_b": "去掉、难用",
+     "id": "ct-c612887c",
+     "status": "resolved",
+     "resolution": {
+      "note": "保留双方反馈，灰度验证后决定",
+      "operator": "李四",
+      "time": "2026-09-22T08:56:50+08:00"
+     },
+     "detected_at": "2026-09-22T08:56:02+08:00"
+    },
+    {
+     "item_a": "fb-b3976387",
+     "text_a": "建议去掉深色模式自动切换，很难用，经常闪眼睛",
+     "item_b": "fb-6613ec8b",
+     "text_b": "有用户希望关闭深色模式自动切换，也有用户希望保留，反馈不一致",
+     "claim_a": "去掉",
+     "claim_b": "保留",
+     "id": "ct-2396c830",
+     "status": "pending",
+     "resolution": null,
+     "detected_at": "2026-09-22T08:56:02+08:00"
+    }
+   ],
+   "adjudication": null,
+   "adjudication_history": [],
+   "created_at": "2026-09-22T08:56:02+08:00"
+  },
+  "dm-ed2512e8": {
+   "id": "dm-ed2512e8",
+   "title": "建议消息通知默认开启，太安静了容易错过工单",
+   "feature": "消息通知",
+   "status": "pending",
+   "items": [
+    "fb-61a6a35b"
+   ],
+   "merge_rationales": [],
+   "contradictions": [],
+   "adjudication": null,
+   "adjudication_history": [],
+   "created_at": "2026-09-22T08:56:02+08:00"
+  },
+  "dm-50dc4ae5": {
+   "id": "dm-50dc4ae5",
+   "title": "能不能优化一下通知设置，希望增加免打扰时段",
+   "feature": "消息通知",
+   "status": "pending",
+   "items": [
+    "fb-53913a4f"
+   ],
+   "merge_rationales": [],
+   "contradictions": [],
+   "adjudication": null,
+   "adjudication_history": [],
+   "created_at": "2026-09-22T08:56:02+08:00"
+  },
+  "dm-87d0201a": {
+   "id": "dm-87d0201a",
+   "title": "用户担心账号存在安全风险，建议加强二次验证",
+   "feature": "账号安全",
+   "status": "pending",
+   "items": [
+    "fb-aea6d0be"
+   ],
+   "merge_rationales": [],
+   "contradictions": [],
+   "adjudication": null,
+   "adjudication_history": [],
+   "created_at": "2026-09-22T08:56:02+08:00"
+  }
+ },
+ "audit_log": [
+  {
+   "id": "log-bf29de1e",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "创建诉求",
+   "demand_id": "dm-66cbc582",
+   "detail": "首条反馈 fb-f39c2c47（工单）",
+   "operator": "system"
+  },
+  {
+   "id": "log-9c5c6f00",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "归并反馈",
+   "demand_id": "dm-66cbc582",
+   "detail": "反馈 fb-f0ac8714 以相似度 0.371 并入",
+   "operator": "system"
+  },
+  {
+   "id": "log-5448e433",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "归并反馈",
+   "demand_id": "dm-66cbc582",
+   "detail": "反馈 fb-8c4d73fa 以相似度 0.354 并入",
+   "operator": "system"
+  },
+  {
+   "id": "log-1e758ad4",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "创建诉求",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "首条反馈 fb-dd4ac1aa（社区）",
+   "operator": "system"
+  },
+  {
+   "id": "log-f14be8da",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "发现矛盾",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "「保留、好用、很方便」 vs 「去掉、难用」，双方均已保留，待裁定",
+   "operator": "system"
+  },
+  {
+   "id": "log-cffb05b2",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "归并反馈",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "反馈 fb-b3976387 以相似度 0.435 并入",
+   "operator": "system"
+  },
+  {
+   "id": "log-78d09b6d",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "发现矛盾",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "「保留、好用、很方便」 vs 「去掉、难用」，双方均已保留，待裁定",
+   "operator": "system"
+  },
+  {
+   "id": "log-a3edb1e0",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "发现矛盾",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "「去掉」 vs 「保留」，双方均已保留，待裁定",
+   "operator": "system"
+  },
+  {
+   "id": "log-cc62a71b",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "归并反馈",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "反馈 fb-6613ec8b 以相似度 0.478 并入",
+   "operator": "system"
+  },
+  {
+   "id": "log-b1156dcf",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "创建诉求",
+   "demand_id": "dm-ed2512e8",
+   "detail": "首条反馈 fb-61a6a35b（工单）",
+   "operator": "system"
+  },
+  {
+   "id": "log-2093db61",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "创建诉求",
+   "demand_id": "dm-50dc4ae5",
+   "detail": "首条反馈 fb-53913a4f（社区）",
+   "operator": "system"
+  },
+  {
+   "id": "log-40fa5957",
+   "time": "2026-09-22T08:56:02+08:00",
+   "action": "创建诉求",
+   "demand_id": "dm-87d0201a",
+   "detail": "首条反馈 fb-aea6d0be（客服记录）",
+   "operator": "system"
+  },
+  {
+   "id": "log-90644f8f",
+   "time": "2026-09-22T08:56:32+08:00",
+   "action": "裁定诉求",
+   "demand_id": "dm-66cbc582",
+   "detail": "去向「立即修复」优先级「P0」：核心流程崩溃",
+   "operator": "张三"
+  },
+  {
+   "id": "log-d7f876ed",
+   "time": "2026-09-22T08:56:33+08:00",
+   "action": "判定依据变化",
+   "demand_id": "dm-66cbc582",
+   "detail": "新反馈 fb-acab73bc（工单）并入，原裁定「立即修复/P0」已失效，需重新确认",
+   "operator": "system"
+  },
+  {
+   "id": "log-455b368e",
+   "time": "2026-09-22T08:56:50+08:00",
+   "action": "裁定矛盾",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "矛盾「保留、好用、很方便」vs「去掉、难用」：保留双方反馈，灰度验证后决定（双方表述均保留）",
+   "operator": "李四"
+  },
+  {
+   "id": "log-c5826507",
+   "time": "2026-09-22T08:56:50+08:00",
+   "action": "确认归并",
+   "demand_id": "dm-ea1c31e3",
+   "detail": "确认反馈 fb-b3976387 属于本诉求",
+   "operator": "李四"
+  }
+ ]
+}
