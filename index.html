@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>小队战术规划系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#14181f;color:#dfe6ee;font:13px/1.5 "Microsoft YaHei",sans-serif}
+header{padding:8px 16px;background:#1c2330;border-bottom:1px solid #2c3648;display:flex;align-items:center;gap:16px}
+header h1{font-size:16px;color:#7fc4ff}
+header span{color:#8b98ab}
+#app{display:flex;gap:12px;padding:12px}
+#left{flex:0 0 auto}
+canvas{background:#0d1117;border:1px solid #2c3648;border-radius:6px;display:block}
+#controls{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{background:#24304a;color:#cfe0f5;border:1px solid #3a4a6b;border-radius:4px;padding:5px 12px;cursor:pointer}
+button:hover{background:#2f3f61}
+button.warn{background:#4a2b24;border-color:#6b3a3a}
+select,input[type=range]{accent-color:#7fc4ff}
+#legend{margin-top:6px;color:#8b98ab;font-size:12px}
+#right{flex:1;min-width:380px;display:flex;flex-direction:column;gap:10px}
+section{background:#1a212d;border:1px solid #2c3648;border-radius:6px;padding:8px 10px}
+section h2{font-size:13px;color:#7fc4ff;margin-bottom:6px}
+.wrow{display:flex;align-items:center;gap:8px;margin:2px 0}
+.wrow label{width:90px;color:#9fb0c8}
+.card{border:1px solid #2c3648;border-radius:5px;padding:6px 8px;margin:4px 0;cursor:pointer}
+.card.sel{border-color:#7fc4ff;background:#20293a}
+.card.dead{opacity:.45}
+.bar{height:6px;background:#2a3342;border-radius:3px;overflow:hidden;margin:2px 0}
+.bar>i{display:block;height:100%}
+.hp>i{background:#5fc26e}.ap>i{background:#7fc4ff}
+.muted{color:#8b98ab}.tag{display:inline-block;background:#24304a;border-radius:3px;padding:0 6px;margin-right:4px;font-size:11px}
+.tag.manual{background:#4a3a1c}.tag.fail{background:#4a2424}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:3px 6px;border-bottom:1px solid #26303f;text-align:right}
+th:first-child,td:first-child{text-align:left}
+tr.cur{background:#22314a}
+.steps li{list-style:none;padding:1px 0}
+.steps .done{color:#5fc26e}.steps .now{color:#ffd479}.steps .todo{color:#8b98ab}
+#logs,#fails{max-height:130px;overflow:auto;font-size:12px}
+#logs div,#fails div{padding:1px 0;border-bottom:1px dashed #232c3a}
+#fails div{color:#e08c8c}
+.reason{background:#16202e;border-left:3px solid #7fc4ff;padding:4px 8px;margin:4px 0;color:#b9cbe0}
+#banner{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);background:#1c2330ee;border:2px solid #7fc4ff;border-radius:8px;padding:18px 40px;font-size:20px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<header><h1>小队战术规划系统</h1><span>候选计划生成 · 评分择优 · 环境变化重规划 · 失败回退 · 人工干预</span></header>
+<div id="app">
+ <div id="left">
+  <canvas id="map" width="720" height="480"></canvas>
+  <div id="controls">
+   <button id="btnRun">▶ 开始</button>
+   <button id="btnStep">单步</button>
+   <select id="speed"><option value="900">慢速</option><option value="500" selected>中速</option><option value="200">快速</option></select>
+   <button id="btnEnemy" class="warn">模拟:敌人移动</button>
+   <button id="btnWall" class="warn">模拟:出现障碍</button>
+   <button id="btnUnwall">模拟:清除障碍</button>
+   <label class="muted"><input type="checkbox" id="chkVision" checked> 视野迷雾</label>
+  </div>
+  <div id="legend">蓝圈=我方(点击选中) 红圈=敌人 灰块=墙体 斜纹=掩体 绿区=撤离点 | 选中角色后点击格子可手动下达移动指令</div>
+ </div>
+ <div id="right">
+  <section id="weightsSec"><h2>目标优先级(调整会触发重规划)</h2>
+   <div class="wrow"><label>消灭敌人</label><input type="range" id="wElim" min="0" max="100" value="50"><span id="wElimV">0.50</span></div>
+   <div class="wrow"><label>抵达撤离点</label><input type="range" id="wObj" min="0" max="100" value="30"><span id="wObjV">0.30</span></div>
+   <div class="wrow"><label>保全生命</label><input type="range" id="wSurv" min="0" max="100" value="20"><span id="wSurvV">0.20</span></div>
+  </section>
+  <section><h2>角色状态</h2><div id="squad"></div></section>
+  <section><h2>当前计划与选择理由</h2><div id="planDetail" class="muted">点击左侧角色查看</div></section>
+  <section><h2>候选计划对比</h2><div id="cands" class="muted">—</div></section>
+  <section><h2>重规划日志</h2><div id="logs"></div></section>
+  <section><h2>失败记录</h2><div id="fails"></div></section>
+ </div>
+</div>
+<div id="banner"></div>
+<script src="js/engine.js"></script>
+<script src="js/planner.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
