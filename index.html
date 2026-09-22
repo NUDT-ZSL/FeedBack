@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>决策回放 · Decision Replay</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>决策回放</h1>
+  <span class="subtitle">记录依据 · 追踪演变 · 复盘判断</span>
+</header>
+<main class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <h2>决策列表</h2>
+      <button id="btn-new-decision" class="btn primary">+ 新建决策</button>
+    </div>
+    <ul id="decision-list" class="decision-list"></ul>
+  </aside>
+  <section id="detail" class="detail">
+    <div class="empty-hint">请选择或新建一个决策</div>
+  </section>
+</main>
+
+<dialog id="dlg-decision">
+  <form method="dialog" id="form-decision">
+    <h3>新建决策</h3>
+    <label>决策标题<input id="inp-dec-title" required placeholder="例如：是否接受 A 公司的 offer"></label>
+    <label>决策背景（可选）<textarea id="inp-dec-context" rows="2"></textarea></label>
+    <menu>
+      <button value="cancel" class="btn">取消</button>
+      <button value="ok" class="btn primary">创建</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-option">
+  <form method="dialog" id="form-option">
+    <h3>添加选项</h3>
+    <label>选项名称<input id="inp-opt-name" required placeholder="例如：接受 offer"></label>
+    <menu>
+      <button value="cancel" class="btn">取消</button>
+      <button value="ok" class="btn primary">添加</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-rationale">
+  <form method="dialog" id="form-rationale">
+    <h3>添加依据</h3>
+    <label>依据内容<input id="inp-rat-text" required placeholder="例如：薪资比现职高 30%"></label>
+    <label>方向
+      <select id="inp-rat-dir">
+        <option value="1">支持该选项 (+)</option>
+        <option value="-1">反对该选项 (−)</option>
+      </select>
+    </label>
+    <label>主观权重 (1-10)<input id="inp-rat-weight" type="number" min="1" max="10" value="5" required></label>
+    <label>半衰期（天，权重随时间衰减）<input id="inp-rat-half" type="number" min="1" value="30" required></label>
+    <menu>
+      <button value="cancel" class="btn">取消</button>
+      <button value="ok" class="btn primary">添加</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-info">
+  <form method="dialog" id="form-info">
+    <h3>追加新信息</h3>
+    <label>信息内容<input id="inp-info-text" required placeholder="例如：猎头透露该岗位半年后可能裁员"></label>
+    <label>挂载到选项<select id="inp-info-option"></select></label>
+    <label>作用方式
+      <select id="inp-info-mode">
+        <option value="new">作为新依据加入</option>
+        <option value="boost">强化已有依据</option>
+        <option value="contradict">推翻已有依据（使其失效）</option>
+      </select>
+    </label>
+    <div id="info-target-wrap" style="display:none">
+      <label>目标依据<select id="inp-info-target"></select></label>
+    </div>
+    <div id="info-new-fields">
+      <label>方向
+        <select id="inp-info-dir">
+          <option value="1">支持 (+)</option>
+          <option value="-1">反对 (−)</option>
+        </select>
+      </label>
+      <label>权重 (1-10)<input id="inp-info-weight" type="number" min="1" max="10" value="5"></label>
+    </div>
+    <div id="info-boost-fields" style="display:none">
+      <label>权重增量<input id="inp-info-delta" type="number" min="1" max="10" value="2"></label>
+    </div>
+    <menu>
+      <button value="cancel" class="btn">取消</button>
+      <button value="ok" class="btn primary">追加并重算</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-compare" class="wide">
+  <h3>演变对比</h3>
+  <div id="compare-body"></div>
+  <menu><button class="btn" onclick="document.getElementById('dlg-compare').close()">关闭</button></menu>
+</dialog>
+
+<script src="model.js"></script>
+<script src="views.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
