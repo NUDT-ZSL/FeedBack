@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>决策回放 · Decision Replay</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --line:#e3e6ea; --ink:#1f2733; --sub:#6b7686;
+    --accent:#2f6fed; --accent-soft:#e8f0fe; --good:#1a9e5c; --bad:#d64545;
+    --warn:#d98e04; --frozen:#8a6d3b; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:17px;margin:0}
+  header .tag{font-size:12px;color:var(--sub)}
+  main{display:flex;gap:14px;padding:14px 20px;align-items:flex-start}
+  #sidebar{width:270px;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  #sidebar h2{font-size:13px;color:var(--sub);margin:2px 0 10px;text-transform:uppercase;letter-spacing:.5px}
+  .dec-item{padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:6px;border:1px solid transparent}
+  .dec-item:hover{background:#f2f5fa}
+  .dec-item.active{background:var(--accent-soft);border-color:var(--accent)}
+  .dec-item .t{font-weight:600}
+  .dec-item .m{font-size:12px;color:var(--sub);margin-top:2px}
+  #detail{flex:1;min-width:0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+  .panel h3{margin:0 0 10px;font-size:15px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+  button:hover{background:#f2f5fa}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#265ecf}
+  button.danger{color:var(--bad);border-color:#f0c8c8}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .opt-card{border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:10px}
+  .opt-card.executed{border-color:var(--good);background:#f4fbf7}
+  .opt-card.abandoned{border-color:#d8c9a3;background:#fbf8ef}
+  .opt-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .opt-head .name{font-weight:600;font-size:15px}
+  .score{font-weight:700;font-size:15px;padding:2px 10px;border-radius:14px;background:var(--accent-soft);color:var(--accent)}
+  .score.pos{background:#e5f6ec;color:var(--good)}
+  .score.neg{background:#fdeaea;color:var(--bad)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:#eef1f5;color:var(--sub)}
+  .badge.exec{background:#e5f6ec;color:var(--good)}
+  .badge.aban{background:#f5ecd7;color:var(--frozen)}
+  table.ev{width:100%;border-collapse:collapse;margin-top:8px}
+  table.ev th,table.ev td{border-top:1px solid var(--line);padding:6px 8px;text-align:left;font-size:13px;vertical-align:top}
+  table.ev th{color:var(--sub);font-weight:600;border-top:none}
+  tr.dead td{color:#a8b0bb;text-decoration:line-through}
+  tr.dead td .reason{text-decoration:none}
+  .wbar{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle}
+  .wbar.neg{background:var(--bad)}
+  .reason{font-size:11px;color:var(--warn)}
+  .muted{color:var(--sub);font-size:12px}
+  .delta-up{color:var(--good);font-weight:600}
+  .delta-down{color:var(--bad);font-weight:600}
+  .snap-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .snap-item .head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .inv-list{font-size:12px;color:var(--warn);margin-top:4px}
+  .chart-wrap{overflow-x:auto}
+  svg.chart{background:#fbfcfe;border:1px solid var(--line);border-radius:8px}
+  .legend span{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:12px}
+  .legend i{width:12px;height:3px;display:inline-block;border-radius:2px}
+  .dom-change{font-size:12px;margin-top:6px}
+  .empty{color:var(--sub);text-align:center;padding:30px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}main{flex-direction:column}#sidebar{width:100%}}
+</style>
+</head>
+<body>
+<header>
+  <h1>决策回放</h1>
+  <span class="tag">记录判断依据 · 追踪权重演变 · 复盘每个选择</span>
+</header>
+<main>
+  <div id="sidebar">
+    <h2>决策列表</h2>
+    <div id="decList"></div>
+    <button class="primary" style="width:100%" onclick="ui.newDecision()">＋ 新建决策</button>
+  </div>
+  <div id="detail"></div>
+</main>
+<script>"use strict";
+/* ============ 数据层 ============ */
+const LS_KEY = "decisionReplay.v1";
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+const DAY = 86400000;
+const now = () => Date.now();
+const fmtTime = ts => new Date(ts).toLocaleString("zh-CN", { hour12: false });
+const fmtDate = ts => new Date(ts).toLocaleDateString("zh-CN");
+
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn("load failed", e); }
+  return { decisions: [], currentId: null, view: "detail" };
+}
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+function getDecision(id) { return state.decisions.find(d => d.id === id); }
+function getOption(dec, oid) { return dec.options.find(o => o.id === oid); }
+function getEvidence(dec, eid) {
+  for (const o of dec.options) {
+    const e = o.evidence.find(x => x.id === eid);
+    if (e) return e;
+  }
+  return null;
+}
+
+/* ============ 评分引擎 ============ */
+// 依据有效权重 = 主观权重 × 时间衰减(半衰期)。衰减系数低于阈值视为失效。
+const DECAY_FLOOR = 0.2;
+
+function decayFactor(ev, at) {
+  const ageDays = Math.max(0, (at - ev.createdAt) / DAY);
+  const hl = ev.halfLifeDays > 0 ? ev.halfLifeDays : 30;
+  return Math.pow(0.5, ageDays / hl);
+}
+function effWeight(ev, at) {
+  if (!ev.active) return 0;
+  return ev.weight * decayFactor(ev, at);
+}
+function scoreOption(opt, at) {
+  if (opt.status !== "open" && opt.frozenScore != null) return opt.frozenScore;
+  return opt.evidence.reduce((s, e) => s + effWeight(e, at), 0);
+}
+function scoreDecision(dec, at) {
+  const r = {};
+  dec.options.forEach(o => { r[o.id] = scoreOption(o, at); });
+  return r;
+}
+// 主导依据：当前有效权重绝对值最大的一条
+function dominantEvidence(opt, at) {
+  let best = null, bestAbs = 0;
+  opt.evidence.forEach(e => {
+    const w = effWeight(e, at);
+    if (Math.abs(w) > bestAbs) { bestAbs = Math.abs(w); best = e; }
+  });
+  return best ? { ev: best, w: bestAbs } : null;
+}
+
+/* 重算：把衰减到阈值以下的活跃依据标记为失效，生成快照，保留旧结论 */
+function recalc(dec, label) {
+  const at = now();
+  const invalidated = [];
+  dec.options.forEach(o => {
+    if (o.status !== "open") return; // 已执行/放弃的选项冻结，不参与重算
+    o.evidence.forEach(e => {
+      if (!e.active) return;
+      if (decayFactor(e, at) < DECAY_FLOOR) {
+        e.active = false;
+        e.inactiveReason = "权重随时间衰减至阈值以下";
+        e.inactiveAt = at;
+        invalidated.push({ evId: e.id, text: e.text, reason: e.inactiveReason });
+      }
+    });
+  });
+  const scores = scoreDecision(dec, at);
+  const dom = {};
+  dec.options.forEach(o => {
+    const d = dominantEvidence(o, at);
+    dom[o.id] = d ? { evId: d.ev.id, text: d.ev.text, w: +d.w.toFixed(2) } : null;
+  });
+  const snap = {
+    id: uid(), at, label: label || ("重算 " + fmtTime(at)),
+    scores: Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, +v.toFixed(2)])),
+    dominant: dom, invalidated
+  };
+  dec.snapshots.push(snap);
+  return snap;
+}
+
+/* ============ 操作 ============ */
+function addDecision(title, note) {
+  const d = { id: uid(), title, note: note || "", createdAt: now(), options: [], snapshots: [] };
+  state.decisions.unshift(d);
+  state.currentId = d.id;
+  save(); render();
+}
+function addOption(dec, name) {
+  dec.options.push({ id: uid(), name, status: "open", frozenScore: null, frozenAt: null, evidence: [] });
+  save(); render();
+}
+function addEvidence(dec, oid, text, weight, halfLifeDays, supersedeId) {
+  const opt = getOption(dec, oid);
+  if (!opt || opt.status !== "open") return;
+  if (supersedeId) {
+    const old = getEvidence(dec, supersedeId);
+    if (old) {
+      old.active = false;
+      old.inactiveReason = "被新信息覆盖";
+      old.inactiveAt = now();
+      old.supersededBy = null;
+    }
+  }
+  const ev = {
+    id: uid(), text, weight: +weight, halfLifeDays: +halfLifeDays || 30,
+    createdAt: now(), active: true, inactiveReason: null, inactiveAt: null, supersededBy: null
+  };
+  if (supersedeId) {
+    const old = getEvidence(dec, supersedeId);
+    if (old) old.supersededBy = ev.id;
+  }
+  opt.evidence.push(ev);
+  save(); render();
+}
+function invalidateEvidence(dec, eid, reason) {
+  const e = getEvidence(dec, eid);
+  if (e && e.active) {
+    e.active = false;
+    e.inactiveReason = reason || "手动标记失效";
+    e.inactiveAt = now();
+    save(); render();
+  }
+}
+function setOptionStatus(dec, oid, status) {
+  const o = getOption(dec, oid);
+  if (!o || o.status !== "open") return;
+  o.status = status; // executed | abandoned
+  o.frozenAt = now();
+  o.frozenScore = +scoreOption(o, now()).toFixed(2);
+  save(); render();
+}
+function reopenOption(dec, oid) {
+  const o = getOption(dec, oid);
+  if (!o) return;
+  o.status = "open"; o.frozenScore = null; o.frozenAt = null;
+  save(); render();
+}
+function deleteDecision(id) {
+  state.decisions = state.decisions.filter(d => d.id !== id);
+  if (state.currentId === id) state.currentId = state.decisions[0] ? state.decisions[0].id : null;
+  save(); render();
+}/* ============ 交互入口 ============ */
+const ui = {
+  newDecision() {
+    const title = prompt("决策名称（例如：是否换工作）");
+    if (!title) return;
+    const note = prompt("背景说明（可留空）") || "";
+    addDecision(title.trim(), note.trim());
+  },
+  addOption(decId) {
+    const name = prompt("选项名称（例如：留在现公司 / 接受新offer）");
+    if (!name) return;
+    addOption(getDecision(decId), name.trim());
+  },
+  addEvidence(decId, oid) {
+    const text = prompt("依据 / 新信息内容（例如：新offer薪资高30%）");
+    if (!text) return;
+    const w = parseFloat(prompt("主观权重（-10 ~ +10，正数支持该选项，负数反对）", "3"));
+    if (isNaN(w)) return alert("权重必须是数字");
+    const hl = parseFloat(prompt("半衰期（天）：权重多久衰减一半，默认30", "30")) || 30;
+    const dec = getDecision(decId);
+    const opt = getOption(dec, oid);
+    let sup = null;
+    if (opt.evidence.some(e => e.active)) {
+      const list = opt.evidence.filter(e => e.active)
+        .map((e, i) => (i + 1) + ". " + e.text).join("\n");
+      const pick = prompt("若此信息推翻了某条旧依据，输入其编号覆盖之；否则留空：\n" + list);
+      if (pick) {
+        const idx = parseInt(pick, 10) - 1;
+        const actives = opt.evidence.filter(e => e.active);
+        if (actives[idx]) sup = actives[idx].id;
+      }
+    }
+    addEvidence(dec, oid, text.trim(), w, hl, sup);
+  },
+  invalidate(decId, eid) {
+    const reason = prompt("失效原因（例如：该信息来源被证伪）", "手动标记失效");
+    if (reason === null) return;
+    invalidateEvidence(getDecision(decId), eid, reason);
+  },
+  recalc(decId) {
+    const label = prompt("本次重算备注（可留空）", "");
+    if (label === null) return;
+    const dec = getDecision(decId);
+    recalc(dec, label.trim());
+    save(); state.view = "detail"; render();
+  },
+  freeze(decId, oid, status) {
+    const word = status === "executed" ? "已执行" : "已放弃";
+    if (!confirm("将该选项标记为「" + word + "」？其评估值将冻结，不再参与后续重算。")) return;
+    setOptionStatus(getDecision(decId), oid, status);
+  },
+  reopen(decId, oid) {
+    if (!confirm("恢复该选项为「评估中」？它将重新参与重算。")) return;
+    reopenOption(getDecision(decId), oid);
+  },
+  delDecision(decId) {
+    if (!confirm("删除整个决策及其全部历史？此操作不可恢复。")) return;
+    deleteDecision(decId);
+  },
+  delSnapshot(decId, sid) {
+    const dec = getDecision(decId);
+    dec.snapshots = dec.snapshots.filter(s => s.id !== sid);
+    save(); render();
+  },
+  show(view) { state.view = view; save(); render(); }
+};
+
+/* ============ 渲染 ============ */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const PALETTE = ["#2f6fed", "#1a9e5c", "#d98e04", "#9b51e0", "#d64545", "#0e9aa7", "#e0629b"];
+
+function render() {
+  renderSidebar();
+  renderDetail();
+}
+
+function renderSidebar() {
+  const el = document.getElementById("decList");
+  if (!state.decisions.length) {
+    el.innerHTML = '<div class="empty">还没有决策<br>点击下方按钮开始记录</div>';
+    return;
+  }
+  el.innerHTML = state.decisions.map(d => {
+    const open = d.options.filter(o => o.status === "open").length;
+    return '<div class="dec-item' + (d.id === state.currentId ? " active" : "") + '" onclick="state.currentId=\'' + d.id + '\';save();render()">' +
+      '<div class="t">' + esc(d.title) + "</div>" +
+      '<div class="m">' + d.options.length + " 个选项（" + open + " 个评估中）· " + d.snapshots.length + " 次重算</div>" +
+      '<div class="m">' + fmtDate(d.createdAt) + "</div></div>";
+  }).join("");
+}
+
+function renderDetail() {
+  const el = document.getElementById("detail");
+  const dec = getDecision(state.currentId);
+  if (!dec) {
+    el.innerHTML = '<div class="panel empty">从左侧选择一个决策，或新建一个决策开始记录判断过程。</div>';
+    return;
+  }
+  let h = "";
+  // 头部 + 操作栏
+  h += '<div class="panel"><div class="row" style="justify-content:space-between">' +
+    '<div><h3 style="margin-bottom:4px">' + esc(dec.title) + "</h3>" +
+    (dec.note ? '<div class="muted">' + esc(dec.note) + "</div>" : "") +
+    '<div class="muted">创建于 ' + fmtTime(dec.createdAt) + "</div></div>" +
+    '<div class="row">' +
+    '<button onclick="ui.addOption(\'' + dec.id + '\')">＋ 添加选项</button>' +
+    '<button class="primary" onclick="ui.recalc(\'' + dec.id + '\')" ' + (dec.options.length ? "" : "disabled") + '>⟳ 重算并快照</button>' +
+    '<button onclick="ui.show(\'' + (state.view === "compare" ? "detail" : "compare") + '\')" ' + (dec.snapshots.length ? "" : "disabled") + ">" +
+    (state.view === "compare" ? "返回详情" : "⇄ 对比视图") + "</button>" +
+    '<button class="danger" onclick="ui.delDecision(\'' + dec.id + '\')">删除</button>' +
+    "</div></div></div>";
+  if (state.view === "compare") {
+    h += renderCompare(dec);
+  } else {
+    h += renderOptions(dec) + renderSnapshots(dec);
+  }
+  el.innerHTML = h;
+}function renderOptions(dec) {
+  if (!dec.options.length) {
+    return '<div class="panel empty">还没有选项。点击「添加选项」，为每个选项录入当时的依据与权重。</div>';
+  }
+  const at = now();
+  const lastSnap = dec.snapshots[dec.snapshots.length - 1];
+  let h = '<div class="panel"><h3>选项与依据（当前评估）</h3>';
+  dec.options.forEach((o, oi) => {
+    const score = scoreOption(o, at);
+    const frozen = o.status !== "open";
+    const prev = lastSnap ? lastSnap.scores[o.id] : null;
+    let delta = "";
+    if (!frozen && prev != null) {
+      const d = score - prev;
+      if (Math.abs(d) >= 0.005) {
+        delta = ' <span class="' + (d > 0 ? "delta-up" : "delta-down") + '">' +
+          (d > 0 ? "▲" : "▼") + Math.abs(d).toFixed(2) + " 较上次快照</span>";
+      }
+    }
+    const statusBadge = o.status === "executed" ? '<span class="badge exec">已执行 · 已冻结</span>'
+      : o.status === "abandoned" ? '<span class="badge aban">已放弃 · 已冻结</span>'
+      : '<span class="badge">评估中</span>';
+    const scoreCls = score > 0 ? "pos" : score < 0 ? "neg" : "";
+    h += '<div class="opt-card ' + o.status + '">' +
+      '<div class="opt-head"><span class="name">' + esc(o.name) + "</span>" + statusBadge +
+      '<span class="score ' + scoreCls + '">' + (frozen ? "冻结 " : "") + score.toFixed(2) + "</span>" + delta +
+      '<span style="flex:1"></span>' +
+      (frozen
+        ? '<button onclick="ui.reopen(\'' + dec.id + "','" + o.id + '\')">恢复评估</button>'
+        : '<button onclick="ui.addEvidence(\'' + dec.id + "','" + o.id + '\')">＋ 追加信息</button>' +
+          '<button onclick="ui.freeze(\'' + dec.id + "','" + o.id + "','executed')\">标记已执行</button>" +
+          '<button onclick="ui.freeze(\'' + dec.id + "','" + o.id + "','abandoned')\">标记已放弃</button>") +
+      "</div>";
+    if (frozen) {
+      h += '<div class="muted" style="margin-top:4px">冻结于 ' + fmtTime(o.frozenAt) + "，历史评估已保留，不再参与重算。</div>";
+    }
+    // 依据表
+    if (o.evidence.length) {
+      h += '<table class="ev"><tr><th style="width:44%">依据</th><th>主观权重</th><th>当前有效权重</th><th>半衰期</th><th>录入时间</th><th></th></tr>';
+      o.evidence.forEach(e => {
+        const ew = effWeight(e, at);
+        const wCls = e.weight < 0 ? "neg" : "";
+        const wWidth = Math.min(60, Math.abs(e.weight) * 6);
+        const ewWidth = Math.min(60, Math.abs(ew) * 6);
+        h += '<tr class="' + (e.active ? "" : "dead") + '">' +
+          "<td>" + esc(e.text) +
+            (e.active ? "" : ' <div class="reason">已失效：' + esc(e.inactiveReason || "") +
+              (e.inactiveAt ? "（" + fmtTime(e.inactiveAt) + "）" : "") + "</div>") +
+            "</td>" +
+          '<td><span class="wbar ' + wCls + '" style="width:' + wWidth + 'px"></span> ' + e.weight.toFixed(1) + "</td>" +
+          "<td>" + (e.active
+            ? '<span class="wbar ' + (ew < 0 ? "neg" : "") + '" style="width:' + ewWidth + 'px"></span> ' + ew.toFixed(2)
+            : "0（失效）") + "</td>" +
+          "<td>" + e.halfLifeDays + " 天</td>" +
+          "<td>" + fmtTime(e.createdAt) + "</td>" +
+          "<td>" + (e.active && !frozen
+            ? '<button onclick="ui.invalidate(\'' + dec.id + "','" + e.id + '\')">标记失效</button>'
+            : "") + "</td></tr>";
+      });
+      h += "</table>";
+    } else {
+      h += '<div class="muted" style="margin-top:6px">暂无依据，点击「追加信息」录入第一条。</div>';
+    }
+    h += "</div>";
+  });
+  return h + "</div>";
+}
+
+function renderSnapshots(dec) {
+  if (!dec.snapshots.length) return "";
+  let h = '<div class="panel"><h3>历史快照（旧结论保留）</h3>';
+  [...dec.snapshots].reverse().forEach(s => {
+    h += '<div class="snap-item"><div class="head"><div><strong>' + esc(s.label) + "</strong> " +
+      '<span class="muted">' + fmtTime(s.at) + "</span></div>" +
+      '<button class="danger" onclick="ui.delSnapshot(\'' + dec.id + "','" + s.id + '\')">删除</button></div>' +
+      '<div class="row" style="margin-top:6px">';
+    dec.options.forEach(o => {
+      const v = s.scores[o.id];
+      if (v == null) return;
+      h += '<span class="badge">' + esc(o.name) + "：" + v.toFixed(2) + "</span>";
+    });
+    h += "</div>";
+    const doms = dec.options.map(o => {
+      const d = s.dominant[o.id];
+      return d ? esc(o.name) + " ← 「" + esc(d.text) + "」(" + d.w.toFixed(2) + ")" : null;
+    }).filter(Boolean);
+    if (doms.length) h += '<div class="muted" style="margin-top:4px">主导依据：' + doms.join("；") + "</div>";
+    if (s.invalidated && s.invalidated.length) {
+      h += '<div class="inv-list">本次失效：' + s.invalidated.map(i => "「" + esc(i.text) + "」（" + esc(i.reason) + "）").join("；") + "</div>";
+    }
+    h += "</div>";
+  });
+  return h + "</div>";
+}/* ============ 对比视图 ============ */
+function renderCompare(dec) {
+  if (!dec.snapshots.length) {
+    return '<div class="panel empty">还没有快照。先录入依据并点击「重算并快照」，之后即可对比多个时间点。</div>';
+  }
+  const snaps = dec.snapshots;
+  const W = Math.max(560, snaps.length * 130 + 90), H = 300, padL = 50, padR = 20, padT = 20, padB = 46;
+  const allVals = [];
+  snaps.forEach(s => dec.options.forEach(o => { if (s.scores[o.id] != null) allVals.push(s.scores[o.id]); }));
+  let min = Math.min(0, ...allVals), max = Math.max(0, ...allVals);
+  if (max - min < 1) { max += 0.5; min -= 0.5; }
+  const x = i => padL + (snaps.length === 1 ? (W - padL - padR) / 2 : i * (W - padL - padR) / (snaps.length - 1));
+  const y = v => padT + (max - v) * (H - padT - padB) / (max - min);
+
+  let svg = '<svg class="chart" width="' + W + '" height="' + H + '">';
+  // 网格与刻度
+  const ticks = 5;
+  for (let t = 0; t <= ticks; t++) {
+    const v = min + (max - min) * t / ticks;
+    svg += '<line x1="' + padL + '" y1="' + y(v) + '" x2="' + (W - padR) + '" y2="' + y(v) + '" stroke="#e8ebf0"/>' +
+      '<text x="' + (padL - 6) + '" y="' + (y(v) + 4) + '" font-size="10" fill="#8a94a3" text-anchor="end">' + v.toFixed(1) + "</text>";
+  }
+  svg += '<line x1="' + padL + '" y1="' + y(0) + '" x2="' + (W - padR) + '" y2="' + y(0) + '" stroke="#c3cad4" stroke-dasharray="4 3"/>';
+  // 每个选项一条线
+  dec.options.forEach((o, oi) => {
+    const color = PALETTE[oi % PALETTE.length];
+    const pts = [];
+    snaps.forEach((s, i) => { if (s.scores[o.id] != null) pts.push([x(i), y(s.scores[o.id]), i]); });
+    if (pts.length > 1) {
+      svg += '<polyline fill="none" stroke="' + color + '" stroke-width="2.5" points="' +
+        pts.map(p => p[0] + "," + p[1]).join(" ") + '"/>';
+    }
+    pts.forEach(p => {
+      svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="4" fill="' + color + '">' +
+        "<title>" + esc(o.name) + "：" + snaps[p[2]].scores[o.id].toFixed(2) + "（" + esc(snaps[p[2]].label) + "）</title></circle>";
+    });
+  });
+  // x 轴标签
+  snaps.forEach((s, i) => {
+    svg += '<text x="' + x(i) + '" y="' + (H - 26) + '" font-size="10" fill="#6b7686" text-anchor="middle">' + esc(s.label.slice(0, 10)) + "</text>" +
+      '<text x="' + x(i) + '" y="' + (H - 12) + '" font-size="9" fill="#a0a8b4" text-anchor="middle">' + fmtTime(s.at) + "</text>";
+  });
+  svg += "</svg>";
+
+  let h = '<div class="panel"><h3>评估值演变轨迹</h3><div class="legend">';
+  dec.options.forEach((o, oi) => {
+    h += "<span><i style=\"background:" + PALETTE[oi % PALETTE.length] + '"></i>' + esc(o.name) +
+      (o.status !== "open" ? "（已冻结）" : "") + "</span>";
+  });
+  h += '</div><div class="chart-wrap">' + svg + "</div></div>";
+
+  // 主导依据更替表
+  h += '<div class="panel"><h3>主导依据更替</h3><table class="ev"><tr><th>时间点</th>';
+  dec.options.forEach(o => { h += "<th>" + esc(o.name) + "</th>"; });
+  h += "</tr>";
+  snaps.forEach(s => {
+    h += "<tr><td>" + esc(s.label) + '<br><span class="muted">' + fmtTime(s.at) + "</span></td>";
+    dec.options.forEach(o => {
+      const d = s.dominant[o.id];
+      const v = s.scores[o.id];
+      h += "<td>" + (d ? "「" + esc(d.text) + "」<br><span class=\"muted\">有效权重 " + d.w.toFixed(2) + " · 评估 " + (v != null ? v.toFixed(2) : "—") + "</span>" : '<span class="muted">无有效依据</span>') + "</td>";
+    });
+    h += "</tr>";
+  });
+  h += "</table></div>";
+
+  // 失效依据汇总
+  const dead = [];
+  dec.options.forEach(o => o.evidence.forEach(e => {
+    if (!e.active) dead.push({ opt: o.name, e });
+  }));
+  if (dead.length) {
+    h += '<div class="panel"><h3>已失效依据（被推翻或衰减）</h3><table class="ev"><tr><th>选项</th><th>依据</th><th>失效原因</th><th>失效时间</th></tr>';
+    dead.forEach(d => {
+      h += "<tr><td>" + esc(d.opt) + "</td><td>" + esc(d.e.text) + "</td><td>" + esc(d.e.inactiveReason || "") +
+        (d.e.supersededBy ? "（被新信息覆盖）" : "") + "</td><td>" + (d.e.inactiveAt ? fmtTime(d.e.inactiveAt) : "—") + "</td></tr>";
+    });
+    h += "</table></div>";
+  }
+  return h;
+}
+
+/* ============ 示例数据 ============ */
+function seed() {
+  const d = { id: uid(), title: "是否接受新公司的 offer", note: "示例决策：演示依据权重随时间与新信息的演变", createdAt: now() - 40 * DAY, options: [], snapshots: [] };
+  const mk = (name) => ({ id: uid(), name, status: "open", frozenScore: null, frozenAt: null, evidence: [] });
+  const o1 = mk("接受新 offer"), o2 = mk("留在现公司");
+  const ev = (text, w, ageDays, hl) => ({ id: uid(), text, weight: w, halfLifeDays: hl, createdAt: now() - ageDays * DAY, active: true, inactiveReason: null, inactiveAt: null, supersededBy: null });
+  o1.evidence.push(ev("薪资高 30%", 5, 40, 60));
+  o1.evidence.push(ev("新团队技术方向更有前景", 4, 40, 90));
+  o1.evidence.push(ev("需要搬家，生活成本高", -3, 40, 120));
+  o2.evidence.push(ev("现有团队关系稳定", 3, 40, 60));
+  o2.evidence.push(ev("年终奖即将发放", 2, 40, 20));
+  d.options.push(o1, o2);
+  // 历史快照 1：初始判断
+  recalc(d, "初始判断");
+  // 模拟时间推进后的新信息
+  o2.evidence.push(ev("年终奖缩水，实际只有预期一半", -2, 10, 60));
+  const old = o1.evidence[2];
+  old.active = false; old.inactiveReason = "被新信息覆盖"; old.inactiveAt = now() - 5 * DAY;
+  o1.evidence.push(Object.assign(ev("公司提供搬家补贴，成本顾虑缓解", 2, 5, 90), {}));
+  old.supersededBy = o1.evidence[o1.evidence.length - 1].id;
+  recalc(d, "补充新信息后重算");
+  state.decisions.push(d);
+  state.currentId = d.id;
+}
+
+/* ============ 启动 ============ */
+if (!state.decisions.length) { seed(); save(); }
+render();
+</script>
+</body>
+</html>
