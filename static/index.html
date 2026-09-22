@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>用户反馈聚类工作台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+  header { background: #1f3a5f; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; margin: 0; }
+  #badge { font-size: 12px; padding: 2px 10px; border-radius: 10px; background: #2e7d32; }
+  #badge.bad { background: #c62828; }
+  main { display: grid; grid-template-columns: 300px 1fr 320px; gap: 14px; padding: 14px; }
+  section { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size: 15px; margin: 0 0 10px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  textarea { width: 100%; height: 110px; resize: vertical; }
+  button { cursor: pointer; border: none; border-radius: 4px; padding: 6px 12px; background: #1f3a5f; color: #fff; }
+  button.ghost { background: #e0e0e0; color: #333; }
+  button.warn { background: #c62828; }
+  .cluster { border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; padding: 10px; }
+  .cluster h3 { margin: 0 0 6px; font-size: 14px; }
+  .rep { color: #1f3a5f; font-size: 13px; margin-bottom: 6px; }
+  .member { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 0; border-top: 1px dashed #eee; }
+  .member .txt { flex: 1; }
+  .member select { max-width: 110px; }
+  .tag { background: #e3ecff; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  .conflict { border: 1px solid #f0b429; background: #fff8e1; border-radius: 6px; padding: 8px; margin-bottom: 8px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border-bottom: 1px solid #eee; padding: 5px 6px; text-align: left; }
+  th { cursor: pointer; background: #f0f2f5; }
+  #log { font-size: 12px; max-height: 180px; overflow-y: auto; color: #555; }
+  #log div { padding: 2px 0; border-bottom: 1px dotted #eee; }
+  .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>用户反馈聚类工作台</h1>
+  <span id="badge">一致性校验中…</span>
+  <span style="margin-left:auto;font-size:12px" id="stats"></span>
+</header>
+<main>
+  <section>
+    <h2>1. 导入反馈</h2>
+    <textarea id="paste" placeholder="每行一条反馈, 粘贴到这里…"></textarea>
+    <div class="row">
+      <button onclick="importText()">导入粘贴内容</button>
+      <input type="file" id="file" accept=".txt,.csv,.log">
+      <button onclick="importFile()">导入文件</button>
+    </div>
+    <div class="row">
+      <button class="ghost" onclick="loadSample()">载入示例数据</button>
+      <button class="warn" onclick="resetAll()">清空全部</button>
+    </div>
+    <h2 style="margin-top:16px">决策日志</h2>
+    <div id="log"></div>
+  </section>
+  <section>
+    <h2>2. 问题簇(自动聚类 + 人工修订)</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button onclick="mergeSelected()">合并选中的簇</button>
+      <span style="font-size:12px;color:#777">勾选簇前的复选框后可合并; 勾选成员可拆分</span>
+    </div>
+    <div id="clusters"></div>
+  </section>
+  <section>
+    <h2>3. 相似冲突待裁决</h2>
+    <div id="conflicts"><i style="color:#888">暂无冲突</i></div>
+    <h2 style="margin-top:14px">4. 需求线索</h2>
+    <table>
+      <thead><tr><th onclick="sortLeads('size')">规模 ⇅</th><th>线索(代表性描述)</th><th>来源反馈</th></tr></thead>
+      <tbody id="leads"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+let S = null;            // 最近一次服务端状态
+let leadSortAsc = false;
+
+async function api(path, body, isForm) {
+  const opt = { method: body ? "POST" : "GET" };
+  if (body && isForm) { opt.body = body; }
+  else if (body) { opt.headers = {"Content-Type": "application/json"}; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  return await r.json();
+}
+
+async function refresh(state) {
+  S = state || await api("/api/state");
+  render();
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function render() {
+  const badge = document.getElementById("badge");
+  badge.textContent = S.consistent ? "✓ 与全量重算一致" : "✗ 存在遗漏/残留";
+  badge.className = S.consistent ? "" : "bad";
+  document.getElementById("stats").textContent =
+    `反馈 ${S.feedbacks.length} 条 · 簇 ${S.clusters.length} 个 · 阈值 ${S.threshold}`;
+  renderClusters();
+  renderConflicts();
+  renderLeads();
+  renderLog();
+}
+
+function renderClusters() {
+  const box = document.getElementById("clusters");
+  if (!S.clusters.length) { box.innerHTML = "<i style='color:#888'>尚未导入反馈</i>"; return; }
+  box.innerHTML = S.clusters.map(c => `
+    <div class="cluster">
+      <h3><input type="checkbox" class="cmerge" value="${c.id}">
+        簇 #${c.id} <span class="tag">${c.size} 条</span>
+        <button class="ghost" style="float:right;padding:2px 8px;font-size:12px"
+          onclick="splitCluster(${c.id})">拆分选中成员</button></h3>
+      <div class="rep">代表描述: ${esc(c.representative)}</div>
+      ${c.members.map(m => `
+        <div class="member">
+          <input type="checkbox" class="csplit" data-cid="${c.id}" value="${m.id}">
+          <span class="txt">#${m.id} ${esc(m.text)}</span>
+          <select onchange="moveFeedback(${m.id}, this.value)">
+            <option value="">移动到…</option>
+            <option value="new">新簇</option>
+            ${S.clusters.filter(o => o.id !== c.id)
+              .map(o => `<option value="${o.id}">簇 #${o.id}</option>`).join("")}
+          </select>
+        </div>`).join("")}
+    </div>`).join("");
+}
+
+function renderConflicts() {
+  const box = document.getElementById("conflicts");
+  if (!S.conflicts.length) { box.innerHTML = "<i style='color:#888'>暂无冲突</i>"; return; }
+  const textOf = {}; S.feedbacks.forEach(f => textOf[f.id] = f.text);
+  box.innerHTML = S.conflicts.map(c => `
+    <div class="conflict">
+      <div>相似度 <b>${c.sim}</b> 但分属不同簇:</div>
+      <div>#${c.a} ${esc(textOf[c.a])}</div>
+      <div>#${c.b} ${esc(textOf[c.b])}</div>
+      <div class="row">
+        <button onclick="resolveConflict(${c.a},${c.b},'merge')">保留同簇</button>
+        <button class="ghost" onclick="resolveConflict(${c.a},${c.b},'separate')">保持分开</button>
+      </div>
+    </div>`).join("");
+}
+
+function renderLeads() {
+  const leads = [...S.leads].sort((a, b) =>
+    leadSortAsc ? a.size - b.size : b.size - a.size);
+  document.getElementById("leads").innerHTML = leads.map(l => `
+    <tr><td>${l.size}</td><td>${esc(l.title)}</td>
+    <td>${l.feedback_ids.map(i => "#" + i).join(" ")}</td></tr>`).join("");
+}
+
+function renderLog() {
+  document.getElementById("log").innerHTML =
+    [...S.decisions].reverse().map(d =>
+      `<div>[${d.time}] ${esc(d.detail)}</div>`).join("") || "<i>暂无</i>";
+}
+
+async function importText() {
+  const text = document.getElementById("paste").value;
+  if (!text.trim()) return alert("请先粘贴反馈内容");
+  await refresh(await api("/api/import", { text }));
+  document.getElementById("paste").value = "";
+}
+
+async function importFile() {
+  const f = document.getElementById("file").files[0];
+  if (!f) return alert("请先选择文件");
+  const fd = new FormData();
+  fd.append("file", f);
+  await refresh(await api("/api/import", fd, true));
+}
+
+async function loadSample() {
+  const r = await fetch("/static/sample_feedback.txt");
+  await refresh(await api("/api/import", { text: await r.text() }));
+}
+
+async function moveFeedback(fid, target) {
+  if (target === "") return;
+  await refresh(await api("/api/move", { feedback_id: fid, target_cluster_id: target }));
+}
+
+async function mergeSelected() {
+  const ids = [...document.querySelectorAll(".cmerge:checked")].map(x => +x.value);
+  if (ids.length < 2) return alert("请至少勾选两个簇");
+  await refresh(await api("/api/merge", { cluster_ids: ids }));
+}
+
+async function splitCluster(cid) {
+  const ids = [...document.querySelectorAll(`.csplit[data-cid="${cid}"]:checked`)]
+    .map(x => +x.value);
+  if (!ids.length) return alert("请先勾选要拆出的反馈");
+  await refresh(await api("/api/split", { cluster_id: cid, feedback_ids: ids }));
+}
+
+async function resolveConflict(a, b, action) {
+  await refresh(await api("/api/resolve_conflict", { a, b, action }));
+}
+
+async function resetAll() {
+  if (!confirm("确定清空全部反馈与决策?")) return;
+  await refresh(await api("/api/reset", {}));
+}
+
+function sortLeads() { leadSortAsc = !leadSortAsc; renderLeads(); }
+
+refresh();
+</script>
+</body>
+</html>
