@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>小队战术 AI 规划系统</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>小队战术 AI 规划系统</h1>
+  <div class="controls">
+    <button id="btnPlan">生成计划</button>
+    <button id="btnExec">执行回合</button>
+    <button id="btnObstacle">事件：出现障碍</button>
+    <button id="btnEnemyMove">事件：敌人移动</button>
+    <button id="btnReset">重置</button>
+    <span id="turnInfo"></span>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <canvas id="map" width="624" height="520"></canvas>
+    <div id="log" class="log"></div>
+  </section>
+  <section class="right">
+    <div id="units" class="units"></div>
+    <div id="detail" class="detail">
+      <p class="hint">点击地图或左侧列表选择角色，查看其当前计划与候选计划对比。</p>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
+
