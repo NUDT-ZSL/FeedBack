@@ -1,0 +1,211 @@
+[
+  {
+    "id": "T01",
+    "name": "宣传片-剪辑",
+    "source": "A机位RAW",
+    "step": "剪辑",
+    "duration": 6,
+    "channels": [
+      "剪辑-1",
+      "剪辑-2"
+    ],
+    "deps": []
+  },
+  {
+    "id": "T02",
+    "name": "宣传片-调色",
+    "source": "A机位RAW",
+    "step": "调色",
+    "duration": 4,
+    "channels": [
+      "调色-1"
+    ],
+    "deps": [
+      "T01"
+    ]
+  },
+  {
+    "id": "T03",
+    "name": "宣传片-合成",
+    "source": "A机位RAW",
+    "step": "合成",
+    "duration": 5,
+    "channels": [
+      "合成-1",
+      "合成-2"
+    ],
+    "deps": [
+      "T02"
+    ]
+  },
+  {
+    "id": "T04",
+    "name": "宣传片-审片",
+    "source": "A机位RAW",
+    "step": "审片",
+    "duration": 2,
+    "channels": [
+      "审片-1"
+    ],
+    "deps": [
+      "T03"
+    ]
+  },
+  {
+    "id": "T05",
+    "name": "纪录片-剪辑",
+    "source": "素材库",
+    "step": "剪辑",
+    "duration": 8,
+    "channels": [
+      "剪辑-1",
+      "剪辑-2"
+    ],
+    "deps": []
+  },
+  {
+    "id": "T06",
+    "name": "纪录片-调色",
+    "source": "素材库",
+    "step": "调色",
+    "duration": 3,
+    "channels": [
+      "调色-1"
+    ],
+    "deps": [
+      "T05"
+    ]
+  },
+  {
+    "id": "T07",
+    "name": "纪录片-审片",
+    "source": "素材库",
+    "step": "审片",
+    "duration": 2,
+    "channels": [
+      "审片-1"
+    ],
+    "deps": [
+      "T06"
+    ]
+  },
+  {
+    "id": "T08",
+    "name": "广告A-剪辑",
+    "source": "外部供应商",
+    "step": "剪辑",
+    "duration": 4,
+    "channels": [
+      "剪辑-1",
+      "剪辑-2"
+    ],
+    "deps": []
+  },
+  {
+    "id": "T09",
+    "name": "广告A-合成",
+    "source": "外部供应商",
+    "step": "合成",
+    "duration": 6,
+    "channels": [
+      "合成-1",
+      "合成-2"
+    ],
+    "deps": [
+      "T08"
+    ]
+  },
+  {
+    "id": "T10",
+    "name": "广告A-审片",
+    "source": "外部供应商",
+    "step": "审片",
+    "duration": 1,
+    "channels": [
+      "审片-1"
+    ],
+    "deps": [
+      "T09"
+    ]
+  },
+  {
+    "id": "T11",
+    "name": "动画短片-合成",
+    "source": "动画组",
+    "step": "合成",
+    "duration": 7,
+    "channels": [
+      "合成-1",
+      "合成-2"
+    ],
+    "deps": []
+  },
+  {
+    "id": "T12",
+    "name": "动画短片-调色",
+    "source": "动画组",
+    "step": "调色",
+    "duration": 3,
+    "channels": [
+      "调色-1"
+    ],
+    "deps": [
+      "T11"
+    ]
+  },
+  {
+    "id": "T13",
+    "name": "广告B-剪辑",
+    "source": "外部供应商",
+    "step": "剪辑",
+    "duration": 5,
+    "channels": [
+      "剪辑-1",
+      "剪辑-2"
+    ],
+    "deps": []
+  },
+  {
+    "id": "T14",
+    "name": "广告B-合成",
+    "source": "外部供应商",
+    "step": "合成",
+    "duration": 4,
+    "channels": [
+      "合成-1",
+      "合成-2"
+    ],
+    "deps": [
+      "T13"
+    ]
+  },
+  {
+    "id": "T15",
+    "name": "广告B-审片",
+    "source": "外部供应商",
+    "step": "审片",
+    "duration": 2,
+    "channels": [
+      "审片-1"
+    ],
+    "deps": [
+      "T14",
+      "T10"
+    ]
+  },
+  {
+    "id": "T16",
+    "name": "年度混剪-剪辑",
+    "source": "素材库",
+    "step": "剪辑",
+    "duration": 6,
+    "channels": [
+      "剪辑-1",
+      "剪辑-2"
+    ],
+    "deps": [
+      "T04",
+      "T07"
+    ]
+  }
+]

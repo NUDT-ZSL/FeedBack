@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>媒体素材生产档期编排</title>
+<style>
+:root{--bg:#14171c;--panel:#1c2129;--line:#2b323d;--fg:#dfe6ee;--dim:#8b96a5;--acc:#4da3ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header h1{font-size:15px;margin:0 12px 0 0}
+button{background:#26303c;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+#layout{display:grid;grid-template-columns:1fr 350px;gap:10px;padding:10px 16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px}
+.panel h2{font-size:13px;margin:0 0 8px;color:var(--dim);letter-spacing:.5px}
+#ganttWrap{overflow-x:auto}
+.grow{position:relative;height:22px;border-bottom:1px solid #232a34}
+.glabel{position:absolute;left:0;top:2px;width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim);cursor:pointer}
+.gbar{position:absolute;top:3px;height:16px;border-radius:4px;cursor:pointer;font-size:10px;color:#0d1117;padding:0 4px;overflow:hidden;white-space:nowrap}
+.gbar.delayed{outline:2px solid #ffb454}
+.gbar.locked{outline:2px dashed #fff}
+.gbar.sel{box-shadow:0 0 0 2px var(--acc)}
+.gtick{position:absolute;top:0;color:#5b6673;font-size:10px;padding-left:2px;border-left:1px solid #232a34}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;margin:1px 2px}
+.b-wait{background:#3a2f16;color:#ffb454}
+.b-dep{background:#16324a;color:#6ec1ff}
+.b-err{background:#4a1620;color:#ff7b8a}
+.b-ok{background:#16402a;color:#6fe3a5}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:4px 6px;border-bottom:1px solid #232a34;text-align:left;white-space:nowrap}
+tr.sel td{background:#22303f}
+tr.un td{color:#ff7b8a}
+tr[data-id]{cursor:pointer}
+input[type=text],input[type=number]{background:#10141a;border:1px solid var(--line);color:var(--fg);border-radius:4px;padding:3px 6px;width:100%}
+label{display:block;margin:6px 0 2px;color:var(--dim)}
+.chips label{display:inline-block;margin:2px 8px 2px 0;color:var(--fg)}
+#impact{font-size:12px;color:var(--dim)}
+.kv{color:var(--dim)}
+.reason{margin:3px 0;padding:4px 6px;background:#10141a;border-left:3px solid var(--acc);border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+<h1>媒体素材生产档期编排</h1>
+<button id="btnSample">加载示例数据</button>
+<button id="btnBad">注入异常示例</button>
+<button id="btnFull">整体重排</button>
+<button id="btnImport">导入本地JSON</button>
+<input type="file" id="fileIn" accept=".json" style="display:none">
+<span id="impact"></span>
+</header>
+<div id="layout">
+<div>
+<div class="panel"><h2>档期甘特图（单位：小时）</h2><div id="ganttWrap"></div></div>
+<div class="panel"><h2>任务列表</h2><div id="tableWrap"></div></div>
+<div class="panel"><h2>不可排期任务</h2><div id="unschedWrap"></div></div>
+</div>
+<div>
+<div class="panel"><h2>通道排除</h2><div id="exclWrap" class="chips"></div></div>
+<div class="panel"><h2>任务详情 / 编辑</h2><div id="detailWrap">点击左侧任务查看排布依据。</div></div>
+</div>
+</div>
+<script>
+//__MORE__
+const SAMPLE=[
+{id:"T01",name:"宣传片-剪辑",source:"A机位RAW",step:"剪辑",duration:6,channels:["剪辑-1","剪辑-2"],deps:[]},
+{id:"T02",name:"宣传片-调色",source:"A机位RAW",step:"调色",duration:4,channels:["调色-1"],deps:["T01"]},
+{id:"T03",name:"宣传片-合成",source:"A机位RAW",step:"合成",duration:5,channels:["合成-1","合成-2"],deps:["T02"]},
+{id:"T04",name:"宣传片-审片",source:"A机位RAW",step:"审片",duration:2,channels:["审片-1"],deps:["T03"]},
+{id:"T05",name:"纪录片-剪辑",source:"素材库",step:"剪辑",duration:8,channels:["剪辑-1","剪辑-2"],deps:[]},
+{id:"T06",name:"纪录片-调色",source:"素材库",step:"调色",duration:3,channels:["调色-1"],deps:["T05"]},
+{id:"T07",name:"纪录片-审片",source:"素材库",step:"审片",duration:2,channels:["审片-1"],deps:["T06"]},
+{id:"T08",name:"广告A-剪辑",source:"外部供应商",step:"剪辑",duration:4,channels:["剪辑-1","剪辑-2"],deps:[]},
+{id:"T09",name:"广告A-合成",source:"外部供应商",step:"合成",duration:6,channels:["合成-1","合成-2"],deps:["T08"]},
+{id:"T10",name:"广告A-审片",source:"外部供应商",step:"审片",duration:1,channels:["审片-1"],deps:["T09"]},
+{id:"T11",name:"动画短片-合成",source:"动画组",step:"合成",duration:7,channels:["合成-1","合成-2"],deps:[]},
+{id:"T12",name:"动画短片-调色",source:"动画组",step:"调色",duration:3,channels:["调色-1"],deps:["T11"]},
+{id:"T13",name:"广告B-剪辑",source:"外部供应商",step:"剪辑",duration:5,channels:["剪辑-1","剪辑-2"],deps:[]},
+{id:"T14",name:"广告B-合成",source:"外部供应商",step:"合成",duration:4,channels:["合成-1","合成-2"],deps:["T13"]},
+{id:"T15",name:"广告B-审片",source:"外部供应商",step:"审片",duration:2,channels:["审片-1"],deps:["T14","T10"]},
+{id:"T16",name:"年度混剪-剪辑",source:"素材库",step:"剪辑",duration:6,channels:["剪辑-1","剪辑-2"],deps:["T04","T07"]}
+];
+const BAD=[
+{id:"T91",name:"异常-缺失前置",source:"测试",step:"剪辑",duration:2,channels:["剪辑-1"],deps:["T99"]},
+{id:"T92",name:"异常-闭环A",source:"测试",step:"合成",duration:2,channels:["合成-1"],deps:["T93"]},
+{id:"T93",name:"异常-闭环B",source:"测试",step:"合成",duration:2,channels:["合成-1"],deps:["T92"]},
+{id:"T94",name:"异常-依赖异常任务",source:"测试",step:"审片",duration:1,channels:["审片-1"],deps:["T91"]}
+];
+let tasks=[],excluded=new Set(),result=null,prevResult=null,selId=null;
+const $=id=>document.getElementById(id);
+const makespan=res=>{let m=0;for(const sc of res.sched.values())m=Math.max(m,sc.end);return m;};
+const PALETTE=["#6ec1ff","#6fe3a5","#ffb454","#e58cff","#ff8f6b","#7be3e0","#ffd166","#9db4ff"];
+function chColor(ch){let h=0;for(const c of ch)h=(h*31+c.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length];}
+//__MORE2__
+function analyze(tasks){
+  const byId=new Map(tasks.map(t=>[t.id,t]));
+  const un=new Map();
+  for(const t of tasks)for(const d of t.deps)
+    if(!byId.has(d))un.set(t.id,"前置任务「"+d+"」不存在");
+  const cand=tasks.filter(t=>!un.has(t.id));
+  const indeg=new Map(),adj=new Map();
+  for(const t of cand){indeg.set(t.id,0);adj.set(t.id,[]);}
+  for(const t of cand)for(const d of t.deps){
+    if(!adj.has(d))continue;
+    indeg.set(t.id,indeg.get(t.id)+1);
+    adj.get(d).push(t.id);
+  }
+  const q=cand.filter(t=>indeg.get(t.id)===0).map(t=>t.id).sort();
+  const topo=[];
+  while(q.length){
+    const id=q.shift();topo.push(id);
+    for(const v of adj.get(id)){indeg.set(v,indeg.get(v)-1);if(indeg.get(v)===0)q.push(v);}
+  }
+  const left=cand.filter(t=>indeg.get(t.id)>0).map(t=>t.id);
+  const L=new Set(left);
+  const findCycle=start=>{
+    const stack=[[start,[start]]],seen=new Set([start]);
+    while(stack.length){
+      const [n,p]=stack.pop();
+      for(const m of (adj.get(n)||[])){
+        if(!L.has(m))continue;
+        if(m===start)return p.concat([m]);
+        if(!seen.has(m)){seen.add(m);stack.push([m,p.concat([m])]);}
+      }
+    }
+    return null;
+  };
+  for(const id of left){
+    const path=findCycle(id);
+    if(path)un.set(id,"依赖闭环："+path.join(" → "));
+  }
+  const reaches=(a,b)=>{
+    const st=[a],seen=new Set([a]);
+    while(st.length){const n=st.pop();for(const m of (adj.get(n)||[])){
+      if(m===b)return true;
+      if(L.has(m)&&!seen.has(m)){seen.add(m);st.push(m);}
+    }}
+    return false;
+  };
+  for(const id of left)if(!un.has(id)){
+    const cyc=left.find(x=>un.has(x)&&un.get(x).startsWith("依赖闭环")&&reaches(x,id));
+    un.set(id,"依赖于闭环中的任务"+(cyc?("「"+cyc+"」"):""));
+  }
+  let chg=true;
+  while(chg){chg=false;
+    for(const t of tasks){
+      if(un.has(t.id))continue;
+      for(const d of t.deps)if(un.has(d)){un.set(t.id,"前置任务「"+d+"」不可排期");chg=true;break;}
+    }
+  }
+  return {byId,un,topo};
+}
+//__MORE3__
+function scheduleAll(tasks,excluded,fixed){
+  fixed=fixed||new Map();
+  const {byId,un,topo}=analyze(tasks);
+  const sched=new Map(),busy=new Map();
+  const place=(ch,s,e,id)=>{if(!busy.has(ch))busy.set(ch,[]);busy.get(ch).push({s,e,id});};
+  const freeAt=(ch,est,dur)=>{
+    const iv=(busy.get(ch)||[]).slice().sort((a,b)=>a.s-b.s);
+    let s=est;
+    for(const x of iv){if(x.e<=s+1e-9)continue;if(x.s>=s+dur-1e-9)break;s=Math.max(s,x.e);}
+    return s;
+  };
+  for(const [id,sc] of fixed){
+    if(un.has(id))continue;
+    place(sc.channel,sc.start,sc.end,id);
+    sched.set(id,sc);
+  }
+  const locked=tasks.filter(t=>t.locked&&!un.has(t.id)&&!sched.has(t.id))
+    .sort((a,b)=>a.lockedStart-b.lockedStart||a.id.localeCompare(b.id));
+  for(const t of locked){
+    const chs=t.channels.filter(c=>!excluded.has(c));
+    if(!chs.length){un.set(t.id,"可用通道均被排除");continue;}
+    const ch=chs[0],s=t.lockedStart,e=s+t.duration;
+    place(ch,s,e,t.id);
+    sched.set(t.id,{start:s,end:e,channel:ch,reasons:["已锁定档期，固定于 H"+s],locked:true,delayCh:0,est:0});
+  }
+  const pend=new Set(topo.filter(id=>!un.has(id)&&!sched.has(id)));
+  while(pend.size){
+    let best=null,bestEst=Infinity;
+    for(const id of pend){
+      const t=byId.get(id);
+      if(!t.deps.every(d=>sched.has(d)))continue;
+      let est=0;for(const d of t.deps)est=Math.max(est,sched.get(d).end);
+      if(est<bestEst-1e-9||(Math.abs(est-bestEst)<1e-9&&(best===null||id<best))){bestEst=est;best=id;}
+    }
+    if(best===null)break;
+    pend.delete(best);
+    const t=byId.get(best);
+    const chs=t.channels.filter(c=>!excluded.has(c));
+    if(!chs.length){un.set(best,"可用通道均被排除");continue;}
+    let pick=null;
+    for(const ch of chs){
+      const s=freeAt(ch,bestEst,t.duration);
+      if(!pick||s+t.duration<pick.e-1e-9||(Math.abs(s+t.duration-pick.e)<1e-9&&ch<pick.ch))
+        pick={ch,s,e:s+t.duration};
+    }
+    const reasons=[];
+    if(t.deps.length){
+      const maxd=t.deps.filter(d=>Math.abs(sched.get(d).end-bestEst)<1e-9);
+      reasons.push("等待前置 "+maxd.join("、")+"（完成于 H"+bestEst+"）");
+    }
+    let delayCh=0;
+    if(pick.s>bestEst+1e-9){
+      delayCh=Math.round((pick.s-bestEst)*100)/100;
+      const blockers=(busy.get(pick.ch)||[]).filter(x=>x.e>bestEst+1e-9&&x.s<pick.s-1e-9).map(x=>x.id);
+      reasons.push("通道「"+pick.ch+"」被 "+(blockers.join("、")||"其他任务")+" 占用，顺延 "+delayCh+"h");
+    }
+    place(pick.ch,pick.s,pick.e,best);
+    sched.set(best,{start:pick.s,end:pick.e,channel:pick.ch,reasons,est:bestEst,delayCh});
+  }
+  let chg=true;
+  while(chg){chg=false;
+    for(const t of tasks){
+      if(un.has(t.id)||sched.has(t.id))continue;
+      const d=t.deps.find(x=>!sched.has(x)&&un.has(x));
+      if(d){un.set(t.id,"前置任务「"+d+"」不可排期");chg=true;}
+    }
+  }
+  for(const t of tasks)if(!un.has(t.id)&&!sched.has(t.id))un.set(t.id,"无法推导排期（前置未排期）");
+  for(const t of tasks){
+    const sc=sched.get(t.id);
+    if(!sc||!t.locked)continue;
+    let est=0;for(const d of t.deps){const ds=sched.get(d);if(ds)est=Math.max(est,ds.end);}
+    sc.est=est;
+    if(est>sc.start+1e-9){sc.conflict=true;sc.reasons.push("锁定档期早于前置完成时刻 H"+est+"，存在冲突");}
+  }
+  return {sched,un,busy,byId};
+}
+//__MORE4__
+function incrementalReschedule(tasks,excluded,oldRes,changedId){
+  const byId=new Map(tasks.map(t=>[t.id,t]));
+  const childMap=new Map();
+  for(const t of tasks)for(const d of t.deps){
+    if(!childMap.has(d))childMap.set(d,[]);
+    childMap.get(d).push(t.id);
+  }
+  const D=new Set([changedId]);
+  const stack=[changedId];
+  while(stack.length){
+    const n=stack.pop();
+    for(const m of (childMap.get(n)||[]))if(!D.has(m)){D.add(m);stack.push(m);}
+  }
+  const old=oldRes.sched;
+  // 迭代扩张脏集 D 并下压影响时刻 T0，直到不动点：
+  // 终止后所有脏任务新开始时刻 >= T0，非脏任务占用区间均结束于 T0 之前，
+  // 因此非脏任务的决策环境与整体重排完全一致。
+  let T0=Infinity;
+  for(;;){
+    const memo=new Map();
+    const el=id=>{
+      if(memo.has(id))return memo.get(id);
+      memo.set(id,0);
+      const t=byId.get(id);
+      if(t.locked){memo.set(id,t.lockedStart||0);return t.lockedStart||0;}
+      let e=0;
+      for(const d of t.deps){
+        if(D.has(d))e=Math.max(e,el(d)+byId.get(d).duration);
+        else if(old.has(d))e=Math.max(e,old.get(d).end);
+      }
+      memo.set(id,e);
+      return e;
+    };
+    for(const id of D){
+      T0=Math.min(T0,el(id));
+      if(old.has(id))T0=Math.min(T0,old.get(id).start);
+    }
+    const affCh=new Set();
+    for(const id of D){
+      for(const c of byId.get(id).channels)affCh.add(c);
+      if(old.has(id))affCh.add(old.get(id).channel);
+    }
+    let added=false;
+    for(const t of tasks){
+      if(D.has(t.id))continue;
+      const sc=old.get(t.id);
+      const hitDep=t.deps.some(d=>D.has(d));
+      const hitCh=sc&&t.channels.some(c=>affCh.has(c))&&sc.end>T0+1e-9;
+      if(hitDep||hitCh){D.add(t.id);added=true;}
+    }
+    if(!added)break;
+  }
+  const fixed=new Map();
+  for(const [id,sc] of old)if(!D.has(id))fixed.set(id,sc);
+  const res=scheduleAll(tasks,excluded,fixed);
+  res.recomputed=D.size;
+  return res;
+}
+function verifyConsistency(tasks,excluded,res){
+  const full=scheduleAll(tasks,excluded);
+  const ids=new Set([...res.sched.keys(),...full.sched.keys()]);
+  for(const id of ids){
+    const a=res.sched.get(id),b=full.sched.get(id);
+    if(!a||!b||Math.abs(a.start-b.start)>1e-9||Math.abs(a.end-b.end)>1e-9||a.channel!==b.channel)return false;
+  }
+  if(res.un.size!==full.un.size)return false;
+  for(const k of res.un.keys())if(!full.un.has(k))return false;
+  return true;
+}
+//__MORE5__
+function renderImpact(){
+  if(!result){$("impact").textContent="";return;}
+  let html="";
+  if(prevResult){
+    const d=makespan(result)-makespan(prevResult);
+    let shifted=0;
+    for(const [id,sc] of result.sched){
+      const o=prevResult.sched.get(id);
+      if(!o||Math.abs(o.start-sc.start)>1e-9||Math.abs(o.end-sc.end)>1e-9||o.channel!==sc.channel)shifted++;
+    }
+    html+="完工时刻 H"+makespan(result)+"（整体顺延 "+(d>=0?"+":"")+d+"h），排布变化 "+shifted+" 项";
+  }
+  if(result.recomputed!=null)html+=" ｜ 本次增量重推 "+result.recomputed+" 项";
+  if(result.consistent===true)html+=' ｜ <span class="badge b-ok">与整体重排一致 ✓</span>';
+  if(result.consistent===false)html+=' ｜ <span class="badge b-wait">增量未收敛，已回退为整体重排</span>';
+  $("impact").innerHTML=html;
+}
+function renderGantt(){
+  const w=$("ganttWrap");
+  if(!result||!result.sched.size){w.innerHTML='<span class="kv">暂无排布。</span>';return;}
+  const ms=makespan(result);
+  const px=Math.max(30,Math.min(70,Math.floor(920/Math.max(ms,1))));
+  const X=220;
+  const rows=[...result.sched.entries()].sort((a,b)=>a[1].start-b[1].start||a[0].localeCompare(b[0]));
+  let html='<div style="position:relative;min-width:'+(X+ms*px+40)+'px">';
+  const step=ms>40?Math.ceil(ms/20):2;
+  for(let h=0;h<=ms;h+=step)
+    html+='<div class="gtick" style="left:'+(X+h*px)+'px;height:'+(rows.length*22)+'px">H'+h+'</div>';
+  for(const [id,sc] of rows){
+    const t=result.byId.get(id);
+    html+='<div class="grow"><div class="glabel" data-id="'+id+'">'+id+' '+t.name+'</div>';
+    const cls=["gbar"];
+    if(sc.delayCh>0)cls.push("delayed");
+    if(sc.locked)cls.push("locked");
+    if(id===selId)cls.push("sel");
+    html+='<div class="'+cls.join(" ")+'" data-id="'+id+'" style="left:'+(X+sc.start*px)+'px;width:'+Math.max(10,(sc.end-sc.start)*px)+'px;background:'+chColor(sc.channel)+'" title="'+sc.channel+' H'+sc.start+' → H'+sc.end+'">'+(sc.locked?"🔒":"")+sc.channel+'</div></div>';
+  }
+  w.innerHTML=html+"</div>";
+  w.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>{selId=el.dataset.id;render();});
+}
+function renderTable(){
+  const rows=tasks.map(t=>{
+    const sc=result&&result.sched.get(t.id);
+    const un=result&&result.un.get(t.id);
+    const cls=un?"un":(t.id===selId?"sel":"");
+    let badges="";
+    if(sc){
+      if(sc.delayCh>0)badges+='<span class="badge b-wait">通道顺延'+sc.delayCh+'h</span>';
+      if(t.deps.length)badges+='<span class="badge b-dep">等待前置</span>';
+      if(sc.conflict)badges+='<span class="badge b-err">锁定冲突</span>';
+      if(sc.locked)badges+='<span class="badge b-ok">已锁定</span>';
+    }
+    return '<tr class="'+cls+'" data-id="'+t.id+'"><td>'+t.id+'</td><td>'+t.name+'</td><td>'+t.source+'</td><td>'+t.step+'</td><td>'+t.duration+'h</td><td>'+t.channels.join("/")+'</td><td>'+(t.deps.join(",")||"—")+'</td><td>'+(sc?("H"+sc.start+" → H"+sc.end):"—")+'</td><td>'+(sc?sc.channel:"—")+'</td><td>'+(un?'<span class="badge b-err">不可排期</span>':badges)+'</td></tr>';
+  }).join("");
+  $("tableWrap").innerHTML='<table><tr><th>ID</th><th>任务</th><th>素材来源</th><th>工序</th><th>耗时</th><th>可用通道</th><th>前置</th><th>档期</th><th>通道</th><th>标记</th></tr>'+rows+'</table>';
+  $("tableWrap").querySelectorAll("tr[data-id]").forEach(el=>el.onclick=()=>{selId=el.dataset.id;render();});
+}
+function renderUnsched(){
+  if(!result||!result.un.size){$("unschedWrap").innerHTML='<span class="kv">无。</span>';return;}
+  $("unschedWrap").innerHTML=[...result.un.entries()].map(([id,r])=>'<div class="reason" style="border-color:#ff7b8a"><b>'+id+'</b>：'+r+'</div>').join("");
+}
+function renderExcl(){
+  const chs=[...new Set(tasks.flatMap(t=>t.channels))].sort();
+  $("exclWrap").innerHTML=chs.map(c=>'<label><input type="checkbox" data-ch="'+c+'"'+(excluded.has(c)?" checked":"")+"> 排除 "+c+'</label>').join("");
+  $("exclWrap").querySelectorAll("input").forEach(el=>el.onchange=()=>{
+    if(el.checked)excluded.add(el.dataset.ch);else excluded.delete(el.dataset.ch);
+    prevResult=result;
+    result=scheduleAll(tasks,excluded);
+    render();
+  });
+}
+function render(){renderImpact();renderGantt();renderTable();renderUnsched();renderExcl();renderDetail();}
+//__MORE6__
+function renderDetail(){
+  const w=$("detailWrap");
+  const t=tasks.find(x=>x.id===selId);
+  if(!t){w.innerHTML='<span class="kv">点击左侧任务查看排布依据。</span>';return;}
+  const sc=result&&result.sched.get(t.id);
+  const un=result&&result.un.get(t.id);
+  const allCh=[...new Set(tasks.flatMap(x=>x.channels))].sort();
+  let html='<div><b>'+t.id+" · "+t.name+'</b> <span class="kv">'+t.source+" / "+t.step+"</span></div>";
+  html+='<label>预计耗时（小时）</label><input type="number" id="e_dur" value="'+t.duration+'" min="0.5" step="0.5">';
+  html+='<label>可占用通道</label><div class="chips">'+allCh.map(c=>'<label><input type="checkbox" class="e_ch" value="'+c+'"'+(t.channels.includes(c)?" checked":"")+"> "+c+"</label>").join("")+"</div>";
+  html+='<label>前置依赖（逗号分隔）</label><input type="text" id="e_deps" value="'+t.deps.join(",")+'">';
+  html+='<label><input type="checkbox" id="e_lock"'+(t.locked?" checked":"")+"> 锁定档期（编排必须尊重）</label>";
+  html+='<label>锁定开始时刻（小时）</label><input type="number" id="e_lstart" value="'+(t.lockedStart!=null?t.lockedStart:(sc?sc.start:0))+'" min="0">';
+  html+='<div style="margin-top:8px"><button id="e_apply">应用修改（增量重排）</button></div>';
+  html+='<hr style="border-color:#2b323d"><h2>排布依据</h2>';
+  if(un){
+    html+='<div class="reason" style="border-color:#ff7b8a">不可排期：'+un+"</div>";
+  }else if(sc){
+    html+='<div class="reason">档期 H'+sc.start+" → H"+sc.end+"，占用通道「"+sc.channel+"」区间 ["+sc.start+", "+sc.end+")</div>";
+    html+='<div class="reason">前置推导的最早可开始时刻：H'+sc.est+"</div>";
+    if(t.deps.length){
+      for(const d of t.deps){
+        const ds=result.sched.get(d);
+        html+='<div class="reason">前置 '+d+"："+(ds?("完成于 H"+ds.end+(Math.abs(ds.end-sc.est)<1e-9?" ← 关键前置":"")):'<span class="badge b-err">未排期</span>')+"</div>";
+      }
+    }else html+='<div class="reason">无前置任务。</div>';
+    for(const r of sc.reasons)html+='<div class="reason">'+r+"</div>";
+    if(!sc.reasons.length)html+='<div class="reason">无顺延，按最早可开始时刻排布。</div>';
+  }
+  w.innerHTML=html;
+  $("e_apply").onclick=()=>applyEdit(t.id);
+}
+function applyEdit(id){
+  const t=tasks.find(x=>x.id===id);
+  const dur=parseFloat($("e_dur").value);
+  if(dur>0)t.duration=dur;
+  const chs=[...document.querySelectorAll(".e_ch")].filter(e=>e.checked).map(e=>e.value);
+  if(chs.length)t.channels=chs;
+  t.deps=$("e_deps").value.split(/[,，\s]+/).filter(Boolean);
+  t.locked=$("e_lock").checked;
+  const ls=parseFloat($("e_lstart").value);
+  t.lockedStart=isNaN(ls)?0:ls;
+  prevResult=result;
+  result=incrementalReschedule(tasks,excluded,result,id);
+  result.consistent=verifyConsistency(tasks,excluded,result);
+  if(!result.consistent){result=scheduleAll(tasks,excluded);result.consistent=false;result.fellBack=true;}
+  render();
+}
+$("btnSample").onclick=()=>loadTasks(JSON.parse(JSON.stringify(SAMPLE)));
+$("btnBad").onclick=()=>{
+  const ids=new Set(tasks.map(t=>t.id));
+  tasks=tasks.concat(BAD.filter(t=>!ids.has(t.id)).map(t=>({locked:false,lockedStart:null,...t})));
+  prevResult=result;
+  result=scheduleAll(tasks,excluded);
+  render();
+};
+$("btnFull").onclick=()=>{prevResult=result;result=scheduleAll(tasks,excluded);render();};
+$("btnImport").onclick=()=>$("fileIn").click();
+$("fileIn").onchange=e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{loadTasks(JSON.parse(r.result));}catch(err){alert("JSON 解析失败："+err.message);}};
+  r.readAsText(f);
+};
+function loadTasks(list){
+  tasks=list.map(t=>({locked:false,lockedStart:null,...t}));
+  excluded=new Set();
+  prevResult=null;selId=null;
+  result=scheduleAll(tasks,excluded);
+  render();
+}
+loadTasks(JSON.parse(JSON.stringify(SAMPLE)));
+</script>
+</body>
+</html>
