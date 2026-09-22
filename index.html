@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>运营指标异常归因推演台</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Local Operations Analytics</p>
+      <h1>运营指标异常归因推演台</h1>
+      <p class="subtitle">将指标波动、事件时间线和人工判断放在同一工作台内推演。</p>
+    </div>
+    <div class="top-actions">
+      <button id="loadSample" class="secondary">载入样例</button>
+      <button id="downloadTemplates" class="secondary">下载模板</button>
+      <button id="exportResult">导出结论 JSON</button>
+    </div>
+  </header>
+
+  <section class="import-panel">
+    <label class="file-card">
+      <span>导入指标 CSV</span>
+      <strong>date, metric_name, value</strong>
+      <input id="metricFile" type="file" accept=".csv,text/csv">
+    </label>
+    <label class="file-card">
+      <span>导入事件 CSV</span>
+      <strong>date, event_type, description</strong>
+      <input id="eventFile" type="file" accept=".csv,text/csv">
+    </label>
+    <div class="import-status">
+      <span id="dataStatus">正在载入样例数据…</span>
+      <label>指标
+        <select id="metricSelect"></select>
+      </label>
+    </div>
+  </section>
+
+  <section class="quality-strip" id="qualityStrip"></section>
+
+  <main class="workspace">
+    <aside class="segment-panel">
+      <div class="panel-heading">
+        <h2>异常区段</h2>
+        <span id="segmentCount"></span>
+      </div>
+      <div id="segmentList" class="segment-list"></div>
+    </aside>
+
+    <section class="detail-panel">
+      <div id="chart" class="chart-card"></div>
+      <div id="segmentDetail"></div>
+    </section>
+  </main>
+
+  <template id="emptyTemplate">
+    <div class="empty-state">
+      <h2>导入数据后开始归因推演</h2>
+      <p>指标数据需包含日期和数值；事件数据需包含日期和事件类型。</p>
+    </div>
+  </template>
+
+  <script src="src/analyzer.js"></script>
+  <script src="src/sample.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

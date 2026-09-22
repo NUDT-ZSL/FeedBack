@@ -1,0 +1,11 @@
+{
+  "name": "operations-anomaly-attribution-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地运营指标异常识别与事件归因推演应用",
+  "scripts": {
+    "start": "python serve.py",
+    "test": "node --test",
+    "check": "node --check src/analyzer.js && node --check src/sample.js && node --check src/app.js"
+  }
+}
