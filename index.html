@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收支情景推演 · Cashflow Sandbox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>收支情景推演</h1>
+  <p class="subtitle">维护基础收支计划，叠加情景参数，实时查看资金曲线与缺口时点</p>
+</header>
+
+<main class="layout">
+  <!-- 左栏：计划编辑 + 情景参数 -->
+  <section class="panel left">
+    <h2>基础收支计划</h2>
+    <div class="globals">
+      <label>期初余额 <input type="number" id="initialBalance" step="100"></label>
+      <label>安全线 <input type="number" id="safetyLine" step="100"></label>
+      <label>推演月数 <input type="number" id="horizonMonths" min="1" max="60" step="1"></label>
+    </div>
+
+    <table id="entryTable">
+      <thead>
+        <tr>
+          <th>名称</th><th>类型</th><th>金额</th><th>起始日期</th><th>重复规律</th><th>结束日期</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="entryBody"></tbody>
+    </table>
+    <button id="addEntry" class="btn">+ 添加一笔收支</button>
+
+    <h2>情景参数（同时叠加）</h2>
+    <div class="scenario">
+      <div class="sc-item">
+        <label>收入延迟 <span id="incomeDelayVal"></span> 天</label>
+        <input type="range" id="incomeDelay" min="0" max="60" step="1">
+      </div>
+      <div class="sc-item">
+        <label>支出提前 <span id="expenseAdvanceVal"></span> 天</label>
+        <input type="range" id="expenseAdvance" min="0" max="60" step="1">
+      </div>
+      <div class="sc-item">
+        <label>金额上浮 <span id="upliftVal"></span> %（作用于
+          <select id="upliftTarget">
+            <option value="expense">支出</option>
+            <option value="income">收入</option>
+            <option value="both">全部</option>
+          </select>）
+        </label>
+        <input type="range" id="amountUplift" min="0" max="100" step="1">
+      </div>
+      <button id="resetScenario" class="btn ghost">情景归零</button>
+    </div>
+  </section>
+
+  <!-- 右栏：曲线 + 缺口明细 -->
+  <section class="panel right">
+    <h2>资金曲线</h2>
+    <div class="legend">
+      <span class="lg base">基准余额</span>
+      <span class="lg scen">情景余额</span>
+      <span class="lg safe">安全线</span>
+      <span class="lg breach">首次跌破点</span>
+    </div>
+    <canvas id="chart" width="860" height="380"></canvas>
+
+    <div class="stats" id="stats"></div>
+
+    <h2>缺口明细</h2>
+    <div id="breachPanel" class="breach-panel"></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
