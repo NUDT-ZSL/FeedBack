@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>点云 LOD 查看器</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#0b0e13;
+    font:13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; color:#dfe6ee; }
+  #app { position:fixed; inset:0; }
+  .panel { position:absolute; background:rgba(16,20,28,.88); border:1px solid #2a3342;
+    border-radius:8px; padding:10px 12px; backdrop-filter: blur(4px); }
+  #loadPanel { top:12px; left:12px; width:300px; }
+  #loadPanel h1 { font-size:14px; margin:0 0 8px; color:#8fd0ff; }
+  #loadPanel input[type=text] { width:100%; box-sizing:border-box; background:#0d1117;
+    border:1px solid #2a3342; color:#dfe6ee; border-radius:4px; padding:5px 7px; }
+  #loadPanel .row { display:flex; gap:6px; margin-top:6px; align-items:center; }
+  button { background:#1d6fb8; border:none; color:#fff; border-radius:4px;
+    padding:5px 12px; cursor:pointer; }
+  button:hover { background:#2585d8; }
+  button.ghost { background:#2a3342; }
+  #loadMsg { margin-top:6px; color:#9fb3c8; min-height:16px; word-break:break-all; }
+  #stats { top:12px; right:12px; width:280px; }
+  #stats h2 { font-size:13px; margin:0 0 6px; color:#8fd0ff; }
+  .kv { display:flex; justify-content:space-between; }
+  .kv b { color:#fff; font-weight:600; }
+  #lodBars { margin-top:8px; }
+  .barRow { display:flex; align-items:center; gap:6px; margin:2px 0; }
+  .barRow .lab { width:44px; color:#9fb3c8; }
+  .barRow .bar { height:10px; border-radius:2px; min-width:2px; }
+  .barRow .cnt { width:64px; text-align:right; color:#9fb3c8; font-size:11px; }
+  #hint { bottom:12px; left:12px; color:#9fb3c8; }
+  #err { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    color:#ff9a9a; font-size:15px; display:none; }
+  label.chk { display:flex; gap:6px; align-items:center; margin-top:8px; color:#9fb3c8; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loadPanel" class="panel">
+  <h1>点云 LOD 查看器</h1>
+  <div class="row">
+    <input type="file" id="fileInput" accept=".ply,.xyz,.txt,.csv,.pts,.asc">
+  </div>
+  <div class="row">
+    <input type="text" id="pathInput" placeholder="或输入服务器本地文件路径，如 data/sample.ply">
+  </div>
+  <div class="row">
+    <button id="loadPathBtn">加载路径</button>
+    <button id="loadSampleBtn" class="ghost">加载示例数据</button>
+  </div>
+  <div id="loadMsg">尚未加载数据</div>
+  <label class="chk"><input type="checkbox" id="lodColor"> 按细节层次着色（LOD 调试）</label>
+</div>
+<div id="stats" class="panel">
+  <h2>渲染状态</h2>
+  <div class="kv"><span>帧率</span><b id="fps">--</b></div>
+  <div class="kv"><span>绘制点数</span><b id="pts">--</b></div>
+  <div class="kv"><span>已加载节点</span><b id="loaded">0</b></div>
+  <div class="kv"><span>加载中 / 队列</span><b id="loading">0</b></div>
+  <div class="kv"><span>占位节点(低细节)</span><b id="placeholder">0</b></div>
+  <div class="kv"><span>点预算</span><b id="budget">--</b></div>
+  <div id="lodBars"></div>
+</div>
+<div id="hint" class="panel">左键旋转 · 右键平移 · 滚轮缩放</div>
+<div id="err"></div>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three.module.js",
+               "three/addons/controls/OrbitControls.js": "/vendor/OrbitControls.js" } }
+</script>
+<script type="module" src="/web/viewer.js"></script>
+</body>
+</html>
