@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>分段上传与转换</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 960px;
+         margin: 24px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 22px; } h2 { font-size: 16px; margin-bottom: 8px; }
+  section { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px;
+            margin-bottom: 16px; }
+  button { padding: 6px 14px; border: 1px solid #888; border-radius: 6px;
+           background: #f7f7f7; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .bar { height: 16px; background: #eee; border-radius: 8px; overflow: hidden;
+         margin: 8px 0; }
+  .bar > div { height: 100%; width: 0; background: #3b82f6; transition: width .2s; }
+  .bar.conv > div { background: #10b981; }
+  #grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+  .cell { width: 26px; height: 26px; border-radius: 4px; background: #e5e7eb;
+          font-size: 10px; display: flex; align-items: center; justify-content: center; }
+  .cell.ok { background: #86efac; } .cell.sending { background: #93c5fd; }
+  .cell.fail { background: #fca5a5; }
+  .failitem { color: #b91c1c; font-size: 13px; margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
+  .muted { color: #666; font-size: 13px; }
+  #result a { font-weight: 600; }
+  label.demo { font-size: 12px; color: #888; margin-left: 12px; }
+</style>
+</head>
+<body>
+<h1>大文件分段上传 · 后台转换 · 断点续传</h1>
+
+<section>
+  <h2>1. 选择文件并上传</h2>
+  <input type="file" id="file">
+  <select id="chunkSize">
+    <option value="1048576">分段 1 MB</option>
+    <option value="2097152" selected>分段 2 MB</option>
+    <option value="4194304">分段 4 MB</option>
+  </select>
+  <button id="btnStart">开始上传</button>
+  <button id="btnPause" disabled>暂停</button>
+  <button id="btnResume" disabled>继续</button>
+  <label class="demo">演示：损坏第 <input type="number" id="corruptAt" value="-1"
+    style="width:48px"> 段（-1 关闭）</label>
+  <div class="bar"><div id="upBar"></div></div>
+  <div class="muted" id="upStat">未开始</div>
+  <div id="grid"></div>
+  <div id="fails"></div>
+</section>
+
+<section>
+  <h2>2. 后台转换</h2>
+  <label class="demo">演示：转换在第 <input type="number" id="failAt" value="-1"
+    style="width:48px"> 段失败（-1 关闭）</label>
+  <button id="btnConvert" disabled>开始转换</button>
+  <button id="btnResumeConv" disabled>从失败点继续转换</button>
+  <div class="bar conv"><div id="convBar"></div></div>
+  <div class="muted" id="convStat">等待上传完成</div>
+</section>
+
+<section id="resultSec">
+  <h2>3. 结果</h2>
+  <div id="result" class="muted">尚未生成结果文件</div>
+</section>
+
+<section>
+  <h2>状态变化记录</h2>
+  <table><thead><tr><th>时间</th><th>类型</th><th>说明</th></tr></thead>
+  <tbody id="events"></tbody></table>
+</section>
+
+<script src="/app.js"></script>
+</body>
+</html>
