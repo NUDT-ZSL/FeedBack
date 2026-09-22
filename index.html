@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>批注锚点重定位系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>批注锚点重定位系统</h1>
+    <div class="toolbar">
+      <label class="stepper">
+        已应用编辑：<span id="stepLabel">0 / 0</span>
+        <input type="range" id="stepRange" min="0" max="0" value="0">
+      </label>
+      <button id="applyAllBtn">应用全部编辑</button>
+      <label class="loadBtn">
+        载入自定义 JSON
+        <input type="file" id="fileInput" accept=".json" hidden>
+      </label>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main>
+    <section class="doc-pane">
+      <h2>最新文档</h2>
+      <div id="editList" class="edit-list"></div>
+      <div id="docView" class="doc-view"></div>
+    </section>
+    <aside class="comment-pane">
+      <h2>批注列表</h2>
+      <div id="commentList"></div>
+      <div id="trashInfo" class="trash-info"></div>
+    </aside>
+  </main>
+
+  <script src="js/anchor-engine.js"></script>
+  <script src="data/sample.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
