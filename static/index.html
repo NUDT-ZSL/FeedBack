@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>协作编辑协调工具</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1 id="doc-title">协作编辑协调工具</h1>
+    <div class="header-actions">
+      <span id="summary"></span>
+      <button id="btn-reset">重置会话</button>
+    </div>
+  </header>
+  <main>
+    <aside id="left">
+      <h2>章节结构</h2>
+      <div id="tree"></div>
+      <h2>未解决清单</h2>
+      <div id="unresolved"></div>
+    </aside>
+    <section id="middle">
+      <h2>待确认改动</h2>
+      <div id="groups"></div>
+    </section>
+    <section id="right">
+      <h2>最终文档预览</h2>
+      <div id="final-doc"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

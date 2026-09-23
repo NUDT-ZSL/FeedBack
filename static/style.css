@@ -1,0 +1,74 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f4f5f7;
+  color: #24292f;
+}
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 20px; background: #1f2937; color: #fff;
+}
+header h1 { font-size: 18px; margin: 0; }
+header button {
+  background: #4b5563; color: #fff; border: none; border-radius: 4px;
+  padding: 6px 12px; cursor: pointer;
+}
+#summary { margin-right: 14px; font-size: 13px; color: #d1d5db; }
+main {
+  display: grid; grid-template-columns: 280px 1fr 1fr; gap: 12px;
+  padding: 12px; height: calc(100vh - 52px);
+}
+aside, section { overflow-y: auto; background: #fff; border-radius: 8px; padding: 12px; }
+h2 { font-size: 14px; color: #6b7280; margin: 8px 0; text-transform: uppercase; }
+.sec-title { font-weight: 600; margin: 8px 0 4px; font-size: 14px; }
+.sec-children { margin-left: 14px; }
+.para-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+.para-row:hover { background: #eef2ff; }
+.para-row.active { background: #dbeafe; }
+.para-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
+.badge {
+  font-size: 11px; border-radius: 10px; padding: 1px 8px; margin-left: 6px;
+}
+.badge.pending { background: #fef3c7; color: #92400e; }
+.badge.conflict { background: #fee2e2; color: #b91c1c; }
+.badge.done { background: #d1fae5; color: #065f46; }
+.badge.invalid { background: #e5e7eb; color: #6b7280; }
+.group {
+  border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 14px; padding: 10px;
+}
+.group.conflicted { border-color: #fca5a5; background: #fff7f7; }
+.group h3 { margin: 0 0 6px; font-size: 14px; }
+.base-text, .merged-text {
+  font-size: 13px; padding: 6px 8px; border-radius: 4px; margin: 4px 0;
+}
+.base-text { background: #f3f4f6; color: #6b7280; }
+.merged-text { background: #ecfdf5; }
+.merged-text.deleted { background: #fee2e2; text-decoration: line-through; }
+.conflict-line { color: #b91c1c; font-size: 13px; margin: 4px 0; }
+.edit-card {
+  border-top: 1px dashed #e5e7eb; padding: 8px 0; font-size: 13px;
+}
+.edit-meta { color: #6b7280; margin-bottom: 4px; }
+.edit-content { background: #eff6ff; padding: 6px 8px; border-radius: 4px; margin: 4px 0; }
+.edit-actions button {
+  margin-right: 6px; border: none; border-radius: 4px;
+  padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+.btn-accept { background: #10b981; color: #fff; }
+.btn-reject { background: #ef4444; color: #fff; }
+.btn-adjust { background: #3b82f6; color: #fff; }
+.status-tag { font-weight: 600; }
+.status-tag.accepted { color: #059669; }
+.status-tag.rejected { color: #dc2626; }
+.status-tag.invalid { color: #6b7280; }
+.status-tag.pending { color: #d97706; }
+.invalid-reason { color: #6b7280; font-size: 12px; font-style: italic; }
+.override-box { width: 100%; min-height: 60px; margin-top: 6px; font-size: 13px; }
+.final-sec { font-weight: 600; margin: 10px 0 4px; }
+.final-para { font-size: 13px; margin: 4px 0 4px 8px; }
+.unresolved-item { font-size: 13px; margin: 4px 0; }
+.ok-line { color: #059669; font-size: 13px; }

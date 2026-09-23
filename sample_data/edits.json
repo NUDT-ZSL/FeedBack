@@ -1,0 +1,57 @@
+[
+  {
+    "id": "e1",
+    "author": "小林",
+    "op": "replace",
+    "target": "p4",
+    "content": "系统应支持最多 50 人同时在线编辑同一块白板。",
+    "note": "客户调研显示 20 人不够用"
+  },
+  {
+    "id": "e2",
+    "author": "阿May",
+    "op": "replace",
+    "target": "p4",
+    "content": "系统应支持最多 20 人同时在线编辑同一块白板, 并提供只观模式。",
+    "note": "补充只观模式诉求"
+  },
+  {
+    "id": "e3",
+    "author": "David",
+    "op": "replace",
+    "target": "p5",
+    "content": "白板内容需要每 10 秒自动保存一次, 并保留历史版本。",
+    "depends_on": ["e1"],
+    "note": "保存策略依赖并发方案确定后生效"
+  },
+  {
+    "id": "e4",
+    "author": "小林",
+    "op": "delete",
+    "target": "p7",
+    "note": "发布计划改到另一个文档维护"
+  },
+  {
+    "id": "e5",
+    "author": "阿May",
+    "op": "replace",
+    "target": "p7",
+    "content": "第一个内测版本计划在明年第一季度发布。",
+    "note": "进度延期"
+  },
+  {
+    "id": "e6",
+    "author": "David",
+    "op": "insert_after",
+    "target": "p6",
+    "content": "在弱网环境下延迟可放宽至 500 毫秒, 但需给出提示。",
+    "note": "补充弱网场景"
+  },
+  {
+    "id": "e7",
+    "author": "小林",
+    "op": "replace",
+    "target": "p3",
+    "content": "主要面向 10 人以内的产品设计与研发团队。"
+  }
+]
