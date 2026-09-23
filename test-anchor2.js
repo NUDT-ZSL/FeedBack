@@ -1,0 +1,11 @@
+﻿const fs = require("fs");
+const src = fs.readFileSync("app.extracted.js", "utf8");
+const seg = src.slice(src.indexOf("// ---------- 锚点定位"), src.indexOf("// ---------- 编辑器渲染"));
+eval(seg);
+const doc = "随着远程办公的普及，团队成员的日程协调成本显著上升，导致会议安排效率低下。";
+const t = "日程协调成本显著上升";
+const s = doc.indexOf(t);
+const a = buildAnchor(doc, s, s + t.length);
+const doc2 = doc.replace(t, "日程协调成本明显上升");
+const r = resolveAnchor(doc2, a, { start: s, end: s + t.length });
+console.log("轻度改写:", r.status, "|", r.reason || "", "| 命中:", r.start != null ? doc2.slice(r.start, r.end) : "-");
