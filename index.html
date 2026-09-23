@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>记忆复习规划器</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#ffffff; --ink:#1f2933; --muted:#6b7280;
+    --accent:#2563eb; --accent-soft:#dbeafe; --danger:#dc2626; --warn:#d97706;
+    --ok:#059669; --line:#e5e7eb; --boost:#7c3aed;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;position:sticky;top:0;z-index:5;}
+  header h1{font-size:18px;margin:0;}
+  header .spacer{flex:1;}
+  .budget-box{display:flex;align-items:center;gap:8px;font-size:14px;}
+  .budget-box input{width:70px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:14px;}
+  main{max-width:1080px;margin:0 auto;padding:20px 16px 60px;display:grid;gap:20px;}
+  section.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
+  section.card h2{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:10px;}
+  .tag{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);}
+  .tag.warn{background:#fef3c7;color:var(--warn);}
+  .tag.danger{background:#fee2e2;color:var(--danger);}
+  .tag.boost{background:#ede9fe;color:var(--boost);}
+  .tag.ok{background:#d1fae5;color:var(--ok);}
+  button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:13px;color:var(--ink);}
+  button:hover{border-color:var(--accent);color:var(--accent);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.primary:hover{filter:brightness(1.08);color:#fff;}
+  button.danger{color:var(--danger);}
+  button.danger:hover{border-color:var(--danger);}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  input,select,textarea{font-family:inherit;}
+  .plan-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;}
+  .plan-item.done{opacity:.55;}
+  .plan-item .info{flex:1;}
+  .plan-item .name{font-weight:600;font-size:15px;}
+  .plan-item .reason{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;}
+  .plan-item .mins{white-space:nowrap;font-size:13px;color:var(--muted);}
+  .qbtns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .qbtns button{width:38px;height:32px;padding:0;}
+  .qbtns button.sel{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .qlabel{font-size:12px;color:var(--muted);margin-top:4px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  th{font-size:12px;color:var(--muted);font-weight:600;}
+  .rbar{width:90px;height:8px;background:#eef2f5;border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle;}
+  .rbar>i{display:block;height:100%;background:var(--ok);}
+  .rbar>i.mid{background:var(--warn);}
+  .rbar>i.low{background:var(--danger);}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  .row-actions button{padding:4px 8px;font-size:12px;}
+  .form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .form-row label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:4px;}
+  .form-row input,.form-row select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:14px;}
+  .empty{color:var(--muted);font-size:14px;padding:14px 0;text-align:center;}
+  .modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:20;}
+  .modal-mask.open{display:flex;}
+  .modal{background:#fff;border-radius:10px;max-width:640px;width:92%;max-height:82vh;overflow:auto;padding:18px 20px;}
+  .modal h3{margin:0 0 12px;font-size:16px;}
+  .modal .close{float:right;}
+  .hist-item{display:flex;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;}
+  .hist-item .grow{flex:1;}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);}
+  .stats b{color:var(--ink);font-size:16px;}
+  .muted{color:var(--muted);font-size:12px;}
+  .footer-bar{display:flex;gap:10px;justify-content:flex-end;}
+  @media (max-width:720px){ th:nth-child(4),td:nth-child(4){display:none;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>📖 记忆复习规划器</h1>
+  <span class="muted" id="todayLabel"></span>
+  <div class="spacer"></div>
+  <div class="budget-box">
+    <label for="budgetInput">今日时间预算（分钟）</label>
+    <input id="budgetInput" type="number" min="5" step="5" value="30">
+  </div>
+  <button id="exportBtn">导出数据</button>
+  <button id="importBtn">导入</button>
+  <input type="file" id="importFile" accept="application/json" style="display:none">
+</header>
+
+<main>
+  <section class="card">
+    <h2>今日复习清单 <span class="tag" id="planCountTag"></span></h2>
+    <div class="stats" id="planStats"></div>
+    <div id="planList" style="margin-top:12px"></div>
+  </section>
+
+  <section class="card">
+    <h2>新增知识点</h2>
+    <div class="form-row">
+      <label style="flex:2;min-width:180px">名称
+        <input id="kpName" type="text" placeholder="例如：泰勒公式">
+      </label>
+      <label>预计复习耗时（分钟）
+        <input id="kpMins" type="number" min="1" value="10" style="width:110px">
+      </label>
+      <label>初始掌握程度
+        <select id="kpInit">
+          <option value="fresh">刚学习（尽快首复）</option>
+          <option value="known">已较熟悉</option>
+        </select>
+      </label>
+      <button class="primary" id="addKpBtn">添加</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>全部知识点 <span class="tag" id="kpCountTag"></span></h2>
+    <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>名称</th><th>当前保持率</th><th>稳定度</th><th>下次到期</th><th>状态</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="kpTableBody"></tbody>
+    </table>
+    </div>
+    <div class="empty" id="kpEmpty" style="display:none">还没有知识点，先在上方添加一个吧。</div>
+  </section>
+</main>
+
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <button class="close" id="modalClose">关闭</button>
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= 数据层 =================
+ * 每个知识点持有一个事件流 events：
+ *   {id, time, type:"review", quality:0..5}
+ *   {id, time, type:"adjust", level:"forgotten"|"fuzzy"|"known"}
+ * 知识点的记忆状态完全由事件流重放推导，删除/修改任一事件后重算，
+ * 保证排期与清单始终一致。
+ */
+const STORE_KEY = "memoryPlanner.v1";
+const DAY_MS = 86400000;
+const DUE_R = 0.8;            // 保持率低于该值即到期
+const LAPSE_Q = 2;            // 回忆质量 <= 该值视为失败
+
+let db = loadDb();
+
+function loadDb(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){ const d = JSON.parse(raw); if(d && Array.isArray(d.kps)) return d; }
+  }catch(e){}
+  return { kps: [], budget: 30 };
+}
+function saveDb(){ localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* ================= 记忆模型 =================
+ * 保持率 R(t) = 0.9 ^ (t / S)，t 为距上次复习的天数，S 为稳定度（天）。
+ * 到期时间：R 降至 DUE_R(0.8) 的时刻 => interval = S * ln(0.8)/ln(0.9)。
+ * 复习后按回忆质量 q(0..5) 更新 S：
+ *   q>=3 成功：S 放大，且复习时保持率越低（合意困难）增益越大；
+ *   q<=2 失败：S 大幅缩短，并标记 needsBoost（需要加强）。
+ */
+function retention(S, days){ return Math.pow(0.9, days / Math.max(S, 0.05)); }
+function intervalFor(S){ return S * Math.log(DUE_R) / Math.log(0.9); }
+
+const INIT_S = { fresh: 0.6, known: 4 };
+const ADJUST_S = { forgotten: 0.3, fuzzy: 1, known: 4 };
+
+function deriveState(kp, now){
+  let S = INIT_S[kp.initLevel] || 0.6;
+  let lastTime = kp.created;
+  let needsBoost = false, lapses = 0, reviews = 0, lastQ = null;
+  const evs = kp.events.slice().sort((a,b)=>a.time-b.time);
+  for(const ev of evs){
+    if(ev.type === "review"){
+      const t = Math.max(0, (ev.time - lastTime) / DAY_MS);
+      const R = retention(S, t);
+      const q = ev.quality;
+      if(q <= LAPSE_Q){
+        S = Math.max(0.2, S * (0.25 + 0.1 * q));
+        needsBoost = true; lapses++;
+      }else{
+        // 成功回忆：质量越高增益越大；低保持率时复习增益更高
+        const gain = (1 + 0.45 * (q - 2)) * (1 + (1 - R));
+        S = Math.min(365, S * gain);
+        // 保持率很高却只勉强想起(q=3)：明显低于预期，标记加强
+        needsBoost = (q === 3 && R > 0.85) ? true : false;
+      }
+      lastTime = ev.time; reviews++; lastQ = q;
+    }else if(ev.type === "adjust"){
+      S = ADJUST_S[ev.level] != null ? ADJUST_S[ev.level] : S;
+      needsBoost = (ev.level === "forgotten");
+      lastTime = ev.time;
+    }
+  }
+  const elapsed = Math.max(0, (now - lastTime) / DAY_MS);
+  const R = retention(S, elapsed);
+  const interval = intervalFor(S);
+  const dueTime = lastTime + interval * DAY_MS;
+  return { S, R, dueTime, needsBoost, lapses, reviews, lastQ, lastTime, elapsed };
+}
+
+/* ================= 今日清单 =================
+ * 候选：已到期 + 24h 内临近到期 + 需要加强的知识点。
+ * 按紧迫度排序后在时间预算内贪心选入，并记录入选理由。
+ */
+function urgencyOf(st, now){
+  const overdueDays = Math.max(0, (now - st.dueTime) / DAY_MS);
+  return (1 - st.R) * 2 + overdueDays + (st.needsBoost ? 1.5 : 0);
+}
+function buildPlan(now){
+  const budget = db.budget || 30;
+  const horizon = now + DAY_MS;
+  const cands = db.kps.map(kp => ({ kp, st: deriveState(kp, now) }))
+    .filter(c => c.st.dueTime <= horizon || c.st.needsBoost);
+  cands.sort((a,b)=> urgencyOf(b.st,now) - urgencyOf(a.st,now));
+  const plan = []; let used = 0;
+  for(const c of cands){
+    const m = c.kp.minutes || 10;
+    if(used + m > budget && plan.length > 0) continue;
+    used += m;
+    plan.push({ kp:c.kp, st:c.st, reason: planReason(c.st, now) });
+  }
+  return { plan, used, budget };
+}
+function planReason(st, now){
+  const parts = [];
+  if(st.needsBoost) parts.push("需要加强：近期回忆质量明显偏低");
+  const od = (now - st.dueTime) / DAY_MS;
+  if(od > 0.05) parts.push("已逾期 " + (od >= 1 ? Math.floor(od) + " 天" : "数小时")
+    + "，当前保持率约 " + Math.round(st.R*100) + "%");
+  else if(st.dueTime <= now) parts.push("今日到期，保持率已降至约 " + Math.round(st.R*100) + "%");
+  else parts.push("24 小时内即将到期，预算内提前安排");
+  if(st.lapses > 0) parts.push("历史遗忘 " + st.lapses + " 次");
+  return parts.join("；");
+}
+
+/* ================= 渲染 ================= */
+const $ = id => document.getElementById(id);
+const QUALITY_LABELS = ["0 完全没印象","1 几乎想不起","2 勉强有点印象","3 费力想起","4 稍有卡顿","5 轻松回忆"];
+
+function fmtDate(ts){
+  const d = new Date(ts);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dd = new Date(d); dd.setHours(0,0,0,0);
+  const diff = Math.round((dd - today) / DAY_MS);
+  const hm = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+  if(diff === 0) return "今天 " + hm;
+  if(diff === 1) return "明天 " + hm;
+  if(diff === -1) return "昨天 " + hm;
+  return (d.getMonth()+1) + "月" + d.getDate() + "日 " + hm;
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function render(){
+  const now = Date.now();
+  $("todayLabel").textContent = new Date(now).toLocaleDateString("zh-CN",
+    { year:"numeric", month:"long", day:"numeric", weekday:"long" });
+  $("budgetInput").value = db.budget;
+  renderPlan(now);
+  renderTable(now);
+}
+
+function renderPlan(now){
+  const { plan, used, budget } = buildPlan(now);
+  const doneSet = new Set(plan.filter(p=>{
+    const last = p.kp.events[p.kp.events.length-1];
+    return last && last.type === "review" && (now - last.time) < DAY_MS/2 && last.time > startOfToday();
+  }).map(p=>p.kp.id));
+  $("planCountTag").textContent = plan.length + " 项";
+  $("planStats").innerHTML =
+    "<span>已分配 <b>" + used + "</b> / " + budget + " 分钟</span>" +
+    "<span>待复习 <b>" + plan.filter(p=>!doneSet.has(p.kp.id)).length + "</b> 项</span>" +
+    "<span>需加强 <b>" + plan.filter(p=>p.st.needsBoost).length + "</b> 项</span>";
+  const box = $("planList");
+  if(plan.length === 0){
+    box.innerHTML = '<div class="empty">今天没有到期或临近到期的知识点。🎉</div>';
+    return;
+  }
+  box.innerHTML = "";
+  plan.forEach(p=>{
+    const div = document.createElement("div");
+    div.className = "plan-item" + (doneSet.has(p.kp.id) ? " done" : "");
+    div.innerHTML =
+      '<div class="info"><div class="name">' + esc(p.kp.name) +
+      (p.st.needsBoost ? ' <span class="tag boost">需要加强</span>' : "") +
+      '</div><div class="reason">入选理由：' + esc(p.reason) + "</div>" +
+      '<div class="qwrap"></div></div>' +
+      '<div class="mins">' + (p.kp.minutes||10) + ' 分钟</div>';
+    const qwrap = div.querySelector(".qwrap");
+    if(doneSet.has(p.kp.id)){
+      qwrap.innerHTML = '<span class="tag ok">今日已复习 ✓</span>';
+    }else{
+      const btns = document.createElement("div");
+      btns.className = "qbtns";
+      for(let q=0;q<=5;q++){
+        const b = document.createElement("button");
+        b.textContent = q; b.title = QUALITY_LABELS[q];
+        b.onclick = ()=>{ recordReview(p.kp.id, q); };
+        btns.appendChild(b);
+      }
+      qwrap.appendChild(btns);
+      const lab = document.createElement("div");
+      lab.className = "qlabel";
+      lab.textContent = "复习后点击回忆质量（0=完全遗忘 … 5=轻松回忆）";
+      qwrap.appendChild(lab);
+    }
+    box.appendChild(div);
+  });
+}
+
+function renderTable(now){
+  const body = $("kpTableBody");
+  $("kpCountTag").textContent = db.kps.length + " 个";
+  $("kpEmpty").style.display = db.kps.length ? "none" : "block";
+  body.innerHTML = "";
+  const rows = db.kps.map(kp=>({kp, st:deriveState(kp, now)}))
+    .sort((a,b)=>a.st.dueTime - b.st.dueTime);
+  for(const {kp, st} of rows){
+    const tr = document.createElement("tr");
+    const pct = Math.round(st.R*100);
+    const cls = pct >= 80 ? "" : (pct >= 55 ? "mid" : "low");
+    const overdue = st.dueTime <= now;
+    tr.innerHTML =
+      "<td><b>" + esc(kp.name) + "</b><br><span class='muted'>" + (kp.minutes||10) + " 分钟/次</span></td>" +
+      '<td><span class="rbar"><i class="' + cls + '" style="width:' + pct + '%"></i></span> ' + pct + "%</td>" +
+      "<td>" + st.S.toFixed(1) + " 天</td>" +
+      "<td>" + fmtDate(st.dueTime) + (overdue ? ' <span class="tag danger">已到期</span>' : "") + "</td>" +
+      "<td>" + (st.needsBoost ? '<span class="tag boost">需要加强</span>' :
+        (st.reviews === 0 ? '<span class="tag">待首复</span>' : '<span class="tag ok">正常</span>')) + "</td>" +
+      '<td><div class="row-actions">' +
+      '<button data-a="review">记录复习</button>' +
+      '<button data-a="adjust">调整状态</button>' +
+      '<button data-a="hist">记录</button>' +
+      '<button data-a="del" class="danger">删除</button>' +
+      "</div></td>";
+    tr.querySelector('[data-a="review"]').onclick = ()=>openReviewModal(kp.id);
+    tr.querySelector('[data-a="adjust"]').onclick = ()=>openAdjustModal(kp.id);
+    tr.querySelector('[data-a="hist"]').onclick = ()=>openHistoryModal(kp.id);
+    tr.querySelector('[data-a="del"]').onclick = ()=>{
+      if(confirm("确定删除知识点「" + kp.name + "」及其全部记录？")){
+        db.kps = db.kps.filter(k=>k.id!==kp.id); saveDb(); render();
+      }
+    };
+    body.appendChild(tr);
+  }
+}
+
+function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+
+/* ================= 操作 ================= */
+function findKp(id){ return db.kps.find(k=>k.id===id); }
+
+function recordReview(id, q){
+  const kp = findKp(id); if(!kp) return;
+  kp.events.push({ id: uid(), time: Date.now(), type: "review", quality: q });
+  saveDb(); render();
+}
+
+function openReviewModal(id){
+  const kp = findKp(id); if(!kp) return;
+  openModal("记录复习：" + kp.name, body=>{
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "选择本次回忆质量：";
+    body.appendChild(p);
+    QUALITY_LABELS.forEach((lab,q)=>{
+      const b = document.createElement("button");
+      b.textContent = lab; b.style.margin = "0 6px 8px 0";
+      b.onclick = ()=>{ recordReview(id, q); closeModal(); };
+      body.appendChild(b);
+    });
+  });
+}
+
+function openAdjustModal(id){
+  const kp = findKp(id); if(!kp) return;
+  openModal("手动调整记忆状态：" + kp.name, body=>{
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "调整会作为一条事件写入记录，排期将立即重新推导。";
+    body.appendChild(p);
+    [["known","我记得很牢（状态良好）"],["fuzzy","有些模糊"],["forgotten","基本忘了"]].forEach(pair=>{
+      const lv = pair[0], lab = pair[1];
+      const b = document.createElement("button");
+      b.textContent = lab; b.style.margin = "0 6px 8px 0";
+      if(lv==="forgotten") b.className = "danger";
+      b.onclick = ()=>{
+        kp.events.push({ id: uid(), time: Date.now(), type: "adjust", level: lv });
+        saveDb(); closeModal(); render();
+      };
+      body.appendChild(b);
+    });
+  });
+}
+
+function openHistoryModal(id){
+  const kp = findKp(id); if(!kp) return;
+  openModal("复习记录：" + kp.name, body=>{
+    if(kp.events.length === 0){
+      body.innerHTML = '<div class="empty">暂无记录</div>'; return;
+    }
+    const evs = kp.events.slice().sort((a,b)=>b.time-a.time);
+    evs.forEach(ev=>{
+      const row = document.createElement("div");
+      row.className = "hist-item";
+      const desc = ev.type === "review"
+        ? "复习 · 质量 " + ev.quality + "（" + QUALITY_LABELS[ev.quality].slice(2) + "）"
+        : "手动调整 · " + ({known:"状态良好",fuzzy:"有些模糊",forgotten:"基本忘了"}[ev.level] || ev.level);
+      row.innerHTML = '<span class="grow">' + new Date(ev.time).toLocaleString("zh-CN") +
+        "　" + esc(desc) + "</span>";
+      const del = document.createElement("button");
+      del.textContent = "删除"; del.className = "danger";
+      del.onclick = ()=>{
+        kp.events = kp.events.filter(e=>e.id!==ev.id);
+        saveDb(); closeModal(); render(); openHistoryModal(id);
+      };
+      row.appendChild(del);
+      body.appendChild(row);
+    });
+    const tip = document.createElement("p");
+    tip.className = "muted";
+    tip.textContent = "删除记录后，该知识点的记忆强度、到期时间与今日清单会自动重新推导。";
+    body.appendChild(tip);
+  });
+}
+
+/* ================= 弹窗 ================= */
+function openModal(title, fill){
+  $("modalTitle").textContent = title;
+  const body = $("modalBody");
+  body.innerHTML = "";
+  fill(body);
+  $("modalMask").classList.add("open");
+}
+function closeModal(){ $("modalMask").classList.remove("open"); }
+$("modalClose").onclick = closeModal;
+$("modalMask").addEventListener("click", e=>{ if(e.target === $("modalMask")) closeModal(); });
+
+/* ================= 绑定 ================= */
+$("addKpBtn").onclick = ()=>{
+  const name = $("kpName").value.trim();
+  if(!name){ alert("请填写知识点名称"); return; }
+  const mins = Math.max(1, parseInt($("kpMins").value, 10) || 10);
+  db.kps.push({
+    id: uid(), name, minutes: mins,
+    initLevel: $("kpInit").value,
+    created: Date.now(), events: []
+  });
+  $("kpName").value = "";
+  saveDb(); render();
+};
+$("budgetInput").onchange = ()=>{
+  db.budget = Math.max(5, parseInt($("budgetInput").value, 10) || 30);
+  saveDb(); render();
+};
+$("exportBtn").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "memory-planner-" + new Date().toISOString().slice(0,10) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$("importBtn").onclick = ()=>$("importFile").click();
+$("importFile").onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const d = JSON.parse(r.result);
+      if(!d || !Array.isArray(d.kps)) throw new Error("bad");
+      db = d; saveDb(); render();
+    }catch(err){ alert("导入失败：文件格式不正确"); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+render();
+</script>
+</body>
+</html>
