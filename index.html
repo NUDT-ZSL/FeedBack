@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>仓库月台作业编排工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; margin: 0; background: #f4f6f8; color: #222; font-size: 13px; }
+  header { background: #1f3a5f; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; margin-right: 12px; }
+  button { background: #2f6fb2; color: #fff; border: none; border-radius: 4px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { background: #255a92; }
+  button.secondary { background: #5a6b7d; }
+  button.danger { background: #b23a3a; }
+  button:disabled { background: #9aa7b3; cursor: default; }
+  #conflicts { background: #fdecea; border: 1px solid #e5a49f; border-radius: 6px; margin: 10px 16px 0; padding: 8px 12px; display: none; }
+  #conflicts h3 { margin: 0 0 6px; color: #a02c22; font-size: 14px; }
+  #conflicts .citem { margin: 3px 0; color: #7c241c; }
+  #notes { background: #fff8e1; border: 1px solid #e0c97f; border-radius: 6px; margin: 10px 16px 0; padding: 6px 12px; display: none; color: #6d5b12; }
+  #main { display: flex; gap: 12px; padding: 12px 16px; align-items: flex-start; }
+  #left { width: 660px; flex: none; }
+  #right { flex: 1; min-width: 420px; }
+  .panel { background: #fff; border: 1px solid #d7dee6; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+  .panel h2 { font-size: 14px; margin: 0 0 8px; color: #1f3a5f; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #e2e8f0; padding: 3px 4px; text-align: center; white-space: nowrap; }
+  th { background: #eef2f7; font-weight: 600; }
+  td input[type=time], td input[type=number], td select { width: 100%; border: 1px solid transparent; background: transparent; font-size: 12px; text-align: center; }
+  td input:hover, td select:hover { border-color: #b9c6d4; }
+  tr.infeasible td { background: #fdecea; }
+  tr.confirmed td { background: #eefaf0; }
+  tr.highlight td { outline: 2px solid #2f6fb2; }
+  .resrow { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .resrow label { display: flex; align-items: center; gap: 4px; }
+  .resrow input[type=number] { width: 56px; }
+  .crewchip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #c6d2de; border-radius: 4px; padding: 2px 6px; margin: 2px; background: #f7fafc; }
+  .crewchip input { width: 64px; }
+  .crewchip input.cap { width: 44px; }
+  /* 甘特图 */
+  #gantt { position: relative; overflow-x: auto; }
+  .axis { position: relative; height: 18px; border-bottom: 1px solid #cbd5e0; margin-left: 64px; }
+  .tick { position: absolute; top: 0; font-size: 10px; color: #667; border-left: 1px solid #cbd5e0; padding-left: 2px; height: 18px; }
+  .lane { display: flex; align-items: stretch; border-bottom: 1px solid #e6ebf1; height: 34px; }
+  .lane-label { width: 64px; flex: none; font-size: 12px; color: #445; display: flex; align-items: center; justify-content: center; background: #f2f5f9; border-right: 1px solid #dbe3ec; }
+  .lane-body { position: relative; flex: 1; }
+  .block { position: absolute; top: 4px; height: 26px; border-radius: 4px; color: #fff; font-size: 11px; line-height: 26px; padding: 0 4px; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .block.confirmed { outline: 2px solid #1c7c34; }
+  .block:hover { filter: brightness(1.15); }
+  /* 负载图 */
+  .loadrow { display: flex; align-items: flex-end; margin-bottom: 4px; }
+  .load-label { width: 64px; flex: none; font-size: 12px; color: #445; text-align: center; }
+  .load-body { position: relative; flex: 1; height: 70px; border-bottom: 1px solid #cbd5e0; display: flex; align-items: flex-end; }
+  .bar { flex: 1; margin: 0 0.5px; background: #7aa7d1; min-width: 2px; position: relative; }
+  .bar.over { background: #d9534f; }
+  .capline { position: absolute; left: 0; right: 0; border-top: 2px dashed #c0392b; }
+  .legend { font-size: 11px; color: #556; margin-top: 4px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 10px; vertical-align: -1px; }
+  #undoInfo { color: #cfe0f0; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>仓库月台作业编排</h1>
+  <button id="btnSample">载入示例数据</button>
+  <button id="btnImport" class="secondary">导入 JSON</button>
+  <button id="btnExport" class="secondary">导出 JSON</button>
+  <button id="btnReopt">全局优化重排</button>
+  <button id="btnUndo" class="danger">撤销调整</button>
+  <span id="undoInfo"></span>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+</header>
+<div id="conflicts"></div>
+<div id="notes"></div>
+<div id="main">
+  <div id="left">
+    <div class="panel" id="resPanel"><h2>资源设置</h2><div class="resrow" id="resRow"></div></div>
+    <div class="panel">
+      <h2>到货任务 <button id="btnAdd" style="float:right;font-size:12px;padding:2px 8px">+ 新增任务</button></h2>
+      <table id="taskTable"></table>
+    </div>
+  </div>
+  <div id="right">
+    <div class="panel"><h2>月台占用时间线</h2><div id="gantt"></div><div class="legend" id="ganttLegend"></div></div>
+    <div class="panel"><h2>班组负载（每 30 分钟）</h2><div id="loads"></div><div class="legend">红色虚线 = 班组产能上限；柱高 = 已占用产能</div></div>
+  </div>
+</div>
+<script>
+const SLOT = 5; // 时间粒度（分钟）
+const COLORS = ["#2f6fb2","#c0762c","#5a9367","#8a5fa8","#b2507a","#4a8f8f"];
+
+function hm(m){ m=((m%1440)+1440)%1440; const h=Math.floor(m/60), mm=m%60;
+  return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0"); }
+function parseHM(s){ const p=s.split(":"); return (+p[0])*60+(+p[1]||0); }
+
+function sampleState(){
+  return {
+    docks: 3,
+    crews: [
+      {name:"装卸一组", capacity:6},
+      {name:"装卸二组", capacity:4}
+    ],
+    tasks: [
+      {id:"T01", name:"冷链-鲜奶",   earliest:480, latest:600,  duration:60, priority:5, workload:3, crew:"", confirmed:false, assignment:null},
+      {id:"T02", name:"百货-日用品", earliest:480, latest:720,  duration:90, priority:2, workload:2, crew:"", confirmed:false, assignment:null},
+      {id:"T03", name:"生鲜-蔬菜",   earliest:510, latest:660,  duration:45, priority:4, workload:3, crew:"", confirmed:false, assignment:null},
+      {id:"T04", name:"家电-大件",   earliest:540, latest:780,  duration:120,priority:3, workload:4, crew:"", confirmed:false, assignment:null},
+      {id:"T05", name:"服装-快消",   earliest:600, latest:840,  duration:60, priority:2, workload:2, crew:"", confirmed:false, assignment:null},
+      {id:"T06", name:"冷链-冻品",   earliest:630, latest:810,  duration:75, priority:4, workload:3, crew:"", confirmed:false, assignment:null},
+      {id:"T07", name:"粮油-补货",   earliest:660, latest:900,  duration:90, priority:1, workload:2, crew:"", confirmed:false, assignment:null},
+      {id:"T08", name:"医药-急单",   earliest:690, latest:870,  duration:45, priority:5, workload:2, crew:"", confirmed:false, assignment:null},
+      {id:"T09", name:"建材-托盘",   earliest:720, latest:960,  duration:120,priority:1, workload:4, crew:"", confirmed:false, assignment:null},
+      {id:"T10", name:"电商-退货",   earliest:780, latest:1020, duration:60, priority:2, workload:2, crew:"", confirmed:false, assignment:null}
+    ]
+  };
+}
+
+let state = sampleState();
+let historyStack = [];   // 每次调整前的快照，用于撤销
+let lastResult = null;   // 最近一次编排结果
+
+function snapshot(){ return JSON.stringify(state); }
+function pushHistory(){
+  historyStack.push(snapshot());
+  if(historyStack.length>80) historyStack.shift();
+}
+function undo(){
+  if(!historyStack.length) return;
+  state = JSON.parse(historyStack.pop());
+  recompute(false);
+}
+
+// 深拷贝任务数组，避免引用污染
+function cloneTasks(tasks){ return JSON.parse(JSON.stringify(tasks)); }
+
+/* ================= 编排求解器 =================
+ * 约束：1) 到达时刻落在 [earliest, latest-duration]；
+ *       2) 同一月台时间段不重叠；
+ *       3) 任一班组在任一时刻已占用产能 + 任务需求 <= 班组产能。
+ * 目标：先满足全部约束；可行解中优先最小化等待（start-earliest），
+ *       高优先级任务先挑选时段（等待相近时高优先级更早开始）。
+ * 稳定性：已确认任务原样锁定；未确认任务若原安排仍可行则尽量保留，
+ *       仅受影响/不可行的任务重新寻找时段。
+ */
+function computeSchedule(st, keepPrevious){
+  const dockBusy = Array.from({length: st.docks}, ()=>[]);   // {start,end,id}
+  const crewIv   = st.crews.map(()=>[]);                     // {start,end,wl,id}
+  const result = new Map();   // id -> {start,dock,crew}
+  const infeasible = [];      // {task, reasons[]}
+  const notes = [];
+
+  function crewUsedAt(ci, t){
+    let u = 0;
+    for(const iv of crewIv[ci]) if(iv.start <= t && t < iv.end) u += iv.wl;
+    return u;
+  }
+  function dockFree(di, s, e){
+    return !dockBusy[di].some(iv => s < iv.end && e > iv.start);
+  }
+  function canPlace(task, s, di, ci){
+    const e = s + task.duration;
+    if(!dockFree(di, s, e)) return false;
+    const cap = st.crews[ci].capacity;
+    for(let t = s; t < e; t += SLOT)
+      if(crewUsedAt(ci, t) + task.workload > cap) return false;
+    return true;
+  }
+  function place(task, s, di, ci){
+    const e = s + task.duration;
+    dockBusy[di].push({start:s, end:e, id:task.id});
+    crewIv[ci].push({start:s, end:e, wl:task.workload, id:task.id});
+    result.set(task.id, {start:s, dock:di, crew:ci});
+  }
+  function eligibleCrews(task){
+    if(task.crew === "" || task.crew == null) return st.crews.map((_,i)=>i);
+    const i = st.crews.findIndex(c=>c.name===task.crew);
+    return i>=0 ? [i] : [];
+  }
+
+  // 阶段 A：已确认任务原样锁定（若自身时窗已不含原安排则自动解除确认）
+  const pending = [];
+  const locked = [];
+  for(const t of st.tasks){
+    const a = t.assignment;
+    if(t.confirmed && a && a.start >= t.earliest && a.start + t.duration <= t.latest){
+      locked.push(t);
+    } else {
+      if(t.confirmed){
+        t.confirmed = false;
+        notes.push(`任务 ${t.id} 已确认的时刻超出新时窗，已自动转为未确认。`);
+      }
+      pending.push(t);
+    }
+  }
+  locked.sort((a,b)=> a.assignment.start - b.assignment.start);
+  for(const t of locked){
+    const a = t.assignment;
+    const di = Math.min(a.dock, st.docks-1);
+    const ci = Math.min(a.crew, st.crews.length-1);
+    if(canPlace(t, a.start, di, ci)) place(t, a.start, di, ci);
+    else { // 已确认任务之间冲突（一般是资源被调小导致）
+      t.confirmed = false;
+      notes.push(`任务 ${t.id} 的已确认安排与当前资源冲突，已转为未确认重新编排。`);
+      pending.push(t);
+    }
+  }
+
+  // 阶段 B：未确认任务，高优先级优先、同时窗早者优先
+  pending.sort((a,b)=> b.priority - a.priority || a.earliest - b.earliest || (a.id<b.id?-1:1));
+  for(const t of pending){
+    // 稳定性：原安排仍可行则保留
+    const a = t.assignment;
+    if(keepPrevious && a && a.dock < st.docks && a.crew < st.crews.length
+       && a.start >= t.earliest && a.start + t.duration <= t.latest
+       && eligibleCrews(t).includes(a.crew)
+       && canPlace(t, a.start, a.dock, a.crew)){
+      place(t, a.start, a.dock, a.crew);
+      continue;
+    }
+    // 在时窗内按时间顺序找第一个可行位置（等待最小）
+    const crews = eligibleCrews(t);
+    let found = null;
+    for(let s = t.earliest; s + t.duration <= t.latest && !found; s += SLOT){
+      for(let di = 0; di < st.docks && !found; di++)
+        for(const ci of crews)
+          if(canPlace(t, s, di, ci)){ found = {s, di, ci}; break; }
+    }
+    if(found) place(t, found.s, found.di, found.ci);
+    else infeasible.push({task: t, reasons: diagnose(t, st, dockBusy, crewIv)});
+  }
+  return {result, infeasible, notes, dockBusy, crewIv};
+}
+
+/* 不可行诊断：在任务时窗内扫描，找出
+ *  - 全部月台被占用的时段（及占用者）
+ *  - 班组剩余产能不足的时段（及占用者）
+ */
+function diagnose(task, st, dockBusy, crewIv){
+  const reasons = [];
+  const W0 = task.earliest, W1 = task.latest;
+  if(task.duration > W1 - W0){
+    reasons.push(`作业时长 ${task.duration} 分钟超过时窗长度 ${W1-W0} 分钟（${hm(W0)}–${hm(W1)}）`);
+    return reasons;
+  }
+  // 月台：全部占用的连续时段
+  let ranges = [], cur = null, blockers = new Set();
+  for(let t = W0; t < W1; t += SLOT){
+    let busy = 0; const ids = [];
+    for(let di = 0; di < st.docks; di++){
+      const iv = dockBusy[di].find(v => v.start <= t && t < v.end);
+      if(iv){ busy++; ids.push(iv.id); }
+    }
+    if(busy >= st.docks){
+      if(!cur) cur = {s:t, e:t+SLOT}; else cur.e = t+SLOT;
+      ids.forEach(i=>blockers.add(i));
+    } else if(cur){ ranges.push(cur); cur = null; }
+  }
+  if(cur) ranges.push(cur);
+  for(const r of ranges.slice(0,3))
+    reasons.push(`月台冲突：${hm(r.s)}–${hm(r.e)} 全部 ${st.docks} 个月台被占用（${[...blockers].join("、")}）`);
+  // 班组：剩余产能不足的时段
+  const crews = (task.crew === "" || task.crew == null)
+    ? st.crews.map((_,i)=>i)
+    : st.crews.map((c,i)=>c.name===task.crew?i:-1).filter(i=>i>=0);
+  for(const ci of crews){
+    const cap = st.crews[ci].capacity;
+    let rr = [], c2 = null; const users = new Set();
+    for(let t = W0; t < W1; t += SLOT){
+      let used = 0; const ids = [];
+      for(const iv of crewIv[ci]) if(iv.start <= t && t < iv.end){ used += iv.wl; ids.push(iv.id); }
+      if(cap - used < task.workload){
+        if(!c2) c2 = {s:t, e:t+SLOT}; else c2.e = t+SLOT;
+        ids.forEach(i=>users.add(i));
+      } else if(c2){ rr.push(c2); c2 = null; }
+    }
+    if(c2) rr.push(c2);
+    for(const r of rr.slice(0,2))
+      reasons.push(`班组「${st.crews[ci].name}」产能不足：${hm(r.s)}–${hm(r.e)} 剩余产能低于需求 ${task.workload}（占用：${[...users].join("、")||"无"}）`);
+  }
+  if(!reasons.length)
+    reasons.push(`时窗 ${hm(W0)}–${hm(W1)} 内没有长度足够的连续空档可同时满足月台与班组产能（资源被碎片占用）`);
+  return reasons;
+}
+/* ================= 渲染 ================= */
+function renderResources(){
+  const el = document.getElementById("resRow");
+  let html = `<label>月台数量 <input type="number" id="dockCount" min="1" max="20" value="${state.docks}"></label>`;
+  html += `<span>班组：</span>`;
+  state.crews.forEach((c,i)=>{
+    html += `<span class="crewchip">
+      <input value="${c.name}" data-crew-name="${i}" title="班组名称">
+      产能<input class="cap" type="number" min="1" max="99" value="${c.capacity}" data-crew-cap="${i}">
+      <button class="danger" style="padding:0 6px" data-crew-del="${i}" title="删除班组">×</button>
+    </span>`;
+  });
+  html += `<button id="btnAddCrew" class="secondary" style="padding:2px 8px">+ 班组</button>`;
+  el.innerHTML = html;
+  document.getElementById("dockCount").onchange = e=>{
+    pushHistory(); state.docks = Math.max(1, +e.target.value|0); recompute(false);
+  };
+  el.querySelectorAll("[data-crew-name]").forEach(inp=> inp.onchange = e=>{
+    pushHistory(); state.crews[+e.target.dataset.crewName].name = e.target.value; recompute(false);
+  });
+  el.querySelectorAll("[data-crew-cap]").forEach(inp=> inp.onchange = e=>{
+    pushHistory(); state.crews[+e.target.dataset.crewCap].capacity = Math.max(1, +e.target.value|0); recompute(false);
+  });
+  el.querySelectorAll("[data-crew-del]").forEach(btn=> btn.onclick = e=>{
+    pushHistory(); state.crews.splice(+e.target.dataset.crewDel, 1); recompute(false);
+  });
+  document.getElementById("btnAddCrew").onclick = ()=>{
+    pushHistory();
+    state.crews.push({name:"班组"+(state.crews.length+1), capacity:4});
+    recompute(false);
+  };
+}
+
+function renderTable(){
+  const t = document.getElementById("taskTable");
+  let html = `<tr><th>确认</th><th>ID</th><th>名称</th><th>时窗起</th><th>时窗止</th>
+    <th>时长(分)</th><th>优先级</th><th>工作量</th><th>指定班组</th><th>编排结果</th><th>等待</th><th></th></tr>`;
+  for(const task of state.tasks){
+    const a = lastResult.result.get(task.id);
+    const inf = lastResult.infeasible.find(x=>x.task.id===task.id);
+    const cls = inf ? "infeasible" : (task.confirmed ? "confirmed" : "");
+    const crewOpts = [`<option value="">任意</option>`].concat(
+      state.crews.map(c=>`<option ${task.crew===c.name?"selected":""}>${c.name}</option>`)).join("");
+    html += `<tr class="${cls}" data-row="${task.id}">
+      <td><input type="checkbox" data-confirm="${task.id}" ${task.confirmed?"checked":""} ${a?"":"disabled"} title="锁定当前编排"></td>
+      <td>${task.id}</td>
+      <td><input style="width:86px" value="${task.name}" data-f="name" data-id="${task.id}"></td>
+      <td><input type="time" value="${hm(task.earliest)}" data-f="earliest" data-id="${task.id}"></td>
+      <td><input type="time" value="${hm(task.latest)}" data-f="latest" data-id="${task.id}"></td>
+      <td><input type="number" min="5" step="5" style="width:52px" value="${task.duration}" data-f="duration" data-id="${task.id}"></td>
+      <td><input type="number" min="1" max="5" style="width:40px" value="${task.priority}" data-f="priority" data-id="${task.id}"></td>
+      <td><input type="number" min="1" max="20" style="width:44px" value="${task.workload}" data-f="workload" data-id="${task.id}"></td>
+      <td><select data-f="crew" data-id="${task.id}">${crewOpts}</select></td>
+      <td>${a ? `${hm(a.start)}–${hm(a.start+task.duration)} @月台${a.dock+1}·${state.crews[a.crew].name}` : "<b style='color:#a02c22'>不可行</b>"}</td>
+      <td>${a ? (a.start-task.earliest)+"分" : "-"}</td>
+      <td><button class="danger" style="padding:0 6px" data-del="${task.id}">×</button></td>
+    </tr>`;
+  }
+  t.innerHTML = html;
+  t.querySelectorAll("input[data-f],select[data-f]").forEach(inp=>{
+    inp.onchange = onFieldEdit;
+  });
+  t.querySelectorAll("[data-confirm]").forEach(cb=>{
+    cb.onchange = e=>{
+      const task = state.tasks.find(x=>x.id===e.target.dataset.confirm);
+      pushHistory();
+      task.confirmed = e.target.checked;
+      recompute(true);
+    };
+  });
+  t.querySelectorAll("[data-del]").forEach(btn=>{
+    btn.onclick = e=>{
+      pushHistory();
+      state.tasks = state.tasks.filter(x=>x.id!==e.target.dataset.del);
+      recompute(false);
+    };
+  });
+}
+function timeAxis(){
+  let t0 = Infinity, t1 = -Infinity;
+  for(const task of state.tasks){
+    t0 = Math.min(t0, task.earliest); t1 = Math.max(t1, task.latest);
+    const a = lastResult.result.get(task.id);
+    if(a){ t0 = Math.min(t0, a.start); t1 = Math.max(t1, a.start + task.duration); }
+  }
+  if(!isFinite(t0)){ t0 = 480; t1 = 1080; }
+  t0 = Math.floor(t0/60)*60 - 30; t1 = Math.ceil(t1/60)*60 + 30;
+  return [Math.max(0,t0), Math.min(1440,t1)];
+}
+
+function renderGantt(){
+  const [t0, t1] = timeAxis();
+  const span = t1 - t0;
+  const pct = m => ((m - t0)/span*100) + "%";
+  let html = `<div class="axis">`;
+  for(let m = t0; m <= t1; m += 60)
+    html += `<div class="tick" style="left:${pct(m)}">${hm(m)}</div>`;
+  html += `</div>`;
+  for(let di = 0; di < state.docks; di++){
+    html += `<div class="lane"><div class="lane-label">月台 ${di+1}</div><div class="lane-body">`;
+    for(const task of state.tasks){
+      const a = lastResult.result.get(task.id);
+      if(!a || a.dock !== di) continue;
+      const color = COLORS[a.crew % COLORS.length];
+      const left = (a.start - t0)/span*100;
+      const width = task.duration/span*100;
+      html += `<div class="block ${task.confirmed?"confirmed":""}" data-block="${task.id}"
+        style="left:${left}%;width:${width}%;background:${color}"
+        title="${task.id} ${task.name}&#10;${hm(a.start)}–${hm(a.start+task.duration)}  月台${di+1} · ${state.crews[a.crew].name}&#10;优先级 ${task.priority}，等待 ${a.start-task.earliest} 分${task.confirmed?"&#10;已确认锁定":""}">${task.id}${task.confirmed?" 🔒":""}</div>`;
+    }
+    html += `</div></div>`;
+  }
+  document.getElementById("gantt").innerHTML = html;
+  document.getElementById("ganttLegend").innerHTML =
+    state.crews.map((c,i)=>`<span class="swatch" style="background:${COLORS[i%COLORS.length]}"></span>${c.name}`).join("")
+    + `<span style="margin-left:14px">绿框 🔒 = 已确认锁定；点击色块可定位任务行</span>`;
+  document.querySelectorAll("[data-block]").forEach(b=>{
+    b.onclick = ()=>{
+      const row = document.querySelector(`[data-row="${b.dataset.block}"]`);
+      if(row){ row.scrollIntoView({block:"center"}); row.classList.add("highlight");
+        setTimeout(()=>row.classList.remove("highlight"), 1500); }
+    };
+  });
+}
+function renderLoads(){
+  const [t0, t1] = timeAxis();
+  const BUCKET = 30;
+  let html = "";
+  state.crews.forEach((c, ci)=>{
+    html += `<div class="loadrow"><div class="load-label">${c.name}<br><small>产能 ${c.capacity}</small></div>
+      <div class="load-body">`;
+    for(let m = t0; m < t1; m += BUCKET){
+      let used = 0;
+      for(const iv of lastResult.crewIv[ci])
+        if(iv.start < m + BUCKET && iv.end > m) used += iv.wl;
+      const h = Math.min(100, used / c.capacity * 100);
+      html += `<div class="bar ${used>c.capacity?"over":""}" style="height:${h}%;background:${COLORS[ci%COLORS.length]}"
+        title="${hm(m)}–${hm(m+BUCKET)}  占用 ${used}/${c.capacity}"></div>`;
+    }
+    html += `<div class="capline" style="bottom:100%"></div></div></div>`;
+  });
+  document.getElementById("loads").innerHTML = html;
+}
+
+function renderConflicts(){
+  const box = document.getElementById("conflicts");
+  if(!lastResult.infeasible.length){ box.style.display = "none"; box.innerHTML=""; }
+  else{
+    let html = `<h3>⚠ ${lastResult.infeasible.length} 个任务在当前约束下不可行</h3>`;
+    for(const x of lastResult.infeasible){
+      html += `<div class="citem"><b>${x.task.id} ${x.task.name}</b>（时窗 ${hm(x.task.earliest)}–${hm(x.task.latest)}，需 ${x.task.duration} 分 / 工作量 ${x.task.workload}）：<br>· ${x.reasons.join("<br>· ")}</div>`;
+    }
+    box.innerHTML = html; box.style.display = "block";
+  }
+  const nb = document.getElementById("notes");
+  if(lastResult.notes.length){ nb.innerHTML = lastResult.notes.join("<br>"); nb.style.display="block"; }
+  else { nb.style.display = "none"; }
+}
+
+function renderAll(){
+  renderResources();
+  renderTable();
+  renderGantt();
+  renderLoads();
+  renderConflicts();
+  document.getElementById("btnUndo").disabled = !historyStack.length;
+  document.getElementById("undoInfo").textContent =
+    `已排 ${lastResult.result.size}/${state.tasks.length} 个任务` +
+    (lastResult.infeasible.length ? `，${lastResult.infeasible.length} 个不可行` : "，全部可行");
+}
+
+/* keepPrevious=true：尽量保留未确认任务的现有安排（局部调整）；
+ * keepPrevious=false：全局重排（用于资源变化或手动优化）。 */
+function recompute(keepPrevious){
+  lastResult = computeSchedule(state, keepPrevious);
+  for(const t of state.tasks){
+    const a = lastResult.result.get(t.id);
+    t.assignment = a ? {start:a.start, dock:a.dock, crew:a.crew} : null;
+  }
+  renderAll();
+}
+
+/* 编辑任务字段：该任务自动转为未确认（受影响段），其余确认任务保持锁定 */
+function onFieldEdit(e){
+  const id = e.target.dataset.id, f = e.target.dataset.f;
+  const task = state.tasks.find(x=>x.id===id);
+  if(!task) return;
+  pushHistory();
+  if(f==="earliest"||f==="latest") task[f] = parseHM(e.target.value);
+  else if(f==="duration"||f==="priority"||f==="workload") task[f] = Math.max(1, +e.target.value|0);
+  else task[f] = e.target.value;
+  if(task.latest < task.earliest + task.duration && (f==="latest"||f==="earliest"||f==="duration")){
+    // 允许输入，但会在诊断中提示时窗过短
+  }
+  task.confirmed = false;
+  recompute(true);
+}
+/* ================= 事件绑定 ================= */
+document.getElementById("btnSample").onclick = ()=>{
+  pushHistory(); state = sampleState(); recompute(false);
+};
+document.getElementById("btnUndo").onclick = undo;
+document.getElementById("btnReopt").onclick = ()=>{
+  pushHistory(); recompute(false); // 忽略旧安排，全局优化重排（确认任务仍锁定）
+};
+document.getElementById("btnAdd").onclick = ()=>{
+  pushHistory();
+  let n = state.tasks.length + 1, id;
+  do { id = "T" + String(n++).padStart(2,"0"); } while(state.tasks.some(t=>t.id===id));
+  state.tasks.push({id, name:"新任务", earliest:600, latest:840, duration:60,
+    priority:3, workload:2, crew:"", confirmed:false, assignment:null});
+  recompute(true);
+};
+document.getElementById("btnExport").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "schedule_" + new Date().toISOString().slice(0,10) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("btnImport").onclick = ()=> document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const data = JSON.parse(r.result);
+      if(!data.tasks || !data.crews || !data.docks) throw new Error("缺少 tasks/crews/docks 字段");
+      pushHistory();
+      state = data;
+      state.tasks.forEach(t=>{ if(t.assignment===undefined) t.assignment = null; });
+      recompute(true);
+    }catch(err){ alert("导入失败：" + err.message); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+recompute(false);
+</script>
+</body>
+</html>
