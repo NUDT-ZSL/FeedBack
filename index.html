@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>表单填写离线推演台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Offline form deduction</p>
+      <h1>表单填写离线推演台</h1>
+      <p class="subtitle">按事件顺序推导当前值、错误归属、依赖阻塞、冲突证据与可确认状态。</p>
+    </div>
+    <div class="actions">
+      <button id="resetDemo" class="secondary" type="button">恢复演示数据</button>
+      <button id="clearAll" class="danger" type="button">清空本地数据</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel composer" aria-labelledby="composerTitle">
+      <h2 id="composerTitle">提交输入事件</h2>
+      <form id="eventForm">
+        <label>目标字段
+          <select id="eventField" required></select>
+        </label>
+        <label>来源
+          <select id="eventSource" required>
+            <option value="keyboard">键盘</option>
+            <option value="voice">语音</option>
+            <option value="switch">开关</option>
+            <option value="paste">粘贴</option>
+          </select>
+        </label>
+        <label class="rawbox">原始内容
+          <input id="eventRaw" placeholder="例如 demo@example.com / 28 / true">
+        </label>
+        <label>依据说明
+          <input id="eventBasis" placeholder="例如：语音识别候选">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="primary">追加事件</button>
+          <button id="clearEvent" type="button" class="secondary">发送清空事件</button>
+        </div>
+      </form>
+      <div class="capabilities">
+        <h3>当前客户端输入能力</h3>
+        <div id="capabilityToggles" class="checks"></div>
+      </div>
+    </section>
+
+    <section class="panel summary" aria-labelledby="summaryTitle">
+      <h2 id="summaryTitle">整表状态</h2>
+      <div id="summaryCards" class="summary-grid"></div>
+    </section>
+
+    <section class="panel fields" aria-labelledby="fieldsTitle">
+      <div class="section-head">
+        <h2 id="fieldsTitle">字段结论</h2>
+        <p>只展示当前仍影响结论的事件；清空事件之前的历史不会参与字段结论。</p>
+      </div>
+      <div id="fieldList" class="field-list"></div>
+    </section>
+
+    <section class="panel config" aria-labelledby="configTitle">
+      <h2 id="configTitle">新增字段 / 依赖调整</h2>
+      <form id="fieldForm">
+        <label>字段 ID<input id="newFieldId" required placeholder="city"></label>
+        <label>显示名<input id="newFieldLabel" required placeholder="城市"></label>
+        <label>类型
+          <select id="newFieldType">
+            <option value="text">文本</option>
+            <option value="email">邮箱</option>
+            <option value="number">数字</option>
+            <option value="boolean">开关</option>
+          </select>
+        </label>
+        <label>格式（正则，可选）<input id="newFieldPattern" placeholder="^[A-Z]"></label>
+        <label class="wide">输入方式
+          <div class="checks" id="newFieldInputs"></div>
+        </label>
+        <button class="primary" type="submit">新增字段</button>
+      </form>
+    </section>
+  </main>
+
+  <dialog id="dependencyDialog">
+    <form method="dialog" id="dependencyForm">
+      <h3>调整依赖关系</h3>
+      <p id="dependencyFieldName"></p>
+      <div id="dependencyOptions" class="dialog-options"></div>
+      <menu>
+        <button value="cancel" class="secondary" formnovalidate>取消</button>
+        <button id="saveDependencies" value="default" class="primary">保存并重算影响域</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
