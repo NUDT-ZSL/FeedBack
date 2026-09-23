@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>作业流消费模拟器</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#0f1420; color:#dfe6f0; }
+  header { padding:10px 18px; background:#161d2e; border-bottom:1px solid #2a3550; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; color:#7fd4ff; }
+  main { display:grid; grid-template-columns: 340px 1fr; gap:10px; padding:10px; }
+  .panel { background:#161d2e; border:1px solid #2a3550; border-radius:8px; padding:12px; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:#9fb4d8; text-transform:uppercase; letter-spacing:1px; }
+  textarea { width:100%; height:150px; background:#0b101c; color:#cfe0ff; border:1px solid #2a3550; border-radius:6px; font-family:Consolas,monospace; font-size:12px; padding:6px; resize:vertical; }
+  button { background:#2563eb; color:#fff; border:none; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; margin:2px 2px 2px 0; }
+  button:hover { background:#3b82f6; }
+  button.warn { background:#b45309; }
+  button.ghost { background:#2a3550; }
+  button:disabled { opacity:.4; cursor:default; }
+  label { display:block; font-size:12px; color:#9fb4d8; margin-top:8px; }
+  input[type=number], select, input[type=text] { width:100%; background:#0b101c; color:#dfe6f0; border:1px solid #2a3550; border-radius:6px; padding:5px; font-size:13px; }
+  input[type=range] { width:100%; }
+  .row { display:flex; gap:8px; }
+  .row > div { flex:1; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+  .stat { background:#0b101c; border:1px solid #2a3550; border-radius:8px; padding:8px 10px; }
+  .stat .v { font-size:22px; font-weight:600; color:#7fd4ff; }
+  .stat .k { font-size:11px; color:#9fb4d8; }
+  .stat.alert .v { color:#ff7b72; }
+  canvas { width:100%; height:260px; background:#0b101c; border:1px solid #2a3550; border-radius:8px; display:block; }
+  table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
+  th, td { padding:4px 6px; border-bottom:1px solid #22304d; text-align:right; }
+  th { color:#9fb4d8; font-weight:600; }
+  td:first-child, th:first-child { text-align:left; }
+  tr.starved td { color:#ff7b72; }
+  #banner { display:none; background:#3a1d1d; border:1px solid #7f1d1d; color:#ffb4ab; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  #log { height:120px; overflow-y:auto; background:#0b101c; border:1px solid #2a3550; border-radius:6px; font-family:Consolas,monospace; font-size:11px; padding:6px; margin-top:8px; }
+  #log div { padding:1px 0; color:#8ea3c8; }
+  .hint { font-size:11px; color:#63769a; margin-top:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>作业流消费模拟器</h1>
+  <button id="btnStart">▶ 开始</button>
+  <button id="btnPauseSim" class="ghost" disabled>⏸ 暂停时间</button>
+  <button id="btnPauseConsume" class="warn" disabled>⏸ 暂停消费</button>
+  <button id="btnBurst" class="ghost" disabled>💥 注入突发(30件)</button>
+  <button id="btnReset" class="ghost">↺ 重置</button>
+  <span class="hint" id="clockHint">速度: 5 时间单位/秒</span>
+</header>
+<main>
+  <div>
+    <div class="panel">
+      <h2>作业输入 (到达时刻, 处理耗时, 类别)</h2>
+      <textarea id="input" spellcheck="false"></textarea>
+      <div class="hint">每行一条，逗号/空格分隔；# 开头为注释；允许同一时刻多条。</div>
+      <div class="row">
+        <div><button id="btnSample" class="ghost">载入示例数据</button></div>
+        <div><button id="btnLoad">装载作业流</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>消费策略（运行中可调，立即生效）</h2>
+      <div class="row">
+        <div><label>消费者数量</label><input type="number" id="numConsumers" min="1" max="16" value="2"></div>
+        <div><label>单次批量</label><input type="number" id="batchSize" min="1" max="20" value="1"></div>
+      </div>
+      <label>取件策略</label>
+      <select id="strategy">
+        <option value="fifo">FIFO（按到达先后）</option>
+        <option value="sjf">短作业优先</option>
+        <option value="priority">类别优先级</option>
+      </select>
+      <label>类别优先级（逗号分隔，靠前优先）</label>
+      <input type="text" id="prioOrder" value="A,B,C">
+      <label>模拟速度 <span id="speedVal">5</span>x</label>
+      <input type="range" id="speed" min="1" max="100" value="5">
+      <label>饥饿阈值（时间单位）</label>
+      <input type="number" id="starveLimit" min="5" max="500" value="40">
+    </div>
+  </div>
+  <div>
+    <div id="banner"></div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="stTime">0.0</div><div class="k">模拟时刻</div></div>
+      <div class="stat" id="boxBacklog"><div class="v" id="stBacklog">0</div><div class="k">队列积压</div></div>
+      <div class="stat"><div class="v" id="stInflight">0</div><div class="k">在途作业</div></div>
+      <div class="stat"><div class="v" id="stDone">0</div><div class="k">已完成</div></div>
+    </div>
+    <canvas id="chart" width="900" height="260"></canvas>
+    <div class="hint">堆积面积图：各类别队列积压随时间变化；白线：在途作业数。可观察积压的增长与回落。</div>
+    <div class="panel" style="margin-top:10px">
+      <h2>类别状态</h2>
+      <table id="catTable"><thead><tr>
+        <th>类别</th><th>已到达</th><th>积压</th><th>在途</th><th>已完成</th><th>最长等待</th><th>状态</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+<div id="log"></div>
+  </div>
+</main>
+<script>
+"use strict";
+// ---------- 状态 ----------
+const S = {
+  upcoming: [], pending: [], consumers: [],
+  simTime: 0, running: false, timePaused: false, consumePaused: false,
+  speed: 5, batchSize: 1, strategy: "fifo", prioOrder: ["A","B","C"],
+  starveLimit: 40,
+  completed: 0, perCat: {}, history: [], lastSample: -1, nextId: 1,
+  finished: false,
+};
+const COLORS = ["#4fc3f7","#ffb74d","#aed581","#f06292","#ba68c8","#fff176","#4db6ac","#ff8a65"];
+const catColor = {};
+function colorOf(cat){ if(!(cat in catColor)) catColor[cat]=COLORS[Object.keys(catColor).length%COLORS.length]; return catColor[cat]; }
+function cat(catName){ if(!S.perCat[catName]) S.perCat[catName]={arrived:0,done:0}; return S.perCat[catName]; }
+
+// ---------- 输入解析 ----------
+function parseJobs(text){
+  const jobs=[];
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();
+    if(!line||line.startsWith("#")) continue;
+    const p=line.split(/[,\s]+/);
+    if(p.length<3) throw new Error("无法解析行: "+line);
+    const arrival=parseFloat(p[0]), cost=parseFloat(p[1]), c=p[2];
+    if(isNaN(arrival)||isNaN(cost)||cost<=0) throw new Error("非法数值: "+line);
+    jobs.push({id:S.nextId++, arrival, cost, cat:c});
+  }
+  jobs.sort((a,b)=>a.arrival-b.arrival||a.id-b.id);
+  return jobs;
+}
+function makeSample(){
+  const lines=["# 到达时刻, 处理耗时, 类别（示例：生产持续快于消费，t=30 有突发）"];
+  const cats=["A","B","C"];
+  for(let t=0;t<60;t+=1){
+    lines.push(t.toFixed(0)+",3,"+cats[t%3]);
+    if(t%4===0) lines.push(t.toFixed(0)+",2,"+cats[(t+1)%3]);
+  }
+  for(let i=0;i<35;i++) lines.push("30,"+(1+i%4)+","+cats[i%3]);
+  for(let t=61;t<90;t+=2) lines.push(t.toFixed(0)+",2,"+cats[t%3]);
+  return lines.join("\n");
+}
+
+// ---------- 引擎 ----------
+function pickBatch(){
+  if(!S.pending.length) return null;
+  let idx;
+  if(S.strategy==="sjf"){
+    idx=[...S.pending.keys()].sort((a,b)=>S.pending[a].cost-S.pending[b].cost||S.pending[a].arrival-S.pending[b].arrival);
+  } else if(S.strategy==="priority"){
+    const rank=c=>{const i=S.prioOrder.indexOf(c);return i<0?S.prioOrder.length:i;};
+    idx=[...S.pending.keys()].sort((a,b)=>rank(S.pending[a].cat)-rank(S.pending[b].cat)||S.pending[a].arrival-S.pending[b].arrival);
+  } else {
+    idx=[...S.pending.keys()].sort((a,b)=>S.pending[a].arrival-S.pending[b].arrival||S.pending[a].id-S.pending[b].id);
+  }
+  const take=idx.slice(0,S.batchSize).sort((a,b)=>b-a);
+  const batch=[];
+  for(const i of take) batch.push(S.pending.splice(i,1)[0]);
+  return batch;
+}
+function advanceTo(t){
+  while(S.upcoming.length && S.upcoming[0].arrival<=t){
+    const j=S.upcoming.shift(); S.pending.push(j); cat(j.cat).arrived++;
+  }
+  for(const c of S.consumers){
+    if(c.batch.length && c.busyUntil<=t){
+      for(const j of c.batch){ S.completed++; cat(j.cat).done++; }
+      c.batch=[];
+    }
+  }
+  S.consumers=S.consumers.filter(c=>!(c.retire&&!c.batch.length));
+  if(!S.consumePaused){
+    for(const c of S.consumers){
+      if(c.retire||c.batch.length) continue;
+      const b=pickBatch();
+      if(b){ c.batch=b; c.busyUntil=t+b.reduce((s,j)=>s+j.cost,0); }
+    }
+  }
+}
+
+// ---------- 主循环 ----------
+let lastFrame=null;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(lastFrame===null){ lastFrame=ts; return; }
+  const dt=Math.min((ts-lastFrame)/1000,0.2); lastFrame=ts;
+  if(S.running && !S.timePaused){
+    S.simTime+=dt*S.speed;
+    advanceTo(S.simTime);
+    sample();
+    if(!S.upcoming.length && !S.pending.length && S.consumers.every(c=>!c.batch.length)){
+      if(!S.finished){ S.finished=true; log("全部作业处理完成，共 "+S.completed+" 件。"); }
+    }
+  }
+  render();
+}
+function sample(){
+  if(S.simTime-S.lastSample<0.5) return;
+  S.lastSample=S.simTime;
+  const per={};
+  for(const j of S.pending) per[j.cat]=(per[j.cat]||0)+1;
+  const inflight=S.consumers.reduce((s,c)=>s+c.batch.length,0);
+  S.history.push({t:S.simTime, per, inflight, done:S.completed});
+  if(S.history.length>2400){
+    S.history=S.history.filter((_,i)=>i%2===0);
+    S.history.sampleStep=(S.history.sampleStep||1)*2;
+  }
+}
+function setConsumers(n){
+  while(S.consumers.length<n) S.consumers.push({busyUntil:0,batch:[],retire:false});
+  let extra=S.consumers.length-n;
+  for(const c of S.consumers){ if(extra<=0)break; if(!c.batch.length&&!c.retire){c.retire=true;extra--;} }
+  for(const c of S.consumers){ if(extra<=0)break; if(!c.retire){c.retire=true;extra--;} }
+  S.consumers=S.consumers.filter(c=>!(c.retire&&!c.batch.length));
+}
+function burst(n){
+  const cats=Object.keys(S.perCat).length?Object.keys(S.perCat):["A","B","C"];
+  for(let i=0;i<n;i++){
+    const c=cats[Math.floor(Math.random()*cats.length)];
+    S.upcoming.push({id:S.nextId++, arrival:S.simTime, cost:1+Math.floor(Math.random()*5), cat:c});
+  }
+  S.upcoming.sort((a,b)=>a.arrival-b.arrival||a.id-b.id);
+  S.finished=false;
+  log("t="+S.simTime.toFixed(1)+" 注入突发到达 "+n+" 件。");
+}
+
+// ---------- 渲染 ----------
+const $=id=>document.getElementById(id);
+const cv=$("chart"), ctx=cv.getContext("2d");
+function log(msg){
+  const d=document.createElement("div");
+  d.textContent="["+S.simTime.toFixed(1)+"] "+msg;
+  $("log").appendChild(d); $("log").scrollTop=$("log").scrollHeight;
+}
+function render(){
+  $("stTime").textContent=S.simTime.toFixed(1);
+  $("stBacklog").textContent=S.pending.length;
+  const inflight=S.consumers.reduce((s,c)=>s+c.batch.length,0);
+  $("stInflight").textContent=inflight;
+  $("stDone").textContent=S.completed;
+  $("boxBacklog").classList.toggle("alert",S.pending.length>0&&S.upcoming.length===0?false:S.pending.length>20);
+  renderTable(); renderBanner(); drawChart();
+}
+function catStats(){
+  const out={};
+  for(const k of Object.keys(S.perCat)) out[k]={pending:0,inflight:0,oldest:null};
+  for(const j of S.pending){ const o=out[j.cat]; o.pending++; if(o.oldest===null||j.arrival<o.oldest)o.oldest=j.arrival; }
+  for(const c of S.consumers) for(const j of c.batch) out[j.cat].inflight++;
+  return out;
+}
+function starvedCats(){
+  const st=catStats(), res=[];
+  for(const k of Object.keys(st)){
+    if(st[k].pending>0 && st[k].oldest!==null && S.simTime-st[k].oldest>S.starveLimit)
+      res.push({cat:k, wait:S.simTime-st[k].oldest});
+  }
+  return res;
+}
+function renderTable(){
+  const st=catStats(), starved=new Set(starvedCats().map(s=>s.cat));
+  const tb=$("catTable").querySelector("tbody"); tb.innerHTML="";
+  for(const k of Object.keys(S.perCat).sort()){
+    const tr=document.createElement("tr");
+    if(starved.has(k)) tr.className="starved";
+    const wait=st[k].oldest===null?0:S.simTime-st[k].oldest;
+    tr.innerHTML="<td>"+k+"</td><td>"+S.perCat[k].arrived+"</td><td>"+st[k].pending+"</td><td>"+
+      st[k].inflight+"</td><td>"+S.perCat[k].done+"</td><td>"+wait.toFixed(1)+"</td><td>"+
+      (starved.has(k)?"⚠ 饥饿":"正常")+"</td>";
+    tb.appendChild(tr);
+  }
+}
+function renderBanner(){
+  const sv=starvedCats(), b=$("banner");
+  if(!sv.length){ b.style.display="none"; return; }
+  b.style.display="block";
+  b.textContent="⚠ 饥饿警告：类别 "+sv.map(s=>s.cat+"（已等待 "+s.wait.toFixed(0)+" 单位时间）").join("、")+
+    " 长期未被处理。可切换为“类别优先级”策略并提高其优先级，或增加消费者/批量。";
+}
+
+// ---------- 图表 ----------
+function drawChart(){
+  const W=cv.width=cv.clientWidth, H=cv.height=cv.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  const h=S.history; if(h.length<2){ return; }
+  const t0=h[0].t, t1=Math.max(h[h.length-1].t,t0+1);
+  let maxB=1, maxI=1;
+  for(const p of h){
+    let s=0; for(const k in p.per) s+=p.per[k];
+    maxB=Math.max(maxB,s); maxI=Math.max(maxI,p.inflight);
+  }
+  const maxY=Math.max(maxB,maxI);
+  const X=t=>8+(t-t0)/(t1-t0)*(W-16);
+  const Y=v=>H-20-(v/maxY)*(H-36);
+  ctx.strokeStyle="#22304d"; ctx.fillStyle="#63769a"; ctx.font="10px sans-serif";
+  for(let i=0;i<=4;i++){
+    const y=Y(maxY*i/4);
+    ctx.beginPath(); ctx.moveTo(8,y); ctx.lineTo(W-8,y); ctx.stroke();
+    ctx.fillText((maxY*i/4).toFixed(0),10,y-2);
+  }
+  const cats=[...new Set(h.flatMap(p=>Object.keys(p.per)))].sort();
+  for(const c of cats){
+    ctx.beginPath(); ctx.moveTo(X(h[0].t),Y(0));
+    for(const p of h){
+      let base=0;
+      for(const cc of cats){ if(cc===c)break; base+=p.per[cc]||0; }
+      ctx.lineTo(X(p.t),Y(base+(p.per[c]||0)));
+    }
+    for(let i=h.length-1;i>=0;i--){
+      const p=h[i]; let base=0;
+      for(const cc of cats){ if(cc===c)break; base+=p.per[cc]||0; }
+      ctx.lineTo(X(p.t),Y(base));
+    }
+    ctx.closePath();
+    ctx.globalAlpha=0.55; ctx.fillStyle=colorOf(c); ctx.fill(); ctx.globalAlpha=1;
+  }
+  ctx.beginPath();
+  h.forEach((p,i)=>{ const x=X(p.t),y=Y(p.inflight); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.strokeStyle="#ffffff"; ctx.lineWidth=1.5; ctx.stroke(); ctx.lineWidth=1;
+  ctx.fillStyle="#9fb4d8";
+  ctx.fillText("t="+t0.toFixed(0),8,H-6);
+  ctx.fillText("t="+t1.toFixed(0),W-50,H-6);
+  let lx=W-8;
+  for(const c of cats.slice().reverse()){
+    ctx.fillStyle=colorOf(c); ctx.fillRect(lx-46,6,8,8);
+    ctx.fillStyle="#dfe6f0"; ctx.fillText(c,lx-34,13); lx-=56;
+  }
+}
+
+// ---------- 交互 ----------
+function loadJobs(){
+  try{
+    const jobs=parseJobs($("input").value);
+    if(!jobs.length) throw new Error("作业列表为空");
+    S.upcoming=jobs; S.pending=[]; S.consumers=[]; S.simTime=0;
+    S.completed=0; S.perCat={}; S.history=[]; S.lastSample=-1;
+    S.finished=false; S.consumePaused=false; S.timePaused=false;
+    setConsumers(+$("numConsumers").value);
+    $("log").innerHTML="";
+    log("已装载 "+jobs.length+" 条作业，时间范围 0 ~ "+jobs[jobs.length-1].arrival+"。");
+    return true;
+  }catch(e){ alert(e.message); return false; }
+}
+$("btnSample").onclick=()=>{ $("input").value=makeSample(); };
+$("btnLoad").onclick=()=>{ S.running=false; $("btnStart").textContent="▶ 开始"; loadJobs(); };
+$("btnStart").onclick=()=>{
+  if(!S.running){
+    if(!S.upcoming.length&&!S.pending.length&&!S.completed){ if(!loadJobs())return; }
+    S.running=true; S.timePaused=false; $("btnStart").textContent="⏸ 暂停时间";
+    $("btnPauseSim").disabled=false; $("btnPauseConsume").disabled=false; $("btnBurst").disabled=false;
+  }else{
+    S.timePaused=!S.timePaused;
+    $("btnStart").textContent=S.timePaused?"▶ 继续":"⏸ 暂停时间";
+  }
+};
+$("btnPauseSim").onclick=()=>$("btnStart").onclick();
+$("btnPauseConsume").onclick=()=>{
+  S.consumePaused=!S.consumePaused;
+  $("btnPauseConsume").textContent=S.consumePaused?"▶ 恢复消费":"⏸ 暂停消费";
+  log(S.consumePaused?"消费已暂停：在途作业继续完成，不再取新件。":"消费已恢复，进度连续推进。");
+};
+$("btnBurst").onclick=()=>burst(30);
+$("btnReset").onclick=()=>{
+  S.running=false; S.upcoming=[]; S.pending=[]; S.consumers=[];
+  S.simTime=0; S.completed=0; S.perCat={}; S.history=[]; S.lastSample=-1;
+  S.finished=false; S.consumePaused=false; S.timePaused=false;
+  $("btnStart").textContent="▶ 开始"; $("btnPauseConsume").textContent="⏸ 暂停消费";
+  $("btnPauseSim").disabled=true; $("btnPauseConsume").disabled=true; $("btnBurst").disabled=true;
+  $("log").innerHTML=""; render();
+};
+$("numConsumers").onchange=e=>{
+  const n=Math.max(1,Math.min(16,+e.target.value||1)); e.target.value=n;
+  setConsumers(n);
+  log("消费者数量调整为 "+n+"，后续积压走向将按新能力重新推导（已有进度保留）。");
+};
+$("batchSize").onchange=e=>{
+  const n=Math.max(1,Math.min(20,+e.target.value||1)); e.target.value=n;
+  S.batchSize=n; log("单次批量调整为 "+n+"。");
+};
+$("strategy").onchange=e=>{ S.strategy=e.target.value; log("取件策略切换为："+e.target.selectedOptions[0].text); };
+$("prioOrder").onchange=e=>{
+  S.prioOrder=e.target.value.split(/[,\s]+/).filter(Boolean);
+  log("类别优先级更新为："+S.prioOrder.join(" > "));
+};
+$("starveLimit").onchange=e=>{ S.starveLimit=Math.max(5,+e.target.value||40); };
+$("speed").oninput=e=>{
+  S.speed=+e.target.value; $("speedVal").textContent=S.speed;
+  $("clockHint").textContent="速度: "+S.speed+" 时间单位/秒";
+};
+
+// ---------- 初始化 ----------
+$("input").value=makeSample();
+loadJobs();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
