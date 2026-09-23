@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>笔记线索整理</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --ink:#1f2329; --sub:#6b7280; --acc:#2563eb; --warn:#dc2626; --hl:#fef3c7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--card); border-bottom:1px solid #e5e7eb; position:sticky; top:0; z-index:5; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  .stats { color:var(--sub); font-size:13px; }
+  .spacer { flex:1; }
+  button { cursor:pointer; border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:6px 12px; font-size:13px; }
+  button:hover { background:#f3f4f6; }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  button.primary:hover { background:#1d4ed8; }
+  button.danger { color:var(--warn); border-color:#fca5a5; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  #importPanel { display:none; padding:16px 20px; background:#fff; border-bottom:1px solid #e5e7eb; }
+  #importPanel.open { display:block; }
+  #importPanel textarea { width:100%; height:120px; font-family:inherit; font-size:13px; padding:8px; border:1px solid #d1d5db; border-radius:6px; resize:vertical; }
+  #importPanel .hint { font-size:12px; color:var(--sub); margin:6px 0; }
+  #banner { display:none; margin:12px 20px 0; padding:10px 14px; background:var(--hl); border:1px solid #fcd34d; border-radius:8px; font-size:13px; }
+  #banner.show { display:block; }
+  #mergeBar { display:none; margin:12px 20px 0; padding:10px 14px; background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; font-size:13px; }
+  #mergeBar.show { display:block; }
+  main { padding:16px 20px 40px; display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; }
+  .thread { background:var(--card); border:1px solid #e5e7eb; border-radius:10px; padding:14px; transition:box-shadow .2s; }
+  .thread.affected { animation:pulse 1.6s ease-in-out 2; border-color:#f59e0b; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0);} 50%{box-shadow:0 0 0 6px rgba(245,158,11,.35);} }
+  .thread.merge-pick { outline:2px solid var(--acc); cursor:pointer; }
+  .thread.merge-sel { outline:3px solid var(--acc); background:#eff6ff; }
+  .t-head { display:flex; align-items:baseline; gap:8px; }
+  .t-label { font-weight:600; font-size:15px; flex:1; word-break:break-all; }
+  .t-id { color:var(--sub); font-size:12px; }
+  .t-meta { display:flex; gap:14px; font-size:12px; color:var(--sub); margin:8px 0; flex-wrap:wrap; }
+  .strength { display:flex; align-items:center; gap:6px; }
+  .bar { width:80px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--acc); }
+  .notes { margin-top:6px; border-top:1px dashed #e5e7eb; }
+  .note { padding:10px 0; border-bottom:1px dashed #f0f0f0; }
+  .note:last-child { border-bottom:none; }
+  .n-text { font-size:13px; line-height:1.6; }
+  .n-meta { font-size:12px; color:var(--sub); margin-top:4px; }
+  .n-links { font-size:12px; color:#059669; margin-top:2px; }
+  .n-ops { margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .n-ops select { font-size:12px; padding:3px 6px; border:1px solid #d1d5db; border-radius:5px; max-width:200px; }
+  .n-ops button { font-size:12px; padding:3px 8px; }
+  .toggle { font-size:12px; color:var(--acc); background:none; border:none; padding:0; margin-top:6px; }
+  #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; display:none; z-index:9; max-width:80%; }
+  .empty { grid-column:1/-1; text-align:center; color:var(--sub); padding:60px 0; font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>笔记线索整理</h1>
+  <span class="stats" id="stats">尚未导入笔记</span>
+  <span class="spacer"></span>
+  <button id="btnImport">导入笔记</button>
+  <button id="btnMerge" disabled>合并线索</button>
+  <button id="btnUndo" disabled>撤销</button>
+  <button id="btnReset" class="danger">清空</button>
+</header>
+
+<div id="importPanel">
+  <textarea id="importText" placeholder="每行一条，格式：来源 | 时间 | 内容&#10;例如：备忘录 | 2026-09-20T15:30:00 | 订好了国庆去成都的高铁票&#10;也可以粘贴 JSON 数组：[{&quot;text&quot;:&quot;...&quot;,&quot;source&quot;:&quot;...&quot;,&quot;ts&quot;:&quot;...&quot;}]"></textarea>
+  <div class="hint">导入后会按语义相近程度自动建立关联并归纳为主题线索。</div>
+  <button class="primary" id="btnDoImport">导入</button>
+  <button id="btnSample">载入示例数据</button>
+  <button id="btnCloseImport">收起</button>
+</div>
+
+<div id="banner"></div>
+<div id="mergeBar">
+  合并模式：请依次点击两条要合并的线索。
+  <span id="mergeSel"></span>
+  <button class="primary" id="btnDoMerge" disabled>确认合并</button>
+  <button id="btnCancelMerge">取消</button>
+</div>
+
+<main id="threads"></main>
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let STATE = null, mergeMode = false, mergePicks = [];
+const expanded = new Set();
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtTs(ts){ return ts ? ts.replace('T',' ').slice(0,16) : '无时间'; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',4000); }
+
+async function api(path, body){
+  const opt = body===undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)};
+  const r = await fetch(path, opt);
+  const d = await r.json();
+  if(!r.ok){ toast(d.error || '操作失败'); throw new Error(d.error); }
+  return d;
+}
+async function doOp(path, body){
+  try { render(await api(path, body)); } catch(e) {}
+}
+
+function render(st){
+  STATE = st;
+  $('#stats').textContent = st.note_total ? ('共 ' + st.note_total + ' 条笔记 · ' + st.threads.length + ' 条线索') : '尚未导入笔记';
+  $('#btnUndo').disabled = !st.can_undo;
+  $('#btnMerge').disabled = st.threads.length < 2;
+  const banner = $('#banner');
+  if(st.affected && st.affected.length){
+    banner.textContent = '本次调整影响的线索：' + st.affected.join('、') + '（其余线索保持不变）';
+    banner.className = 'show';
+  } else { banner.className = ''; }
+  const main = $('#threads');
+  main.innerHTML = '';
+  if(!st.threads.length){
+    main.innerHTML = '<div class="empty">还没有线索，点击右上角「导入笔记」开始。</div>';
+    return;
+  }
+  for(const t of st.threads) main.appendChild(renderThread(t, st));
+}
+
+function renderThread(t, st){
+  const div = document.createElement('div');
+  div.className = 'thread'
+    + (st.affected.includes(t.id) ? ' affected' : '')
+    + (mergeMode ? ' merge-pick' : '')
+    + (mergePicks.includes(t.id) ? ' merge-sel' : '');
+  const pct = Math.round(t.strength * 100);
+  div.innerHTML =
+    '<div class="t-head"><span class="t-label">' + esc(t.label) + '</span><span class="t-id">' + t.id + '</span></div>'
+    + '<div class="t-meta"><span>笔记 ' + t.note_count + ' 条</span>'
+    + '<span>最近 ' + fmtTs(t.latest_ts) + '</span>'
+    + '<span class="strength">关联强度 <span class="bar"><i style="width:' + pct + '%"></i></span>'
+    + (t.note_count > 1 ? pct + '%' : '—') + '</span></div>'
+    + '<button class="toggle">' + (expanded.has(t.id) ? '收起' : '展开') + ' ' + t.note_count + ' 条笔记</button>'
+    + '<div class="notes" style="display:' + (expanded.has(t.id) ? 'block' : 'none') + '"></div>';
+  div.querySelector('.toggle').onclick = e => {
+    e.stopPropagation();
+    expanded.has(t.id) ? expanded.delete(t.id) : expanded.add(t.id);
+    render(STATE);
+  };
+  if(mergeMode) div.onclick = () => pickMerge(t.id);
+  const box = div.querySelector('.notes');
+  for(const n of t.notes) box.appendChild(renderNote(n, t, st));
+  return div;
+}
+
+function renderNote(n, t, st){
+  const d = document.createElement('div');
+  d.className = 'note';
+  const links = t.edges.filter(e => e.a === n.id || e.b === n.id)
+    .map(e => '与 ' + (e.a === n.id ? e.b : e.a) + ' 相似度 ' + e.sim);
+  const opts = st.threads.filter(x => x.id !== t.id)
+    .map(x => '<option value="' + x.id + '">' + x.id + ' ' + esc(x.label) + '</option>').join('');
+  d.innerHTML =
+    '<div class="n-text">' + esc(n.text) + '</div>'
+    + '<div class="n-meta">' + n.id + ' · ' + esc(n.source) + ' · ' + fmtTs(n.ts) + '</div>'
+    + '<div class="n-links">' + (links.length ? '关联：' + links.join('；') : '本线索内暂无自动关联') + '</div>'
+    + '<div class="n-ops"><select><option value="">移动到其他线索…</option>' + opts + '</select>'
+    + '<button class="split">拆出为新线索</button></div>';
+  d.querySelector('select').onchange = e => {
+    if(e.target.value) doOp('/api/move', {note_id: n.id, target: e.target.value});
+  };
+  d.querySelector('.split').onclick = () => doOp('/api/split', {note_id: n.id});
+  return d;
+}
+function pickMerge(tid){
+  if(mergePicks.includes(tid)){ mergePicks = mergePicks.filter(x => x !== tid); }
+  else { mergePicks.push(tid); if(mergePicks.length > 2) mergePicks.shift(); }
+  updateMergeBar();
+  render(STATE);
+}
+function updateMergeBar(){
+  $('#mergeSel').textContent = mergePicks.length ? ('已选择：' + mergePicks.join('、')) : '';
+  $('#btnDoMerge').disabled = mergePicks.length !== 2;
+}
+function setMergeMode(on){
+  mergeMode = on; mergePicks = [];
+  $('#mergeBar').className = on ? 'show' : '';
+  if(on) updateMergeBar();
+  render(STATE);
+}
+
+$('#btnMerge').onclick = () => setMergeMode(true);
+$('#btnCancelMerge').onclick = () => setMergeMode(false);
+$('#btnDoMerge').onclick = async () => {
+  const [a, b] = mergePicks;
+  setMergeMode(false);
+  await doOp('/api/merge', {thread_a: a, thread_b: b});
+};
+
+$('#btnImport').onclick = () => $('#importPanel').classList.toggle('open');
+$('#btnCloseImport').onclick = () => $('#importPanel').classList.remove('open');
+$('#btnSample').onclick = async () => {
+  const notes = await api('/api/sample');
+  $('#importText').value = JSON.stringify(notes, null, 2);
+};
+$('#btnDoImport').onclick = async () => {
+  const raw = $('#importText').value.trim();
+  if(!raw){ toast('请先粘贴笔记内容'); return; }
+  let body;
+  if(raw[0] === '['){
+    try { body = {notes: JSON.parse(raw)}; }
+    catch(e){ toast('JSON 解析失败：' + e.message); return; }
+  } else {
+    body = {text: raw};
+  }
+  await doOp('/api/import', body);
+  $('#importPanel').classList.remove('open');
+};
+
+$('#btnUndo').onclick = () => doOp('/api/undo', {});
+$('#btnReset').onclick = async () => {
+  if(confirm('确定清空所有笔记和线索？')){ expanded.clear(); await doOp('/api/reset', {}); }
+};
+
+(async function init(){
+  try { render(await api('/api/state')); }
+  catch(e){ toast('无法连接服务器'); }
+})();
+</script>
+</body>
+</html>
