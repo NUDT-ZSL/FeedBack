@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>错因模式分析</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0;
+         background: #f4f6f9; color: #222; }
+  header { background: #1f3a5f; color: #fff; padding: 14px 24px;
+           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  button { cursor: pointer; border: none; border-radius: 6px;
+           padding: 7px 14px; font-size: 13px; }
+  .btn-light { background: #fff; color: #1f3a5f; }
+  .btn-primary { background: #2f6fdd; color: #fff; }
+  #stats { padding: 10px 24px; background: #e8eef7; font-size: 13px;
+           display: none; }
+  nav { display: flex; gap: 4px; padding: 10px 24px 0; }
+  nav button { background: #dde5ef; border-radius: 6px 6px 0 0; }
+  nav button.active { background: #fff; font-weight: bold; }
+  main { padding: 16px 24px 40px; }
+  .tab { display: none; background: #fff; border-radius: 0 8px 8px 8px;
+         padding: 18px; min-height: 300px; }
+  .tab.active { display: block; }
+  .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;
+          margin-bottom: 14px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; }
+  .qtext { color: #555; font-size: 13px; margin-bottom: 10px; }
+  .steps { list-style: none; padding: 0; margin: 0; }
+  .steps li { padding: 8px 12px; border-left: 4px solid #cbd5e1;
+              margin-bottom: 6px; border-radius: 4px; background: #f8fafc;
+              font-size: 13px; }
+  .steps li.ok { border-color: #22a06b; background: #eefaf3; }
+  .steps li.err { border-color: #e5484d; background: #fdeeee; }
+  .steps li.miss { border-color: #cbd5e1; color: #94a3b8;
+                   border-style: dashed; background: #fff; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px;
+         border-radius: 10px; margin-left: 8px; }
+  .tag-skill { background: #e0e9fb; color: #2f5bb5; }
+  .tag-err { background: #e5484d; color: #fff; }
+  .tag-miss { background: #e2e8f0; color: #64748b; }
+  .pattern { border-left: 5px solid #2f6fdd; }
+  .pattern.flash { animation: flash 1.6s ease; }
+  @keyframes flash { 0% { background: #fff3c4; } 100% { background: #fff; } }
+  .summary { font-size: 13px; color: #333; margin: 6px 0; }
+  .suggest { background: #f0f7ff; border-radius: 6px; padding: 10px 12px;
+             font-size: 13px; margin-top: 8px; }
+  .suggest .basis { color: #5b7bb4; font-size: 12px; margin-top: 4px; }
+  .event-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+               border-top: 1px dashed #e2e8f0; font-size: 13px; }
+  .event-row .grow { flex: 1; }
+  .cand-panel { background: #fbfcfe; border: 1px solid #d7e3f5;
+                border-radius: 6px; padding: 10px; margin: 6px 0 10px;
+                font-size: 13px; }
+  .cand { padding: 6px 8px; border-bottom: 1px solid #eef2f7; }
+  .cand:last-child { border-bottom: none; }
+  .cand .why { color: #64748b; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+  th { background: #f1f5fb; }
+  .muted { color: #94a3b8; font-size: 13px; }
+  #importBox { display: none; padding: 12px 24px; background: #fff;
+               border-bottom: 1px solid #e2e8f0; }
+  #importBox textarea { width: 100%; height: 120px; font-size: 12px;
+                        font-family: Consolas, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>错因模式分析工作台</h1>
+  <button class="btn-light" onclick="loadSample()">载入示例数据</button>
+  <button class="btn-light" onclick="document.getElementById('fileInput').click()">导入 JSON 文件</button>
+  <button class="btn-light" onclick="toggleImportBox()">粘贴 JSON 导入</button>
+  <input type="file" id="fileInput" accept=".json" style="display:none"
+         onchange="importFile(this)">
+</header>
+<div id="importBox">
+  <textarea id="jsonText" placeholder='粘贴 {"questions":[...],"records":[...]} 格式的数据'></textarea>
+  <div style="margin-top:8px">
+    <button class="btn-primary" onclick="importText()">导入</button>
+  </div>
+</div>
+<div id="stats"></div>
+<nav id="tabs" style="display:none">
+  <button class="active" data-tab="traj" onclick="switchTab('traj')">逐步作答轨迹</button>
+  <button data-tab="pat" onclick="switchTab('pat')">错因模式</button>
+  <button data-tab="inc" onclick="switchTab('inc')">无法定位的记录</button>
+</nav>
+<main>
+  <div id="tab-traj" class="tab active"></div>
+  <div id="tab-pat" class="tab"></div>
+  <div id="tab-inc" class="tab"></div>
+</main>
+
+<script>
+let S = null;            // 后端返回的完整状态
+let lastChanged = [];    // 最近一次调整受影响的模式 id
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function switchTab(name) {
+  document.querySelectorAll("nav button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.id === "tab-" + name));
+}
+
+function toggleImportBox() {
+  const b = document.getElementById("importBox");
+  b.style.display = b.style.display === "block" ? "none" : "block";
+}
+
+async function postJSON(url, body) {
+  const r = await fetch(url, {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json();
+  if (!r.ok) { alert(data.error || "请求失败"); throw new Error(data.error); }
+  return data;
+}
+
+function applyResult(data) {
+  S = data.state;
+  lastChanged = data.changed || [];
+  renderAll();
+}
+
+async function loadSample() { applyResult(await postJSON("/api/sample", {})); }
+
+function importFile(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = async () => {
+    try { applyResult(await postJSON("/api/import", JSON.parse(rd.result))); }
+    catch (e) { if (!(e instanceof SyntaxError)) return;
+                alert("JSON 解析失败: " + e.message); }
+  };
+  rd.readAsText(f, "utf-8");
+  input.value = "";
+}
+
+async function importText() {
+  const txt = document.getElementById("jsonText").value.trim();
+  if (!txt) return;
+  try { applyResult(await postJSON("/api/import", JSON.parse(txt))); }
+  catch (e) { if (e instanceof SyntaxError) alert("JSON 解析失败: " + e.message); }
+}
+
+function renderAll() {
+  const st = document.getElementById("stats");
+  st.style.display = "block";
+  document.getElementById("tabs").style.display = "flex";
+  const nErr = S.events.length, nOk = S.correct.length,
+        nInc = S.incompletes.length, nPat = S.patterns.length;
+  st.textContent = "共 " + S.trajectories.length + " 条作答记录 | 定位到错误环节 "
+    + nErr + " 条 | 全部正确 " + nOk + " 条 | 无法定位 " + nInc
+    + " 条 | 归纳出错因模式 " + nPat + " 个";
+  renderTrajectories();
+  renderPatterns();
+  renderIncompletes();
+}
+
+function renderTrajectories() {
+  const el = document.getElementById("tab-traj");
+  if (!S.trajectories.length) { el.innerHTML = '<p class="muted">暂无数据</p>'; return; }
+  el.innerHTML = S.trajectories.map(t => {
+    const steps = t.steps.map(s => {
+      let cls = "miss", tag = '<span class="tag tag-miss">未走到</span>';
+      if (s.reached && s.result === "correct") {
+        cls = "ok"; tag = '<span class="tag tag-skill">正确</span>';
+      } else if (s.is_error) {
+        cls = "err"; tag = '<span class="tag tag-err">出错环节</span>';
+      } else if (s.reached) {
+        cls = "err"; tag = '<span class="tag tag-err">异常</span>';
+      }
+      const ans = s.student_answer
+        ? '<div class="muted">学生作答: ' + esc(s.student_answer) + "</div>" : "";
+      return '<li class="' + cls + '">第 ' + (s.index + 1) + " 步 "
+        + esc(s.text) + ' <span class="tag tag-skill">' + esc(s.skill)
+        + "</span>" + tag + ans + "</li>";
+    }).join("");
+    return '<div class="card"><h3>' + esc(t.student_id) + " · "
+      + esc(t.question_id) + "</h3>"
+      + '<div class="qtext">' + esc(t.question_text) + "</div>"
+      + '<ul class="steps">' + steps + "</ul></div>";
+  }).join("");
+}
+function eventDesc(eid) {
+  const e = S.events.find(x => x.id === eid);
+  if (!e) return esc(eid);
+  return esc(e.question_id) + " 第 " + (e.step_index + 1) + " 步「"
+    + esc(e.step_text) + "」(" + esc(e.skill) + ")";
+}
+
+function renderPatterns() {
+  const el = document.getElementById("tab-pat");
+  if (!S.patterns.length) { el.innerHTML = '<p class="muted">暂无可归纳的错因模式</p>'; return; }
+  el.innerHTML = S.patterns.map(p => {
+    const sug = p.suggestion || {};
+    const events = p.event_ids.map(eid =>
+      '<div class="event-row"><span class="grow">' + eventDesc(eid) + "</span>"
+      + '<button class="btn-primary" onclick="showCandidates(\'' + eid + "')\">"
+      + "调整归属</button></div>"
+      + '<div class="cand-panel" id="cand-' + eid + '" style="display:none"></div>'
+    ).join("");
+    const flash = lastChanged.includes(p.id) ? " flash" : "";
+    return '<div class="card pattern' + flash + '"><h3>' + esc(p.label)
+      + ' <span class="tag tag-skill">覆盖 ' + p.question_ids.length
+      + " 题 / " + p.event_ids.length + " 个错误环节</span></h3>"
+      + '<div class="summary">' + esc(p.summary) + "</div>"
+      + '<div class="suggest"><b>练习建议:</b>' + esc(sug.advice || "")
+      + '<div class="basis">依据环节:' + esc((sug.basis_steps || []).join("、"))
+      + "<br>已覆盖题目:" + esc((sug.covered_questions || []).join("、"))
+      + "</div></div>"
+      + '<div style="margin-top:8px"><b>模式内错误事件:</b>' + events
+      + "</div></div>";
+  }).join("");
+}
+
+function renderIncompletes() {
+  const el = document.getElementById("tab-inc");
+  if (!S.incompletes.length) {
+    el.innerHTML = '<p class="muted">没有无法定位错误环节的记录</p>'; return;
+  }
+  const rows = S.incompletes.map(r =>
+    "<tr><td>" + esc(r.record_id) + "</td><td>" + esc(r.student_id)
+    + "</td><td>" + esc(r.question_id) + "</td><td>" + esc(r.reason)
+    + "</td><td>" + esc(r.missing_position) + "</td></tr>").join("");
+  el.innerHTML = "<p class=muted>以下记录因步骤缺失或作答不完整,"
+    + "未强行归入任何错因模式:</p>"
+    + "<table><tr><th>记录</th><th>学生</th><th>题目</th>"
+    + "<th>无法定位原因</th><th>缺失位置</th></tr>" + rows + "</table>";
+}
+async function showCandidates(eid) {
+  const panel = document.getElementById("cand-" + eid);
+  if (panel.style.display === "block") { panel.style.display = "none"; return; }
+  const r = await fetch("/api/events/" + encodeURIComponent(eid) + "/candidates");
+  const data = await r.json();
+  const cur = S.patterns.find(p => p.event_ids.includes(eid));
+  let html = '<div style="margin-bottom:6px"><b>候选归属</b>(当前归属:'
+    + esc(cur ? cur.label : "无") + ")</div>";
+  if (!data.candidates.length) {
+    html += '<div class="muted">该学生暂无其他可匹配的模式</div>';
+  }
+  html += data.candidates.map(c => {
+    const isCur = cur && c.pattern_id === cur.id;
+    return '<div class="cand"><b>' + esc(c.label) + "</b>"
+      + ' <span class="tag tag-skill">匹配度 ' + c.score + "</span>"
+      + (isCur ? ' <span class="tag tag-err">当前归属</span>' : "")
+      + '<div class="why">依据:' + esc(c.rationale) + "</div>"
+      + (isCur ? "" : '<button class="btn-primary" onclick="reassign(\''
+        + eid + "','" + c.pattern_id + "')\">归入此模式</button>")
+      + "</div>";
+  }).join("");
+  html += '<div class="cand"><b>新建独立模式</b>'
+    + '<div class="why">依据:现有模式均不能解释该错误,单独归纳</div>'
+    + '<button class="btn-primary" onclick="reassign(\'' + eid
+    + "','new')\">新建并归入</button></div>";
+  panel.innerHTML = html;
+  panel.style.display = "block";
+}
+
+async function reassign(eid, target) {
+  const data = await postJSON("/api/reassign", {event_id: eid, target: target});
+  applyResult(data);   // 仅受影响模式被重新归纳,其余保持不变
+  switchTab("pat");
+}
+</script>
+</body>
+</html>
