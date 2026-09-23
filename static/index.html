@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>协作编辑协调工具</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>协作编辑协调工具</h1>
+    <div class="toolbar">
+      <button id="btn-sample">载入示例数据</button>
+      <label class="filebtn">载入 JSON 文件
+        <input type="file" id="file-input" accept=".json" hidden>
+      </label>
+      <span id="stats" class="stats"></span>
+    </div>
+  </header>
+  <main>
+    <aside class="pane" id="outline-pane">
+      <h2>章节结构</h2>
+      <div id="outline"></div>
+    </aside>
+    <section class="pane" id="review-pane">
+      <h2>待确认改动</h2>
+      <div id="groups"></div>
+    </section>
+    <aside class="pane" id="final-pane">
+      <h2>最终文档</h2>
+      <div id="unresolved-box"></div>
+      <div id="final-doc"></div>
+    </aside>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
