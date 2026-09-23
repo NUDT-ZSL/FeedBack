@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>运营指标异常归因分析</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>运营指标异常归因分析</h1>
+  <div class="actions">
+    <button id="btn-sample" class="primary">加载示例数据</button>
+    <button id="btn-import">导入本地数据</button>
+  </div>
+</header>
+
+<div id="import-panel" class="hidden">
+  <div class="import-grid">
+    <div>
+      <h3>指标序列 CSV</h3>
+      <p class="hint">列：date, metric, value（支持中文列名：日期/指标/值）</p>
+      <input type="file" id="file-metrics" accept=".csv">
+    </div>
+    <div>
+      <h3>事件记录 CSV</h3>
+      <p class="hint">列：event_id, date, end_date, event_type, description, metric, direction</p>
+      <input type="file" id="file-events" accept=".csv">
+    </div>
+  </div>
+  <button id="btn-do-import" class="primary">开始分析</button>
+  <span id="import-error" class="error"></span>
+</div>
+
+<main id="main" class="hidden">
+  <section id="issues-panel" class="hidden">
+    <h2>数据质量提示</h2>
+    <ul id="issues-list"></ul>
+  </section>
+
+  <section id="chart-panel">
+    <div class="panel-head">
+      <h2>指标趋势与异常区段</h2>
+      <select id="metric-select"></select>
+    </div>
+    <div id="chart"></div>
+    <div id="chart-legend" class="legend"></div>
+  </section>
+
+  <div class="two-col">
+    <section id="segments-panel">
+      <h2>异常区段</h2>
+      <div id="segments-list"></div>
+    </section>
+    <section id="detail-panel" class="hidden">
+      <h2 id="detail-title">候选原因</h2>
+      <div id="candidates"></div>
+      <h3>变更历史</h3>
+      <div id="history"></div>
+    </section>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
