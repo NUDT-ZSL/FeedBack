@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>笔记线索整理</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  header { background: #2d3e50; color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  button { cursor: pointer; border: 1px solid #bbb; background: #fff; border-radius: 4px; padding: 4px 10px; }
+  button:hover { background: #eef; }
+  #banner { padding: 8px 20px; background: #e8f5e9; border-bottom: 1px solid #c8e6c9; display: none; }
+  #banner.error { background: #ffebee; border-color: #ffcdd2; color: #b71c1c; }
+  #importPanel { padding: 12px 20px; background: #fff; border-bottom: 1px solid #ddd; }
+  #importPanel textarea { width: 100%; height: 90px; font-family: monospace; box-sizing: border-box; }
+  #threads { display: flex; flex-wrap: wrap; gap: 14px; padding: 16px 20px; align-items: flex-start; }
+  .thread { background: #fff; border: 2px solid #dde1e6; border-radius: 8px; width: 340px; padding: 10px 12px; }
+  .thread.affected { border-color: #ff9800; box-shadow: 0 0 8px #ffb74d; }
+  .thread h2 { font-size: 15px; margin: 0 0 6px; color: #2d3e50; }
+  .stats { font-size: 12px; color: #666; margin-bottom: 8px; }
+  .bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 3px; }
+  .bar > div { height: 100%; background: #4caf50; }
+  .note { border-top: 1px dashed #ddd; padding: 6px 0; font-size: 13px; }
+  .note .meta { color: #888; font-size: 11px; margin: 2px 0; }
+  .note .ops select, .thread .mergebox select { font-size: 12px; }
+  .links { font-size: 11px; color: #777; margin-top: 6px; }
+  .theme-tag { display: inline-block; background: #e3f2fd; border-radius: 3px; padding: 1px 6px; margin: 1px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>笔记线索整理</h1>
+  <button id="btnSample">载入示例</button>
+  <button id="btnImport">导入笔记</button>
+  <button id="btnUndo">撤销</button>
+</header>
+<div id="banner"></div>
+<div id="importPanel">
+  <textarea id="importText" placeholder='粘贴 JSON：{"notes":[{"id":"n1","text":"...","source":"...","time":"2026-09-01 10:00"}]}'></textarea>
+</div>
+<div id="threads"></div>
+<script>
+let lastAffected = [];
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  };
+  const res = await fetch(path, opt);
+  return await res.json();
+}
+
+function showBanner(msg, isError) {
+  const b = document.getElementById('banner');
+  b.textContent = msg;
+  b.className = isError ? 'error' : '';
+  b.style.display = 'block';
+}
+
+async function refresh(data) {
+  if (!data) data = await api('/api/state');
+  if (data.ok === false) { showBanner('操作被拒绝：' + data.error, true); return; }
+  lastAffected = data.affected || [];
+  if (data.message) {
+    showBanner('操作完成（' + data.message + '），受影响线索：' +
+      (lastAffected.join(', ') || '无') +
+      (data.problems && data.problems.length ? '；一致性问题：' + data.problems.join('; ') : ''));
+  }
+  render(data);
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function render(data) {
+  const root = document.getElementById('threads');
+  root.innerHTML = '';
+  const tids = Object.keys(data.threads).sort();
+  for (const tid of tids) {
+    const th = data.threads[tid];
+    const div = document.createElement('div');
+    div.className = 'thread' + (lastAffected.includes(tid) ? ' affected' : '');
+    const pct = Math.min(100, Math.round((th.stats.avg_link_strength || 0) * 200));
+    const theme = (th.theme || []).map(t => '<span class="theme-tag">' + esc(t) + '</span>').join('');
+    let html = '<h2>' + esc(tid) + ' 主题线索</h2>'
+      + '<div class="stats">笔记 ' + th.stats.note_count + ' 条 ｜ 最近记录：'
+      + esc(th.stats.latest_time || '—') + ' ｜ 关联强度：' + th.stats.avg_link_strength
+      + '<div class="bar"><div style="width:' + pct + '%"></div></div></div>'
+    + '<div>' + theme + '</div>';
+    for (const nid of th.note_ids) {
+      const n = data.notes[nid];
+      html += '<div class="note"><div>' + esc(n.text) + '</div>'
+        + '<div class="meta">' + esc(nid) + ' ｜ ' + esc(n.source) + ' ｜ ' + esc(n.time) + '</div>'
+        + '<div class="ops">移动到 <select data-note="' + esc(nid) + '">'
+        + tids.filter(t => t !== tid).map(t => '<option>' + esc(t) + '</option>').join('')
+        + '</select> <button data-move="' + esc(nid) + '">移动</button>'
+        + ' <button data-split="' + esc(nid) + '">拆出</button></div></div>';
+    }
+    const links = (th.links || []).slice(0, 5)
+      .map(l => esc(l.a) + '↔' + esc(l.b) + ' (' + l.strength + ')').join('，');
+    html += '<div class="links">关联：' + (links || '无') + '</div>';
+    html += '<div class="mergebox">与 <select>'
+      + tids.filter(t => t !== tid).map(t => '<option>' + esc(t) + '</option>').join('')
+      + '</select> <button data-merge="' + esc(tid) + '">合并线索</button></div>';
+    div.innerHTML = html;
+    root.appendChild(div);
+  }
+  document.getElementById('btnUndo').disabled = !data.can_undo;
+}
+
+document.getElementById('threads').addEventListener('click', async ev => {
+  const t = ev.target;
+  if (t.dataset.move) {
+    const sel = t.parentElement.querySelector('select');
+    await refresh(await api('/api/move', {note_id: t.dataset.move, thread_id: sel.value}));
+  } else if (t.dataset.split) {
+    await refresh(await api('/api/split', {note_id: t.dataset.split}));
+  } else if (t.dataset.merge) {
+    const sel = t.parentElement.querySelector('select');
+    if (!sel.value) return;
+    await refresh(await api('/api/merge', {thread_a: t.dataset.merge, thread_b: sel.value}));
+  }
+});
+
+document.getElementById('btnUndo').onclick = async () =>
+  refresh(await api('/api/undo', {}));
+document.getElementById('btnImport').onclick = async () => {
+  try {
+    const payload = JSON.parse(document.getElementById('importText').value);
+    await refresh(await api('/api/import', payload));
+  } catch (e) { showBanner('JSON 解析失败：' + e.message, true); }
+};
+document.getElementById('btnSample').onclick = async () => {
+  const s = await api('/api/sample');
+  document.getElementById('importText').value = JSON.stringify(s, null, 2);
+};
+refresh();
+</script>
+</body>
+</html>
