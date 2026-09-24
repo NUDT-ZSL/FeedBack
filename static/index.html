@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>字幕对齐推演工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 "Microsoft YaHei", sans-serif;
+         background: #1e1f24; color: #ddd; }
+  header { display: flex; align-items: center; gap: 12px;
+           padding: 8px 16px; background: #26272e; }
+  header h1 { font-size: 16px; margin: 0; }
+  button, .filebtn { background: #3a6ea5; color: #fff; border: 0;
+           border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+  button:hover { background: #4a7eb5; }
+  section { padding: 8px 16px; }
+  h2 { font-size: 13px; color: #9ab; margin: 6px 0; }
+  canvas { width: 100%; background: #181920; border-radius: 6px; }
+  main { display: flex; gap: 12px; padding: 8px 16px; }
+  #segList { flex: 1.2; max-height: 46vh; overflow-y: auto; }
+  #detail { flex: 1; max-height: 46vh; overflow-y: auto;
+            background: #26272e; border-radius: 6px; padding: 8px 12px; }
+  .segrow { display: grid; grid-template-columns: 14px 52px 64px 150px 150px
+            70px 60px 1fr; gap: 6px; padding: 3px 6px; cursor: pointer;
+            border-radius: 4px; align-items: center; }
+  .segrow:hover { background: #2c2d35; }
+  .segrow.sel { background: #33415c; }
+  .segrow.affected { outline: 1px solid #e6a23c; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .mono { font-family: Consolas, monospace; font-size: 12px; }
+  .ev { background: #1e1f24; border-left: 3px solid #3a6ea5;
+        padding: 4px 8px; margin: 4px 0; border-radius: 3px; }
+  .cf { background: #1e1f24; border-left: 3px solid #d64545;
+        padding: 4px 8px; margin: 4px 0; border-radius: 3px; }
+  .iss { background: #1e1f24; border-left: 3px solid #e6a23c;
+         padding: 4px 8px; margin: 4px 0; border-radius: 3px; }
+  .party { margin-left: 12px; color: #bbb; }
+  input[type=text] { width: 90px; background: #181920; color: #ddd;
+        border: 1px solid #444; border-radius: 4px; padding: 2px 6px; }
+  .anchor-row { display: flex; gap: 8px; align-items: center;
+        margin: 4px 0; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 0 6px; border-radius: 8px;
+         background: #3a3b45; color: #aac; }
+  #legend span { margin-right: 14px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>字幕对齐推演工具（离线）</h1>
+  <span id="mediaInfo" class="mono"></span>
+  <button id="btnReset">重置示例</button>
+  <label class="filebtn">载入 JSON
+    <input type="file" id="fileInput" accept=".json" hidden></label>
+</header>
+<section>
+  <h2>时间轴（上排：对齐后位置；下排：原始标注位置；▲ 为锚点，可拖动）</h2>
+  <canvas id="timeline" height="150"></canvas>
+  <div id="legend">
+    <span style="color:#3fa34d">● 正常</span>
+    <span style="color:#e6a23c">● 警告</span>
+    <span style="color:#d64545">● 矛盾</span>
+    <span style="color:#8a8a8a">● 不可信</span>
+  </div>
+</section>
+<section>
+  <h2>漂移累积趋势（相对首个锚点的偏移漂移，秒）</h2>
+  <canvas id="drift" height="90"></canvas>
+</section>
+<main>
+  <div id="segList"></div>
+  <div id="detail">
+    <h2>片段详情 / 裁决</h2>
+    <div id="detailBody">点击左侧片段查看对齐依据与矛盾双方。</div>
+    <h2>锚点</h2>
+    <div id="anchorList"></div>
+    <h2>警告</h2>
+    <div id="warnList"></div>
+  </div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

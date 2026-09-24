@@ -1,0 +1,23 @@
+{
+  "media": {"duration": 620.0, "fps": 25.0, "name": "demo_media.mp4"},
+  "anchors": [
+    {"id": "a1", "segment_id": "s2", "media_time": 10.0, "note": "片头对白起点"},
+    {"id": "a2", "segment_id": "s6", "media_time": 129.0, "note": "场景切换音效"},
+    {"id": "a3", "segment_id": "s10", "media_time": 300.0, "note": "人物入场台词"}
+  ],
+  "segments": [
+    {"id": "s1", "start": 2.0, "end": 5.5, "text": "（片头音乐）", "source": "manual"},
+    {"id": "s2", "start": 9.5, "end": 13.0, "text": "大家好，欢迎收看本期节目。", "source": "asr-v1"},
+    {"id": "s3", "start": 30.0, "end": 34.5, "text": "今天我们要讨论的是离线对齐。", "source": "asr-v1"},
+    {"id": "s4", "start": 60.0, "end": 63.0, "text": "首先看第一个例子。", "source": "asr-v1"},
+    {"id": "s5", "start": 90.0, "end": 88.0, "text": "这条时间标反了。", "source": "ocr"},
+    {"id": "s6", "start": 128.0, "end": 132.0, "text": "画面在这里切到外景。", "source": "manual"},
+    {"id": "s7", "start": 150.0, "end": 156.0, "text": "外景拍摄持续了大概两分钟。", "source": "asr-v1"},
+    {"id": "s8", "start": 155.0, "end": 159.0, "text": "可以看到风很大。", "source": "asr-v2"},
+    {"id": "s9", "start": 200.0, "end": 204.0, "text": "回到演播室继续讨论。", "source": "asr-v2"},
+    {"id": "s10", "start": 296.0, "end": 300.0, "text": "让我们欢迎今天的嘉宾。", "source": "manual"},
+    {"id": "s11", "start": 400.0, "end": 404.0, "text": "嘉宾分享了自己的经验。", "source": "asr-v2"},
+    {"id": "s12", "start": 618.0, "end": 626.0, "text": "（片尾字幕）", "source": "ocr"}
+  ],
+  "decisions": {}
+}
