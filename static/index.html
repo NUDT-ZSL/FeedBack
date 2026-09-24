@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轨迹分段分析工具</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #2c3e50; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 17px; flex: 1; }
+  button { cursor: pointer; border: none; border-radius: 4px; padding: 6px 12px; font-size: 13px; }
+  .btn-primary { background: #3498db; color: #fff; }
+  .btn-plain { background: #ecf0f1; color: #2c3e50; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #panel { width: 400px; overflow-y: auto; background: #f5f6f7; padding: 12px; border-right: 1px solid #ddd; }
+  #map { flex: 1; }
+  .card { background: #fff; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .seg { cursor: pointer; border-left: 5px solid #999; }
+  .seg:hover { background: #f0f7ff; }
+  .seg.active { outline: 2px solid #3498db; }
+  .seg.stay { border-left-color: #e74c3c; }
+  .seg.move { border-left-color: #2980b9; }
+  .seg.uncertain { border-left-color: #f39c12; background: #fffaf0; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; color: #fff; margin-right: 6px; }
+  .badge.stay { background: #e74c3c; } .badge.move { background: #2980b9; } .badge.uncertain { background: #f39c12; }
+  .meta { font-size: 12px; color: #555; margin-top: 6px; line-height: 1.7; }
+  .warn { color: #d35400; font-size: 12px; margin-top: 4px; }
+  .reason { color: #b9770e; font-size: 12px; margin-top: 4px; }
+  .seg-actions { margin-top: 8px; display: flex; gap: 6px; }
+  .seg-actions button { font-size: 12px; padding: 3px 10px; background: #ecf0f1; }
+  .seg-actions button:hover { background: #d5dbdb; }
+  .ovr-tag { font-size: 11px; color: #8e44ad; margin-left: 6px; }
+  #summary .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 13px; margin-top: 6px; }
+  .delta { color: #27ae60; font-size: 11px; }
+  .alert { background: #fdecea; border-left: 4px solid #e74c3c; padding: 8px 10px; font-size: 12px; margin-bottom: 10px; border-radius: 4px; }
+  #toast { position: fixed; top: 60px; right: 16px; z-index: 2000; display: none; max-width: 360px; }
+  .toast-item { background: #34495e; color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
+  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 3000; align-items: center; justify-content: center; }
+  #modal .box { background: #fff; border-radius: 8px; padding: 18px; width: 560px; }
+  #modal textarea { width: 100%; height: 180px; font-family: monospace; font-size: 12px; margin: 8px 0; }
+  h3 { font-size: 14px; color: #2c3e50; margin: 4px 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>轨迹分段分析工具</h1>
+  <button class="btn-primary" onclick="loadSample()">加载示例轨迹</button>
+  <button class="btn-plain" onclick="document.getElementById('modal').style.display='flex'">导入数据</button>
+</header>
+<div id="main">
+  <div id="panel">
+    <div id="alerts"></div>
+    <div id="summary" class="card" style="display:none"></div>
+    <h3>分段列表</h3>
+    <div id="seglist"><div class="card">请加载示例轨迹或导入数据。</div></div>
+  </div>
+  <div id="map"></div>
+</div>
+<div id="toast"></div>
+<div id="modal">
+  <div class="box">
+    <h3>导入定位记录</h3>
+    <div style="font-size:12px;color:#666">支持 JSON 数组 [{time,lat,lon,acc?}] 或 CSV(表头可选):time,lat,lon,acc。时间支持 Unix 秒/毫秒或 "YYYY-MM-DD HH:MM:SS"。</div>
+    <textarea id="inputData" placeholder="2026-09-24 08:00:00,31.2304,121.4737,15"></textarea>
+    <input type="file" id="fileInput" accept=".csv,.json,.txt">
+    <div style="margin-top:10px;text-align:right">
+      <button class="btn-plain" onclick="document.getElementById('modal').style.display='none'">取消</button>
+      <button class="btn-primary" onclick="analyzeInput()">分析</button>
+    </div>
+  </div>
+</div>
+<script>
+const TYPE_NAME = { stay: "停驻", move: "移动", uncertain: "待确认" };
+const TYPE_COLOR = { stay: "#e74c3c", move: "#2980b9", uncertain: "#f39c12" };
+let map, layerGroup, DATA = null, lastSummary = null, activeSeg = null;
+
+map = L.map("map").setView([31.23, 121.47], 13);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+layerGroup = L.layerGroup().addTo(map);
+
+function fmtTime(ts) { const d = new Date(ts * 1000); return d.toTimeString().slice(0, 8); }
+function fmtDur(sec) { return sec >= 3600 ? (sec / 3600).toFixed(1) + " 小时" : Math.round(sec / 60) + " 分钟"; }
+function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(2) + " km" : Math.round(m) + " m"; }
+function toast(msg) {
+  const box = document.getElementById("toast");
+  const el = document.createElement("div");
+  el.className = "toast-item"; el.textContent = msg;
+  box.appendChild(el); box.style.display = "block";
+  setTimeout(() => { el.remove(); if (!box.children.length) box.style.display = "none"; }, 6000);
+}
+
+function deltaHtml(cur, prev, fmt) {
+  if (!prev) return "";
+  const d = cur - prev;
+  if (Math.abs(d) < 1) return "";
+  return ` <span class="delta">(较调整前 ${d > 0 ? "+" : ""}${fmt(d)})</span>`;
+}
+
+function renderSummary(s) {
+  const el = document.getElementById("summary");
+  el.style.display = "block";
+  el.innerHTML = `<h3>整体统计</h3><div class="grid">
+    <div>分段数:${s.segment_count}</div>
+    <div>总里程:${fmtDist(s.total_distance)}</div>
+    <div>停驻时长:${fmtDur(s.stay_duration)}${deltaHtml(s.stay_duration, lastSummary && lastSummary.stay_duration, fmtDur)}</div>
+    <div>移动时长:${fmtDur(s.move_duration)}${deltaHtml(s.move_duration, lastSummary && lastSummary.move_duration, fmtDur)}</div>
+    <div>待确认段:${s.uncertain_count} 个 / ${fmtDur(s.uncertain_duration)}</div>
+    <div>漂移点:${s.drift_count} 个,精度差点:${s.low_acc_count} 个</div>
+  </div>`;
+}
+
+function renderAlerts() {
+  const box = document.getElementById("alerts");
+  const items = [];
+  for (const [idx, f] of Object.entries(DATA.drift)) {
+    const p = DATA.points[idx];
+    items.push(`<div class="alert">⚠ 点 #${idx}(${fmtTime(p.t)}):${f.reasons.join(";")}${f.excluded ? " — 已从分析中剔除" : " — 仍参与分析"}</div>`);
+  }
+  box.innerHTML = items.join("");
+}
+
+function renderSegList() {
+  const box = document.getElementById("seglist");
+  box.innerHTML = "";
+  DATA.segments.forEach(s => {
+    const div = document.createElement("div");
+    div.className = `card seg ${s.type}`;
+    div.id = `seg-${s.id}`;
+    const warns = (s.warnings || []).map(w => `<div class="warn">⚠ ${w}(已保留您的修改)</div>`).join("");
+    const reasons = (s.reasons || []).map(r => `<div class="reason">❓ ${r}</div>`).join("");
+    div.innerHTML = `
+      <div><span class="badge ${s.type}">${TYPE_NAME[s.type]}</span>
+        <b>#${s.id + 1}</b>${s.overridden ? '<span class="ovr-tag">已手动调整</span>' : ""}</div>
+      <div class="meta">
+        时间:${fmtTime(s.start_time)} ~ ${fmtTime(s.end_time)}(时长 ${fmtDur(s.duration)})<br>
+        范围:${fmtDist(s.extent)} · 里程:${fmtDist(s.distance)} · 均速:${s.avg_speed.toFixed(2)} m/s · 点数:${s.point_count}
+      </div>${reasons}${warns}
+      <div class="seg-actions">
+        <button onclick="event.stopPropagation();overrideSeg(${s.id},'stay')">标为停驻</button>
+        <button onclick="event.stopPropagation();overrideSeg(${s.id},'move')">标为移动</button>
+      </div>`;
+    div.onclick = () => focusSeg(s.id);
+    box.appendChild(div);
+  });
+}
+
+function segLatLngs(s) {
+  // 段的下标基于过滤后点列;映射回原始点坐标
+  return DATA.kept_points.slice(s.start_idx, s.end_idx + 1).map(p => [p.lat, p.lon]);
+}
+
+function renderMap() {
+  layerGroup.clearLayers();
+  const allBounds = [];
+  DATA.segments.forEach(s => {
+    const ll = segLatLngs(s);
+    if (!ll.length) return;
+    if (s.type === "stay") {
+      L.circle(s.center, { radius: Math.max(s.extent, 15), color: TYPE_COLOR.stay,
+        weight: 2, fillOpacity: 0.25 }).addTo(layerGroup);
+      L.polyline(ll, { color: TYPE_COLOR.stay, weight: 3, opacity: 0.6 }).addTo(layerGroup);
+    } else {
+      L.polyline(ll, { color: TYPE_COLOR[s.type], weight: 4,
+        dashArray: s.type === "uncertain" ? "8 8" : null,
+        opacity: s.type === "uncertain" ? 0.8 : 0.9 }).addTo(layerGroup);
+    }
+    allBounds.push(...ll);
+  });
+  // 漂移/异常点标记
+  for (const [idx, f] of Object.entries(DATA.drift)) {
+    const p = DATA.points[idx];
+    L.circleMarker([p.lat, p.lon], { radius: 7, color: "#c0392b", weight: 2,
+      fillColor: "#e74c3c", fillOpacity: 0.8 })
+      .bindPopup(`漂移提示:${f.reasons.join(";")}`).addTo(layerGroup);
+  }
+  if (allBounds.length) map.fitBounds(L.latLngBounds(allBounds).pad(0.1));
+}
+
+function focusSeg(id) {
+  const s = DATA.segments.find(x => x.id === id);
+  if (!s) return;
+  activeSeg = id;
+  document.querySelectorAll(".seg").forEach(e => e.classList.remove("active"));
+  const el = document.getElementById(`seg-${id}`);
+  if (el) el.classList.add("active");
+  map.fitBounds(L.latLngBounds(s.bbox).pad(0.3));
+}
+
+function renderAll() {
+  renderSummary(DATA.summary);
+  renderAlerts();
+  renderSegList();
+  renderMap();
+}
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const j = await r.json();
+  if (!r.ok) { toast("错误:" + (j.error || r.status)); return null; }
+  return j;
+}
+
+async function loadSample() {
+  const j = await api("/api/sample");
+  if (j) { DATA = j; lastSummary = null; renderAll(); toast("已加载示例轨迹"); }
+}
+
+async function analyzeInput() {
+  const text = document.getElementById("inputData").value.trim();
+  if (!text) { toast("请先粘贴数据或选择文件"); return; }
+  const j = await api("/api/analyze", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: text }) });
+  if (j) {
+    DATA = j; lastSummary = null; renderAll();
+    document.getElementById("modal").style.display = "none";
+    toast("分析完成");
+  }
+}
+
+async function overrideSeg(id, type) {
+  const j = await api("/api/override", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, type }) });
+  if (!j) return;
+  const oldCount = DATA.segments.length;
+  lastSummary = DATA.summary;
+  DATA = j;
+  renderAll();
+  const seg = DATA.segments.find(s => s.overridden && s.type === type);
+  if (DATA.segments.length < oldCount) toast("相邻同类型段已自动合并");
+  const warns = DATA.segments.flatMap(s => s.warnings || []);
+  warns.forEach(w => toast("提示:" + w));
+  if (seg) focusSeg(seg.id);
+}
+
+document.getElementById("fileInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { document.getElementById("inputData").value = rd.result; };
+  rd.readAsText(f);
+});
+
+loadSample();
+</script>
+</body>
+</html>
+</script>
