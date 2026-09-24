@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>目标工作台 · 长期目标管理</title>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2740;--line:#2a3550;--txt:#e6ebf5;--dim:#8b96ad;--acc:#4f8cff;--ok:#34c98e;--warn:#f0b429;--bad:#f0564f}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+header.top{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top h1{font-size:18px;font-weight:600}
+header.top .sub{color:var(--dim);font-size:12px}
+.layout{display:flex;min-height:calc(100vh - 53px)}
+aside{width:250px;background:var(--panel);border-right:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:8px}
+aside h2{font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.goal-item{padding:10px 12px;border-radius:8px;cursor:pointer;border:1px solid transparent;background:var(--panel2)}
+.goal-item:hover{border-color:var(--acc)}
+.goal-item.active{border-color:var(--acc);background:#22305a}
+.goal-item .nm{font-weight:600;font-size:14px;margin-bottom:4px}
+.goal-item .pg{height:5px;background:#0d1220;border-radius:3px;overflow:hidden}
+.goal-item .pg i{display:block;height:100%;background:var(--ok)}
+.goal-item .meta{font-size:11px;color:var(--dim);margin-top:4px}
+main{flex:1;padding:20px 24px;overflow-x:hidden}
+.btn{background:var(--acc);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer}
+.btn:hover{filter:brightness(1.12)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+.btn.small{padding:3px 9px;font-size:12px;border-radius:5px}
+.btn.danger{background:var(--bad)}
+.btn.ok{background:var(--ok)}
+.btn.warn{background:var(--warn);color:#222}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+.card h3{font-size:14px;margin-bottom:10px;color:var(--dim);font-weight:600}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.stat{background:var(--panel2);border-radius:8px;padding:8px 14px;font-size:12px;color:var(--dim)}
+.stat b{display:block;font-size:16px;color:var(--txt);margin-top:2px}
+.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.b-ok{background:#123b2e;color:var(--ok)}.b-warn{background:#3d3013;color:var(--warn)}.b-bad{background:#3d1a18;color:var(--bad)}.b-dim{background:#232c44;color:var(--dim)}.b-run{background:#1b2f55;color:var(--acc)}
+.progress{height:8px;background:#0d1220;border-radius:4px;overflow:hidden;flex:1;min-width:120px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--ok))}
+.alert{border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.alert.err{background:#3d1a18;border:1px solid var(--bad)}
+.alert.warn{background:#3d3013;border:1px solid var(--warn)}
+.alert.ok{background:#123b2e;border:1px solid var(--ok)}
+.alert .act{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--dim);font-weight:600;font-size:12px}
+tr.affected td{background:rgba(240,86,79,.08)}
+tr.cancelled td{opacity:.45}
+input,select,textarea{background:#0d1220;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 9px;font-size:13px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:var(--acc)}
+input.num{width:64px}
+select[multiple]{min-width:150px;min-height:64px}
+.gantt{position:relative}
+.g-row{display:flex;align-items:center;height:34px;border-bottom:1px solid #1a2338}
+.g-name{width:170px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px;flex:none}
+.g-track{flex:1;position:relative;height:22px}
+.g.bar{position:absolute;top:3px;height:16px;border-radius:4px;background:var(--acc);font-size:10px;line-height:16px;color:#fff;padding:0 6px;white-space:nowrap;overflow:hidden}
+.bar.done{background:var(--ok)}.bar.delayed{background:var(--warn)}.bar.cancelled{background:#444;text-decoration:line-through}.bar.critical{box-shadow:0 0 0 2px var(--bad)}
+.g-deadline{position:absolute;top:0;bottom:0;width:2px;background:var(--bad);opacity:.8}
+.g-deadline span{position:absolute;top:-2px;left:4px;font-size:10px;color:var(--bad);white-space:nowrap}
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+.modal-mask.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:440px;max-width:92vw}
+.modal h3{margin-bottom:14px}
+.modal label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+.modal input,.modal textarea{width:100%}
+.empty{color:var(--dim);text-align:center;padding:80px 0;font-size:14px}
+.hint{font-size:11px;color:var(--dim)}
+.tag{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body><header class="top">
+  <h1>🎯 目标工作台</h1>
+  <span class="sub">长期目标 · 阶段拆解 · 动态重规划</span>
+</header>
+<div class="layout">
+  <aside>
+    <h2>长期目标</h2>
+    <div id="goalList"></div>
+    <button class="btn" id="btnNewGoal" style="margin-top:8px">＋ 新建目标</button>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<div class="modal-mask" id="goalModal">
+  <div class="modal">
+    <h3 id="goalModalTitle">新建长期目标</h3>
+    <label>目标名称</label>
+    <input id="gName" placeholder="例如：一年内完成职业转型">
+    <label>可量化完成条件</label>
+    <div class="row" style="gap:8px">
+      <input id="gTarget" type="number" placeholder="目标值" style="width:110px">
+      <input id="gUnit" placeholder="单位，如 kg / 个 / 元" style="width:150px">
+      <span class="hint">完成条件 = 达到该目标值</span>
+    </div>
+    <label>条件描述</label>
+    <textarea id="gCriterion" rows="2" placeholder="例如：体重降至目标值并保持 4 周"></textarea>
+    <label>期望周期（天）</label>
+    <input id="gDeadline" type="number" min="1" placeholder="例如：365">
+    <div class="row" style="margin-top:16px;justify-content:flex-end">
+      <button class="btn ghost" id="btnCancelGoal">取消</button>
+      <button class="btn" id="btnSaveGoal">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============ 数据层 ============ */
+const KEY = "goal-workbench.v1";
+const uid = () => Math.random().toString(36).slice(2, 10);
+const todayStr = () => new Date().toISOString().slice(0, 10);
+function addDays(dateStr, n){ const d = new Date(dateStr + "T00:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0,10); }
+function loadState(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && Array.isArray(s.goals)) return s; }catch(e){}
+  return null;
+}
+function seed(){
+  const g1 = uid(), m1 = uid(), m2 = uid(), m3 = uid(), m4 = uid();
+  return { activeId: g1, goals: [{
+    id: g1, name: "示例：6 个月跑完半程马拉松",
+    criterion: "一次性连续跑完 21.1 公里", target: 21.1, unit: "公里",
+    startDate: todayStr(), deadlineDays: 180,
+    order: [m1, m2, m3, m4],
+    milestones: [
+      { id: m1, name: "建立基础跑量（每周 3 次）", duration: 30, deps: [], status: "done", delayDays: 0 },
+      { id: m2, name: "单次 10 公里轻松跑", duration: 45, deps: [m1], status: "in-progress", delayDays: 0 },
+      { id: m3, name: "单次 15 公里耐力跑", duration: 40, deps: [m2], status: "pending", delayDays: 0 },
+      { id: m4, name: "半马配速模拟赛", duration: 30, deps: [m3], status: "pending", delayDays: 0 }
+    ]
+  }]};
+}
+let state = loadState() || seed();
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+const getGoal = id => state.goals.find(g => g.id === id);
+const STATUS = {
+  pending:     { label: "待开始", cls: "b-dim"  },
+  "in-progress":{ label: "进行中", cls: "b-run"  },
+  done:        { label: "已完成", cls: "b-ok"   },
+  delayed:     { label: "已延期", cls: "b-warn" },
+  cancelled:   { label: "已取消", cls: "b-dim"  }
+};/* ============ 调度引擎：依赖拓扑 + 前推/回推 + 可行性分析 ============ */
+function effDur(m){
+  if(m.status === "cancelled") return 0;
+  let d = Math.max(0, +m.duration || 0);
+  if(m.status === "delayed") d += Math.max(0, +m.delayDays || 0);
+  return d;
+}
+function analyze(goal){
+  const ms = goal.milestones, byId = {};
+  ms.forEach(m => byId[m.id] = m);
+  // 拓扑排序（Kahn），同时检测循环依赖
+  const indeg = {}, adj = {};
+  ms.forEach(m => { indeg[m.id] = 0; adj[m.id] = []; });
+  ms.forEach(m => (m.deps || []).forEach(d => {
+    if(byId[d]){ indeg[m.id]++; adj[d].push(m.id); }
+  }));
+  const queue = ms.filter(m => indeg[m.id] === 0).map(m => m.id);
+  const topo = [];
+  while(queue.length){
+    const id = queue.shift(); topo.push(id);
+    adj[id].forEach(n => { if(--indeg[n] === 0) queue.push(n); });
+  }
+  const cyclic = ms.filter(m => !topo.includes(m.id)).map(m => m.id);
+  const inCycle = id => cyclic.includes(id);
+  // 前推：最早开始/完成（相对目标开始日的天数）
+  const es = {}, ef = {};
+  topo.forEach(id => {
+    const m = byId[id];
+    const deps = (m.deps || []).filter(d => byId[d] && !inCycle(d));
+    es[id] = deps.length ? Math.max.apply(null, deps.map(d => ef[d])) : 0;
+    ef[id] = es[id] + effDur(m);
+  });
+  cyclic.forEach(id => { es[id] = 0; ef[id] = 0; });
+  const finish = ms.length ? Math.max.apply(null, ms.map(m => ef[m.id])) : 0;
+  // 回推：最晚开始/完成 → 总时差（关键路径时差为 0）
+  const lf = {}, ls = {};
+  topo.slice().reverse().forEach(id => {
+    const succ = adj[id].filter(n => !inCycle(n));
+    lf[id] = succ.length ? Math.min.apply(null, succ.map(s => ls[s])) : finish;
+    ls[id] = lf[id] - effDur(byId[id]);
+  });
+  ms.forEach(m => {
+    m._es = es[m.id]; m._ef = ef[m.id];
+    m._slack = inCycle(m.id) ? 0 : (ls[m.id] - es[m.id]);
+    m._critical = !inCycle(m.id) && m.status !== "cancelled" && m._slack <= 0;
+  });
+  // 问题与建议
+  const deadline = +goal.deadlineDays || 0;
+  const overrun = finish - deadline;
+  const issues = [];
+  if(cyclic.length){
+    issues.push({ level: "err",
+      text: "检测到循环依赖：" + cyclic.map(id => "「" + byId[id].name + "」").join(" → ") + "。请解除其中一条依赖，否则这些阶段无法排期。" });
+  }
+  ms.forEach(m => {
+    (m.deps || []).forEach(d => {
+      if(byId[d] && byId[d].status === "cancelled" && m.status !== "cancelled"){
+        issues.push({ level: "warn",
+          text: "「" + m.name + "」依赖已取消的「" + byId[d].name + "」，当前按 0 天处理。建议移除该依赖或改接到其他前置阶段。",
+          action: { label: "移除该依赖", fn: "removeDep", args: [goal.id, m.id, d] } });
+      }
+    });
+  });
+  if(overrun > 0){
+    const critNames = ms.filter(m => m._critical).map(m => "「" + m.name + "」").join("、");
+    issues.push({ level: "err",
+      text: "时间线不可行：按当前拆解预计需要 " + finish + " 天，超出期望周期 " + overrun + " 天。受影响的关键阶段：" + (critNames || "无") + "。",
+      action: { label: "延长周期至 " + finish + " 天", fn: "extendDeadline", args: [goal.id, finish] } });
+    issues.push({ level: "warn",
+      text: "可执行建议：① 压缩关键路径上的阶段时长（共需压缩 " + overrun + " 天）；② 将可并行的阶段解除串行依赖；③ 取消非关键阶段释放资源。" });
+  } else if(ms.length){
+    issues.push({ level: "ok", text: "路径可行：预计第 " + finish + " 天完成（" + addDays(goal.startDate, finish) + "），距截止还有 " + (-overrun) + " 天余量。" });
+  }
+  return { finish, overrun, cyclic, issues, deadline };
+}/* ============ 渲染 ============ */
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function goalProgress(g){
+  const active = g.milestones.filter(m => m.status !== "cancelled");
+  const done = active.filter(m => m.status === "done").length;
+  return { done, total: active.length, pct: active.length ? Math.round(done / active.length * 100) : 0 };
+}
+function renderGoalList(){
+  const el = document.getElementById("goalList");
+  el.innerHTML = state.goals.map(g => {
+    const p = goalProgress(g);
+    return '<div class="goal-item' + (g.id === state.activeId ? " active" : "") + '" data-gid="' + g.id + '">'
+      + '<div class="nm">' + esc(g.name) + '</div>'
+      + '<div class="pg"><i style="width:' + p.pct + '%"></i></div>'
+      + '<div class="meta">' + p.done + '/' + p.total + ' 阶段 · ' + g.deadlineDays + ' 天</div></div>';
+  }).join("") || '<div class="hint">还没有目标，点击下方按钮创建。</div>';
+  el.querySelectorAll(".goal-item").forEach(it => it.onclick = () => { state.activeId = it.dataset.gid; save(); render(); });
+}
+function render(){
+  renderGoalList();
+  const main = document.getElementById("main");
+  const g = getGoal(state.activeId);
+  if(!g){
+    main.innerHTML = '<div class="empty">在左侧选择一个目标，或新建一个长期目标开始规划。</div>';
+    return;
+  }
+  const a = analyze(g);
+  const p = goalProgress(g);
+  const eta = addDays(g.startDate, a.finish);
+  const feasible = a.overrun <= 0 && !a.cyclic.length;
+  main.innerHTML =
+    '<div class="card"><div class="row" style="justify-content:space-between">'
+    + '<div><div style="font-size:18px;font-weight:700">' + esc(g.name) + '</div>'
+    + '<div class="tag">完成条件：' + esc(g.criterion || "—") + (g.target ? '（' + esc(g.target) + ' ' + esc(g.unit || "") + '）' : "") + '</div></div>'
+    + '<div class="row"><button class="btn ghost small" id="btnEditGoal">编辑目标</button>'
+    + '<button class="btn danger small" id="btnDelGoal">删除</button></div></div>'
+    + '<div class="row" style="margin-top:12px">'
+    + '<div class="stat">开始日<b>' + g.startDate + '</b></div>'
+    + '<div class="stat">期望周期<b>' + g.deadlineDays + ' 天</b></div>'
+    + '<div class="stat">预计完成<b>' + eta + '（第 ' + a.finish + ' 天）</b></div>'
+    + '<div class="stat">路径状态<b>' + (feasible ? '<span class="badge b-ok">可行</span>' : '<span class="badge b-bad">不可行</span>') + '</b></div>'
+    + '</div>'
+    + '<div class="row" style="margin-top:12px"><div class="progress"><i style="width:' + p.pct + '%"></i></div>'
+    + '<span class="tag">' + p.done + '/' + p.total + ' 阶段完成（' + p.pct + '%）</span></div></div>'
+    + '<div class="card"><h3>动态反馈与调整建议</h3><div id="alerts">'
+    + a.issues.map(is => '<div class="alert ' + is.level + '"><span>' + esc(is.text) + '</span>'
+      + (is.action ? '<button class="btn small act" data-fn="' + is.action.fn + '" data-args="' + esc(JSON.stringify(is.action.args)) + '">' + esc(is.action.label) + '</button>' : "")
+      + '</div>').join("")
+    + '</div></div>'
+    + '<div class="card"><h3>路径时间线（含关键路径标记）</h3><div id="gantt"></div></div>'
+    + '<div class="card"><h3>阶段成果（可调整顺序、时长、依赖与状态）</h3><div id="mTable"></div>'
+    + '<div class="row" style="margin-top:12px">'
+    + '<input id="nmName" placeholder="新阶段名称" style="flex:1;min-width:180px">'
+    + '<input id="nmDur" type="number" class="num" min="1" placeholder="天数">'
+    + '<button class="btn small" id="btnAddM">＋ 添加阶段</button></div>'
+    + '<div class="hint" style="margin-top:6px">新阶段默认接在当前最后一个阶段之后，可在表格中修改依赖。</div></div>';
+  renderGantt(g, a);
+  renderTable(g, a);
+  bindMainEvents(g);
+}
+function renderGantt(g, a){
+  const el = document.getElementById("gantt");
+  if(!g.milestones.length){ el.innerHTML = '<div class="hint">暂无阶段。</div>'; return; }
+  const span = Math.max(a.finish, a.deadline, 1);
+  const rows = g.order.map(id => g.milestones.find(m => m.id === id)).filter(Boolean);
+  const deadlineLeft = Math.min(100, a.deadline / span * 100);
+  el.innerHTML = '<div class="gantt">'
+    + rows.map(m => {
+      const l = m._es / span * 100, w = Math.max(1.2, (m._ef - m._es) / span * 100);
+      const cls = "bar " + m.status + (m._critical && a.overrun > 0 ? " critical" : "");
+      return '<div class="g-row"><div class="g-name" title="' + esc(m.name) + '">' + (m._critical && a.overrun > 0 ? "⚠ " : "") + esc(m.name) + '</div>'
+        + '<div class="g-track"><div class="' + cls + '" style="left:' + l + '%;width:' + w + '%">' + (m._ef - m._es) + 'd</div>'
+        + '<div class="g-deadline" style="left:' + deadlineLeft + '%"><span>截止</span></div></div></div>';
+    }).join("") + '</div>';
+}function renderTable(g, a){
+  const el = document.getElementById("mTable");
+  if(!g.milestones.length){ el.innerHTML = '<div class="hint">暂无阶段，请在下方添加。</div>'; return; }
+  const rows = g.order.map(id => g.milestones.find(m => m.id === id)).filter(Boolean);
+  const depOpts = (m) => g.milestones.filter(x => x.id !== m.id)
+    .map(x => '<option value="' + x.id + '"' + ((m.deps || []).includes(x.id) ? " selected" : "") + '>' + esc(x.name) + '</option>').join("");
+  el.innerHTML = '<table><tr><th style="width:60px">顺序</th><th>阶段成果</th><th>时长(天)</th><th>延期(天)</th><th>前置依赖</th>'
+    + '<th>预计窗口</th><th>时差</th><th>状态</th><th>操作</th></tr>'
+    + rows.map((m, i) => {
+      const st = STATUS[m.status];
+      const affected = (m._critical && a.overrun > 0) || a.cyclic.includes(m.id);
+      return '<tr class="' + (affected ? "affected " : "") + (m.status === "cancelled" ? "cancelled" : "") + '" data-mid="' + m.id + '">'
+      + '<td><button class="btn ghost small mv" data-dir="-1"' + (i === 0 ? " disabled" : "") + '>↑</button>'
+      + '<button class="btn ghost small mv" data-dir="1"' + (i === rows.length - 1 ? " disabled" : "") + '>↓</button></td>'
+      + '<td><input class="m-name" value="' + esc(m.name) + '" style="width:180px">' + (affected ? ' <span class="badge b-bad">受影响</span>' : "") + '</td>'
+      + '<td><input class="m-dur num" type="number" min="0" value="' + m.duration + '"></td>'
+      + '<td><input class="m-delay num" type="number" min="0" value="' + (m.delayDays || 0) + '"' + (m.status === "delayed" ? "" : " disabled") + '></td>'
+      + '<td><select class="m-deps" multiple>' + depOpts(m) + '</select></td>'
+      + '<td class="tag">第 ' + m._es + ' ~ ' + m._ef + ' 天<br>' + addDays(g.startDate, m._es) + ' ~ ' + addDays(g.startDate, m._ef) + '</td>'
+      + '<td class="tag">' + (m.status === "cancelled" ? "—" : (m._slack <= 0 ? "关键" : m._slack + " 天")) + '</td>'
+      + '<td><span class="badge ' + st.cls + '">' + st.label + '</span></td>'
+      + '<td style="white-space:nowrap">'
+      + '<button class="btn ok small st" data-s="done">完成</button> '
+      + '<button class="btn warn small st" data-s="delayed">延期</button> '
+      + '<button class="btn ghost small st" data-s="cancelled">取消</button> '
+      + '<button class="btn ghost small st" data-s="pending">重置</button> '
+      + '<button class="btn danger small del">删</button></td></tr>';
+    }).join("") + '</table>';
+}
+/* ============ 交互 ============ */
+function bindMainEvents(g){
+  document.getElementById("btnEditGoal").onclick = () => openGoalModal(g);
+  document.getElementById("btnDelGoal").onclick = () => {
+    if(confirm("确定删除目标「" + g.name + "」及其全部阶段？")){
+      state.goals = state.goals.filter(x => x.id !== g.id);
+      state.activeId = state.goals.length ? state.goals[0].id : null;
+      save(); render();
+    }
+  };
+  document.getElementById("btnAddM").onclick = () => {
+    const name = document.getElementById("nmName").value.trim();
+    const dur = +document.getElementById("nmDur").value || 7;
+    if(!name){ alert("请填写阶段名称"); return; }
+    const id = uid();
+    const lastId = g.order.length ? g.order[g.order.length - 1] : null;
+    g.milestones.push({ id, name, duration: dur, deps: lastId ? [lastId] : [], status: "pending", delayDays: 0 });
+    g.order.push(id); save(); render();
+  };
+  document.querySelectorAll("#alerts [data-fn]").forEach(b => b.onclick = () => {
+    const args = JSON.parse(b.dataset.args);
+    if(b.dataset.fn === "removeDep") removeDep.apply(null, args);
+    if(b.dataset.fn === "extendDeadline") extendDeadline.apply(null, args);
+  });
+  document.querySelectorAll("#mTable tr[data-mid]").forEach(tr => {
+    const mid = tr.dataset.mid;
+    const m = g.milestones.find(x => x.id === mid);
+    tr.querySelector(".m-name").onchange = e => { m.name = e.target.value.trim() || m.name; save(); render(); };
+    tr.querySelector(".m-dur").onchange = e => { m.duration = Math.max(0, +e.target.value || 0); save(); render(); };
+    tr.querySelector(".m-delay").onchange = e => { m.delayDays = Math.max(0, +e.target.value || 0); save(); render(); };
+    tr.querySelector(".m-deps").onchange = e => {
+      m.deps = Array.from(e.target.selectedOptions).map(o => o.value); save(); render();
+    };
+    tr.querySelectorAll(".st").forEach(b => b.onclick = () => setStatus(g, m, b.dataset.s));
+    tr.querySelectorAll(".mv").forEach(b => b.onclick = () => moveMilestone(g, mid, +b.dataset.dir));
+    tr.querySelector(".del").onclick = () => {
+      if(!confirm("删除阶段「" + m.name + "」？其后续阶段的依赖会自动清理。")) return;
+      g.milestones = g.milestones.filter(x => x.id !== mid);
+      g.milestones.forEach(x => x.deps = (x.deps || []).filter(d => d !== mid));
+      g.order = g.order.filter(id => id !== mid);
+      save(); render();
+    };
+  });
+}
+function setStatus(g, m, s){
+  m.status = s;
+  if(s === "delayed"){
+    const d = prompt("「" + m.name + "」预计延期多少天？", m.delayDays || 7);
+    if(d === null){ render(); return; }
+    m.delayDays = Math.max(0, +d || 0);
+  }
+  if(s !== "delayed") m.delayDays = 0;
+  save(); render(); // 状态变化后整体重算路径
+}
+function moveMilestone(g, mid, dir){
+  const ord = g.order, i = ord.indexOf(mid), j = i + dir;
+  if(j < 0 || j >= ord.length) return;
+  const A = ord[i], B = ord[j];
+  const mA = g.milestones.find(x => x.id === A), mB = g.milestones.find(x => x.id === B);
+  if(dir === 1 && (mB.deps || []).includes(A)){          // A 下移越过依赖它的 B
+    mB.deps = mB.deps.filter(d => d !== A).concat((mA.deps || []).filter(d => d !== B));
+    mA.deps = [B];
+  } else if(dir === -1 && (mA.deps || []).includes(B)){  // A 上移越过它依赖的 B
+    mA.deps = mA.deps.filter(d => d !== B).concat((mB.deps || []).filter(d => d !== A));
+    mB.deps = [A];
+  }
+  ord[i] = B; ord[j] = A;
+  save(); render();
+}
+function removeDep(gid, mid, dep){
+  const g = getGoal(gid); if(!g) return;
+  const m = g.milestones.find(x => x.id === mid); if(!m) return;
+  m.deps = (m.deps || []).filter(d => d !== dep);
+  save(); render();
+}
+function extendDeadline(gid, days){
+  const g = getGoal(gid); if(!g) return;
+  g.deadlineDays = days; save(); render();
+}
+/* ============ 目标新建/编辑弹窗 ============ */
+let editingGoalId = null;
+function openGoalModal(g){
+  editingGoalId = g ? g.id : null;
+  document.getElementById("goalModalTitle").textContent = g ? "编辑目标" : "新建长期目标";
+  document.getElementById("gName").value = g ? g.name : "";
+  document.getElementById("gTarget").value = g && g.target != null ? g.target : "";
+  document.getElementById("gUnit").value = g ? (g.unit || "") : "";
+  document.getElementById("gCriterion").value = g ? (g.criterion || "") : "";
+  document.getElementById("gDeadline").value = g ? g.deadlineDays : "";
+  document.getElementById("goalModal").classList.add("show");
+}
+document.getElementById("btnNewGoal").onclick = () => openGoalModal(null);
+document.getElementById("btnCancelGoal").onclick = () => document.getElementById("goalModal").classList.remove("show");
+document.getElementById("btnSaveGoal").onclick = () => {
+  const name = document.getElementById("gName").value.trim();
+  const dl = +document.getElementById("gDeadline").value;
+  if(!name){ alert("请填写目标名称"); return; }
+  if(!dl || dl <= 0){ alert("请填写有效的期望周期（天）"); return; }
+  const data = {
+    name, deadlineDays: dl,
+    target: document.getElementById("gTarget").value === "" ? null : +document.getElementById("gTarget").value,
+    unit: document.getElementById("gUnit").value.trim(),
+    criterion: document.getElementById("gCriterion").value.trim()
+  };
+  if(editingGoalId){
+    Object.assign(getGoal(editingGoalId), data);
+  } else {
+    const id = uid();
+    state.goals.push(Object.assign({ id, startDate: todayStr(), order: [], milestones: [] }, data));
+    state.activeId = id;
+  }
+  document.getElementById("goalModal").classList.remove("show");
+  save(); render();
+};
+render();
+</script>
+</body>
+</html>
