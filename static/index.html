@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>多级代理转发推导</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>多级代理转发推导</h1>
+    <div id="report-bar" class="report-bar">已载入示例数据</div>
+    <button id="btn-reset">重置数据</button>
+  </header>
+  <main>
+    <section class="col" id="col-left">
+      <h2>节点状态</h2>
+      <div id="nodes"></div>
+      <h2>请求记录</h2>
+      <div id="requests"></div>
+    </section>
+    <section class="col wide" id="col-mid">
+      <h2>逐跳推导过程</h2>
+      <div id="trace"><p class="hint">点击左侧请求查看逐跳推导、候选依据与回退路径。</p></div>
+    </section>
+    <section class="col" id="col-right">
+      <h2>规则（可临时改写）</h2>
+      <div id="rules"></div>
+      <h3>新增规则</h3>
+      <div id="add-rule">
+        <input id="nr-id" placeholder="规则 id">
+        <input id="nr-node" placeholder="所在节点">
+        <input id="nr-priority" type="number" value="50" title="优先级（小者优先）">
+        <input id="nr-when" placeholder='条件 JSON，如 {"host":"a.com"}'>
+        <input id="nr-target" placeholder="目标节点">
+        <input id="nr-backups" placeholder="备用目标，逗号分隔">
+        <button id="btn-add-rule">添加</button>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

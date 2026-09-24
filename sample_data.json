@@ -1,0 +1,35 @@
+{
+  "nodes": [
+    {"id": "edge-1", "name": "入口代理 edge-1", "reachable": true},
+    {"id": "edge-2", "name": "静态代理 edge-2", "reachable": true},
+    {"id": "proxy-a", "name": "二级代理 proxy-a", "reachable": false},
+    {"id": "proxy-b", "name": "二级代理 proxy-b", "reachable": true},
+    {"id": "loop-1", "name": "loop-1", "reachable": true},
+    {"id": "loop-2", "name": "loop-2", "reachable": true},
+    {"id": "backend-v1", "name": "后端 v1", "reachable": true, "terminal": true},
+    {"id": "backend-v2", "name": "后端 v2", "reachable": true, "terminal": true},
+    {"id": "backend-static", "name": "静态后端", "reachable": true, "terminal": true}
+  ],
+  "rules": [
+    {"id": "r1", "node": "edge-1", "priority": 10, "when": {"host": "api.example.com", "path_prefix": "/v1"}, "target": "proxy-a", "backups": ["proxy-b"], "status": "active"},
+    {"id": "r2", "node": "edge-1", "priority": 20, "when": {"host": "api.example.com"}, "target": "proxy-b", "backups": [], "status": "active"},
+    {"id": "r3", "node": "edge-1", "priority": 10, "when": {"host": "static.example.com"}, "target": "edge-2", "backups": [], "status": "active"},
+    {"id": "r4", "node": "edge-1", "priority": 90, "when": {}, "target": "loop-1", "backups": [], "status": "active"},
+    {"id": "r5", "node": "edge-1", "priority": 5, "when": {"host": "api.example.com", "path_prefix": "/v1"}, "target": "backend-v2", "backups": [], "status": "withdrawn"},
+    {"id": "r10", "node": "proxy-a", "priority": 10, "when": {"path_prefix": "/v1/users"}, "target": "backend-v1", "backups": [], "status": "active"},
+    {"id": "r11", "node": "proxy-a", "priority": 20, "when": {}, "target": "backend-v2", "backups": [], "status": "active"},
+    {"id": "r12", "node": "proxy-b", "priority": 10, "when": {}, "target": "backend-v2", "backups": [], "status": "active"},
+    {"id": "r20", "node": "edge-2", "priority": 10, "when": {"path_prefix": "/old"}, "target": "ghost", "backups": [], "status": "active"},
+    {"id": "r21", "node": "edge-2", "priority": 20, "when": {"path_prefix": "/img"}, "target": "backend-static", "backups": [], "status": "active"},
+    {"id": "r30", "node": "loop-1", "priority": 10, "when": {}, "target": "loop-2", "backups": [], "status": "active"},
+    {"id": "r31", "node": "loop-2", "priority": 10, "when": {}, "target": "loop-1", "backups": [], "status": "active"}
+  ],
+  "requests": [
+    {"id": "req-1", "entry": "edge-1", "features": {"host": "api.example.com", "path": "/v1/users/42", "method": "GET"}},
+    {"id": "req-2", "entry": "edge-1", "features": {"host": "api.example.com", "path": "/v1/orders", "method": "POST"}},
+    {"id": "req-3", "entry": "edge-1", "features": {"host": "api.example.com", "path": "/health", "method": "GET"}},
+    {"id": "req-4", "entry": "edge-1", "features": {"host": "static.example.com", "path": "/img/logo.png", "method": "GET"}},
+    {"id": "req-5", "entry": "edge-1", "features": {"host": "unknown.example.com", "path": "/", "method": "GET"}},
+    {"id": "req-6", "entry": "edge-1", "features": {"host": "static.example.com", "path": "/old/page", "method": "GET"}}
+  ]
+}
