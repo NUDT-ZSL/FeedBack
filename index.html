@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>到货波动 · 替代链 · 成品产出分析</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>到货波动与替代链影响分析</h1>
+  <div class="toolbar">
+    <button id="btnSample">载入示例数据</button>
+    <button id="btnDemoBad">注入异常演示（环 + 悬空指向）</button>
+    <button id="btnExport">导出 JSON</button>
+    <button id="btnImport">导入 JSON</button>
+    <button id="btnApplyJson">应用 JSON</button>
+  </div>
+  <textarea id="jsonBox" rows="8" hidden spellcheck="false"></textarea>
+</header>
+<main>
+  <section>
+    <h2>① 物料清单（来源 / 到货量）</h2>
+    <table class="grid">
+      <thead><tr><th>名称</th><th>来源</th><th>到货量</th><th>有效供给</th><th>状态 / 问题</th><th></th></tr></thead>
+      <tbody id="matBody"></tbody>
+    </table>
+    <div class="form">
+      <input id="newMatName" placeholder="新物料名称">
+      <input id="newMatSrc" placeholder="来源">
+      <input id="newMatArr" type="number" min="0" placeholder="到货量">
+      <button id="btnAddMat">+ 添加物料</button>
+    </div>
+  </section>
+  <section>
+    <h2>② 替代关系（A → B 表示 A 可用 B 替代）</h2>
+    <ul id="subList" class="subs"></ul>
+    <div class="form">
+      <select id="subFrom"></select>
+      <span>可被</span>
+      <select id="subTo"></select>
+      <span>替代</span>
+      <button id="btnAddSub">+ 添加替代关系</button>
+    </div>
+    <h3>替代路径裁决</h3>
+    <div id="adjPanel"></div>
+  </section>
+  <section>
+    <h2>③ 成品配方与产出结论</h2>
+    <div id="prodCards"></div>
+    <div class="form">
+      <input id="newProdName" placeholder="新成品名称">
+      <input id="newProdMin" type="number" min="1" placeholder="最低产出">
+      <button id="btnAddProd">+ 添加成品</button>
+    </div>
+  </section>
+  <section>
+    <h2>重推日志（增量重推只重算受影响成品）</h2>
+    <ul id="logList" class="log"></ul>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
