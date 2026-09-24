@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>轨迹停驻/移动分段分析</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>轨迹分段分析</h1>
+  <div class="actions">
+    <label class="btn">载入数据文件 (JSON/CSV)<input type="file" id="fileInput" accept=".json,.csv,.txt" hidden></label>
+    <button class="btn" id="sampleBtn">恢复示例数据</button>
+  </div>
+</header>
+<div id="notices" class="notices" hidden></div>
+<main>
+  <section class="map-wrap">
+    <canvas id="map"></canvas>
+    <div class="legend">
+      <span><i class="dot stop"></i>停驻段</span>
+      <span><i class="dot move"></i>移动段</span>
+      <span><i class="dot uncertain"></i>待确认</span>
+      <span><i class="dot drift"></i>漂移点</span>
+      <span class="hint">滚轮缩放 · 拖拽平移 · 点击段选中</span>
+    </div>
+  </section>
+  <aside class="panel">
+    <section class="card" id="statsCard">
+      <h2>整体统计</h2>
+      <div id="stats"></div>
+      <div id="statsDelta" class="delta"></div>
+    </section>
+    <section class="card" id="driftCard" hidden>
+      <h2>漂移提示</h2>
+      <ul id="driftList" class="drift-list"></ul>
+    </section>
+    <section class="card grow">
+      <h2>分段列表</h2>
+      <div id="segList" class="seg-list"></div>
+    </section>
+  </aside>
+</main>
+<div id="toast" class="toast" hidden></div>
+<script src="/map.js"></script>
+<script src="/mapdraw.js"></script>
+<script src="/ui.js"></script>
+<script src="/render.js"></script>
+</body>
+</html>
