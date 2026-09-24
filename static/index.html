@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>本地复习规划</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  header { background: #2f54eb; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { font-size: 13px; opacity: .85; }
+  nav { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 0 24px; }
+  nav button { background: none; border: none; padding: 12px 18px; font-size: 15px; cursor: pointer; border-bottom: 3px solid transparent; }
+  nav button.active { border-bottom-color: #2f54eb; color: #2f54eb; font-weight: 600; }
+  main { max-width: 960px; margin: 20px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .btn { background: #2f54eb; color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
+  .btn:hover { background: #1d39c4; }
+  .btn.gray { background: #8c8c8c; }
+  .btn.green { background: #389e0d; }
+  .btn.red { background: #cf1322; }
+  .btn.small { padding: 4px 10px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 6px; border-bottom: 1px solid #eee; text-align: left; }
+  th { background: #fafafa; }
+  input, select, textarea { font-size: 14px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { width: 100%; min-height: 140px; font-family: Consolas, monospace; }
+  label { display: block; margin: 8px 0 4px; font-size: 13px; color: #555; }
+  .queue-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; cursor: pointer; }
+  .queue-item:hover { border-color: #2f54eb; }
+  .queue-item.current { border-color: #2f54eb; background: #f0f5ff; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #fff1f0; color: #cf1322; }
+  .tag.ok { background: #f6ffed; color: #389e0d; }
+  #toast { position: fixed; top: 16px; right: 16px; padding: 12px 18px; border-radius: 6px; color: #fff; display: none; z-index: 9; max-width: 420px; }
+  #toast.err { background: #cf1322; }
+  #toast.ok { background: #389e0d; }
+  .reasons { background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px; padding: 12px 16px; margin-top: 12px; }
+  .reasons li { margin: 4px 0; font-size: 14px; }
+  .answer { background: #fafafa; border: 1px dashed #bbb; border-radius: 6px; padding: 14px; margin: 12px 0; white-space: pre-wrap; }
+  .muted { color: #888; font-size: 13px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 140px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>本地复习规划</h1>
+  <span class="sub" id="todayLabel"></span>
+  <span class="sub" id="dueLabel"></span>
+</header>
+<nav>
+  <button id="tabReview" class="active" onclick="showTab('review')">今日复习</button>
+  <button id="tabItems" onclick="showTab('items')">条目管理</button>
+  <button id="tabImport" onclick="showTab('import')">导入 / 新增</button>
+</nav>
+<main>
+  <div id="viewReview"></div>
+  <div id="viewItems" style="display:none"></div>
+  <div id="viewImport" style="display:none"></div>
+</main>
+<div id="toast"></div>
+<script>
+let state = { today: "", queue: [], items: [] };
+let currentId = null;
+
+function toast(msg, isErr) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = isErr ? "err" : "ok";
+  t.style.display = "block";
+  setTimeout(() => { t.style.display = "none"; }, isErr ? 5000 : 2500);
+}
+
+async function api(path, method, body) {
+  try {
+    const resp = await fetch(path, {
+      method: method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("请求失败：" + resp.status));
+    return data;
+  } catch (e) {
+    toast(e.message || "网络错误", true);
+    throw e;
+  }
+}
+
+async function refresh() {
+  const data = await api("/api/state");
+  state = data;
+  document.getElementById("todayLabel").textContent = "今天：" + data.today;
+  document.getElementById("dueLabel").textContent = "今日待复习：" + data.queue.length + " 条";
+  renderReview();
+  renderItems();
+}
+
+function showTab(name) {
+  for (const n of ["review", "items", "import"]) {
+    document.getElementById("view" + n[0].toUpperCase() + n.slice(1)).style.display =
+      n === name ? "block" : "none";
+  }
+  for (const b of document.querySelectorAll("nav button")) b.classList.remove("active");
+  document.getElementById("tab" + name[0].toUpperCase() + name.slice(1)).classList.add("active");
+  if (name === "import") renderImport();
+}
+
+function itemById(id) { return state.items.find(it => it.id === id); }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g,
+    c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function pct(x) { return Math.round(x * 100) + "%"; }
+
+function renderReview() {
+  const el = document.getElementById("viewReview");
+  if (!state.queue.length) {
+    el.innerHTML = '<div class="card"><h2>今日复习</h2><p class="muted">今天没有到期的条目，' +
+      '可以在“条目管理”中查看全部内容，或到“导入 / 新增”添加新条目。</p></div>';
+    return;
+  }
+  if (!currentId || !state.queue.includes(currentId)) currentId = state.queue[0];
+  let html = '<div class="card"><h2>今日复习队列（按遗忘程度与重要度排序）</h2>';
+  state.queue.forEach((id, i) => {
+    const it = itemById(id);
+    if (!it) return;
+    html += '<div class="queue-item' + (id === currentId ? " current" : "") +
+      '" onclick="pickItem(\'' + id + '\')">' +
+      "<span>" + (i + 1) + ". " + esc(it.title) + "</span>" +
+      '<span><span class="tag">保持率 ' + pct(it.retention) + "</span> " +
+      '<span class="tag ok">重要度 ' + it.importance + "</span></span></div>";
+  });
+  html += "</div>" + reviewCard(itemById(currentId));
+  el.innerHTML = html;
+}
+
+function pickItem(id) { currentId = id; renderReview(); }
+
+function reviewCard(it) {
+  if (!it) return "";
+  return '<div class="card"><h2>' + esc(it.title) + "</h2>" +
+    '<p class="muted">掌握度 ' + pct(it.mastery) + " ｜ 连续记录 " + it.streak +
+    " ｜ 当前间隔 " + it.interval_days + " 天</p>" +
+    '<div id="answerBox"><button class="btn gray" onclick="showAnswer()">显示答案 / 内容</button></div>' +
+    '<div style="margin-top:14px" id="gradeBox" hidden>' +
+    '<button class="btn green" onclick="grade(true)">答对了</button> ' +
+    '<button class="btn red" onclick="grade(false)">答错了</button></div>' +
+    '<div id="feedback"></div></div>';
+}
+
+function showAnswer() {
+  const it = itemById(currentId);
+  document.getElementById("answerBox").innerHTML =
+    '<div class="answer">' + esc(it.content || "（该条目没有填写内容）") + "</div>";
+  document.getElementById("gradeBox").hidden = false;
+}
+
+async function grade(correct) {
+  const data = await api("/api/items/" + currentId + "/review", "POST", { correct: correct });
+  state = data.state;
+  const it = itemById(currentId);
+  let html = '<div class="reasons"><b>本次调整说明：</b><ul>';
+  for (const r of data.reasons) html += "<li>" + esc(r) + "</li>";
+  html += "</ul><p>当前掌握度 <b>" + pct(it.mastery) + "</b>，下次复习时间 <b>" +
+    it.next_review + "</b></p></div>";
+  document.getElementById("feedback").innerHTML = html;
+  document.getElementById("gradeBox").hidden = true;
+  document.getElementById("dueLabel").textContent = "今日待复习：" + state.queue.length + " 条";
+  setTimeout(() => {
+    currentId = state.queue[0] || null;
+    renderReview(); renderItems();
+  }, 2200);
+}
+
+function renderItems() {
+  const el = document.getElementById("viewItems");
+  let html = '<div class="card"><h2>全部条目（' + state.items.length + "）</h2>";
+  if (!state.items.length) {
+    el.innerHTML = html + '<p class="muted">还没有条目，请先到“导入 / 新增”添加。</p></div>';
+    return;
+  }
+  html += "<table><tr><th>标题</th><th>掌握度</th><th>重要度</th><th>保持率</th>" +
+    "<th>上次复习</th><th>间隔(天)</th><th>下次复习</th><th>连对/连错</th><th>操作</th></tr>";
+  for (const it of state.items) {
+    html += "<tr><td>" + esc(it.title) + "</td><td>" + pct(it.mastery) + "</td><td>" +
+      it.importance + "</td><td>" + pct(it.retention) + "</td><td>" + it.last_review +
+      "</td><td>" + it.interval_days + "</td><td>" + it.next_review + "</td><td>" +
+      it.streak + "</td><td>" +
+      '<button class="btn small" onclick="editItem(\'' + it.id + '\')">修改</button> ' +
+      '<button class="btn small red" onclick="delItem(\'' + it.id + '\')">删除</button>' +
+      "</td></tr>";
+  }
+  html += "</table></div><div id='editBox'></div>";
+  el.innerHTML = html;
+}
+
+function editItem(id) {
+  const it = itemById(id);
+  const html = '<div class="card"><h3>修改：' + esc(it.title) + "</h3>" +
+    '<div class="row"><div><label>掌握度 (0~1)</label>' +
+    '<input id="eMastery" type="number" min="0" max="1" step="0.05" value="' + it.mastery + '"></div>' +
+    '<div><label>重要度 (1~5)</label>' +
+    '<input id="eImportance" type="number" min="1" max="5" step="1" value="' + it.importance + '"></div>' +
+    '<div><label>上次复习日期</label>' +
+    '<input id="eLast" type="date" value="' + it.last_review + '"></div>' +
+    '<div><label>复习间隔（天）</label>' +
+    '<input id="eInterval" type="number" min="0.5" max="365" step="0.5" value="' + it.interval_days + '"></div></div>' +
+    '<label>内容</label><textarea id="eContent">' + esc(it.content) + "</textarea>" +
+    '<div style="margin-top:12px"><button class="btn" onclick="saveEdit(\'' + id + '\')">保存并重算</button> ' +
+    '<button class="btn gray" onclick="renderItems()">取消</button></div>' +
+    '<div id="editReasons"></div></div>';
+  document.getElementById("editBox").innerHTML = html;
+  document.getElementById("editBox").scrollIntoView({ behavior: "smooth" });
+}
+
+async function saveEdit(id) {
+  const changes = {
+    mastery: parseFloat(document.getElementById("eMastery").value),
+    importance: parseInt(document.getElementById("eImportance").value, 10),
+    last_review: document.getElementById("eLast").value,
+    interval_days: parseFloat(document.getElementById("eInterval").value),
+    content: document.getElementById("eContent").value,
+  };
+  if (isNaN(changes.mastery) || isNaN(changes.importance) || !changes.last_review) {
+    toast("请填写合法的掌握度、重要度和日期", true);
+    return;
+  }
+  const data = await api("/api/items/" + id, "PUT", changes);
+  state = data.state;
+  let html = '<div class="reasons"><b>重新推导结果：</b><ul>';
+  for (const r of data.reasons) html += "<li>" + esc(r) + "</li>";
+  html += "</ul></div>";
+  renderItems();
+  renderReview();
+  editItem(id);
+  document.getElementById("editReasons").innerHTML = html;
+  toast("已保存，仅重算了该条目");
+}
+
+async function delItem(id) {
+  if (!confirm("确定删除该条目？")) return;
+  const data = await api("/api/items/" + id, "DELETE");
+  state = data.state;
+  renderItems(); renderReview();
+  toast("已删除");
+}
+
+function renderImport() {
+  const el = document.getElementById("viewImport");
+  el.innerHTML =
+    '<div class="card"><h2>批量导入（JSON 数组）</h2>' +
+    '<p class="muted">每条包含 title（必填）、content、mastery(0~1)、importance(1~5)、' +
+    'last_review(YYYY-MM-DD)。示例：</p>' +
+    '<p class="muted">[{"title":"单词 apple","content":"苹果","mastery":0.4,"importance":4,' +
+    '"last_review":"2026-09-20"}]</p>' +
+    '<textarea id="importText" placeholder="粘贴 JSON 数组"></textarea>' +
+    '<div style="margin-top:10px"><button class="btn" onclick="doImport()">导入</button></div>' +
+    '<div id="importResult"></div></div>' +
+    '<div class="card"><h2>手动新增一条</h2>' +
+    '<div class="row"><div><label>标题 *</label><input id="nTitle"></div>' +
+    '<div><label>掌握度 (0~1)</label><input id="nMastery" type="number" min="0" max="1" step="0.05" value="0.3"></div>' +
+    '<div><label>重要度 (1~5)</label><input id="nImportance" type="number" min="1" max="5" value="3"></div>' +
+    '<div><label>上次复习日期（默认今天）</label><input id="nLast" type="date"></div></div>' +
+    '<label>内容</label><textarea id="nContent"></textarea>' +
+    '<div style="margin-top:10px"><button class="btn" onclick="addOne()">新增</button></div></div>';
+}
+
+async function doImport() {
+  const text = document.getElementById("importText").value.trim();
+  if (!text) { toast("请先粘贴 JSON 内容", true); return; }
+  let arr;
+  try { arr = JSON.parse(text); } catch (e) { toast("JSON 格式错误：" + e.message, true); return; }
+  if (!Array.isArray(arr)) { toast("顶层必须是数组 [...]", true); return; }
+  const data = await api("/api/import", "POST", { items: arr });
+  state = data.state;
+  let html = '<div class="reasons"><b>导入完成：成功 ' + data.imported + " 条</b>";
+  if (data.errors.length) {
+    html += "<ul>";
+    for (const e of data.errors) html += "<li>" + esc(e) + "</li>";
+    html += "</ul>";
+  }
+  html += "</div>";
+  document.getElementById("importResult").innerHTML = html;
+  renderReview(); renderItems();
+  toast("已导入 " + data.imported + " 条");
+}
+
+async function addOne() {
+  const title = document.getElementById("nTitle").value.trim();
+  if (!title) { toast("标题不能为空", true); return; }
+  const body = {
+    title: title,
+    content: document.getElementById("nContent").value,
+    mastery: parseFloat(document.getElementById("nMastery").value) || 0,
+    importance: parseInt(document.getElementById("nImportance").value, 10) || 3,
+  };
+  const last = document.getElementById("nLast").value;
+  if (last) body.last_review = last;
+  const data = await api("/api/items", "POST", body);
+  state = data.state;
+  renderReview(); renderItems();
+  toast("已新增：" + title);
+  showTab("review");
+}
+
+refresh().catch(() => {});
+</script>
+</body>
+</html>
