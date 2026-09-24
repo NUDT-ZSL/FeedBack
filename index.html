@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>位置对象范围查找推演台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>位置对象范围查找推演台</h1>
+  <div class="toolbar">
+    <button id="btn-sample">载入示例数据</button>
+    <label class="file-btn">导入 JSON<input type="file" id="file-import" accept=".json"></label>
+    <button id="btn-export">导出当前状态</button>
+    <button id="btn-verify">增量/整体一致性校验</button>
+    <span id="verify-result"></span>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <canvas id="map" width="560" height="560"></canvas>
+    <p class="hint">拖动范围图形移动；拖动边缘手柄调整大小；点击对象查看来源与裁决。绿色=命中，灰色=未命中，红色=不可信。</p>
+    <div id="event-log"><h3>事件与影响</h3><ul id="event-list"></ul></div>
+  </section>
+  <section class="right">
+    <div class="panel"><h2>范围查找请求</h2><div id="query-list"></div></div>
+    <div class="panel"><h2>查找结论（命中 / 邻近顺序 / 依据 / 歧义）</h2><div id="query-detail">请选择查询</div></div>
+    <div class="panel"><h2>位置对象</h2><div id="object-list"></div></div>
+    <div class="panel"><h2>对象来源与裁决</h2><div id="object-detail">请选择对象</div></div>
+  </section>
+</main>
+<script src="js/engine.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/ui-map.js"></script>
+<script src="js/ui-panels.js"></script>
+<script src="js/ui-object.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
