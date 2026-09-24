@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>位置对象范围推演台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>位置对象范围推演台</h1>
+  <span id="consistency" class="badge">一致性：检查中…</span>
+  <span id="affected" class="badge muted"></span>
+  <button id="btn-reset">重置示例数据</button>
+  <button id="btn-check">校验一致性</button>
+</header>
+<main>
+  <section class="col left">
+    <div class="panel">
+      <h2>态势图 <small>（拖动选中范围可调整位置，点击对象查看详情）</small></h2>
+      <canvas id="map" width="560" height="420"></canvas>
+    </div>
+    <div class="panel">
+      <h2>范围查找请求</h2>
+      <ul id="query-list" class="list"></ul>
+      <button id="btn-new-query">新建查找</button>
+      <form id="query-editor" class="editor hidden">
+        <h3 id="qe-title">编辑查找</h3>
+        <input type="hidden" id="qe-id">
+        <label>名称 <input id="qe-name" required></label>
+        <label>形状
+          <select id="qe-type">
+            <option value="circle">圆形</option>
+            <option value="rect">矩形</option>
+          </select>
+        </label>
+        <div id="qe-circle">
+          <label>圆心X <input id="qe-cx" type="number" step="any"></label>
+          <label>圆心Y <input id="qe-cy" type="number" step="any"></label>
+          <label>半径 <input id="qe-radius" type="number" step="any"></label>
+        </div>
+        <div id="qe-rect" class="hidden">
+          <label>minX <input id="qe-minx" type="number" step="any"></label>
+          <label>minY <input id="qe-miny" type="number" step="any"></label>
+          <label>maxX <input id="qe-maxx" type="number" step="any"></label>
+          <label>maxY <input id="qe-maxy" type="number" step="any"></label>
+        </div>
+        <label>类别过滤（逗号分隔，空为不限） <input id="qe-cats"></label>
+        <label>有效时点 <input id="qe-active" placeholder="2026-09-24T12:00:00"></label>
+        <label>期望依据 <input id="qe-basis"></label>
+        <div class="row">
+          <button type="submit">保存并重推</button>
+          <button type="button" id="qe-delete" class="danger">删除</button>
+          <button type="button" id="qe-cancel">取消</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  <section class="col right">
+    <div class="panel" id="result-panel">
+      <h2 id="result-title">查找结论</h2>
+      <div id="overlap-notes"></div>
+      <div id="result-body"><p class="muted">请选择左侧的查找请求。</p></div>
+    </div>
+    <div class="panel">
+      <h2>位置对象与来源</h2>
+      <ul id="object-list" class="list"></ul>
+      <div id="object-detail"></div>
+    </div>
+    <div class="panel">
+      <h2>变更日志</h2>
+      <ul id="log" class="log"></ul>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

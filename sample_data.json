@@ -1,0 +1,54 @@
+{
+  "objects": [
+    {"object_id": "OBJ-001", "claims": [
+      {"source": "北斗终端A", "lat": 39.902, "lon": 116.402, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "实时回传"}]},
+    {"object_id": "OBJ-002", "claims": [
+      {"source": "人工登记", "category": "仓库",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "台账未录坐标"}]},
+    {"object_id": "OBJ-003", "claims": [
+      {"source": "巡检上报", "lat": 39.900, "lon": 116.410, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "现场GPS"},
+      {"source": "历史台账", "lat": 39.950, "lon": 116.450, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "去年迁移前位置"}]},
+    {"object_id": "OBJ-004", "claims": [
+      {"source": "第三方接口", "lat": 95.0, "lon": 116.400, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "纬度异常"}]},
+    {"object_id": "OBJ-005", "claims": [
+      {"source": "备案系统", "lat": 39.905, "lon": 116.405, "category": "仓库",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-06-30T23:59:59", "note": "上半年备案"},
+      {"source": "年检系统", "lat": 39.905, "lon": 116.405, "category": "仓库",
+       "valid_from": "2026-07-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "下半年年检"}]},
+    {"object_id": "OBJ-006", "claims": [
+      {"source": "北斗终端B", "lat": 39.900, "lon": 116.450, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "恰在Q1边界"}]},
+    {"object_id": "OBJ-007", "claims": [
+      {"source": "资产系统", "lat": 39.898, "lon": 116.415, "category": "仓库",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59"},
+      {"source": "调度系统", "lat": 39.898, "lon": 116.415, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59"}]},
+    {"object_id": "OBJ-008", "claims": [
+      {"source": "北斗终端C", "lat": 39.990, "lon": 116.600, "category": "车辆",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "远在范围外"}]},
+    {"object_id": "OBJ-009", "claims": [
+      {"source": "北斗终端D", "lat": 39.895, "lon": 116.400, "category": "仓库",
+       "valid_from": "2026-01-01T00:00:00", "valid_to": "2026-12-31T23:59:59", "note": "位于Q1与Q2重叠区"}]},
+    {"object_id": "OBJ-010", "claims": [
+      {"source": "退役档案", "lat": 39.900, "lon": 116.410, "category": "车辆",
+       "valid_from": "2025-01-01T00:00:00", "valid_to": "2025-12-31T23:59:59", "note": "已过期"}]}
+  ],
+  "queries": [
+    {"query_id": "Q1", "name": "核心圈（圆）",
+     "shape": {"type": "circle", "cx": 116.40, "cy": 39.90, "radius": 0.05},
+     "filters": {"categories": [], "active_at": "2026-09-24T12:00:00"},
+     "expected_basis": "以各对象当前可信坐标为准，命中需给出距离与采信来源"},
+    {"query_id": "Q2", "name": "东侧矩形区",
+     "shape": {"type": "rect", "minx": 116.38, "miny": 39.88, "maxx": 116.44, "maxy": 39.93},
+     "filters": {"categories": [], "active_at": ""},
+     "expected_basis": "不限有效期，凡坐标落入矩形即命中"},
+    {"query_id": "Q3", "name": "仓库专用圈",
+     "shape": {"type": "circle", "cx": 116.41, "cy": 39.895, "radius": 0.03},
+     "filters": {"categories": ["仓库"], "active_at": "2026-09-24T12:00:00"},
+     "expected_basis": "仅纳入类别为仓库且在有效期内、坐标可信的对象"}
+  ]
+}
