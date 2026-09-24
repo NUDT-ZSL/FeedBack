@@ -1,0 +1,27 @@
+{
+  "name": "rd-workbench",
+  "version": "1.0.0",
+  "description": "",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node test/engine.test.js && node test/app.smoke.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NUDT-ZSL/FeedBack.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NUDT-ZSL/FeedBack/issues"
+  },
+  "homepage": "https://github.com/NUDT-ZSL/FeedBack#readme",
+  "dependencies": {
+    "jsdom": "^30.1.1"
+  },
+  "private": true
+}

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>响应式布局规则推演工作台</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <h1>响应式布局规则推演工作台</h1>
+  <div class="header-right">
+    <span id="consistency-badge" class="badge">未校验</span>
+    <button id="btn-verify" title="执行全量重推并与增量结果比对">全量重推校验</button>
+    <button id="btn-reset" title="恢复内置示例数据">重置示例</button>
+  </div>
+</header>
+<main>
+  <section id="panel-devices" class="panel">
+    <h2>设备预设</h2>
+    <div id="device-list"></div>
+    <details class="add-form" id="device-add">
+      <summary>＋ 新增设备预设</summary>
+      <form id="device-form">
+        <input type="hidden" id="dev-id">
+        <label>名称 <input id="dev-name" required placeholder="如 iPhone SE"></label>
+        <label>视口宽度(px) <input id="dev-width" type="number" min="0" required placeholder="375"></label>
+        <label>像素密度 <input id="dev-dpr" type="number" step="0.01" min="0.1" required placeholder="2"></label>
+        <label>方向
+          <select id="dev-orient">
+            <option value="portrait">竖屏</option>
+            <option value="landscape">横屏</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button type="submit">保存</button>
+          <button type="button" id="dev-cancel">取消</button>
+        </div>
+      </form>
+    </details>
+  </section>
+  <section id="panel-rules" class="panel">
+    <h2>布局规则</h2>
+    <div id="rule-list"></div>
+    <details class="add-form" id="rule-add">
+      <summary>＋ 新增布局规则</summary>
+      <form id="rule-form">
+        <input type="hidden" id="rule-id">
+        <label>名称 <input id="rule-name" required placeholder="如 移动端基础"></label>
+        <label>最小宽度 <input id="rule-min" type="number" min="0" required placeholder="0"></label>
+        <label>最大宽度 <input id="rule-max" type="number" min="0" required placeholder="767"></label>
+        <label>优先级 <input id="rule-priority" type="number" required placeholder="1"></label>
+        <label>布局属性（每行一条，格式 key=value）
+          <textarea id="rule-props" rows="4" placeholder="columns=1&#10;gutter=8"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit">保存</button>
+          <button type="button" id="rule-cancel">取消</button>
+        </div>
+      </form>
+    </details>
+  </section>
+  <section id="panel-preview" class="panel">
+    <h2>预览与诊断</h2>
+    <div id="gap-panel"></div>
+    <div id="preview-list"></div>
+  </section>
+</main>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
