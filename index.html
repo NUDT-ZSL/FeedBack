@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>嵌套标注画布</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="toolbar">
+    <span class="title">嵌套标注画布</span>
+    <button id="btn-add">添加标注框</button>
+    <button id="btn-del">删除选中</button>
+    <button id="btn-clear-sel">清空选择</button>
+    <button id="btn-fit">重置视图</button>
+    <span class="hint">滚轮缩放 · 空格/中键平移 · 拖动框移动 · 边角缩放 · 空白/已选框内框选 · Shift 追加 · Del 删除</span>
+    <span id="zoom" class="zoom">100%</span>
+  </header>
+  <main>
+    <div id="canvas-wrap"><canvas id="canvas"></canvas></div>
+    <aside id="panel">
+      <section>
+        <h3>当前手势</h3>
+        <div id="gesture" class="gesture">空闲</div>
+      </section>
+      <section>
+        <h3>选中集合</h3>
+        <div id="selection" class="chips"></div>
+      </section>
+      <section>
+        <h3>框选预览命中</h3>
+        <div id="preview" class="dim">（无）</div>
+      </section>
+      <section class="grow">
+        <h3>层级结构</h3>
+        <div id="tree" class="tree"></div>
+      </section>
+    </aside>
+  </main>
+  <script src="src/model.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
