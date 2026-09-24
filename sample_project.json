@@ -1,0 +1,24 @@
+{
+  "media": {"duration": 640.0, "fps": 25.0},
+  "anchors": [
+    {"id": "A1", "media_time": 12.0, "label": "片头字幕"},
+    {"id": "A2", "media_time": 158.0, "label": "第一场对白"},
+    {"id": "A3", "media_time": 322.0, "label": "转场音乐"},
+    {"id": "A4", "media_time": 505.0, "label": "结尾旁白"}
+  ],
+  "segments": [
+    {"id": "S01", "start": 10.0, "end": 14.0, "text": "开场白", "source": "字幕组A", "anchor_id": "A1"},
+    {"id": "S02", "start": 14.5, "end": 18.0, "text": "自我介绍", "source": "字幕组A"},
+    {"id": "S03", "start": 17.5, "end": 21.0, "text": "与S02重叠的一句", "source": "机翻轨"},
+    {"id": "S04", "start": 60.0, "end": 63.5, "text": "第一段插叙", "source": "字幕组A"},
+    {"id": "S05", "start": 155.0, "end": 158.5, "text": "关键对白", "source": "人工校对", "anchor_id": "A2"},
+    {"id": "S06", "start": 159.0, "end": 162.0, "text": "对白继续", "source": "人工校对"},
+    {"id": "S07", "start": 230.0, "end": 228.0, "text": "时间倒置的片段", "source": "机翻轨"},
+    {"id": "S08", "start": 300.0, "end": 304.0, "text": "转场前一句", "source": "字幕组B"},
+    {"id": "S09", "start": 320.0, "end": 324.0, "text": "转场句", "source": "字幕组B", "anchor_id": "A3"},
+    {"id": "S10", "start": 410.0, "end": 413.0, "text": "无锚参考段", "source": "字幕组B"},
+    {"id": "S11", "start": 500.0, "end": 504.0, "text": "结尾旁白", "source": "人工校对", "anchor_id": "A4"},
+    {"id": "S12", "start": 636.0, "end": 642.0, "text": "越界片尾", "source": "机翻轨"},
+    {"id": "S13", "start": 100.0, "end": 103.0, "text": "引用缺失锚点", "source": "机翻轨", "anchor_id": "A9"}
+  ]
+}
