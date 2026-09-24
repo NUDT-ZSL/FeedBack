@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T10:08:37.667Z",
+  "task_name": "auto12",
+  "task_type": "0-1代码生成",
+  "business_domain": "Web前端",
+  "modification_scope": "模块内多文件",
+  "prompt": "开发一个交互式音乐波形可视化与播放控制应用，让用户上传音频文件并实时显示频谱和波形动画。使用TypeScript和React实现，整合Web Audio API进行音频分析和播放。文件结构如下：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react，启动脚本：npm run dev）\n - vite.config.js（Vite构建配置，使用React插件）\n - tsconfig.json（严格模式）\n - index.html（入口页面，挂载React根节点，全屏Canvas容器）\n - src/main.ts（应用入口，初始化React渲染）\n - src/AudioEngine.ts（封装Web Audio API，负责音频加载、播放控制、频谱和波形数据实时提取，通过回调或自定义事件将分析数据传给UI层）\n - src/WaveformVisualizer.tsx（React组件，使用Canvas绘制主波形图，支持用户拖拽选择播放区域）\n - src/SpectrumVisualizer.tsx（React组件，使用Canvas绘制频谱条，条带高度随频率能量变化，带渐变颜色和弹性动画）\n - src/App.tsx（主布局组件，组合播放控制面板、波形图和频谱图，管理音频状态和UI交互）\n\n具体需求：\n1. 支持拖拽上传或点击选择本地音频文件（支持mp3、wav、ogg格式），上传后自动解析音频元数据（时长、采样率），并在波形图上显示时长进度条。\n2. 波形图以Canvas绘制，水平方向显示完整音频波形（采样点压缩为垂直柱状），有渐变描边（从蓝色到紫色）和发光效果；用户可在波形图上拖拽选择一段区域（高亮选区背景，半透明遮罩），选区范围实时显示起止时间。\n3. 频谱图分为128条竖条，条带高度根据该频段实时能量动态变化，条带颜色从低频的蓝青色渐变到高频的橙红色；当音乐播放时，频谱条带带有弹性回落动画（模拟真实频谱惯性），暂停时频谱保持当前状态但不再变化。\n4. 右下角提供播放控制按钮：播放/暂停（带图标切换动画）、停止（重置波形选区）、循环播放（高亮显示循环图标）。进度条支持点击跳转和拖拽微调，拖拽时显示时间tooltip。\n5. 左下角显示实时音频信息：当前播放时间/总时长（mm:ss格式）、采样率、文件大小，数值变化时带数字滚动效果。\n\n界面方面：整体采用深色主题（背景#1a1a2e），控制面板为半透明毛玻璃效果（背景rgba(255,255,255,0.1)，模糊10px），波形图区域带有微弱的光晕背景。频谱图底部渐变淡出，与背景融合。所有交互元素（按钮、拖拽手柄、滑块）在鼠标悬停时有0.3秒的亮度提升和平滑缩放动画，响应式适配移动端（控件垂直堆叠，Canvas宽度自适应）。视觉风格统一为科技感、未来风，搭配霓虹蓝紫色调。\n\n性能要求：Canvas绘制的帧率维持在60fps，音频分析数据处理延迟不超过20ms，频谱条带更新频率与音频帧同步（每秒约60次），拖拽选区时波形图重绘响应时间低于16ms。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:3eb448a0c61f2cb6a65ef21b1f44a879_6a27e591c4c3352fcd496911.6a27e60ac4c3352fcd496951.6a27e60a7e5e1360058d04af:Trae CN.T(2026/6/9 18:08:10)",
+    "user_id": "98336997115224",
+    "trace_id": "3eb448a0c61f2cb6a65ef21b1f44a879",
+    "session_id": "6a27e591c4c3352fcd496911",
+    "task_id": "6a27e60ac4c3352fcd496951",
+    "message_id": "6a27e60a7e5e1360058d04af",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 18:08:10",
+    "format": "full"
+  },
+  "trace": "null"
+}
