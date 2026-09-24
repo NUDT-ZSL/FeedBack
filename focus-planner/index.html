@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>焦点路径规划器</title>
+<style>
+  :root { --bg:#14171c; --panel:#1c2129; --line:#2c333d; --fg:#dfe6ee; --dim:#8b96a3;
+          --acc:#4da3ff; --ok:#3fb96f; --warn:#d9a13b; --err:#e05d5d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  header .hint { color:var(--dim); font-size:12px; }
+  #banner { display:none; margin:8px 16px 0; padding:8px 12px; border:1px solid var(--err); border-radius:6px;
+            background:#3a2226; color:#ffd9d9; white-space:pre-wrap; }
+  #banner.show { display:block; }
+  main { display:grid; grid-template-columns: 1fr 1fr 1.1fr; gap:10px; padding:10px 16px; }
+  section.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px; min-height:300px; }
+  section.panel.active { border-color:var(--acc); }
+  section.panel h2 { font-size:13px; margin:2px 4px 8px; color:var(--dim); font-weight:600; }
+  ul.rows { list-style:none; margin:0; padding:0; }
+  ul.rows li { padding:4px 8px; border-radius:5px; outline:none; display:flex; gap:8px; align-items:baseline; }
+  ul.rows li[tabindex="0"] { background:#26303c; }
+  ul.rows li:focus { box-shadow:0 0 0 2px var(--acc); }
+  ul.rows li.walkcur { background:#2c3a2e; box-shadow:inset 3px 0 0 var(--ok); }
+  ul.rows li.walkdone { color:var(--dim); }
+  .pos { color:var(--acc); font-variant-numeric:tabular-nums; min-width:2.2em; display:inline-block; }
+  .cid { color:var(--dim); font-size:12px; }
+  .badge { font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .badge.req { color:#ffd27a; border-color:#6b5a2e; }
+  .badge.init { color:#9fd0ff; border-color:#2e4a6b; }
+  .badge.ok { color:var(--ok); border-color:#2e5b40; }
+  .badge.over { color:var(--warn); border-color:#6b5a2e; }
+  .badge.bad { color:var(--err); border-color:#6b2e2e; }
+  .badge.unreach { color:var(--err); border-color:#6b2e2e; }
+  .via { color:var(--dim); font-size:12px; margin-left:auto; }
+  .tree-c { color:#b9c6d3; font-weight:600; padding:3px 8px; }
+  .tree-el { display:flex; gap:8px; align-items:baseline; border-radius:5px; outline:none; padding:3px 8px; }
+  .tree-el[tabindex="0"] { background:#26303c; }
+  .tree-el:focus { box-shadow:0 0 0 2px var(--acc); }
+  .tree-el.walkcur { background:#2c3a2e; box-shadow:inset 3px 0 0 var(--ok); }
+  .tree-el.walkdone { color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>焦点路径规划器</h1>
+  <span class="hint"><kbd>1</kbd> 顺序 <kbd>2</kbd> 层级 <kbd>3</kbd> 约束 ｜ <kbd>↑↓</kbd> 选择 ｜ <kbd>i</kbd> 新增约束 ｜ <kbd>Del</kbd> 删除 ｜ <kbd>Ctrl+↑↓</kbd> 调优先级 ｜ <kbd>w</kbd> 走查 ｜ <kbd>n</kbd> 推进 ｜ <kbd>r</kbd> 重置 ｜ <kbd>l</kbd> 导入</span>
+</header>
+<div id="banner" role="alert"></div>
+<main>
+  <section class="panel" id="panel-list" aria-label="焦点顺序列表">
+    <h2>① 焦点顺序（推导结果）</h2>
+    <ul class="rows" id="list-rows" role="listbox" aria-label="焦点顺序"></ul>
+  </section>
+  <section class="panel" id="panel-tree" aria-label="层级视图">
+    <h2>② 层级结构（同步位置）</h2>
+    <div id="tree-rows"></div>
+  </section>
+  <section class="panel" id="panel-cons" aria-label="跳转约束">
+    <h2>③ 跳转约束（优先级消解）</h2>
+    <ul class="rows" id="cons-rows" role="listbox" aria-label="跳转约束"></ul>
+  </section>
+</main>
+<div id="insert-form" hidden>
+  <span>新增约束：</span>
+  <label>从 <select id="ins-from"></select></label>
+  <label>到 <select id="ins-to"></select></label>
+  <label>优先级 <input id="ins-pri" type="number" value="5" style="width:64px"></label>
+  <label>备注 <input id="ins-note" type="text" style="width:160px"></label>
+  <button id="ins-ok">确定</button>
+  <button id="ins-cancel">取消</button>
+</div>
+<div id="statusbar" aria-live="polite"></div>
+<div id="io">
+  <textarea id="json-input" spellcheck="false" aria-label="界面结构描述 JSON" placeholder="在此粘贴界面结构描述 JSON，然后点「加载结构」"></textarea>
+  <div>
+    <button id="btn-load">加载结构</button>
+    <button id="btn-sample">载入示例</button>
+    <input type="file" id="file-input" accept=".json,application/json" aria-label="从文件导入结构">
+  </div>
+</div>
+<footer>数据仅在本机浏览器内处理。走查模式：<kbd>w</kbd> 开始，<kbd>n</kbd>/空格 逐步推进，<kbd>r</kbd> 重置，<kbd>Esc</kbd> 退出。</footer>
+<style>
+  #statusbar { margin:0 16px; padding:8px 12px; border:1px solid var(--line); border-radius:6px;
+               background:var(--panel); min-height:38px; white-space:pre-wrap; }
+  #statusbar.err { border-color:var(--err); color:#ffd9d9; }
+  #statusbar.ok { border-color:var(--ok); color:#d2f0dd; }
+  #io { margin:10px 16px; display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+  #io textarea { width:46%; min-height:70px; background:#10141a; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px; font:12px/1.4 Consolas,monospace; }
+  button { background:#26303c; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 12px; cursor:pointer; }
+  button:focus { box-shadow:0 0 0 2px var(--acc); outline:none; }
+  #insert-form { margin:0 16px 10px; padding:10px; border:1px solid var(--acc); border-radius:8px; background:var(--panel);
+                 display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  #insert-form[hidden] { display:none; }
+  #insert-form select, #insert-form input { background:#10141a; color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:4px 6px; }
+  footer { color:var(--dim); font-size:12px; padding:6px 16px 14px; }
+  kbd { background:#10141a; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
+</style>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
