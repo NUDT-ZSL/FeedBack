@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>素材适配工作台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>素材适配工作台</h1>
+  <span class="hint">本地运行 · 数据保存于 data.json</span>
+</header>
+<main>
+  <section class="panel" id="assets-panel">
+    <h2>素材列表</h2>
+    <table>
+      <thead><tr><th>名称</th><th>尺寸</th><th>最小可读区</th><th></th></tr></thead>
+      <tbody id="asset-rows"></tbody>
+    </table>
+    <form id="asset-form" class="edit-form">
+      <h3 id="asset-form-title">新增素材</h3>
+      <input type="hidden" id="asset-id">
+      <label>名称 <input id="asset-name" required></label>
+      <label>宽 <input id="asset-w" type="number" min="1" required></label>
+      <label>高 <input id="asset-h" type="number" min="1" required></label>
+      <label>可读区宽 <input id="asset-mrw" type="number" min="0" value="0"></label>
+      <label>可读区高 <input id="asset-mrh" type="number" min="0" value="0"></label>
+      <div class="form-btns">
+        <button type="submit">保存</button>
+        <button type="button" id="asset-cancel">取消</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" id="specs-panel">
+    <h2>交付规格</h2>
+    <table>
+      <thead><tr><th>名称</th><th>目标尺寸</th><th>安全边距</th><th>允许策略</th><th></th></tr></thead>
+      <tbody id="spec-rows"></tbody>
+    </table>
+    <form id="spec-form" class="edit-form">
+      <h3 id="spec-form-title">新增规格</h3>
+      <input type="hidden" id="spec-id">
+      <label>名称 <input id="spec-name" required></label>
+      <label>宽 <input id="spec-w" type="number" min="1" required></label>
+      <label>高 <input id="spec-h" type="number" min="1" required></label>
+      <label>安全边距 <input id="spec-margin" type="number" min="0" value="0"></label>
+      <fieldset>
+        <legend>允许策略</legend>
+        <label><input type="checkbox" name="spec-strategy" value="scale" checked> 缩放</label>
+        <label><input type="checkbox" name="spec-strategy" value="crop" checked> 裁切</label>
+        <label><input type="checkbox" name="spec-strategy" value="recompose" checked> 重新构图</label>
+      </fieldset>
+      <div class="form-btns">
+        <button type="submit">保存</button>
+        <button type="button" id="spec-cancel">取消</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel wide" id="assign-panel">
+    <h2>分配与适配结论</h2>
+    <form id="assign-form" class="assign-form">
+      <select id="assign-asset" required></select>
+      <select id="assign-spec" required></select>
+      <button type="submit">分配</button>
+    </form>
+    <table>
+      <thead><tr>
+        <th>素材</th><th>规格</th><th>适配方式</th><th>缩放比</th>
+        <th>冲突</th><th>覆盖</th><th></th>
+      </tr></thead>
+      <tbody id="result-rows"></tbody>
+    </table>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
