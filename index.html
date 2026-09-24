@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>素材适配工作台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>素材适配工作台</h1>
+  <p class="sub">本地运行，不依赖任何在线服务；数据保存在浏览器本地存储。
+    <button id="btn-reset" type="button">恢复示例数据</button>
+  </p>
+</header>
+<main>
+  <div class="panels">
+    <section class="panel">
+      <h2>素材列表</h2>
+      <form id="asset-form" class="edit-form">
+        <input type="hidden" id="asset-id">
+        <label>名称 <input id="asset-name" required></label>
+        <label>宽(px) <input id="asset-w" type="number" min="1" required></label>
+        <label>高(px) <input id="asset-h" type="number" min="1" required></label>
+        <label>用途
+          <select id="asset-purpose">
+            <option>横幅</option><option>图标</option><option>正文图</option>
+            <option>海报</option><option>照片</option><option>其他</option>
+          </select>
+        </label>
+        <label>可读区宽 <input id="asset-rw" type="number" min="1" required></label>
+        <label>可读区高 <input id="asset-rh" type="number" min="1" required></label>
+        <div class="form-actions">
+          <button type="submit">保存素材</button>
+          <button type="button" id="asset-cancel">取消</button>
+        </div>
+      </form>
+      <table id="asset-table">
+        <thead><tr>
+          <th>名称</th><th>尺寸</th><th>用途</th><th>最小可读区</th><th>操作</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>交付规格</h2>
+      <form id="spec-form" class="edit-form">
+        <input type="hidden" id="spec-id">
+        <label>名称 <input id="spec-name" required></label>
+        <label>目标宽 <input id="spec-tw" type="number" min="1" required></label>
+        <label>目标高 <input id="spec-th" type="number" min="1" required></label>
+        <label>安全边距(%) <input id="spec-margin" type="number" min="0" max="40" step="0.5" required></label>
+        <fieldset class="strategies">
+          <legend>允许策略</legend>
+          <label><input type="checkbox" id="spec-allow-scale"> 缩放</label>
+          <label><input type="checkbox" id="spec-allow-crop"> 裁切</label>
+          <label><input type="checkbox" id="spec-allow-recompose"> 重新构图</label>
+        </fieldset>
+        <div class="form-actions">
+          <button type="submit">保存规格</button>
+          <button type="button" id="spec-cancel">取消</button>
+        </div>
+      </form>
+      <table id="spec-table">
+        <thead><tr>
+          <th>名称</th><th>目标尺寸</th><th>安全边距</th><th>允许策略</th><th>操作</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>分配矩阵</h2>
+    <p class="hint">勾选即把素材分配给规格；每个「素材 × 规格」的结论独立推导，修改某个规格只会影响该规格所在的行，不会静默改变其他规格的结论。</p>
+    <div id="matrix"></div>
+  </section>
+
+  <section class="panel">
+    <h2>适配结论</h2>
+    <table id="result-table">
+      <thead><tr>
+        <th>素材</th><th>规格</th><th>适配方案</th><th>几何说明</th>
+        <th>约束校验</th><th>冲突</th><th>状态</th><th>覆盖</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
