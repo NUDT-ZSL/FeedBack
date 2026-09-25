@@ -1,0 +1,41 @@
+{
+  "name": "activity-registration",
+  "version": "1.0.0",
+  "description": "Activity Registration System with React + Express",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch src/server/server.ts",
+    "build": "tsc && vite build",
+    "build:client": "vite build",
+    "preview": "vite preview",
+    "start": "tsx src/server/server.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/express": "^4.17.21",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^9.0.8",
+    "@types/cors": "^2.8.17",
+    "@types/body-parser": "^1.19.5",
+    "@types/node": "^20.14.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1",
+    "concurrently": "^8.2.2",
+    "tsx": "^4.16.2"
+  }
+}
