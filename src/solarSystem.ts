@@ -484,19 +484,13 @@ export function createSolarSystem(scene: THREE.Scene, uiContainer: HTMLElement):
   };
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
 export function updateSolarSystem(
   system: SolarSystem,
   delta: number,
   speedMultiplier: number,
   camera: THREE.Camera,
-  showOrbits: boolean,
-  focusTarget: THREE.Vector3 | null,
-  focusProgress: number
-): { focusProgress: number; shouldUpdateControls: boolean } {
+  showOrbits: boolean
+): void {
   const time = performance.now() * 0.001;
   
   if (system.sun.material instanceof THREE.ShaderMaterial) {
@@ -517,7 +511,11 @@ export function updateSolarSystem(
     const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
     
     const distance = planet.mesh.position.distanceTo(camera.position);
-    const isVisible = distance < 25 && screenPos.z < 1;
+    const inFrontOfCamera = screenPos.z > -1 && screenPos.z < 1;
+    const withinViewport =
+      screenPos.x >= -1 && screenPos.x <= 1 &&
+      screenPos.y >= -1 && screenPos.y <= 1;
+    const isVisible = inFrontOfCamera && withinViewport;
     
     planet.label.style.left = `${x}px`;
     planet.label.style.top = `${y}px`;
@@ -545,30 +543,4 @@ export function updateSolarSystem(
     sizes[i] = Math.max(0.05, Math.min(0.5, 0.3 * (1 / (dist * 0.1))));
   }
   system.particles.geometry.attributes.size.needsUpdate = true;
-  
-  let shouldUpdateControls = false;
-  if (focusTarget && focusProgress < 1) {
-    focusProgress = Math.min(1, focusProgress + delta);
-    const t = easeInOutCubic(focusProgress);
-    camera.position.lerp(focusTarget, t * 0.05);
-    shouldUpdateControls = true;
-  }
-  
-  return { focusProgress, shouldUpdateControls };
-}
-
-export function getPlanetFocusPosition(
-  system: SolarSystem,
-  planetName: string,
-  camera: THREE.Camera
-): THREE.Vector3 | null {
-  const planet = system.planets.find(p => p.data.name === planetName);
-  if (!planet) return null;
-  
-  const direction = new THREE.Vector3()
-    .subVectors(camera.position, planet.mesh.position)
-    .normalize();
-  
-  const distance = planet.data.radius * 6 + 5;
-  return planet.mesh.position.clone().add(direction.multiplyScalar(distance));
 }

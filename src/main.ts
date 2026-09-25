@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createSolarSystem, updateSolarSystem, getPlanetFocusPosition, PLANET_DATA } from './solarSystem';
+import { createSolarSystem, updateSolarSystem, PLANET_DATA } from './solarSystem';
 import { createUI } from './ui';
 
 export type FrameCallback = (delta: number, elapsed: number) => void;
@@ -170,9 +170,22 @@ if (canvasContainer && uiContainer) {
   
   let speedMultiplier = 1.0;
   let showOrbits = true;
-  let focusTarget: THREE.Vector3 | null = null;
-  let focusProgress = 0;
-  let focusPlanetName = '';
+  
+  const FOCUS_DURATION = 1.0;
+  
+  function easeInOutCubic(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+  
+  interface FocusState {
+    planetName: string;
+    progress: number;
+    locked: boolean;
+    startTarget: THREE.Vector3;
+    startDistance: number;
+    prevPlanetPos: THREE.Vector3;
+  }
+  let focusState: FocusState | null = null;
   
   ui.onSpeedChange((speed) => {
     speedMultiplier = speed;
@@ -184,43 +197,67 @@ if (canvasContainer && uiContainer) {
   
   ui.onFocus((planetDisplayName) => {
     const nameParts = planetDisplayName.split(' · ');
-    focusPlanetName = nameParts[1] || planetDisplayName;
-    const target = getPlanetFocusPosition(solarSystem, focusPlanetName, controller.camera);
-    if (target) {
-      focusTarget = target;
-      focusProgress = 0;
-      
-      const planet = solarSystem.planets.find(p => p.data.name === focusPlanetName);
-      if (planet) {
-        controller.controls.target.copy(planet.mesh.position);
-      }
-    }
+    const planetName = nameParts[1] || planetDisplayName;
+    const planet = solarSystem.planets.find(p => p.data.name === planetName);
+    if (!planet) return;
+    focusState = {
+      planetName,
+      progress: 0,
+      locked: false,
+      startTarget: controller.controls.target.clone(),
+      startDistance: controller.camera.position.distanceTo(planet.mesh.position),
+      prevPlanetPos: planet.mesh.position.clone()
+    };
   });
   
   let frameCount = 0;
   let lastFPSUpdate = 0;
   
   controller.useFrame((delta, elapsed) => {
-    const result = updateSolarSystem(
+    updateSolarSystem(
       solarSystem,
       delta,
       speedMultiplier,
       controller.camera,
-      showOrbits,
-      focusTarget,
-      focusProgress
+      showOrbits
     );
-    focusProgress = result.focusProgress;
     
-    if (result.shouldUpdateControls) {
-      const planet = solarSystem.planets.find(p => p.data.name === focusPlanetName);
-      if (planet) {
-        controller.controls.target.lerp(planet.mesh.position, 0.05);
+    if (focusState) {
+      const state = focusState;
+      const planet = solarSystem.planets.find(p => p.data.name === state.planetName);
+      if (!planet) {
+        focusState = null;
+      } else {
+        const planetPos = planet.mesh.position;
+        const camera = controller.camera;
+        const orbitControls = controller.controls;
+        
+        if (state.locked) {
+          const movement = planetPos.clone().sub(state.prevPlanetPos);
+          camera.position.add(movement);
+          orbitControls.target.copy(planetPos);
+        } else {
+          state.progress = Math.min(1, state.progress + delta / FOCUS_DURATION);
+          const t = easeInOutCubic(state.progress);
+          orbitControls.target.lerpVectors(state.startTarget, planetPos, t);
+          
+          const desiredDistance = planet.data.radius * 6 + 5;
+          const offset = camera.position.clone().sub(planetPos);
+          if (offset.lengthSq() < 1e-8) {
+            offset.set(0, 0.5, 1);
+          }
+          offset.normalize();
+          const newDistance = state.startDistance + (desiredDistance - state.startDistance) * t;
+          camera.position.copy(planetPos).addScaledVector(offset, newDistance);
+          
+          if (state.progress >= 1) {
+            orbitControls.target.copy(planetPos);
+            state.locked = true;
+          }
+        }
+        
+        state.prevPlanetPos.copy(planetPos);
       }
-    }
-    
-    if (focusProgress >= 1) {
-      focusTarget = null;
     }
     
     frameCount++;
