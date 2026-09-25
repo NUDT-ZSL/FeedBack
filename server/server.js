@@ -156,8 +156,9 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`
 ╔══════════════════════════════════════════════════════╗
 ║                                                      ║
 ║   📚 Book Annotation Server                          ║
@@ -175,5 +176,8 @@ app.listen(PORT, () => {
 ║   DELETE /api/annotations         - Clear all        ║
 ║                                                      ║
 ╚══════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+}
+
+module.exports = { app, annotationsStore };
