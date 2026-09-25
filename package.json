@@ -1,0 +1,15 @@
+{
+  "name": "plant-hybrid-simulator",
+  "version": "1.0.0",
+  "description": "植物杂交培育与变异进化模拟游戏",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}
