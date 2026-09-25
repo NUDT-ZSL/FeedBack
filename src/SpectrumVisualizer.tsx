@@ -1,25 +1,34 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import type { Selection } from './AudioEngine';
 
 interface SpectrumVisualizerProps {
   frequencyData: Uint8Array | null;
   isPlaying: boolean;
+  selection: Selection | null;
+  currentTime: number;
+  duration: number;
 }
 
 interface BarState {
   currentHeight: number;
   targetHeight: number;
   velocity: number;
+  peak: number;
 }
 
 const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
   frequencyData,
-  isPlaying
+  isPlaying,
+  selection,
+  currentTime,
+  duration
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   const barsRef = useRef<BarState[]>([]);
   const lastDataRef = useRef<Uint8Array | null>(null);
+  const selectionKeyRef = useRef<string>('');
 
   const BAR_COUNT = 128;
   const SPRING = 0.15;
@@ -30,8 +39,15 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
     barsRef.current = Array.from({ length: BAR_COUNT }, () => ({
       currentHeight: 0,
       targetHeight: 0,
-      velocity: 0
+      velocity: 0,
+      peak: 0
     }));
+  }, []);
+
+  const resetPeaks = useCallback(() => {
+    for (const bar of barsRef.current) {
+      bar.peak = 0;
+    }
   }, []);
 
   const setupCanvas = useCallback(() => {
@@ -115,6 +131,7 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
         
         bar.currentHeight += bar.velocity;
         bar.currentHeight = Math.max(minBarHeight, Math.min(maxBarHeight, bar.currentHeight));
+        bar.peak = Math.max(bar.peak, bar.currentHeight);
       } else {
         bar.currentHeight *= 0.95;
         if (bar.currentHeight < minBarHeight) {
@@ -151,11 +168,29 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
       
       ctx.shadowBlur = 0;
 
-      const peakY = y - 3;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.6;
-      ctx.fillRect(x, peakY, barWidth, 2);
-      ctx.globalAlpha = 1;
+      if (bar.peak > minBarHeight) {
+        const peakY = Math.max(0, height - bar.peak - 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = 0.9;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+        ctx.shadowBlur = 6;
+        ctx.fillRect(x, peakY, barWidth, 3);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    if (duration > 0) {
+      const playheadX = (Math.max(0, Math.min(currentTime, duration)) / duration) * width;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, 0);
+      ctx.lineTo(playheadX, height);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
     ctx.fillStyle = fadeGradient;
@@ -169,7 +204,17 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
     glowGradient.addColorStop(1, 'rgba(0, 212, 255, 0)');
     ctx.fillStyle = glowGradient;
     ctx.fillRect(0, height * 0.4, width, height * 0.6);
-  }, [frequencyData, isPlaying, getBarColor]);
+  }, [frequencyData, isPlaying, getBarColor, currentTime, duration]);
+
+  useEffect(() => {
+    const key = selection
+      ? `${selection.start.toFixed(4)}-${selection.end.toFixed(4)}-${duration}`
+      : `full-${duration}`;
+    if (selectionKeyRef.current !== key) {
+      selectionKeyRef.current = key;
+      resetPeaks();
+    }
+  }, [selection, duration, resetPeaks]);
 
   useEffect(() => {
     setupCanvas();

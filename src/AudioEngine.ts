@@ -16,6 +16,18 @@ export interface Selection {
   end: number;
 }
 
+export const MIN_SELECTION_DURATION = 0.01;
+
+export function normalizeSelection(selection: Selection | null, duration: number): Selection | null {
+  if (!selection || duration <= 0) return null;
+  const rawStart = Math.max(0, Math.min(selection.start, duration));
+  const rawEnd = Math.max(0, Math.min(selection.end, duration));
+  const start = Math.min(rawStart, rawEnd);
+  const end = Math.max(rawStart, rawEnd);
+  if (end - start < MIN_SELECTION_DURATION) return null;
+  return { start, end };
+}
+
 type AnalysisCallback = (data: AudioAnalysisData) => void;
 type StateChangeCallback = (isPlaying: boolean) => void;
 type EndedCallback = () => void;
@@ -28,8 +40,8 @@ export class AudioEngine {
   private audioBuffer: AudioBuffer | null = null;
   private metadata: AudioMetadata | null = null;
   
-  private frequencyData: Uint8Array | null = null;
-  private timeDomainData: Uint8Array | null = null;
+  private frequencyData: Uint8Array<ArrayBuffer> | null = null;
+  private timeDomainData: Uint8Array<ArrayBuffer> | null = null;
   
   private isPlaying = false;
   private isLooping = false;
@@ -104,39 +116,20 @@ export class AudioEngine {
     return this.audioBuffer;
   }
 
-  public play(selection?: Selection): void {
+  public play(): void {
     if (!this.audioContext || !this.audioBuffer || this.isPlaying) return;
 
     if (this.audioContext.state === 'suspended') {
       this.audioContext.resume();
     }
 
-    this.sourceNode = this.audioContext.createBufferSource();
-    this.sourceNode.buffer = this.audioBuffer;
-    this.sourceNode.connect(this.analyser!);
-    
-    this.sourceNode.onended = () => {
-      if (this.isPlaying) {
-        if (this.isLooping) {
-          this.handleLoopEnd();
-        } else {
-          this.stop();
-          this.endedCallback?.();
-        }
-      }
-    };
-
+    const selection = this.currentSelection;
     if (selection) {
-      this.currentSelection = selection;
-      const offset = Math.max(0, selection.start);
-      const duration = Math.min(selection.end - selection.start, this.audioBuffer.duration - offset);
-      this.sourceNode.start(0, offset, duration);
-      this.startTime = this.audioContext.currentTime - offset;
+      const offset = this.clampToSelection(this.pauseTime, selection);
+      this.startSource(offset, selection.end);
     } else {
-      this.currentSelection = null;
-      const offset = this.pauseTime;
-      this.sourceNode.start(0, offset);
-      this.startTime = this.audioContext.currentTime - offset;
+      const offset = Math.max(0, Math.min(this.pauseTime, this.audioBuffer.duration));
+      this.startSource(offset);
     }
 
     this.isPlaying = true;
@@ -144,19 +137,88 @@ export class AudioEngine {
     this.startAnalysisLoop();
   }
 
-  private handleLoopEnd(): void {
-    if (!this.currentSelection) {
-      this.pauseTime = 0;
-      this.play();
-    } else {
-      this.play(this.currentSelection);
+  private clampToSelection(time: number, selection: Selection): number {
+    const maxStart = Math.max(selection.start, selection.end - 0.001);
+    return Math.min(Math.max(time, selection.start), maxStart);
+  }
+
+  private startSource(offset: number, end?: number): void {
+    if (!this.audioContext || !this.audioBuffer) return;
+
+    if (this.sourceNode) {
+      try {
+        this.sourceNode.onended = null;
+        this.sourceNode.stop();
+        this.sourceNode.disconnect();
+      } catch (e) {
+        // Already stopped
+      }
+      this.sourceNode = null;
     }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.audioBuffer;
+    source.connect(this.analyser!);
+
+    source.onended = () => {
+      if (this.sourceNode === source) {
+        this.handleSourceEnded();
+      }
+    };
+
+    if (end !== undefined && end > offset) {
+      source.start(0, offset, end - offset);
+    } else {
+      source.start(0, offset);
+    }
+
+    this.sourceNode = source;
+    this.startTime = this.audioContext.currentTime - offset;
+  }
+
+  private handleSourceEnded(): void {
+    if (!this.isPlaying) return;
+
+    if (this.isLooping) {
+      if (this.currentSelection) {
+        this.pauseTime = this.currentSelection.start;
+        this.startSource(this.currentSelection.start, this.currentSelection.end);
+      } else {
+        this.pauseTime = 0;
+        this.startSource(0);
+      }
+    } else {
+      this.stop();
+      this.endedCallback?.();
+    }
+  }
+
+  public setSelection(selection: Selection | null): void {
+    const duration = this.audioBuffer?.duration ?? 0;
+    this.currentSelection = normalizeSelection(selection, duration);
+
+    if (!this.isPlaying || !this.audioBuffer) return;
+
+    const current = this.getCurrentTime();
+    if (this.currentSelection) {
+      const offset = this.clampToSelection(current, this.currentSelection);
+      this.pauseTime = offset;
+      this.startSource(offset, this.currentSelection.end);
+    } else {
+      const offset = Math.max(0, Math.min(current, this.audioBuffer.duration));
+      this.pauseTime = offset;
+      this.startSource(offset);
+    }
+  }
+
+  public getSelection(): Selection | null {
+    return this.currentSelection;
   }
 
   public pause(): void {
     if (!this.isPlaying || !this.audioContext || !this.sourceNode) return;
 
-    this.pauseTime = this.audioContext.currentTime - this.startTime;
+    this.pauseTime = this.getCurrentTime();
     this.sourceNode.stop();
     this.sourceNode.disconnect();
     this.sourceNode = null;
@@ -194,15 +256,15 @@ export class AudioEngine {
   public seek(time: number): void {
     if (!this.audioBuffer) return;
     
-    const clampedTime = Math.max(0, Math.min(time, this.audioBuffer.duration));
-    const wasPlaying = this.isPlaying;
-    
-    if (wasPlaying) {
-      this.pause();
-      this.pauseTime = clampedTime;
-      this.play();
-    } else {
-      this.pauseTime = clampedTime;
+    let clampedTime = Math.max(0, Math.min(time, this.audioBuffer.duration));
+    if (this.currentSelection) {
+      clampedTime = this.clampToSelection(clampedTime, this.currentSelection);
+    }
+
+    this.pauseTime = clampedTime;
+
+    if (this.isPlaying) {
+      this.startSource(clampedTime, this.currentSelection?.end);
     }
   }
 

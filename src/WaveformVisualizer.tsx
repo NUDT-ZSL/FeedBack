@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import type { Selection } from './AudioEngine';
+import { MIN_SELECTION_DURATION, type Selection } from './AudioEngine';
 
 interface WaveformVisualizerProps {
   audioBuffer: AudioBuffer | null;
@@ -16,7 +16,11 @@ interface DragState {
   startX: number;
   startTime: number;
   isSelecting: boolean;
+  edge: 'start' | 'end' | null;
+  fixedEdgeTime: number;
 }
+
+const EDGE_HIT_PX = 8;
 
 const formatTime = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
@@ -41,10 +45,26 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     isDragging: false,
     startX: 0,
     startTime: 0,
-    isSelecting: false
+    isSelecting: false,
+    edge: null,
+    fixedEdgeTime: 0
   });
   const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [hoverX, setHoverX] = useState<number>(0);
+  const [hoverEdge, setHoverEdge] = useState<'start' | 'end' | null>(null);
+
+  const getEdgeAtX = useCallback((clientX: number): 'start' | 'end' | null => {
+    const container = containerRef.current;
+    if (!container || !selection || duration === 0) return null;
+
+    const rect = container.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const startX = (selection.start / duration) * rect.width;
+    const endX = (selection.end / duration) * rect.width;
+
+    if (Math.abs(x - startX) <= EDGE_HIT_PX) return 'start';
+    if (Math.abs(x - endX) <= EDGE_HIT_PX) return 'end';
+    return null;
+  }, [selection, duration]);
 
   const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -75,15 +95,6 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     const rect = canvas.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
     return ratio * duration;
-  }, [duration]);
-
-  const getXFromTime = useCallback((time: number): number => {
-    const canvas = canvasRef.current;
-    if (!canvas || duration === 0) return 0;
-    
-    const rect = canvas.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, time / duration));
-    return rect.left + ratio * rect.width;
   }, [duration]);
 
   const draw = useCallback(() => {
@@ -124,6 +135,17 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
       ctx.moveTo(selEndX, 0);
       ctx.lineTo(selEndX, height);
       ctx.stroke();
+
+      const handleWidth = 6;
+      const handleHeight = Math.min(28, height * 0.35);
+      ctx.fillStyle = 'rgba(0, 212, 255, 0.9)';
+      ctx.shadowColor = 'rgba(0, 212, 255, 0.8)';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.roundRect(selStartX - handleWidth / 2, centerY - handleHeight / 2, handleWidth, handleHeight, 3);
+      ctx.roundRect(selEndX - handleWidth / 2, centerY - handleHeight / 2, handleWidth, handleHeight, 3);
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
     const gradient = ctx.createLinearGradient(0, 0, width, 0);
@@ -198,28 +220,64 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     e.preventDefault();
     const time = getTimeFromX(e.clientX);
     
+    if (e.shiftKey) {
+      dragStateRef.current = {
+        isDragging: true,
+        startX: e.clientX,
+        startTime: time,
+        isSelecting: true,
+        edge: null,
+        fixedEdgeTime: 0
+      };
+      onSelectionChange({ start: time, end: time });
+      return;
+    }
+
+    const edge = getEdgeAtX(e.clientX);
+    if (edge && selection) {
+      dragStateRef.current = {
+        isDragging: true,
+        startX: e.clientX,
+        startTime: time,
+        isSelecting: false,
+        edge,
+        fixedEdgeTime: edge === 'start' ? selection.end : selection.start
+      };
+      return;
+    }
+
     dragStateRef.current = {
       isDragging: true,
       startX: e.clientX,
       startTime: time,
-      isSelecting: e.shiftKey
+      isSelecting: false,
+      edge: null,
+      fixedEdgeTime: 0
     };
-
-    if (e.shiftKey) {
-      onSelectionChange({ start: time, end: time });
-    } else {
-      onSeek(time);
-    }
-  }, [duration, getTimeFromX, onSeek, onSelectionChange]);
+    onSeek(time);
+  }, [duration, getTimeFromX, getEdgeAtX, selection, onSeek, onSelectionChange]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const time = getTimeFromX(e.clientX);
     setHoverTime(time);
-    setHoverX(e.clientX);
+
+    if (!dragStateRef.current.isDragging) {
+      setHoverEdge(getEdgeAtX(e.clientX));
+    }
 
     if (!dragStateRef.current.isDragging || duration === 0) return;
 
-    if (dragStateRef.current.isSelecting) {
+    const edge = dragStateRef.current.edge;
+    if (edge) {
+      const fixed = dragStateRef.current.fixedEdgeTime;
+      if (edge === 'start') {
+        const newStart = Math.max(0, Math.min(time, fixed - MIN_SELECTION_DURATION));
+        onSelectionChange({ start: newStart, end: fixed });
+      } else {
+        const newEnd = Math.min(duration, Math.max(time, fixed + MIN_SELECTION_DURATION));
+        onSelectionChange({ start: fixed, end: newEnd });
+      }
+    } else if (dragStateRef.current.isSelecting) {
       const startTime = dragStateRef.current.startTime;
       const newSelection = {
         start: Math.min(startTime, time),
@@ -229,18 +287,21 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     } else {
       onSeek(time);
     }
-  }, [duration, getTimeFromX, onSeek, onSelectionChange]);
+  }, [duration, getTimeFromX, getEdgeAtX, onSeek, onSelectionChange]);
 
   const handleMouseUp = useCallback(() => {
     dragStateRef.current.isDragging = false;
     dragStateRef.current.isSelecting = false;
+    dragStateRef.current.edge = null;
   }, []);
 
   const handleMouseLeave = useCallback(() => {
     setHoverTime(null);
+    setHoverEdge(null);
     if (dragStateRef.current.isDragging) {
       dragStateRef.current.isDragging = false;
       dragStateRef.current.isSelecting = false;
+      dragStateRef.current.edge = null;
     }
   }, []);
 
@@ -288,7 +349,13 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
       onDoubleClick={handleDoubleClick}
-      style={{ cursor: duration > 0 ? 'crosshair' : 'default' }}
+      style={{
+        cursor: duration === 0
+          ? 'default'
+          : (hoverEdge || dragStateRef.current.edge)
+            ? 'ew-resize'
+            : 'crosshair'
+      }}
     >
       <canvas ref={canvasRef} />
       {selection && (

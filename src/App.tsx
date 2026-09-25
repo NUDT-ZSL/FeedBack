@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AudioEngine, type AudioMetadata, type AudioAnalysisData, type Selection } from './AudioEngine';
+import { AudioEngine, normalizeSelection, type AudioMetadata, type AudioAnalysisData, type Selection } from './AudioEngine';
 import WaveformVisualizer from './WaveformVisualizer';
 import SpectrumVisualizer from './SpectrumVisualizer';
 
@@ -153,13 +153,9 @@ const App: React.FC = () => {
     if (isPlaying) {
       audioEngineRef.current.pause();
     } else {
-      if (selection && selection.end > selection.start) {
-        audioEngineRef.current.play(selection);
-      } else {
-        audioEngineRef.current.play();
-      }
+      audioEngineRef.current.play();
     }
-  }, [isPlaying, selection]);
+  }, [isPlaying]);
 
   const handleStop = useCallback(() => {
     if (!audioEngineRef.current) return;
@@ -216,7 +212,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectionChange = useCallback((newSelection: Selection | null) => {
-    setSelection(newSelection);
+    const duration = audioEngineRef.current?.getDuration() ?? 0;
+    const normalized = normalizeSelection(newSelection, duration);
+    setSelection(normalized);
+    audioEngineRef.current?.setSelection(normalized);
   }, []);
 
   const getWaveformData = useCallback((samples: number): Float32Array => {
@@ -286,6 +285,9 @@ const App: React.FC = () => {
             <SpectrumVisualizer
               frequencyData={frequencyData}
               isPlaying={isPlaying}
+              selection={selection}
+              currentTime={currentTime}
+              duration={duration}
             />
           </div>
 
