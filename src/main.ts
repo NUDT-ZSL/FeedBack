@@ -1,75 +1,22 @@
-import { PixelCanvas, type PixelData, type ToolType } from './pixel-canvas.ts';
+import { PixelCanvas, type ToolType } from './pixel-canvas.ts';
 import { ColorPicker, type ColorPickedEventDetail } from './color-picker.ts';
 import { PixelToolbar, type ToolSelectedEventDetail } from './toolbar.ts';
+import { EditorStore, type CanvasSnapshot } from './editor-store.ts';
 
-const MAX_HISTORY = 30;
+const EXPORT_SCALE = 16;
 
-class HistoryManager {
-  private undoStack: PixelData[] = [];
-  private redoStack: PixelData[] = [];
-  private currentSnapshot: PixelData | null = null;
-
-  public push(snapshot: PixelData): void {
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.undoStack, this.currentSnapshot);
-    }
-    this.currentSnapshot = this.deepClone(snapshot);
-    this.redoStack = [];
-  }
-
-  public undo(): PixelData | null {
-    if (this.undoStack.length === 0) return null;
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.redoStack, this.currentSnapshot);
-    }
-    const snapshot = this.undoStack.pop()!;
-    this.currentSnapshot = this.deepClone(snapshot);
-    return snapshot;
-  }
-
-  public redo(): PixelData | null {
-    if (this.redoStack.length === 0) return null;
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.undoStack, this.currentSnapshot);
-    }
-    const snapshot = this.redoStack.pop()!;
-    this.currentSnapshot = this.deepClone(snapshot);
-    return snapshot;
-  }
-
-  public canUndo(): boolean {
-    return this.undoStack.length > 0;
-  }
-
-  public canRedo(): boolean {
-    return this.redoStack.length > 0;
-  }
-
-  public reset(): void {
-    this.undoStack = [];
-    this.redoStack = [];
-    this.currentSnapshot = null;
-  }
-
-  private deepPush(stack: PixelData[], data: PixelData): void {
-    stack.push(this.deepClone(data));
-    if (stack.length > MAX_HISTORY) {
-      stack.shift();
+function snapshotToCanvas(snapshot: CanvasSnapshot): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = snapshot.size;
+  canvas.height = snapshot.size;
+  const ctx = canvas.getContext('2d')!;
+  for (let y = 0; y < snapshot.size; y++) {
+    for (let x = 0; x < snapshot.size; x++) {
+      ctx.fillStyle = snapshot.pixels[y][x];
+      ctx.fillRect(x, y, 1, 1);
     }
   }
-
-  private deepClone(data: PixelData): PixelData {
-    const result: PixelData = new Array(data.length);
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      const newRow = new Array(row.length);
-      for (let j = 0; j < row.length; j++) {
-        newRow[j] = row[j];
-      }
-      result[i] = newRow;
-    }
-    return result;
-  }
+  return canvas;
 }
 
 function init(): void {
@@ -86,19 +33,18 @@ function init(): void {
     return;
   }
 
-  const history = new HistoryManager();
-  let isHistoryAction = false;
+  // 单一数据源：尺寸、已提交像素、撤销/重做历史全部收敛在 store 中。
+  const store = new EditorStore(pixelCanvas.getGridSize());
 
   const updateHistoryButtons = (): void => {
-    undoBtn.disabled = !history.canUndo();
-    redoBtn.disabled = !history.canRedo();
+    undoBtn.disabled = !store.canUndo();
+    redoBtn.disabled = !store.canRedo();
   };
+  store.subscribe(updateHistoryButtons);
 
   pixelCanvas.setColor(colorPicker.getColor());
   pixelCanvas.setTool(toolbar.getTool());
 
-  const initialSnapshot = pixelCanvas.getPixels();
-  history.push(initialSnapshot);
   updateHistoryButtons();
 
   toolbar.addEventListener('toolselected', ((e: CustomEvent<ToolSelectedEventDetail>) => {
@@ -114,39 +60,39 @@ function init(): void {
   }) as EventListener);
 
   pixelCanvas.addEventListener('canvaschange', (() => {
-    if (isHistoryAction) {
-      isHistoryAction = false;
-      return;
-    }
-    const snapshot = pixelCanvas.getPixels();
-    history.push(snapshot);
-    updateHistoryButtons();
+    // 一笔绘制结束（或画布被重置）才会触发，提交到 store；
+    // 与已提交状态一致或是过期尺寸的事件会被 store 忽略。
+    store.commit(pixelCanvas.getPixels());
   }) as EventListener);
+
+  const applySnapshot = (snapshot: CanvasSnapshot): void => {
+    // setPixels 不触发 canvaschange，应用历史快照是同步原子操作，
+    // 快速连续撤销/重做也不会让画布与历史指针错位。
+    pixelCanvas.setPixels(snapshot.pixels);
+    if (sizeSelect.value !== String(snapshot.size)) {
+      sizeSelect.value = String(snapshot.size);
+    }
+  };
 
   sizeSelect.addEventListener('change', () => {
     const newSize = parseInt(sizeSelect.value, 10);
-    history.reset();
+    // 先重置 store（历史仅保留新尺寸初始快照），再重建画布；
+    // resetPixels 触发的 canvaschange 与已提交状态一致，会被忽略。
+    store.resize(newSize);
     pixelCanvas.resetPixels(newSize);
-    const snapshot = pixelCanvas.getPixels();
-    history.push(snapshot);
-    updateHistoryButtons();
   });
 
   undoBtn.addEventListener('click', () => {
-    const snapshot = history.undo();
+    const snapshot = store.undo();
     if (snapshot) {
-      isHistoryAction = true;
-      pixelCanvas.setPixels(snapshot);
-      updateHistoryButtons();
+      applySnapshot(snapshot);
     }
   });
 
   redoBtn.addEventListener('click', () => {
-    const snapshot = history.redo();
+    const snapshot = store.redo();
     if (snapshot) {
-      isHistoryAction = true;
-      pixelCanvas.setPixels(snapshot);
-      updateHistoryButtons();
+      applySnapshot(snapshot);
     }
   });
 
@@ -196,9 +142,12 @@ function init(): void {
   });
 
   exportBtn.addEventListener('click', () => {
-    const sourceCanvas = pixelCanvas.toCanvas();
-    const scale = 16;
-    const size = pixelCanvas.getGridSize();
+    // 导出基于 store 中当前已提交状态，绘制过程中未落笔的
+    // 中间像素不会进入导出结果。
+    const snapshot = store.getSnapshot();
+    const sourceCanvas = snapshotToCanvas(snapshot);
+    const scale = EXPORT_SCALE;
+    const size = snapshot.size;
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = size * scale;
     exportCanvas.height = size * scale;

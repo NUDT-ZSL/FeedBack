@@ -213,8 +213,6 @@ export class PixelCanvas extends HTMLElement {
   }
 
   private attachEvents(): void {
-    const grid = this.container.querySelector('.grid-container')!;
-
     const getCoords = (target: EventTarget | null): { x: number; y: number } | null => {
       if (!(target instanceof HTMLElement)) return null;
       const pixelEl = target.closest('.pixel') as HTMLElement | null;
@@ -226,13 +224,12 @@ export class PixelCanvas extends HTMLElement {
     };
 
     const handleStart = (e: Event) => {
+      const coords = getCoords(e.target);
+      if (!coords) return;
       e.preventDefault();
       this.isDrawing = true;
       this.lastPaintedKey = null;
-      const coords = getCoords(e.target);
-      if (coords) {
-        this.applyTool(coords.x, coords.y);
-      }
+      this.applyTool(coords.x, coords.y);
     };
 
     const handleMove = (e: Event) => {
@@ -275,10 +272,12 @@ export class PixelCanvas extends HTMLElement {
       this.lastPaintedKey = null;
     };
 
-    grid.addEventListener('mousedown', handleStart);
-    grid.addEventListener('touchstart', handleStart, { passive: false });
-    grid.addEventListener('mousemove', handleMove);
-    grid.addEventListener('touchmove', handleMove, { passive: false });
+    // 事件挂在持久存在的容器上：buildGrid 会重建网格元素，
+    // 若直接挂在网格上，撤销/重做/切换尺寸后绘制事件会全部丢失。
+    this.container.addEventListener('mousedown', handleStart);
+    this.container.addEventListener('touchstart', handleStart, { passive: false });
+    this.container.addEventListener('mousemove', handleMove);
+    this.container.addEventListener('touchmove', handleMove, { passive: false });
     window.addEventListener('mouseup', handleEnd);
     window.addEventListener('touchend', handleEnd);
     window.addEventListener('touchcancel', handleEnd);
