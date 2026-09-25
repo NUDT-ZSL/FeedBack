@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>节奏跑酷 - Rhythm Runner</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0020;
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: #ffffff;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #spectrum-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.3;
+    }
+
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: opacity 0.5s ease;
+    }
+
+    .screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #start-screen {
+      background: rgba(10, 0, 32, 0.85);
+      backdrop-filter: blur(10px);
+    }
+
+    #particles-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+    }
+
+    .game-title {
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      margin-bottom: 12px;
+      background: linear-gradient(90deg, #00ffff, #ff00ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+      animation: titleGlow 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes titleGlow {
+      from { filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.5)); }
+      to { filter: drop-shadow(0 0 40px rgba(255, 0, 255, 0.7)); }
+    }
+
+    .game-subtitle {
+      font-size: 18px;
+      color: #8888aa;
+      margin-bottom: 50px;
+      letter-spacing: 4px;
+    }
+
+    .name-input {
+      width: 320px;
+      height: 56px;
+      padding: 0 20px;
+      font-size: 18px;
+      color: #00ffff;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(0, 255, 255, 0.5);
+      border-radius: 8px;
+      outline: none;
+      transition: all 0.2s ease;
+      text-align: center;
+      letter-spacing: 2px;
+    }
+
+    .name-input:focus {
+      border-color: #00ffff;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.4),
+                  inset 0 0 10px rgba(0, 255, 255, 0.1);
+    }
+
+    .name-input::placeholder {
+      color: #555577;
+    }
+
+    .start-btn {
+      margin-top: 30px;
+      width: 240px;
+      height: 60px;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #00ffff, #ff00ff);
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+    }
+
+    .start-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 50px rgba(255, 0, 255, 0.5);
+    }
+
+    .start-btn:active {
+      transform: scale(1.05);
+    }
+
+    .controls-hint {
+      margin-top: 40px;
+      color: #666688;
+      font-size: 14px;
+      text-align: center;
+      line-height: 2;
+    }
+
+    .controls-hint span {
+      display: inline-block;
+      padding: 4px 12px;
+      margin: 0 4px;
+      border: 1px solid #444466;
+      border-radius: 4px;
+      color: #00ffff;
+      font-family: monospace;
+    }
+
+    #game-hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #game-hud.hidden {
+      display: none;
+    }
+
+    .hud-score {
+      position: absolute;
+      top: 30px;
+      left: 30px;
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.8),
+                   0 0 20px rgba(0, 255, 255, 0.4);
+      letter-spacing: 2px;
+    }
+
+    .hud-health {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .heart {
+      width: 28px;
+      height: 28px;
+      transition: all 0.3s ease;
+    }
+
+    .heart.lost {
+      opacity: 0.2;
+      transform: scale(0.7);
+    }
+
+    .hud-beat {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .hud-beat-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00ffff, #ff00ff);
+      border-radius: 4px;
+      transition: width 0.05s ease;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+    }
+
+    #end-screen {
+      background: rgba(10, 0, 32, 0.9);
+      backdrop-filter: blur(15px);
+    }
+
+    .end-panel {
+      background: rgba(20, 0, 50, 0.8);
+      border: 2px solid rgba(0, 255, 255, 0.4);
+      border-radius: 16px;
+      padding: 40px 50px;
+      text-align: center;
+      box-shadow: 0 0 60px rgba(0, 255, 255, 0.2);
+      animation: panelFadeIn 0.5s ease;
+    }
+
+    @keyframes panelFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .end-title {
+      font-size: 36px;
+      font-weight: bold;
+      color: #ff00ff;
+      margin-bottom: 10px;
+      text-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+      letter-spacing: 4px;
+    }
+
+    .final-score-label {
+      font-size: 16px;
+      color: #8888aa;
+      margin-top: 20px;
+      letter-spacing: 2px;
+    }
+
+    .final-score {
+      font-size: 56px;
+      font-weight: 900;
+      background: linear-gradient(90deg, #00ffff, #ff00ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 10px 0 30px;
+    }
+
+    .leaderboard-title {
+      font-size: 20px;
+      color: #00ffff;
+      margin-bottom: 16px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    .leaderboard {
+      width: 100%;
+      min-width: 320px;
+      margin-bottom: 30px;
+    }
+
+    .leaderboard-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      font-size: 14px;
+      animation: rowFadeIn 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    @keyframes rowFadeIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .leaderboard-row:nth-child(odd) {
+      background: rgba(30, 0, 60, 0.6);
+    }
+
+    .leaderboard-row:nth-child(even) {
+      background: rgba(20, 10, 70, 0.6);
+    }
+
+    .leaderboard-rank {
+      width: 30px;
+      color: #ff00ff;
+      font-weight: bold;
+      text-shadow: 0 0 8px rgba(255, 0, 255, 0.6);
+    }
+
+    .leaderboard-name {
+      flex: 1;
+      text-align: left;
+      color: #ffffff;
+      padding-left: 12px;
+    }
+
+    .leaderboard-score {
+      color: #00ffff;
+      font-weight: bold;
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+    }
+
+    .leaderboard-row.current-player .leaderboard-name {
+      color: #ffff00;
+      text-shadow: 0 0 8px rgba(255, 255, 0, 0.6);
+    }
+
+    .restart-btn {
+      width: 200px;
+      height: 52px;
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #00ffff, #ff00ff);
+      border: none;
+      border-radius: 26px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+    }
+
+    .restart-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 40px rgba(255, 0, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+    <canvas id="spectrum-canvas"></canvas>
+
+    <div id="game-hud" class="hidden">
+      <div class="hud-score" id="score-display">0</div>
+      <div class="hud-health" id="health-display"></div>
+      <div class="hud-beat">
+        <div class="hud-beat-fill" id="beat-fill"></div>
+      </div>
+    </div>
+
+    <div id="start-screen" class="screen">
+      <canvas id="particles-canvas"></canvas>
+      <h1 class="game-title">节奏跑酷</h1>
+      <p class="game-subtitle">RHYTHM RUNNER</p>
+      <input type="text" class="name-input" id="name-input" placeholder="输入你的名字" maxlength="12" />
+      <button class="start-btn" id="start-btn">开 始 游 戏</button>
+      <div class="controls-hint">
+        <div><span>空格</span> 跳跃</div>
+        <div><span>A</span> 左闪避 &nbsp;&nbsp; <span>D</span> 右闪避</div>
+      </div>
+    </div>
+
+    <div id="end-screen" class="screen hidden">
+      <div class="end-panel">
+        <h2 class="end-title">游戏结束</h2>
+        <p class="final-score-label">最终得分</p>
+        <div class="final-score" id="final-score">0</div>
+        <h3 class="leaderboard-title">排 行 榜</h3>
+        <div class="leaderboard" id="leaderboard"></div>
+        <button class="restart-btn" id="restart-btn">重 新 开 始</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
