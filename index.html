@@ -17,6 +17,8 @@
           <option value="hard">困难 (6×5)</option>
         </select>
         <button id="restartBtn" class="restart-btn">重新开始</button>
+        <button id="undoBtn" class="history-btn" disabled>↶ 撤销</button>
+        <button id="redoBtn" class="history-btn" disabled>↷ 前进</button>
       </div>
     </header>
 
@@ -41,6 +43,7 @@
 
     <div id="gameOverModal" class="modal-overlay hidden">
       <div class="modal-content">
+        <button id="closeModalBtn" class="modal-close-btn" aria-label="关闭">×</button>
         <h2 class="modal-title">🎉 恭喜通关！</h2>
         <div class="modal-stats">
           <div class="modal-stat">

@@ -129,6 +129,35 @@ body {
   box-shadow: 0 2px 4px var(--shadow);
 }
 
+.history-btn {
+  padding: 10px 16px;
+  border-radius: var(--border-radius);
+  background-color: var(--accent-color);
+  color: var(--text-color);
+  border: 2px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px var(--shadow);
+}
+
+.history-btn:hover:not(:disabled) {
+  border-color: var(--secondary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px var(--shadow);
+}
+
+.history-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+.history-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .stats-bar {
   display: flex;
   justify-content: center;
@@ -413,6 +442,7 @@ body {
 }
 
 .modal-content {
+  position: relative;
   background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
   border-radius: calc(var(--border-radius) * 2);
   padding: 40px 48px;
@@ -422,6 +452,27 @@ body {
   box-shadow: 0 20px 60px var(--shadow);
   border: 2px solid rgba(233, 69, 96, 0.3);
   animation: modalIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 2px solid transparent;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-color);
+  border-color: var(--secondary-color);
 }
 
 @keyframes modalIn {

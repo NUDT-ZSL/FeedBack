@@ -1,9 +1,11 @@
 import {
-  CardData,
-  DifficultyLevel,
   DIFFICULTY_CONFIGS,
   DifficultyConfig,
-  generateCards,
+  DifficultyLevel,
+  GameSnapshot,
+} from './engine';
+import { GameSession, SessionEvents } from './session';
+import {
   renderGrid,
   updateTimerDisplay,
   updateMatchesDisplay,
@@ -18,19 +20,9 @@ import {
   getCardElementById,
 } from './ui';
 
-class MemoryGame {
-  private cards: CardData[] = [];
-  private flippedCards: CardData[] = [];
-  private matchedPairs: number = 0;
-  private moves: number = 0;
-  private isProcessing: boolean = false;
+class MemoryGameUI {
   private difficulty: DifficultyLevel = 'medium';
-  private config: DifficultyConfig;
-
-  private timerInterval: number | null = null;
-  private startTime: number = 0;
-  private elapsedMs: number = 0;
-  private isGameStarted: boolean = false;
+  private readonly session: GameSession;
 
   private readonly gridContainer: HTMLElement;
   private readonly timerDisplay: HTMLElement;
@@ -38,10 +30,13 @@ class MemoryGame {
   private readonly movesDisplay: HTMLElement;
   private readonly difficultySelect: HTMLSelectElement;
   private readonly restartBtn: HTMLButtonElement;
+  private readonly undoBtn: HTMLButtonElement;
+  private readonly redoBtn: HTMLButtonElement;
   private readonly gameOverModal: HTMLElement;
   private readonly finalTimeElement: HTMLElement;
   private readonly finalMovesElement: HTMLElement;
   private readonly playAgainBtn: HTMLButtonElement;
+  private readonly closeModalBtn: HTMLButtonElement;
 
   constructor() {
     this.gridContainer = this.getElement('cardGrid');
@@ -50,15 +45,21 @@ class MemoryGame {
     this.movesDisplay = this.getElement('movesDisplay');
     this.difficultySelect = this.getElement('difficultySelect') as HTMLSelectElement;
     this.restartBtn = this.getElement('restartBtn') as HTMLButtonElement;
+    this.undoBtn = this.getElement('undoBtn') as HTMLButtonElement;
+    this.redoBtn = this.getElement('redoBtn') as HTMLButtonElement;
     this.gameOverModal = this.getElement('gameOverModal');
     this.finalTimeElement = this.getElement('finalTime');
     this.finalMovesElement = this.getElement('finalMoves');
     this.playAgainBtn = this.getElement('playAgainBtn') as HTMLButtonElement;
+    this.closeModalBtn = this.getElement('closeModalBtn') as HTMLButtonElement;
 
-    this.config = DIFFICULTY_CONFIGS[this.difficulty];
+    this.session = new GameSession(
+      DIFFICULTY_CONFIGS[this.difficulty],
+      this.buildEvents()
+    );
 
     this.bindEvents();
-    this.initGame();
+    this.session.start();
   }
 
   private getElement(id: string): HTMLElement {
@@ -69,19 +70,91 @@ class MemoryGame {
     return element;
   }
 
+  private renderBoard(snapshot: GameSnapshot, config: DifficultyConfig): void {
+    renderGrid(this.gridContainer, snapshot.cards, config);
+    for (const card of snapshot.cards) {
+      const el = getCardElementById(this.gridContainer, card.id);
+      if (!el) continue;
+      if (card.isMatched) {
+        markCardMatched(el);
+      } else if (card.isFlipped) {
+        flipCard(el, true);
+      }
+    }
+  }
+
+  private buildEvents(): SessionEvents {
+    return {
+      onBoard: (snapshot, config) => this.renderBoard(snapshot, config),
+      onFlip: (cardId) => {
+        const el = getCardElementById(this.gridContainer, cardId);
+        if (el) {
+          triggerClickAnimation(el);
+          flipCard(el, true);
+        }
+      },
+      onUnflip: (cardIds) => {
+        for (const id of cardIds) {
+          const el = getCardElementById(this.gridContainer, id);
+          if (el) {
+            flipCard(el, false);
+            clearCardWrong(el);
+          }
+        }
+      },
+      onMatched: (cardIds) => {
+        for (const id of cardIds) {
+          const el = getCardElementById(this.gridContainer, id);
+          if (el) markCardMatched(el);
+        }
+      },
+      onMismatch: (cardIds) => {
+        for (const id of cardIds) {
+          const el = getCardElementById(this.gridContainer, id);
+          if (el) markCardWrong(el);
+        }
+      },
+      onStats: (snapshot) => {
+        updateMatchesDisplay(
+          this.matchesDisplay,
+          snapshot.matchedPairs,
+          this.session.config.pairs
+        );
+        updateMovesDisplay(this.movesDisplay, snapshot.moves);
+      },
+      onTick: (elapsedMs) => updateTimerDisplay(this.timerDisplay, elapsedMs),
+      onSettled: (finalElapsedMs, finalMoves) => {
+        showGameOverModal(
+          this.gameOverModal,
+          this.finalTimeElement,
+          this.finalMovesElement,
+          finalElapsedMs,
+          finalMoves
+        );
+      },
+      onHistoryChange: (canUndo, canRedo) => {
+        this.undoBtn.disabled = !canUndo;
+        this.redoBtn.disabled = !canRedo;
+      },
+    };
+  }
+
   private bindEvents(): void {
     this.gridContainer.addEventListener('click', this.handleGridClick.bind(this));
     this.gridContainer.addEventListener('keydown', this.handleGridKeydown.bind(this));
     this.difficultySelect.addEventListener('change', this.handleDifficultyChange.bind(this));
     this.restartBtn.addEventListener('click', this.handleRestart.bind(this));
     this.playAgainBtn.addEventListener('click', this.handleRestart.bind(this));
+    this.closeModalBtn.addEventListener('click', this.handleRestart.bind(this));
+    this.undoBtn.addEventListener('click', () => this.session.undo());
+    this.redoBtn.addEventListener('click', () => this.session.redo());
   }
 
   private handleGridClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
     const cardElement = target.closest('.card') as HTMLElement | null;
     if (cardElement) {
-      this.handleCardClick(cardElement);
+      this.session.clickCard(Number(cardElement.dataset.cardId));
     }
   }
 
@@ -91,171 +164,24 @@ class MemoryGame {
     const cardElement = target.closest('.card') as HTMLElement | null;
     if (cardElement) {
       event.preventDefault();
-      this.handleCardClick(cardElement);
+      this.session.clickCard(Number(cardElement.dataset.cardId));
     }
-  }
-
-  private handleCardClick(cardElement: HTMLElement): void {
-    if (this.isProcessing) return;
-
-    const cardId = Number(cardElement.dataset.cardId);
-    const card = this.cards.find((c) => c.id === cardId);
-
-    if (!card || card.isFlipped || card.isMatched) return;
-
-    if (!this.isGameStarted) {
-      this.startTimer();
-    }
-
-    triggerClickAnimation(cardElement);
-
-    this.flipCardState(card, cardElement);
-    this.flippedCards.push(card);
-    this.moves++;
-    updateMovesDisplay(this.movesDisplay, this.moves);
-
-    if (this.flippedCards.length === 2) {
-      this.checkMatch();
-    }
-  }
-
-  private flipCardState(card: CardData, cardElement: HTMLElement): void {
-    card.isFlipped = true;
-    flipCard(cardElement, true);
-  }
-
-  private unflipCardState(card: CardData, cardElement: HTMLElement): void {
-    card.isFlipped = false;
-    flipCard(cardElement, false);
-  }
-
-  private checkMatch(): void {
-    this.isProcessing = true;
-    const [first, second] = this.flippedCards;
-    const firstElement = getCardElementById(this.gridContainer, first.id);
-    const secondElement = getCardElementById(this.gridContainer, second.id);
-
-    if (first.symbol === second.symbol) {
-      this.handleMatch(first, second, firstElement, secondElement);
-    } else {
-      this.handleMismatch(first, second, firstElement, secondElement);
-    }
-  }
-
-  private handleMatch(
-    first: CardData,
-    second: CardData,
-    firstElement: HTMLElement | null,
-    secondElement: HTMLElement | null
-  ): void {
-    first.isMatched = true;
-    second.isMatched = true;
-    this.matchedPairs++;
-
-    if (firstElement) markCardMatched(firstElement);
-    if (secondElement) markCardMatched(secondElement);
-
-    updateMatchesDisplay(this.matchesDisplay, this.matchedPairs, this.config.pairs);
-
-    this.flippedCards = [];
-    this.isProcessing = false;
-
-    if (this.matchedPairs === this.config.pairs) {
-      this.endGame();
-    }
-  }
-
-  private handleMismatch(
-    first: CardData,
-    second: CardData,
-    firstElement: HTMLElement | null,
-    secondElement: HTMLElement | null
-  ): void {
-    if (firstElement) markCardWrong(firstElement);
-    if (secondElement) markCardWrong(secondElement);
-
-    setTimeout(() => {
-      this.unflipCardState(first, firstElement!);
-      this.unflipCardState(second, secondElement!);
-
-      if (firstElement) clearCardWrong(firstElement);
-      if (secondElement) clearCardWrong(secondElement);
-
-      this.flippedCards = [];
-      this.isProcessing = false;
-    }, 1000);
-  }
-
-  private startTimer(): void {
-    this.isGameStarted = true;
-    this.startTime = performance.now();
-    this.timerInterval = window.setInterval(() => {
-      this.elapsedMs = performance.now() - this.startTime;
-      updateTimerDisplay(this.timerDisplay, this.elapsedMs);
-    }, 100);
-  }
-
-  private stopTimer(): void {
-    if (this.timerInterval !== null) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-  }
-
-  private endGame(): void {
-    if (this.isGameStarted) {
-      this.elapsedMs = performance.now() - this.startTime;
-    }
-    this.stopTimer();
-    updateTimerDisplay(this.timerDisplay, this.elapsedMs);
-    const finalElapsedMs = this.elapsedMs;
-    const finalMoves = this.moves;
-    setTimeout(() => {
-      showGameOverModal(
-        this.gameOverModal,
-        this.finalTimeElement,
-        this.finalMovesElement,
-        finalElapsedMs,
-        finalMoves
-      );
-    }, 600);
   }
 
   private handleDifficultyChange(): void {
     const newDifficulty = this.difficultySelect.value as DifficultyLevel;
     if (newDifficulty === this.difficulty) return;
     this.difficulty = newDifficulty;
-    this.config = DIFFICULTY_CONFIGS[this.difficulty];
-    this.initGame();
+    hideGameOverModal(this.gameOverModal);
+    this.session.setDifficulty(DIFFICULTY_CONFIGS[this.difficulty]);
   }
 
   private handleRestart(): void {
     hideGameOverModal(this.gameOverModal);
-    this.initGame();
-  }
-
-  private resetState(): void {
-    this.stopTimer();
-    this.flippedCards = [];
-    this.matchedPairs = 0;
-    this.moves = 0;
-    this.elapsedMs = 0;
-    this.isProcessing = false;
-    this.isGameStarted = false;
-  }
-
-  private initGame(): void {
-    this.resetState();
-
-    this.cards = generateCards(this.config.pairs);
-
-    renderGrid(this.gridContainer, this.cards, this.config);
-    updateTimerDisplay(this.timerDisplay, 0);
-    updateMatchesDisplay(this.matchesDisplay, 0, this.config.pairs);
-    updateMovesDisplay(this.movesDisplay, 0);
+    this.session.reset();
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  new MemoryGame();
+  new MemoryGameUI();
 });
