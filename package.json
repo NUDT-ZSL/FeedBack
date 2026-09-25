@@ -11,7 +11,8 @@
     "build:client": "vite build",
     "preview": "vite preview",
     "start": "tsx src/server/server.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "react": "^18.3.1",
