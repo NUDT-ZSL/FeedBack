@@ -10,8 +10,17 @@ export interface Obstacle {
   mesh: THREE.Object3D;
   type: 'jump' | 'slide' | 'coin';
   position: THREE.Vector3;
+  beatIndex: number;
+  topY: number;
   collected?: boolean;
   hit?: boolean;
+}
+
+export interface PlayerCollisionState {
+  box: THREE.Box3;
+  laneX: number;
+  feetY: number;
+  isInvincible: boolean;
 }
 
 export interface Particle {
@@ -33,10 +42,9 @@ export class TrackManager {
 
   private currentBeat: number = 0;
   private lastSegmentZ: number = 0;
+  private lastSpawnZ: number = 0;
   private viewDistance: number = 80;
   private despawnDistance: number = 20;
-
-  private energyLevel: number = 0.5;
 
   private warmColor: THREE.Color = new THREE.Color(0xff6600);
   private coolColor: THREE.Color = new THREE.Color(0x00ffff);
@@ -45,7 +53,10 @@ export class TrackManager {
   private coinRotationSpeed: number = 3;
 
   private obstacleChance: number = 0.6;
-  private coinChance: number = 0.4;
+
+  private readonly laneHalfWidth: number = 0.65;
+  private readonly jumpClearance: number = 0.05;
+  private readonly minBeatSpacing: number = 4;
 
   private pointLight: THREE.PointLight;
 
@@ -65,6 +76,7 @@ export class TrackManager {
       this.createSegment(-i * this.segmentLength);
     }
     this.lastSegmentZ = -(initialSegments - 1) * this.segmentLength;
+    this.lastSpawnZ = this.lastSegmentZ;
   }
 
   private createSegment(zPos: number): void {
@@ -117,34 +129,47 @@ export class TrackManager {
     this.currentBeat++;
 
     if (Math.random() < this.obstacleChance) {
-      this.generateObstacle();
+      this.generateObstacle(this.currentBeat);
     }
   }
 
-  private generateObstacle(): void {
-    const spawnZ = this.lastSegmentZ - this.segmentLength;
+  // 每拍至多生成一个障碍；同拍障碍在车道与纵向位置上不得重叠
+  private generateObstacle(beatIndex: number): void {
+    // 生成位置以节拍为时间基准推进：相邻两拍的障碍纵向间距至少 minBeatSpacing，
+    // 即使赛道段尚未前进也不会在同一位置重叠。
+    const spawnZ = Math.min(
+      this.lastSegmentZ - this.segmentLength,
+      this.lastSpawnZ - this.minBeatSpacing
+    );
     const laneIndex = Math.floor(Math.random() * 3) - 1;
     const xPos = laneIndex * 1.3;
+
+    if (this.hasObstacleAt(beatIndex, xPos, spawnZ)) {
+      return;
+    }
+
+    this.lastSpawnZ = spawnZ;
 
     const rand = Math.random();
 
     if (rand < 0.35) {
-      this.createJumpObstacle(xPos, spawnZ);
+      this.createJumpObstacle(xPos, spawnZ, beatIndex);
     } else if (rand < 0.6) {
-      this.createSlideObstacle(xPos, spawnZ);
+      this.createSlideObstacle(xPos, spawnZ, beatIndex);
     } else {
-      this.createCoin(xPos, spawnZ);
-    }
-
-    if (Math.random() < this.coinChance) {
-      const coinLane = Math.floor(Math.random() * 3) - 1;
-      if (coinLane !== laneIndex || rand >= 0.6) {
-        this.createCoin(coinLane * 1.3, spawnZ + 1);
-      }
+      this.createCoin(xPos, spawnZ, beatIndex);
     }
   }
 
-  private createJumpObstacle(x: number, z: number): void {
+  private hasObstacleAt(beatIndex: number, x: number, z: number): boolean {
+    return this.obstacles.some(obs =>
+      obs.beatIndex === beatIndex &&
+      Math.abs(obs.position.x - x) < this.laneHalfWidth &&
+      Math.abs(obs.position.z - z) < 1.0
+    );
+  }
+
+  private createJumpObstacle(x: number, z: number, beatIndex: number): void {
     const height = 0.5 + Math.random() * 1.0;
 
     const group = new THREE.Group();
@@ -179,11 +204,13 @@ export class TrackManager {
     this.obstacles.push({
       mesh: group,
       type: 'jump',
-      position: new THREE.Vector3(x, height / 2, z)
+      position: new THREE.Vector3(x, height / 2, z),
+      beatIndex,
+      topY: height + 0.1
     });
   }
 
-  private createSlideObstacle(x: number, z: number): void {
+  private createSlideObstacle(x: number, z: number, beatIndex: number): void {
     const height = 0.5;
 
     const group = new THREE.Group();
@@ -222,11 +249,13 @@ export class TrackManager {
     this.obstacles.push({
       mesh: group,
       type: 'slide',
-      position: new THREE.Vector3(x, height, z)
+      position: new THREE.Vector3(x, height, z),
+      beatIndex,
+      topY: height + 0.075
     });
   }
 
-  private createCoin(x: number, z: number): void {
+  private createCoin(x: number, z: number, beatIndex: number): void {
     const group = new THREE.Group();
 
     const coinGeo = new THREE.TorusGeometry(0.25, 0.08, 8, 16);
@@ -260,6 +289,8 @@ export class TrackManager {
       mesh: group,
       type: 'coin',
       position: new THREE.Vector3(x, 1.2, z),
+      beatIndex,
+      topY: 1.5,
       collected: false
     });
   }
@@ -379,7 +410,11 @@ export class TrackManager {
     this.pointLight.position.y = 5 + Math.sin(performance.now() / 500) * 0.5;
   }
 
-  checkCollisions(playerBox: THREE.Box3, isJumping: boolean): { coins: number; damage: boolean } {
+  // 碰撞判定结合玩家动作状态：
+  // - 脚底高度越过障碍顶部（跳跃最高点越过矮障碍）时不命中；
+  // - 闪避到位离开障碍所在车道后不命中；
+  // - 无敌帧内不扣血也不消耗障碍，无敌结束后再次接触同一障碍仍正常判定。
+  checkCollisions(player: PlayerCollisionState): { coins: number; damage: boolean } {
     let coinsCollected = 0;
     let damageTaken = false;
 
@@ -388,23 +423,23 @@ export class TrackManager {
 
       const obsBox = this.getObstacleBox(obs);
 
-      if (playerBox.intersectsBox(obsBox)) {
-        if (obs.type === 'coin') {
-          obs.collected = true;
-          coinsCollected++;
-          this.createCoinParticles(obs.position.clone());
-        } else if (obs.type === 'jump') {
-          if (playerBox.min.y < obs.position.y + 0.5) {
-            obs.hit = true;
-            damageTaken = true;
-          }
-        } else if (obs.type === 'slide') {
-          if (!isJumping && playerBox.max.y > obs.position.y) {
-            obs.hit = true;
-            damageTaken = true;
-          }
-        }
+      if (!player.box.intersectsBox(obsBox)) continue;
+
+      if (obs.type === 'coin') {
+        obs.collected = true;
+        coinsCollected++;
+        this.createCoinParticles(obs.position.clone());
+        continue;
       }
+
+      if (player.isInvincible) continue;
+
+      if (Math.abs(player.laneX - obs.position.x) >= this.laneHalfWidth) continue;
+
+      if (player.feetY >= obs.topY - this.jumpClearance) continue;
+
+      obs.hit = true;
+      damageTaken = true;
     }
 
     return { coins: coinsCollected, damage: damageTaken };
@@ -439,7 +474,6 @@ export class TrackManager {
   }
 
   updateColors(energyLevel: number): void {
-    this.energyLevel = energyLevel;
     this.currentColor.lerpColors(this.warmColor, this.coolColor, energyLevel);
 
     for (const seg of this.segments) {

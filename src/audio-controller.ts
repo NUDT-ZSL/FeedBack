@@ -3,8 +3,8 @@ export class AudioController {
   private analyser: AnalyserNode | null = null;
   private source: AudioBufferSourceNode | null = null;
   private gainNode: GainNode | null = null;
-  private frequencyData: Uint8Array = new Uint8Array(0);
-  private timeData: Uint8Array = new Uint8Array(0);
+  private frequencyData: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+  private timeData: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   private beatHistory: number[] = [];
   private lastBeatTime: number = 0;
   private beatThreshold: number = 1.3;
@@ -17,6 +17,10 @@ export class AudioController {
   private bassEnergy: number = 0;
   private midEnergy: number = 0;
   private highEnergy: number = 0;
+  // 音频分析是否可用；解码失败或使用合成音轨时为 false，
+  // 此时节拍由固定间隔的回退时钟产生，保证障碍生成节奏稳定。
+  private analysisAvailable: boolean = true;
+  private readonly defaultBpm: number = 120;
 
   constructor() {}
 
@@ -37,8 +41,10 @@ export class AudioController {
       const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
       this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      this.analysisAvailable = true;
     } catch (e) {
       console.warn('Failed to load audio file, generating synthetic beat track');
+      this.analysisAvailable = false;
       this.audioBuffer = this.generateSynthTrack();
     }
   }
@@ -173,12 +179,28 @@ export class AudioController {
   }
 
   update(): void {
-    if (!this.analyser || !this.isPlaying) {
+    if (!this.isPlaying) {
       this.beatDetected = false;
       this.beatIntensity = 0;
       this.energyLevel = 0;
       return;
     }
+
+    if (this.analyser) {
+      this.updateEnergyLevels();
+    }
+
+    const now = performance.now();
+
+    if (this.analysisAvailable && this.analyser) {
+      this.detectBeatFromAnalysis(now);
+    } else {
+      this.runFallbackBeatClock(now);
+    }
+  }
+
+  private updateEnergyLevels(): void {
+    if (!this.analyser) return;
 
     this.analyser.getByteFrequencyData(this.frequencyData);
     this.analyser.getByteTimeDomainData(this.timeData);
@@ -209,14 +231,15 @@ export class AudioController {
     this.midEnergy = midSum / (midEnd - bassEnd) / 255;
     this.highEnergy = highSum / (bufferLength - midEnd) / 255;
     this.energyLevel = totalSum / bufferLength / 255;
+  }
 
+  private detectBeatFromAnalysis(now: number): void {
     this.beatHistory.push(this.bassEnergy);
     if (this.beatHistory.length > 40) {
       this.beatHistory.shift();
     }
 
     const historyAvg = this.beatHistory.reduce((a, b) => a + b, 0) / this.beatHistory.length;
-    const now = performance.now();
     const minBeatInterval = 300;
 
     if (this.bassEnergy > historyAvg * this.beatThreshold &&
@@ -229,6 +252,30 @@ export class AudioController {
       this.beatDetected = false;
       this.beatIntensity *= 0.9;
     }
+  }
+
+  // 分析不可用时的回退节拍时钟：按固定间隔产生节拍，
+  // 每拍只触发一次且不累积补拍，避免长时间无节拍或一次性爆发。
+  private runFallbackBeatClock(now: number): void {
+    const intervalMs = this.getBeatInterval() * 1000;
+
+    if (now - this.lastBeatTime >= intervalMs) {
+      this.beatDetected = true;
+      this.beatIntensity = 0.6;
+      this.lastBeatTime = now;
+    } else {
+      this.beatDetected = false;
+      this.beatIntensity *= 0.9;
+    }
+  }
+
+  getBeatInterval(): number {
+    const bpm = this.bpm > 0 ? this.bpm : this.defaultBpm;
+    return 60 / bpm;
+  }
+
+  isAnalysisAvailable(): boolean {
+    return this.analysisAvailable;
   }
 
   isBeatDetected(): boolean {

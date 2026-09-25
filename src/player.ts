@@ -29,8 +29,6 @@ export class Player {
   private bodyMesh: THREE.Mesh | null = null;
   private headMesh: THREE.Mesh | null = null;
 
-  private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
-
   constructor() {
     this.position = new THREE.Vector3(0, 0.9, 0);
     this.velocity = new THREE.Vector3(0, 0, 0);
@@ -155,7 +153,7 @@ export class Player {
 
     this.mesh.position.copy(this.position);
 
-    this.updateRunAnimation(deltaTime);
+    this.updateRunAnimation();
   }
 
   private updateJumpSquash(): void {
@@ -167,7 +165,7 @@ export class Player {
     this.bodyMesh.scale.set(scaleXZ, scaleY, scaleXZ);
   }
 
-  private updateRunAnimation(deltaTime: number): void {
+  private updateRunAnimation(): void {
     if (this.isJumping) return;
 
     const runCycle = (performance.now() / 1000 * 12) % (Math.PI * 2);

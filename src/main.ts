@@ -20,15 +20,11 @@ class Game {
   private isPaused: boolean = false;
   private score: number = 0;
   private playerName: string = '玩家';
-  private gameStartTime: number = 0;
 
   private readonly SCORE_PER_SECOND = 10;
   private readonly SCORE_PER_COIN = 100;
   private readonly CAMERA_OFFSET = new THREE.Vector3(0, 1.5, 3);
   private readonly CAMERA_SMOOTH = 0.1;
-
-  private beatTimer: number = 0;
-  private beatInterval: number = 60 / 128;
 
   private frameCount: number = 0;
   private fpsUpdateTime: number = 0;
@@ -131,10 +127,6 @@ class Game {
     this.score = 0;
     this.player.reset();
     this.trackManager.reset();
-    this.beatTimer = 0;
-
-    const bpm = this.audioController.getBPM() || 128;
-    this.beatInterval = 60 / bpm;
 
     this.uiManager.showGameHUD();
     this.uiManager.updateScore(0);
@@ -142,7 +134,6 @@ class Game {
 
     this.isPlaying = true;
     this.isPaused = false;
-    this.gameStartTime = performance.now();
 
     this.audioController.play();
     this.clock.start();
@@ -195,10 +186,12 @@ class Game {
     this.trackManager.update(deltaTime, playerPos.z);
 
     const playerBox = this.player.getBoundingBox();
-    const collisionResult = this.trackManager.checkCollisions(
-      playerBox,
-      this.player.getIsJumping()
-    );
+    const collisionResult = this.trackManager.checkCollisions({
+      box: playerBox,
+      laneX: playerPos.x,
+      feetY: playerBox.min.y,
+      isInvincible: this.player.getIsInvincible()
+    });
 
     if (collisionResult.coins > 0) {
       this.score += collisionResult.coins * this.SCORE_PER_COIN;
@@ -217,7 +210,7 @@ class Game {
     this.score += this.SCORE_PER_SECOND * deltaTime;
     this.uiManager.updateScore(Math.floor(this.score));
 
-    this.updateCamera(deltaTime);
+    this.updateCamera();
 
     this.uiManager.updateBeatIntensity(beatIntensity);
 
@@ -232,7 +225,7 @@ class Game {
     );
   }
 
-  private updateCamera(deltaTime: number): void {
+  private updateCamera(): void {
     const playerPos = this.player.getPosition();
     const targetPos = new THREE.Vector3(
       playerPos.x,
@@ -274,10 +267,8 @@ class Game {
   }
 }
 
-let game: Game;
-
 window.addEventListener('DOMContentLoaded', () => {
-  game = new Game();
+  new Game();
 });
 
 export { Game };
