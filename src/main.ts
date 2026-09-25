@@ -1,7 +1,9 @@
-import { Ball, Vector2 } from './ball';
-import { Course } from './course';
-import { UI } from './ui';
-import { ParticleSystem } from './particles';
+import { Ball } from './ball.ts';
+import type { Vector2 } from './ball.ts';
+import { Course } from './course.ts';
+import { UI } from './ui.ts';
+import { ParticleSystem } from './particles.ts';
+import { MAX_STROKES, MAX_CHARGE_TIME_MS, chargePower } from './rules.ts';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -49,11 +51,11 @@ class Game {
 
     this.isCharging = false;
     this.chargeStartTime = 0;
-    this.maxChargeTime = 2000;
+    this.maxChargeTime = MAX_CHARGE_TIME_MS;
     this.mousePosition = { x: 0, y: 0 };
 
     this.strokeCount = 0;
-    this.maxStrokes = 10;
+    this.maxStrokes = MAX_STROKES;
 
     this.gameState = 'aiming';
     this.lastTime = performance.now();
@@ -146,7 +148,7 @@ class Game {
     if (!this.isCharging) return;
 
     const chargeTime = performance.now() - this.chargeStartTime;
-    const power = Math.min(chargeTime / this.maxChargeTime, 1) * 12 + 2;
+    const power = chargePower(chargeTime);
 
     const direction: Vector2 = {
       x: this.mousePosition.x - this.ball.position.x,

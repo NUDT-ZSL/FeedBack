@@ -1,4 +1,4 @@
-import { Vector2 } from './ball';
+import type { Vector2 } from './ball.ts';
 
 interface Button {
   x: number;

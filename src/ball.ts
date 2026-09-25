@@ -3,6 +3,8 @@ export interface Vector2 {
   y: number;
 }
 
+export type { Rng } from './rng.ts';
+
 export interface Fence {
   start: Vector2;
   end: Vector2;
@@ -26,14 +28,18 @@ export class Ball {
   isMoving: boolean;
   isInHole: boolean;
   holeScale: number;
+  // Random source for slope direction deviation. Defaults to Math.random
+  // (browser behavior); tests inject a seeded RNG for reproducibility.
+  private rng: () => number;
 
-  constructor(x: number, y: number) {
+  constructor(x: number, y: number, rng: () => number = Math.random) {
     this.position = { x, y };
     this.velocity = { x: 0, y: 0 };
     this.radius = 10;
     this.isMoving = false;
     this.isInHole = false;
     this.holeScale = 1;
+    this.rng = rng;
   }
 
   reset(x: number, y: number): void {
@@ -97,7 +103,7 @@ export class Ball {
     }
 
     if (directionDeviation > 0) {
-      const deviationAngle = (Math.random() - 0.5) * directionDeviation;
+      const deviationAngle = (this.rng() - 0.5) * directionDeviation;
       const cos = Math.cos(deviationAngle);
       const sin = Math.sin(deviationAngle);
       const newVx = this.velocity.x * cos - this.velocity.y * sin;

@@ -1,4 +1,4 @@
-import { Vector2, Fence, TerrainZone } from './ball';
+import type { Vector2, Fence, TerrainZone } from './ball.ts';
 
 export class Course {
   width: number;
@@ -9,10 +9,15 @@ export class Course {
   holeRadius: number;
   teePosition: Vector2;
   private sandOffset: number;
+  // Random source for terrain generation. Defaults to Math.random
+  // (browser behavior); tests inject a seeded RNG so the same seed
+  // always produces the same course layout.
+  private rng: () => number;
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, rng: () => number = Math.random) {
     this.width = width;
     this.height = height;
+    this.rng = rng;
     this.terrainZones = [];
     this.fences = [];
     this.holePosition = { x: 0, y: 0 };
@@ -30,25 +35,25 @@ export class Course {
     const innerHeight = this.height - margin * 2;
 
     this.teePosition = {
-      x: margin + 80 + Math.random() * 60,
-      y: margin + innerHeight / 2 + (Math.random() - 0.5) * 150
+      x: margin + 80 + this.rng() * 60,
+      y: margin + innerHeight / 2 + (this.rng() - 0.5) * 150
     };
 
     this.holePosition = {
-      x: this.width - margin - 80 - Math.random() * 60,
-      y: margin + innerHeight / 2 + (Math.random() - 0.5) * 150
+      x: this.width - margin - 80 - this.rng() * 60,
+      y: margin + innerHeight / 2 + (this.rng() - 0.5) * 150
     };
 
     const centerX = (this.teePosition.x + this.holePosition.x) / 2;
     const centerY = (this.teePosition.y + this.holePosition.y) / 2;
 
-    const zoneCount = 3 + Math.floor(Math.random() * 3);
+    const zoneCount = 3 + Math.floor(this.rng() * 3);
     const types: Array<'sand' | 'uphill' | 'downhill'> = ['sand', 'uphill', 'downhill'];
 
     for (let i = 0; i < zoneCount; i++) {
-      const type = types[Math.floor(Math.random() * types.length)];
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 100 + Math.random() * 200;
+      const type = types[Math.floor(this.rng() * types.length)];
+      const angle = this.rng() * Math.PI * 2;
+      const dist = 100 + this.rng() * 200;
       const zoneX = centerX + Math.cos(angle) * dist;
       const zoneY = centerY + Math.sin(angle) * dist;
 
@@ -69,12 +74,12 @@ export class Course {
       const zone: TerrainZone = {
         type,
         center: { x: clampedX, y: clampedY },
-        radius: 50 + Math.random() * 60
+        radius: 50 + this.rng() * 60
       };
 
       if (type === 'uphill' || type === 'downhill') {
-        zone.slopeAngle = 0.2 + Math.random() * 0.3;
-        const slopeAngle = Math.random() * Math.PI * 2;
+        zone.slopeAngle = 0.2 + this.rng() * 0.3;
+        const slopeAngle = this.rng() * Math.PI * 2;
         zone.slopeDirection = {
           x: Math.cos(slopeAngle),
           y: Math.sin(slopeAngle)
