@@ -1,76 +1,6 @@
-import { PixelCanvas, type PixelData, type ToolType } from './pixel-canvas.ts';
+import { PixelCanvas, type ToolType } from './pixel-canvas.ts';
 import { ColorPicker, type ColorPickedEventDetail } from './color-picker.ts';
 import { PixelToolbar, type ToolSelectedEventDetail } from './toolbar.ts';
-
-const MAX_HISTORY = 30;
-
-class HistoryManager {
-  private undoStack: PixelData[] = [];
-  private redoStack: PixelData[] = [];
-  private currentSnapshot: PixelData | null = null;
-
-  public push(snapshot: PixelData): void {
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.undoStack, this.currentSnapshot);
-    }
-    this.currentSnapshot = this.deepClone(snapshot);
-    this.redoStack = [];
-  }
-
-  public undo(): PixelData | null {
-    if (this.undoStack.length === 0) return null;
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.redoStack, this.currentSnapshot);
-    }
-    const snapshot = this.undoStack.pop()!;
-    this.currentSnapshot = this.deepClone(snapshot);
-    return snapshot;
-  }
-
-  public redo(): PixelData | null {
-    if (this.redoStack.length === 0) return null;
-    if (this.currentSnapshot !== null) {
-      this.deepPush(this.undoStack, this.currentSnapshot);
-    }
-    const snapshot = this.redoStack.pop()!;
-    this.currentSnapshot = this.deepClone(snapshot);
-    return snapshot;
-  }
-
-  public canUndo(): boolean {
-    return this.undoStack.length > 0;
-  }
-
-  public canRedo(): boolean {
-    return this.redoStack.length > 0;
-  }
-
-  public reset(): void {
-    this.undoStack = [];
-    this.redoStack = [];
-    this.currentSnapshot = null;
-  }
-
-  private deepPush(stack: PixelData[], data: PixelData): void {
-    stack.push(this.deepClone(data));
-    if (stack.length > MAX_HISTORY) {
-      stack.shift();
-    }
-  }
-
-  private deepClone(data: PixelData): PixelData {
-    const result: PixelData = new Array(data.length);
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      const newRow = new Array(row.length);
-      for (let j = 0; j < row.length; j++) {
-        newRow[j] = row[j];
-      }
-      result[i] = newRow;
-    }
-    return result;
-  }
-}
 
 function init(): void {
   const pixelCanvas = document.getElementById('pixelCanvas') as PixelCanvas;
@@ -86,20 +16,19 @@ function init(): void {
     return;
   }
 
-  const history = new HistoryManager();
-  let isHistoryAction = false;
-
   const updateHistoryButtons = (): void => {
-    undoBtn.disabled = !history.canUndo();
-    redoBtn.disabled = !history.canRedo();
+    undoBtn.disabled = !pixelCanvas.canUndo();
+    redoBtn.disabled = !pixelCanvas.canRedo();
   };
 
   pixelCanvas.setColor(colorPicker.getColor());
   pixelCanvas.setTool(toolbar.getTool());
 
-  const initialSnapshot = pixelCanvas.getPixels();
-  history.push(initialSnapshot);
   updateHistoryButtons();
+
+  pixelCanvas.addEventListener('historychange', () => {
+    updateHistoryButtons();
+  });
 
   toolbar.addEventListener('toolselected', ((e: CustomEvent<ToolSelectedEventDetail>) => {
     pixelCanvas.setTool(e.detail.tool);
@@ -113,41 +42,17 @@ function init(): void {
     colorPicker.setColor(e.detail.color);
   }) as EventListener);
 
-  pixelCanvas.addEventListener('canvaschange', (() => {
-    if (isHistoryAction) {
-      isHistoryAction = false;
-      return;
-    }
-    const snapshot = pixelCanvas.getPixels();
-    history.push(snapshot);
-    updateHistoryButtons();
-  }) as EventListener);
-
   sizeSelect.addEventListener('change', () => {
     const newSize = parseInt(sizeSelect.value, 10);
-    history.reset();
     pixelCanvas.resetPixels(newSize);
-    const snapshot = pixelCanvas.getPixels();
-    history.push(snapshot);
-    updateHistoryButtons();
   });
 
   undoBtn.addEventListener('click', () => {
-    const snapshot = history.undo();
-    if (snapshot) {
-      isHistoryAction = true;
-      pixelCanvas.setPixels(snapshot);
-      updateHistoryButtons();
-    }
+    pixelCanvas.undo();
   });
 
   redoBtn.addEventListener('click', () => {
-    const snapshot = history.redo();
-    if (snapshot) {
-      isHistoryAction = true;
-      pixelCanvas.setPixels(snapshot);
-      updateHistoryButtons();
-    }
+    pixelCanvas.redo();
   });
 
   document.addEventListener('keydown', (e) => {
@@ -216,10 +121,7 @@ function init(): void {
   });
 
   window.addEventListener('resize', () => {
-    const currentPixels = pixelCanvas.getPixels();
-    const currentSize = pixelCanvas.getGridSize();
-    pixelCanvas.setPixels(currentPixels);
-    pixelCanvas.setAttribute('size', String(currentSize));
+    pixelCanvas.refreshLayout();
   });
 }
 

@@ -1,4 +1,7 @@
-export type PixelData = string[][];
+import { CanvasStore, type PixelData, type StoreChangeType } from './canvas-store.ts';
+
+export type { PixelData } from './canvas-store.ts';
+
 export type ToolType = 'pencil' | 'eraser' | 'picker' | 'fill';
 
 export interface ToolChangeEventDetail {
@@ -17,11 +20,13 @@ export interface CanvasChangeEventDetail {
   pixels: PixelData;
 }
 
-const DEFAULT_COLOR = '#ffffff';
+export interface HistoryChangeEventDetail {
+  canUndo: boolean;
+  canRedo: boolean;
+}
 
 export class PixelCanvas extends HTMLElement {
-  private gridSize: number = 32;
-  private pixels: PixelData = [];
+  private store!: CanvasStore;
   private currentTool: ToolType = 'pencil';
   private currentColor: string = '#000000';
   private isDrawing: boolean = false;
@@ -41,12 +46,11 @@ export class PixelCanvas extends HTMLElement {
   }
 
   connectedCallback(): void {
+    const sizeAttr = this.getAttribute('size');
+    const initialSize = sizeAttr ? parseInt(sizeAttr, 10) : 32;
+    this.store = new CanvasStore(initialSize);
+    this.store.subscribe((type) => this.handleStoreChange(type));
     this.render();
-    const size = this.getAttribute('size');
-    if (size) {
-      this.gridSize = parseInt(size, 10);
-    }
-    this.initPixels();
     this.buildGrid();
     this.attachEvents();
   }
@@ -58,16 +62,13 @@ export class PixelCanvas extends HTMLElement {
   }
 
   attributeChangedCallback(name: string, oldValue: string, newValue: string): void {
-    if (name === 'size' && oldValue !== newValue && this.container) {
-      this.gridSize = parseInt(newValue, 10);
-      this.initPixels();
-      this.buildGrid();
-      this.dispatchChange();
+    if (name === 'size' && oldValue !== newValue && this.store) {
+      this.store.reset(parseInt(newValue, 10));
     }
   }
 
   public getGridSize(): number {
-    return this.gridSize;
+    return this.store.getGridSize();
   }
 
   public setSize(size: number): void {
@@ -75,22 +76,15 @@ export class PixelCanvas extends HTMLElement {
   }
 
   public getPixels(): PixelData {
-    return this.pixels.map(row => [...row]);
+    return this.store.getCommittedPixels();
   }
 
   public setPixels(pixels: PixelData): void {
-    this.pixels = pixels.map(row => [...row]);
-    this.gridSize = pixels.length;
-    this.buildGrid();
+    this.store.setPixels(pixels);
   }
 
   public resetPixels(size?: number): void {
-    if (size !== undefined) {
-      this.gridSize = size;
-    }
-    this.initPixels();
-    this.buildGrid();
-    this.dispatchChange();
+    this.store.reset(size);
   }
 
   public setTool(tool: ToolType): void {
@@ -103,17 +97,59 @@ export class PixelCanvas extends HTMLElement {
   }
 
   public toCanvas(): HTMLCanvasElement {
+    const size = this.store.getGridSize();
+    const pixels = this.store.getCommittedPixels();
     const canvas = document.createElement('canvas');
-    canvas.width = this.gridSize;
-    canvas.height = this.gridSize;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext('2d')!;
-    for (let y = 0; y < this.gridSize; y++) {
-      for (let x = 0; x < this.gridSize; x++) {
-        ctx.fillStyle = this.pixels[y][x];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        ctx.fillStyle = pixels[y][x];
         ctx.fillRect(x, y, 1, 1);
       }
     }
     return canvas;
+  }
+
+  public undo(): boolean {
+    return this.store.undo();
+  }
+
+  public redo(): boolean {
+    return this.store.redo();
+  }
+
+  public canUndo(): boolean {
+    return this.store.canUndo();
+  }
+
+  public canRedo(): boolean {
+    return this.store.canRedo();
+  }
+
+  /** Rebuild the grid layout without touching state (e.g. after window resize). */
+  public refreshLayout(): void {
+    this.buildGrid();
+  }
+
+  private handleStoreChange(type: StoreChangeType): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (type === 'commit') {
+      this.flushPending();
+    } else {
+      this.pendingPixels.clear();
+      this.buildGrid();
+    }
+    this.dispatchChange();
+    this.dispatchEvent(new CustomEvent<HistoryChangeEventDetail>('historychange', {
+      bubbles: true,
+      composed: true,
+      detail: { canUndo: this.store.canUndo(), canRedo: this.store.canRedo() }
+    }));
   }
 
   private getCursorForTool(tool: ToolType): string {
@@ -128,17 +164,6 @@ export class PixelCanvas extends HTMLElement {
         return 'pointer';
       default:
         return 'default';
-    }
-  }
-
-  private initPixels(): void {
-    this.pixels = [];
-    for (let y = 0; y < this.gridSize; y++) {
-      const row: string[] = [];
-      for (let x = 0; x < this.gridSize; x++) {
-        row.push(DEFAULT_COLOR);
-      }
-      this.pixels.push(row);
     }
   }
 
@@ -188,22 +213,24 @@ export class PixelCanvas extends HTMLElement {
       existingGrid.remove();
     }
 
+    const size = this.store.getGridSize();
+    const pixels = this.store.getDisplayPixels();
     const grid = document.createElement('div');
     grid.className = 'grid-container';
 
     const maxViewport = Math.min(window.innerWidth - 80, 520);
-    const pixelSize = Math.max(8, Math.floor(maxViewport / this.gridSize));
+    const pixelSize = Math.max(8, Math.floor(maxViewport / size));
     grid.style.setProperty('--pixel-size', `${pixelSize}px`);
-    grid.style.gridTemplateColumns = `repeat(${this.gridSize}, var(--pixel-size))`;
-    grid.style.gridTemplateRows = `repeat(${this.gridSize}, var(--pixel-size))`;
+    grid.style.gridTemplateColumns = `repeat(${size}, var(--pixel-size))`;
+    grid.style.gridTemplateRows = `repeat(${size}, var(--pixel-size))`;
 
-    for (let y = 0; y < this.gridSize; y++) {
-      for (let x = 0; x < this.gridSize; x++) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
         const pixel = document.createElement('div');
         pixel.className = 'pixel';
         pixel.dataset.x = String(x);
         pixel.dataset.y = String(y);
-        pixel.style.backgroundColor = this.pixels[y][x];
+        pixel.style.backgroundColor = pixels[y][x];
         grid.appendChild(pixel);
       }
     }
@@ -213,8 +240,6 @@ export class PixelCanvas extends HTMLElement {
   }
 
   private attachEvents(): void {
-    const grid = this.container.querySelector('.grid-container')!;
-
     const getCoords = (target: EventTarget | null): { x: number; y: number } | null => {
       if (!(target instanceof HTMLElement)) return null;
       const pixelEl = target.closest('.pixel') as HTMLElement | null;
@@ -229,6 +254,9 @@ export class PixelCanvas extends HTMLElement {
       e.preventDefault();
       this.isDrawing = true;
       this.lastPaintedKey = null;
+      if (this.currentTool !== 'picker') {
+        this.store.beginStroke();
+      }
       const coords = getCoords(e.target);
       if (coords) {
         this.applyTool(coords.x, coords.y);
@@ -253,11 +281,12 @@ export class PixelCanvas extends HTMLElement {
         return;
       }
 
-      const pixelSize = rect.width / this.gridSize;
+      const size = this.store.getGridSize();
+      const pixelSize = rect.width / size;
       const x = Math.floor((clientX - rect.left) / pixelSize);
       const y = Math.floor((clientY - rect.top) / pixelSize);
 
-      if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+      if (x >= 0 && x < size && y >= 0 && y < size) {
         if (this.currentTool === 'pencil' || this.currentTool === 'eraser') {
           this.applyToolLine(x, y);
         } else {
@@ -267,18 +296,17 @@ export class PixelCanvas extends HTMLElement {
     };
 
     const handleEnd = () => {
-      if (this.isDrawing && this.pendingPixels.size > 0) {
-        this.flushPending();
-        this.dispatchChange();
+      if (this.isDrawing) {
+        this.store.endStroke();
       }
       this.isDrawing = false;
       this.lastPaintedKey = null;
     };
 
-    grid.addEventListener('mousedown', handleStart);
-    grid.addEventListener('touchstart', handleStart, { passive: false });
-    grid.addEventListener('mousemove', handleMove);
-    grid.addEventListener('touchmove', handleMove, { passive: false });
+    this.container.addEventListener('mousedown', handleStart);
+    this.container.addEventListener('touchstart', handleStart, { passive: false });
+    this.container.addEventListener('mousemove', handleMove);
+    this.container.addEventListener('touchmove', handleMove, { passive: false });
     window.addEventListener('mouseup', handleEnd);
     window.addEventListener('touchend', handleEnd);
     window.addEventListener('touchcancel', handleEnd);
@@ -335,23 +363,19 @@ export class PixelCanvas extends HTMLElement {
   }
 
   private applyPixel(x: number, y: number): void {
-    if (x < 0 || x >= this.gridSize || y < 0 || y >= this.gridSize) return;
-    if (this.pixels[y][x] === this.currentColor) return;
-    this.pixels[y][x] = this.currentColor;
+    if (!this.store.applyPixel(x, y, this.currentColor)) return;
     this.pendingPixels.add(`${x},${y}`);
     this.scheduleRender();
   }
 
   private erasePixel(x: number, y: number): void {
-    if (x < 0 || x >= this.gridSize || y < 0 || y >= this.gridSize) return;
-    if (this.pixels[y][x] === DEFAULT_COLOR) return;
-    this.pixels[y][x] = DEFAULT_COLOR;
+    if (!this.store.erasePixel(x, y)) return;
     this.pendingPixels.add(`${x},${y}`);
     this.scheduleRender();
   }
 
   private pickColor(x: number, y: number): void {
-    const color = this.pixels[y][x];
+    const color = this.store.getDisplayPixels()[y][x];
     this.dispatchEvent(new CustomEvent<PixelPickedEventDetail>('pixelpicked', {
       bubbles: true,
       composed: true,
@@ -360,27 +384,11 @@ export class PixelCanvas extends HTMLElement {
   }
 
   private floodFill(x: number, y: number): void {
-    const targetColor = this.pixels[y][x];
-    const fillColor = this.currentTool === 'fill' ? this.currentColor : DEFAULT_COLOR;
-    if (targetColor === fillColor) return;
-
-    const stack: Array<[number, number]> = [[x, y]];
-    const visited = new Set<string>();
-
-    while (stack.length > 0) {
-      const [cx, cy] = stack.pop()!;
-      const key = `${cx},${cy}`;
-      if (visited.has(key)) continue;
-      if (cx < 0 || cx >= this.gridSize || cy < 0 || cy >= this.gridSize) continue;
-      if (this.pixels[cy][cx] !== targetColor) continue;
-
-      visited.add(key);
-      this.pixels[cy][cx] = fillColor;
-      this.pendingPixels.add(key);
-
-      stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+    const changed = this.store.floodFill(x, y, this.currentColor);
+    if (changed.length === 0) return;
+    for (const [cx, cy] of changed) {
+      this.pendingPixels.add(`${cx},${cy}`);
     }
-
     this.scheduleRender();
   }
 
@@ -395,12 +403,14 @@ export class PixelCanvas extends HTMLElement {
   private flushPending(): void {
     if (this.pendingPixels.size === 0) return;
     const grid = this.container.querySelector('.grid-container')!;
+    const size = this.store.getGridSize();
+    const pixels = this.store.getDisplayPixels();
     for (const key of this.pendingPixels) {
       const [x, y] = key.split(',').map(Number);
-      const index = y * this.gridSize + x;
+      const index = y * size + x;
       const pixelEl = grid.children[index] as HTMLElement;
       if (pixelEl) {
-        pixelEl.style.backgroundColor = this.pixels[y][x];
+        pixelEl.style.backgroundColor = pixels[y][x];
       }
     }
     this.pendingPixels.clear();
