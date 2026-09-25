@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>手势控制 · 3D粒子音乐可视化</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(to bottom, #0a0a2e 0%, #1a1a3e 100%);
+      transition: background 1s ease;
+      color: #fff;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+    #ui-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #ui-overlay > * {
+      pointer-events: auto;
+    }
+    #top-left {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      max-width: 360px;
+    }
+    #top-right {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+    }
+    #bottom-center {
+      position: absolute;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    #bottom-right {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+    }
+    .panel {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 18px 22px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5),
+                  0 8px 32px rgba(0, 0, 0, 0.4);
+      transition: box-shadow 0.3s ease;
+    }
+    .song-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.95);
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .song-artist {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 14px;
+    }
+    .progress-container {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .progress-bar {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .progress-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #00ffcc, #0066ff);
+      border-radius: 3px;
+      box-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+      transition: width 0.1s linear;
+    }
+    .time-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.55);
+      margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .volume-display {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.85);
+    }
+    .volume-icon {
+      width: 18px;
+      height: 18px;
+      opacity: 0.9;
+    }
+    .volume-bar {
+      flex: 1;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .volume-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff0066, #ffd700);
+      border-radius: 2px;
+      box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+    }
+    .volume-percent {
+      min-width: 38px;
+      text-align: right;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .gesture-panel {
+      width: 120px;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gesture-icon {
+      width: 72px;
+      height: 72px;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+    }
+    .gesture-icon.bounce {
+      transform: scale(1.25);
+    }
+    .gesture-label {
+      text-align: center;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      margin-top: 4px;
+    }
+    .themes-container {
+      display: flex;
+      gap: 14px;
+    }
+    .theme-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+    }
+    .theme-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+    }
+    .theme-btn.active {
+      border-color: rgba(255, 255, 255, 0.95);
+      transform: scale(1.08);
+      box-shadow: 0 0 22px rgba(255, 255, 255, 0.9);
+    }
+    .theme-btn::after {
+      content: attr(data-name);
+      position: absolute;
+      bottom: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.75);
+      white-space: nowrap;
+    }
+    .video-preview {
+      width: 180px;
+      height: 135px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+      background: #000;
+    }
+    .video-preview video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .gesture-guide {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 10px;
+      line-height: 1.7;
+    }
+    .gesture-guide div {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gesture-guide .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #00ffcc;
+      box-shadow: 0 0 4px #00ffcc;
+    }
+    #start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 46, 0.85);
+      backdrop-filter: blur(8px);
+    }
+    #start-overlay.hidden {
+      display: none;
+    }
+    .start-panel {
+      text-align: center;
+      padding: 40px 56px;
+    }
+    .start-title {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #ff0066, #00ffcc, #0066ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+    }
+    .start-subtitle {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 30px;
+    }
+    .start-btn {
+      padding: 14px 44px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, rgba(255,0,102,0.3), rgba(0,255,204,0.3));
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+      transition: all 0.3s ease;
+    }
+    .start-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 30px rgba(0, 255, 204, 0.8);
+    }
+    .status-indicator {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #555;
+    }
+    .status-indicator.active {
+      background: #00ff66;
+      box-shadow: 0 0 8px #00ff66;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .playlist-hint {
+      position: absolute;
+      bottom: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="ui-overlay">
+    <div id="top-left" class="panel">
+      <div class="song-title" id="song-title">—</div>
+      <div class="song-artist" id="song-artist">—</div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="time-labels">
+          <span id="time-current">0:00</span>
+          <span id="time-duration">0:00</span>
+        </div>
+      </div>
+      <div class="volume-display">
+        <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+          <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+        </svg>
+        <div class="volume-bar">
+          <div class="volume-fill" id="volume-fill" style="width: 70%"></div>
+        </div>
+        <span class="volume-percent" id="volume-percent">70%</span>
+      </div>
+    </div>
+
+    <div id="top-right">
+      <div class="panel gesture-panel">
+        <div class="status-indicator" id="gesture-status"></div>
+        <div style="text-align: center;">
+          <svg class="gesture-icon" id="gesture-icon" viewBox="0 0 100 100"></svg>
+          <div class="gesture-label" id="gesture-label">等待手势</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bottom-center">
+      <div class="panel" style="padding: 20px 28px;">
+        <div class="themes-container" id="themes-container"></div>
+        <div class="playlist-hint" id="playlist-hint"></div>
+      </div>
+    </div>
+
+    <div id="bottom-right">
+      <div class="video-preview">
+        <video id="webcam-video" autoplay muted playsinline></video>
+      </div>
+      <div class="panel gesture-guide" style="margin-top: 12px;">
+        <div><span class="dot"></span>1指：播放 / 暂停</div>
+        <div><span class="dot"></span>2指：下一首</div>
+        <div><span class="dot"></span>3指：音量 +</div>
+        <div><span class="dot"></span>4指：音量 −</div>
+        <div><span class="dot"></span>握拳：静音</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="start-overlay">
+    <div class="panel start-panel">
+      <div class="start-title">✨ 手势音乐可视化</div>
+      <div class="start-subtitle">使用摄像头手势控制 3D 粒子音乐播放器</div>
+      <button class="start-btn" id="start-btn">点击开始 · 授权摄像头</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
