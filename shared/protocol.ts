@@ -95,7 +95,14 @@ export function generateOpId(): string {
   return `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export function compareVersions(a: VersionVector, b: VersionVector): number {
+export type VectorRelation = 'equal' | 'ahead' | 'behind' | 'concurrent';
+
+/**
+ * Compare two version vectors and report their causal relation.
+ * 'concurrent' is explicitly distinct from 'equal': concurrent vectors
+ * each contain entries the other side has not seen.
+ */
+export function compareVersionVectors(a: VersionVector, b: VersionVector): VectorRelation {
   let aGreater = false;
   let bGreater = false;
   const allUsers = new Set([...Object.keys(a), ...Object.keys(b)]);
@@ -105,82 +112,254 @@ export function compareVersions(a: VersionVector, b: VersionVector): number {
     if (av > bv) aGreater = true;
     if (av < bv) bGreater = true;
   }
-  if (aGreater && !bGreater) return 1;
-  if (bGreater && !aGreater) return -1;
+  if (aGreater && bGreater) return 'concurrent';
+  if (aGreater) return 'ahead';
+  if (bGreater) return 'behind';
+  return 'equal';
+}
+
+/**
+ * Numeric comparator kept for existing callers: 1 when a is strictly
+ * ahead, -1 when strictly behind, 0 when equal OR concurrent. Use
+ * compareVersionVectors when concurrent must be told apart from equal.
+ */
+export function compareVersions(a: VersionVector, b: VersionVector): number {
+  const relation = compareVersionVectors(a, b);
+  if (relation === 'ahead') return 1;
+  if (relation === 'behind') return -1;
   return 0;
 }
 
+/**
+ * Deterministic tie-break for two operations targeting the same position.
+ * Must be a total order so that transform(A, B) and transform(B, A) agree.
+ */
+function opSortsAfter(op: TextOperation, other: TextOperation): boolean {
+  if (op.timestamp !== other.timestamp) return op.timestamp > other.timestamp;
+  return op.id > other.id;
+}
+
+/**
+ * Transform the position of an insert against an already-applied op.
+ * Returns null when the insert falls strictly inside a range removed by
+ * the applied op: the insert is absorbed (the removal wins) so that both
+ * replicas converge.
+ */
+function transformInsertPosition(
+  position: number,
+  op: TextOperation,
+  appliedOp: TextOperation,
+): number | null {
+  const appPos = appliedOp.position;
+  const appLen = appliedOp.length ?? 0;
+  const appTextLen = (appliedOp.text ?? '').length;
+
+  if (appliedOp.type === 'insert') {
+    if (position > appPos || (position === appPos && opSortsAfter(op, appliedOp))) {
+      return position + appTextLen;
+    }
+    return position;
+  }
+
+  // appliedOp removes [appPos, appPos + appLen) and inserts appText at appPos.
+  const appEnd = appPos + appLen;
+  if (position <= appPos) return position;
+  if (position >= appEnd) return position - appLen + appTextLen;
+  return null;
+}
+
+/**
+ * Transform a deletion range [position, position + length) against an
+ * already-applied op. Returns null when the range is fully consumed.
+ * An insert strictly inside the range is absorbed (the range expands),
+ * which keeps a single contiguous op convergent on both replicas.
+ */
+function transformDeleteRange(
+  position: number,
+  length: number,
+  appliedOp: TextOperation,
+): { position: number; length: number } | null {
+  let pos = position;
+  let len = length;
+
+  if (appliedOp.type === 'insert') {
+    const appPos = appliedOp.position;
+    const appTextLen = (appliedOp.text ?? '').length;
+    if (appTextLen > 0) {
+      if (appPos <= pos) {
+        pos += appTextLen;
+      } else if (appPos < pos + len) {
+        len += appTextLen;
+      }
+    }
+  } else {
+    // delete or replace: first subtract the removed range.
+    const appPos = appliedOp.position;
+    const appLen = appliedOp.length ?? 0;
+    const appEnd = appPos + appLen;
+    const opEnd = pos + len;
+    if (opEnd > appPos && pos < appEnd) {
+      const overlap = Math.min(opEnd, appEnd) - Math.max(pos, appPos);
+      pos = Math.min(pos, appPos);
+      len -= overlap;
+    } else if (pos >= appEnd) {
+      pos -= appLen;
+    }
+    if (len <= 0) return null;
+    if (appliedOp.type === 'replace') {
+      // Then account for the replacement text inserted at appPos.
+      const appTextLen = (appliedOp.text ?? '').length;
+      if (appTextLen > 0) {
+        if (appPos <= pos) {
+          pos += appTextLen;
+        } else if (appPos < pos + len) {
+          len += appTextLen;
+        }
+      }
+    }
+  }
+
+  if (len <= 0) return null;
+  return { position: pos, length: len };
+}
+
+/**
+ * Transform `op` so it can be applied after `appliedOp`, given both were
+ * created against the same base content. Returns null when the op becomes
+ * a no-op (duplicate, or fully absorbed by a concurrent removal).
+ *
+ * Convergence (TP1) holds for insert/delete combinations:
+ *   apply(apply(base, A), transform(B, A)) === apply(apply(base, B), transform(A, B))
+ */
 export function transformOperation(
   op: TextOperation,
   appliedOp: TextOperation,
 ): TextOperation | null {
   if (op.id === appliedOp.id) return null;
 
-  const { position: opPos, length: opLen = 0, type: opType } = op;
-  const { position: appPos, length: appLen = 0, text: appText = '' } = appliedOp;
-  const appDelta = appText.length - appLen;
-
-  let newPos = opPos;
-  let newLen = opLen;
-
-  if (opType === 'insert') {
-    if (opPos > appPos) {
-      newPos = opPos + appDelta;
-    } else if (opPos === appPos && op.timestamp > appliedOp.timestamp) {
-      newPos = opPos + appDelta;
-    }
-  } else if (opType === 'delete' || opType === 'replace') {
-    const opEnd = opPos + opLen;
-    const appEnd = appPos + appLen;
-
-    if (opEnd <= appPos) {
-    } else if (opPos >= appEnd) {
-      newPos = opPos + appDelta;
-    } else {
-      if (opPos <= appPos && opEnd >= appEnd) {
-        newLen = opLen + appDelta;
-      } else if (opPos <= appPos && opEnd < appEnd) {
-        const overlap = opEnd - appPos;
-        newLen = Math.max(0, opLen - overlap);
-      } else if (opPos > appPos && opEnd >= appEnd) {
-        const overlap = appEnd - opPos;
-        newPos = appPos;
-        newLen = Math.max(0, opLen - overlap) + appDelta;
-      } else {
-        const overlapBefore = opPos - appPos;
-        const overlapAfter = appEnd - opEnd;
-        newPos = appPos;
-        newLen = Math.max(0, appText.length - overlapBefore - overlapAfter);
-        return {
-          ...op,
-          position: newPos,
-          length: 0,
-          text: '',
-          type: 'insert',
-        };
-      }
-    }
+  if (op.type === 'insert') {
+    const position = transformInsertPosition(op.position, op, appliedOp);
+    if (position === null) return null;
+    return { ...op, position };
   }
 
-  return {
-    ...op,
-    position: Math.max(0, newPos),
-    length: Math.max(0, newLen),
-  };
+  const range = transformDeleteRange(op.position, op.length ?? 0, appliedOp);
+
+  if (op.type === 'delete') {
+    if (range === null) return null;
+    return { ...op, position: range.position, length: range.length };
+  }
+
+  // replace: the inserted text follows the surviving range start. If the
+  // range vanished, degrade to a pure insert at the transformed insert
+  // position (or nothing when the insert itself was absorbed).
+  const text = op.text ?? '';
+  if (range !== null) {
+    return { ...op, position: range.position, length: range.length, text };
+  }
+  const insertPos = transformInsertPosition(op.position, op, appliedOp);
+  if (insertPos === null || text.length === 0) return null;
+  return { ...op, type: 'insert', position: insertPos, length: 0, text };
 }
 
+export type OperationApplyErrorCode =
+  | 'INVALID_OPERATION'
+  | 'INVALID_POSITION'
+  | 'VERSION_MISMATCH'
+  | 'VECTOR_CONFLICT';
+
+export class OperationApplyError extends Error {
+  readonly code: OperationApplyErrorCode;
+
+  constructor(code: OperationApplyErrorCode, message: string) {
+    super(message);
+    this.name = 'OperationApplyError';
+    this.code = code;
+  }
+}
+
+/**
+ * Apply an operation to content. Invalid operations fail explicitly by
+ * throwing OperationApplyError instead of silently corrupting content.
+ */
 export function applyOperation(content: string, op: TextOperation): string {
   const { type, position, length = 0, text = '' } = op;
 
-  if (type === 'insert') {
-    return content.slice(0, position) + text + content.slice(position);
-  } else if (type === 'delete') {
-    return content.slice(0, position) + content.slice(position + length);
-  } else if (type === 'replace') {
-    return content.slice(0, position) + text + content.slice(position + length);
+  if (type !== 'insert' && type !== 'delete' && type !== 'replace') {
+    throw new OperationApplyError(
+      'INVALID_OPERATION',
+      `Unknown operation type: ${String(type)}`,
+    );
+  }
+  if (!Number.isInteger(position) || position < 0) {
+    throw new OperationApplyError(
+      'INVALID_POSITION',
+      `Operation position ${position} is not a valid offset`,
+    );
+  }
+  if (!Number.isInteger(length) || length < 0) {
+    throw new OperationApplyError(
+      'INVALID_OPERATION',
+      `Operation length ${length} is not a valid length`,
+    );
   }
 
-  return content;
+  if (type === 'insert') {
+    if (position > content.length) {
+      throw new OperationApplyError(
+        'INVALID_POSITION',
+        `Insert position ${position} exceeds content length ${content.length}`,
+      );
+    }
+    return content.slice(0, position) + text + content.slice(position);
+  }
+
+  if (position + length > content.length) {
+    throw new OperationApplyError(
+      'INVALID_POSITION',
+      `out-of-range ${type} [${position}, ${position + length}) for content length ${content.length}`,
+    );
+  }
+  if (type === 'delete') {
+    return content.slice(0, position) + content.slice(position + length);
+  }
+  return content.slice(0, position) + text + content.slice(position + length);
+}
+
+export interface LocalVersionState {
+  version: number;
+  vector: VersionVector;
+}
+
+/**
+ * Apply an operation only when it is consistent with the local version
+ * state. Throws OperationApplyError when the operation's baseVersion does
+ * not match the local version, or when the operation's version vector is
+ * strictly ahead of the local vector (i.e. it assumes operations this
+ * replica has never seen).
+ */
+export function applyOperationAtState(
+  content: string,
+  op: TextOperation,
+  state: LocalVersionState,
+  opVector?: VersionVector,
+): string {
+  if (op.baseVersion !== state.version) {
+    throw new OperationApplyError(
+      'VERSION_MISMATCH',
+      `Operation baseVersion ${op.baseVersion} does not match local version ${state.version}`,
+    );
+  }
+  if (opVector !== undefined) {
+    const relation = compareVersionVectors(opVector, state.vector);
+    if (relation === 'ahead') {
+      throw new OperationApplyError(
+        'VECTOR_CONFLICT',
+        'Operation vector is ahead of the local vector: missing intermediate operations',
+      );
+    }
+  }
+  return applyOperation(content, op);
 }
 
 export function operationFromDiff(
