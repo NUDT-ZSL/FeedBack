@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>卡片记忆配对游戏</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app" class="app-container">
+    <header class="header">
+      <h1 class="title">🎴 记忆配对</h1>
+      <div class="controls">
+        <select id="difficultySelect" class="difficulty-select">
+          <option value="easy">简单 (3×3)</option>
+          <option value="medium" selected>中等 (4×4)</option>
+          <option value="hard">困难 (6×5)</option>
+        </select>
+        <button id="restartBtn" class="restart-btn">重新开始</button>
+      </div>
+    </header>
+
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">⏱️ 时间</span>
+        <span id="timerDisplay" class="stat-value">0.0s</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">✅ 匹配</span>
+        <span id="matchesDisplay" class="stat-value">0 / 0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">👆 操作</span>
+        <span id="movesDisplay" class="stat-value">0</span>
+      </div>
+    </div>
+
+    <main class="game-area">
+      <div id="cardGrid" class="card-grid"></div>
+    </main>
+
+    <div id="gameOverModal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <h2 class="modal-title">🎉 恭喜通关！</h2>
+        <div class="modal-stats">
+          <div class="modal-stat">
+            <span class="modal-stat-label">总用时</span>
+            <span id="finalTime" class="modal-stat-value">0.0s</span>
+          </div>
+          <div class="modal-stat">
+            <span class="modal-stat-label">操作次数</span>
+            <span id="finalMoves" class="modal-stat-value">0</span>
+          </div>
+        </div>
+        <button id="playAgainBtn" class="play-again-btn">再来一局</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/game.ts"></script>
+</body>
+</html>
