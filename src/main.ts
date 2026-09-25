@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createSolarSystem, updateSolarSystem, getPlanetFocusPosition, PLANET_DATA } from './solarSystem';
+import { createSolarSystem, updateSolarSystem, updateLabels, createFocusController, PLANET_DATA } from './solarSystem';
 import { createUI } from './ui';
 
 export type FrameCallback = (delta: number, elapsed: number) => void;
@@ -170,10 +170,9 @@ if (canvasContainer && uiContainer) {
   
   let speedMultiplier = 1.0;
   let showOrbits = true;
-  let focusTarget: THREE.Vector3 | null = null;
-  let focusProgress = 0;
-  let focusPlanetName = '';
-  
+
+  const focusController = createFocusController(solarSystem, controller.camera, controller.controls);
+
   ui.onSpeedChange((speed) => {
     speedMultiplier = speed;
   });
@@ -184,45 +183,26 @@ if (canvasContainer && uiContainer) {
   
   ui.onFocus((planetDisplayName) => {
     const nameParts = planetDisplayName.split(' · ');
-    focusPlanetName = nameParts[1] || planetDisplayName;
-    const target = getPlanetFocusPosition(solarSystem, focusPlanetName, controller.camera);
-    if (target) {
-      focusTarget = target;
-      focusProgress = 0;
-      
-      const planet = solarSystem.planets.find(p => p.data.name === focusPlanetName);
-      if (planet) {
-        controller.controls.target.copy(planet.mesh.position);
-      }
-    }
+    const planetName = nameParts[1] || planetDisplayName;
+    focusController.setTarget(planetName);
   });
   
   let frameCount = 0;
   let lastFPSUpdate = 0;
   
   controller.useFrame((delta, elapsed) => {
-    const result = updateSolarSystem(
+    updateSolarSystem(
       solarSystem,
       delta,
       speedMultiplier,
       controller.camera,
-      showOrbits,
-      focusTarget,
-      focusProgress
+      showOrbits
     );
-    focusProgress = result.focusProgress;
-    
-    if (result.shouldUpdateControls) {
-      const planet = solarSystem.planets.find(p => p.data.name === focusPlanetName);
-      if (planet) {
-        controller.controls.target.lerp(planet.mesh.position, 0.05);
-      }
-    }
-    
-    if (focusProgress >= 1) {
-      focusTarget = null;
-    }
-    
+
+    focusController.update(delta);
+
+    updateLabels(solarSystem, controller.camera);
+
     frameCount++;
     if (elapsed - lastFPSUpdate >= 0.5) {
       const fps = frameCount / (elapsed - lastFPSUpdate);

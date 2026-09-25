@@ -484,19 +484,13 @@ export function createSolarSystem(scene: THREE.Scene, uiContainer: HTMLElement):
   };
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
 export function updateSolarSystem(
   system: SolarSystem,
   delta: number,
   speedMultiplier: number,
   camera: THREE.Camera,
-  showOrbits: boolean,
-  focusTarget: THREE.Vector3 | null,
-  focusProgress: number
-): { focusProgress: number; shouldUpdateControls: boolean } {
+  showOrbits: boolean
+): void {
   const time = performance.now() * 0.001;
   
   if (system.sun.material instanceof THREE.ShaderMaterial) {
@@ -511,18 +505,8 @@ export function updateSolarSystem(
     planet.mesh.rotation.y += planet.data.rotationSpeed * delta * speedMultiplier;
     
     planet.orbit.visible = showOrbits;
-    
-    const screenPos = planet.mesh.position.clone().project(camera);
-    const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-    
+
     const distance = planet.mesh.position.distanceTo(camera.position);
-    const isVisible = distance < 25 && screenPos.z < 1;
-    
-    planet.label.style.left = `${x}px`;
-    planet.label.style.top = `${y}px`;
-    planet.label.classList.toggle('visible', isVisible);
-    
     const glowScale = planet.data.radius * 3 * (1 + distance * 0.02);
     planet.glow.scale.set(glowScale, glowScale, 1);
   });
@@ -545,30 +529,107 @@ export function updateSolarSystem(
     sizes[i] = Math.max(0.05, Math.min(0.5, 0.3 * (1 / (dist * 0.1))));
   }
   system.particles.geometry.attributes.size.needsUpdate = true;
-  
-  let shouldUpdateControls = false;
-  if (focusTarget && focusProgress < 1) {
-    focusProgress = Math.min(1, focusProgress + delta);
-    const t = easeInOutCubic(focusProgress);
-    camera.position.lerp(focusTarget, t * 0.05);
-    shouldUpdateControls = true;
-  }
-  
-  return { focusProgress, shouldUpdateControls };
 }
 
-export function getPlanetFocusPosition(
+const labelViewPos = new THREE.Vector3();
+const labelNdc = new THREE.Vector3();
+
+export function updateLabels(system: SolarSystem, camera: THREE.Camera): void {
+  camera.updateMatrixWorld();
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  system.planets.forEach((planet) => {
+    labelViewPos.copy(planet.mesh.position).applyMatrix4(camera.matrixWorldInverse);
+    const inFront = labelViewPos.z < 0;
+
+    labelNdc.copy(planet.mesh.position).project(camera);
+    const onScreen =
+      inFront &&
+      labelNdc.x >= -1 && labelNdc.x <= 1 &&
+      labelNdc.y >= -1 && labelNdc.y <= 1 &&
+      labelNdc.z >= -1 && labelNdc.z <= 1;
+
+    const x = (labelNdc.x * 0.5 + 0.5) * width;
+    const y = (-labelNdc.y * 0.5 + 0.5) * height;
+
+    planet.label.style.left = `${x}px`;
+    planet.label.style.top = `${y}px`;
+    planet.label.classList.toggle('visible', onScreen);
+  });
+}
+
+export interface FocusControlsLike {
+  target: THREE.Vector3;
+}
+
+export interface FocusController {
+  setTarget: (planetName: string) => void;
+  clear: () => void;
+  update: (delta: number) => void;
+  isActive: () => boolean;
+}
+
+export function createFocusController(
   system: SolarSystem,
-  planetName: string,
-  camera: THREE.Camera
-): THREE.Vector3 | null {
-  const planet = system.planets.find(p => p.data.name === planetName);
-  if (!planet) return null;
-  
-  const direction = new THREE.Vector3()
-    .subVectors(camera.position, planet.mesh.position)
-    .normalize();
-  
-  const distance = planet.data.radius * 6 + 5;
-  return planet.mesh.position.clone().add(direction.multiplyScalar(distance));
+  camera: THREE.Camera,
+  controls: FocusControlsLike
+): FocusController {
+  let target: PlanetObject | null = null;
+  let settled = false;
+  const prevPlanetPos = new THREE.Vector3();
+  const followDelta = new THREE.Vector3();
+  const offset = new THREE.Vector3();
+
+  function setTarget(planetName: string): void {
+    const planet = system.planets.find(p => p.data.name === planetName) ?? null;
+    if (!planet) return;
+    target = planet;
+    settled = false;
+    prevPlanetPos.copy(planet.mesh.position);
+  }
+
+  function clear(): void {
+    target = null;
+    settled = false;
+  }
+
+  function isActive(): boolean {
+    return target !== null;
+  }
+
+  function update(delta: number): void {
+    if (!target) return;
+    const planetPos = target.mesh.position;
+
+    followDelta.subVectors(planetPos, prevPlanetPos);
+    camera.position.add(followDelta);
+    controls.target.add(followDelta);
+    prevPlanetPos.copy(planetPos);
+
+    if (!settled) {
+      const k = 1 - Math.exp(-4 * delta);
+      controls.target.lerp(planetPos, k);
+
+      offset.subVectors(camera.position, controls.target);
+      const currentDist = offset.length();
+      const desiredDist = target.data.radius * 6 + 5;
+      if (currentDist > 1e-6) {
+        offset.setLength(THREE.MathUtils.lerp(currentDist, desiredDist, k));
+        camera.position.copy(controls.target).add(offset);
+      }
+
+      if (
+        controls.target.distanceToSquared(planetPos) < 1e-4 &&
+        Math.abs(currentDist - desiredDist) < 0.05
+      ) {
+        settled = true;
+        controls.target.copy(planetPos);
+      }
+    } else {
+      controls.target.copy(planetPos);
+    }
+  }
+
+  return { setTarget, clear, update, isActive };
 }
