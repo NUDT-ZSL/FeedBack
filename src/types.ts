@@ -51,6 +51,9 @@ export type EventMap = {
   'render-mode-change': { mode: 'points' | 'spheres' }
   'frame-update': { delta: number, fps: number }
   'particle-count-change': { count: number }
+  'reset': {}
+  'pause-change': { paused: boolean }
+  'history-change': { length: number, reviewIndex: number | null }
 }
 
 export type RenderMode = 'points' | 'spheres'

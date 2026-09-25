@@ -202,6 +202,80 @@
       border-color: transparent !important;
     }
 
+    #time-control {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(10, 10, 31, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 12px;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    #time-control .tc-btn {
+      padding: 6px 14px;
+      background: rgba(0, 240, 255, 0.1);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 4px;
+      color: #00f0ff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    #time-control .tc-btn:hover {
+      background: rgba(0, 240, 255, 0.25);
+      transform: translateY(-1px);
+    }
+
+    #time-control .tc-btn.active {
+      background: rgba(0, 240, 255, 0.3);
+      color: #fff;
+    }
+
+    #timeline-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #timeline-container.hidden {
+      display: none;
+    }
+
+    #timeline {
+      width: 220px;
+      accent-color: #00f0ff;
+      cursor: pointer;
+    }
+
+    #timeline-label {
+      color: rgba(255, 255, 255, 0.7);
+      min-width: 56px;
+      text-align: center;
+    }
+
+    #time-status {
+      color: #aaff00;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    #time-status.reviewing {
+      color: #ff00ff;
+    }
+
     @media (max-width: 1024px) {
       .lil-gui {
         --width: 280px !important;
@@ -280,6 +354,15 @@
     <button id="mobile-toggle" aria-label="切换控制面板">
       <span>☰</span>
     </button>
+    <div id="time-control">
+      <button id="btn-pause" class="tc-btn">暂停</button>
+      <button id="btn-step" class="tc-btn">单步</button>
+      <div id="timeline-container" class="hidden">
+        <input type="range" id="timeline" min="0" max="0" step="1" value="0" />
+        <span id="timeline-label">当前帧</span>
+      </div>
+      <span id="time-status">运行中</span>
+    </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { Particle, SharedState, CollisionEvent, RenderMode } from '../types'
 import { eventBus } from '../utils/eventBus'
+import type { TimeController } from '../timeControl/timeController'
 
 const GLOW_POOL_SIZE = 30
 const FLASH_POOL_SIZE = 20
@@ -19,6 +20,7 @@ export class RenderModule {
   private camera: THREE.PerspectiveCamera
   private renderer: THREE.WebGLRenderer
   private state: SharedState
+  private timeController: TimeController
 
   private points: THREE.Points | null = null
   private pointsGeometry: THREE.BufferGeometry | null = null
@@ -50,12 +52,14 @@ export class RenderModule {
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
     renderer: THREE.WebGLRenderer,
-    state: SharedState
+    state: SharedState,
+    timeController: TimeController
   ) {
     this.scene = scene
     this.camera = camera
     this.renderer = renderer
     this.state = state
+    this.timeController = timeController
     this.dummy = new THREE.Object3D()
 
     this.initHUD()
@@ -256,14 +260,14 @@ export class RenderModule {
       const oldCount = this.positions.length / 3
       const newCount = data.count
 
-      if (newCount > oldCount) {
+      if (newCount !== oldCount) {
         const newPositions = new Float32Array(newCount * 3)
         const newColors = new Float32Array(newCount * 3)
         const newSizes = new Float32Array(newCount)
 
-        newPositions.set(this.positions)
-        newColors.set(this.colors)
-        newSizes.set(this.sizes)
+        newPositions.set(this.positions.subarray(0, Math.min(this.positions.length, newPositions.length)))
+        newColors.set(this.colors.subarray(0, Math.min(this.colors.length, newColors.length)))
+        newSizes.set(this.sizes.subarray(0, Math.min(this.sizes.length, newSizes.length)))
 
         this.positions = newPositions
         this.colors = newColors
@@ -303,13 +307,21 @@ export class RenderModule {
   private updatePoints(particles: Particle[]): void {
     if (!this.positions || !this.colors || !this.sizes || !this.pointsGeometry) return
 
+    const reviewPositions = this.timeController.getReviewSnapshot()?.positions ?? null
+
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i]
       const i3 = i * 3
 
-      this.positions[i3] = p.position.x
-      this.positions[i3 + 1] = p.position.y
-      this.positions[i3 + 2] = p.position.z
+      if (reviewPositions && i3 + 2 < reviewPositions.length) {
+        this.positions[i3] = reviewPositions[i3]
+        this.positions[i3 + 1] = reviewPositions[i3 + 1]
+        this.positions[i3 + 2] = reviewPositions[i3 + 2]
+      } else {
+        this.positions[i3] = p.position.x
+        this.positions[i3 + 1] = p.position.y
+        this.positions[i3 + 2] = p.position.z
+      }
 
       const brightness = 1 + p.glowIntensity
       this.colors[i3] = Math.min(1, p.color.r * brightness)
@@ -328,12 +340,21 @@ export class RenderModule {
     if (!this.instancedMesh || !this.instancedMesh.instanceColor) return
 
     const colors = this.instancedMesh.instanceColor.array as Float32Array
+    const reviewPositions = this.timeController.getReviewSnapshot()?.positions ?? null
 
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i]
       const i3 = i * 3
 
-      this.dummy.position.copy(p.position)
+      if (reviewPositions && i3 + 2 < reviewPositions.length) {
+        this.dummy.position.set(
+          reviewPositions[i3],
+          reviewPositions[i3 + 1],
+          reviewPositions[i3 + 2]
+        )
+      } else {
+        this.dummy.position.copy(p.position)
+      }
       this.dummy.scale.setScalar(p.radius)
       this.dummy.rotation.set(0, 0, 0)
       this.dummy.updateMatrix()
@@ -373,13 +394,22 @@ export class RenderModule {
     }
 
     const { particles } = this.state
+    const reviewPositions = this.timeController.getReviewSnapshot()?.positions ?? null
     for (let i = 0; i < this.glowPool.length && i < particles.length; i++) {
       const glow = this.glowPool[i]
       const p = particles[i]
 
       if (p.glowIntensity > 0.01) {
         glow.mesh.visible = true
-        glow.mesh.position.copy(p.position)
+        if (reviewPositions && i * 3 + 2 < reviewPositions.length) {
+          glow.mesh.position.set(
+            reviewPositions[i * 3],
+            reviewPositions[i * 3 + 1],
+            reviewPositions[i * 3 + 2]
+          )
+        } else {
+          glow.mesh.position.copy(p.position)
+        }
         glow.mesh.scale.setScalar(p.radius * (2 + p.glowIntensity * 2))
         ;(glow.mesh.material as THREE.MeshBasicMaterial).color.copy(p.color)
         ;(glow.mesh.material as THREE.MeshBasicMaterial).opacity = p.glowIntensity * 0.3
@@ -428,7 +458,9 @@ export class RenderModule {
     }
 
     if (this.collisionValueEl) {
-      this.collisionValueEl.textContent = this.state.collisionCount.toLocaleString()
+      const review = this.timeController.getReviewSnapshot()
+      const count = review ? review.collisionCount : this.state.collisionCount
+      this.collisionValueEl.textContent = count.toLocaleString()
     }
   }
 

@@ -165,10 +165,7 @@ export class ControlPanel {
   }
 
   private resetSystem(): void {
-    this.state.collisionCount = 0
-    this.params.particleCount = this.state.particleCount
-    eventBus.emit('param-change', { key: 'particleCount', value: this.state.particleCount })
-    eventBus.emit('param-change', { key: 'gravity', value: this.state.gravity })
+    eventBus.emit('reset', {})
   }
 
   update(): void {

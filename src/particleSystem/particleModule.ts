@@ -3,32 +3,56 @@ import type { Particle, SharedState, MouseForceEvent } from '../types'
 import { eventBus } from '../utils/eventBus'
 import { getRandomNeonColor } from '../types'
 import { CollisionManager } from './collisionManager'
+import type { TimeController } from '../timeControl/timeController'
 
 const DAMPING = 0.999
 const MAX_SPEED = 15
 
 export class ParticleModule {
   private state: SharedState
+  private timeController: TimeController
   private collisionManager: CollisionManager
   private particleIdCounter: number = 0
   private mouseForce: MouseForceEvent | null = null
   private physicsAccumulator: number = 0
   private physicsTimestep: number = 1 / 30
+  private pendingParticleCount: number | null = null
+  private pendingSizeUpdate: boolean = false
 
-  constructor(state: SharedState) {
+  constructor(state: SharedState, timeController: TimeController) {
     this.state = state
+    this.timeController = timeController
     this.collisionManager = new CollisionManager(state)
-    
+
     eventBus.on('mouse-force', (data) => {
+      if (this.timeController.isPaused()) return
       this.mouseForce = data
+    })
+
+    eventBus.on('pause-change', (data) => {
+      if (data.paused) {
+        this.mouseForce = null
+      }
     })
 
     eventBus.on('param-change', (data) => {
       if (data.key === 'particleCount' && typeof data.value === 'number') {
-        this.updateParticleCount(data.value)
+        if (this.timeController.isPaused()) {
+          this.pendingParticleCount = data.value
+        } else {
+          this.updateParticleCount(data.value)
+        }
       } else if (data.key === 'particleSizeMin' || data.key === 'particleSizeMax') {
-        this.updateParticleSizes()
+        if (this.timeController.isPaused()) {
+          this.pendingSizeUpdate = true
+        } else {
+          this.updateParticleSizes()
+        }
       }
+    })
+
+    eventBus.on('reset', () => {
+      this.reset()
     })
   }
 
@@ -36,11 +60,11 @@ export class ParticleModule {
     const { bounds, particleSizeMin, particleSizeMax } = this.state
     const radius = particleSizeMin + Math.random() * (particleSizeMax - particleSizeMin)
     const mass = radius * radius * radius
-    
+
     const x = bounds.minX + radius + Math.random() * (bounds.maxX - bounds.minX - radius * 2)
     const y = bounds.minY + radius + Math.random() * (bounds.maxY - bounds.minY - radius * 2)
     const z = bounds.minZ + radius + Math.random() * (bounds.maxZ - bounds.minZ - radius * 2)
-    
+
     const speed = 2 + Math.random() * 3
     const theta = Math.random() * Math.PI * 2
     const phi = Math.random() * Math.PI
@@ -81,10 +105,22 @@ export class ParticleModule {
 
   private updateParticleSizes(): void {
     const { particles, particleSizeMin, particleSizeMax } = this.state
-    
+
     for (const p of particles) {
       p.radius = particleSizeMin + Math.random() * (particleSizeMax - particleSizeMin)
       p.mass = p.radius * p.radius * p.radius
+    }
+  }
+
+  private applyPendingChanges(): void {
+    if (this.pendingParticleCount !== null) {
+      const count = this.pendingParticleCount
+      this.pendingParticleCount = null
+      this.updateParticleCount(count)
+    }
+    if (this.pendingSizeUpdate) {
+      this.pendingSizeUpdate = false
+      this.updateParticleSizes()
     }
   }
 
@@ -95,6 +131,28 @@ export class ParticleModule {
     for (let i = 0; i < particleCount; i++) {
       particles.push(this.createParticle())
     }
+  }
+
+  reset(): void {
+    if (this.pendingParticleCount !== null) {
+      this.state.particleCount = this.pendingParticleCount
+    }
+    this.pendingParticleCount = null
+    this.pendingSizeUpdate = false
+    this.state.collisionCount = 0
+    this.particleIdCounter = 0
+    this.physicsAccumulator = 0
+    this.mouseForce = null
+
+    const { particles, particleCount } = this.state
+    particles.length = 0
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(this.createParticle())
+    }
+
+    this.timeController.clearHistory()
+    this.timeController.recordStep()
+    eventBus.emit('particle-count-change', { count: particleCount })
   }
 
   private applyPhysics(delta: number): void {
@@ -108,7 +166,7 @@ export class ParticleModule {
       if (this.mouseForce) {
         const diff = new THREE.Vector3().subVectors(p.position, this.mouseForce.position)
         const dist = diff.length()
-        
+
         if (dist < this.mouseForce.radius && dist > 0.1) {
           const force = this.mouseForce.strength * (1 - dist / this.mouseForce.radius)
           const dir = diff.normalize()
@@ -133,15 +191,32 @@ export class ParticleModule {
     }
   }
 
+  private stepPhysics(): void {
+    this.applyPhysics(this.physicsTimestep)
+    this.collisionManager.update(this.physicsTimestep)
+    this.timeController.recordStep()
+  }
+
   update(renderDelta: number): void {
+    if (this.timeController.isPaused()) return
+
+    this.applyPendingChanges()
+
     this.physicsAccumulator += renderDelta
 
     while (this.physicsAccumulator >= this.physicsTimestep) {
-      this.applyPhysics(this.physicsTimestep)
-      this.collisionManager.update(this.physicsTimestep)
+      this.stepPhysics()
       this.physicsAccumulator -= this.physicsTimestep
     }
 
+    this.mouseForce = null
+  }
+
+  stepOnce(): void {
+    if (!this.timeController.isPaused()) return
+
+    this.applyPendingChanges()
+    this.stepPhysics()
     this.mouseForce = null
   }
 

@@ -5,6 +5,8 @@ import { ParticleModule } from './particleSystem/particleModule'
 import { InteractionController } from './interaction/interactionController'
 import { RenderModule } from './renderer/renderModule'
 import { ControlPanel } from './ui/controlPanel'
+import { TimeController } from './timeControl/timeController'
+import { TimeControlPanel } from './ui/timeControlPanel'
 
 const BOUNDS = {
   minX: -10,
@@ -22,6 +24,7 @@ class App {
   private container: HTMLElement
 
   private state: SharedState
+  private timeController: TimeController
   private particleModule: ParticleModule
   private interactionController: InteractionController
   private renderModule: RenderModule
@@ -65,10 +68,14 @@ class App {
     this.renderer.toneMappingExposure = 1.2
     this.container.appendChild(this.renderer.domElement)
 
-    this.particleModule = new ParticleModule(this.state)
+    this.timeController = new TimeController(this.state)
+    this.particleModule = new ParticleModule(this.state, this.timeController)
     this.interactionController = new InteractionController(this.container, this.camera)
-    this.renderModule = new RenderModule(this.scene, this.camera, this.renderer, this.state)
+    this.renderModule = new RenderModule(this.scene, this.camera, this.renderer, this.state, this.timeController)
     this.controlPanel = new ControlPanel(this.state)
+    new TimeControlPanel(this.timeController, () => {
+      this.particleModule.stepOnce()
+    })
 
     this.setupZoom()
     this.setupResize()
@@ -129,7 +136,9 @@ class App {
     const delta = Math.min(this.clock.getDelta(), 0.1)
 
     this.updateFPS(delta)
-    this.particleModule.update(delta)
+    if (!this.timeController.isPaused()) {
+      this.particleModule.update(delta)
+    }
     this.interactionController.update()
     this.renderModule.update(delta, this.currentFps)
     this.renderModule.render()
@@ -137,6 +146,7 @@ class App {
 
   init(): void {
     this.particleModule.init()
+    this.timeController.recordStep()
     this.isRunning = true
     this.animate()
   }
