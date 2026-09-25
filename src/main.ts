@@ -16,6 +16,7 @@ class CityApp {
   private infoPanel: HTMLElement;
   private animationFrameId: number | null = null;
   private lastTime: number = 0;
+  private lastInfoUpdate: number = 0;
   private frameCount: number = 0;
   private fps: number = 0;
 
@@ -63,6 +64,12 @@ class CityApp {
     };
 
     this.cityBuilder = new CityBuilder(this.scene, initialParams);
+
+    this.cityBuilder.onBuildingRemoved = (building) => {
+      if (this.selectedBuilding && this.selectedBuilding.id === building.id) {
+        this.hideInfoPanel();
+      }
+    };
 
     const panelConfig: ControlPanelConfig = {
       density: 0.7,
@@ -195,18 +202,12 @@ class CityApp {
   }
 
   private handleParamsChange(params: Partial<CityParams>): void {
-    if ('buildingSpacing' in params) {
-      this.cityBuilder.clearCity();
-      this.cityBuilder.updateParams(params);
-      this.cityBuilder.generateCity();
-    } else {
-      this.cityBuilder.updateParams(params);
-    }
+    this.cityBuilder.updateParams(params);
   }
 
   private handleGenerate(): void {
-    this.cityBuilder.generateCity();
     this.hideInfoPanel();
+    this.cityBuilder.generateCity();
   }
 
   private animate(currentTime: number = 0): void {
@@ -222,6 +223,11 @@ class CityApp {
     }
 
     this.controls.update();
+
+    if (this.selectedBuilding && currentTime - this.lastInfoUpdate > 100) {
+      this.lastInfoUpdate = currentTime;
+      this.showInfoPanel(this.selectedBuilding);
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
