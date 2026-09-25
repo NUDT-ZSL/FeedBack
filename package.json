@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "verify": "tsc -p tsconfig.verify.json && node tests/verify-core.mjs",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -1,3 +1,14 @@
+import { calculateEnvironmentalFitness } from './fitness.js';
+import type { FitnessEnvironmentValues, FlatOptimalEnvironment } from './fitness.js';
+import {
+  clampTraitValue,
+  mergeOptimalEnvironments,
+  mixTraits,
+  mutateSelfCrossTraits,
+  selectBackcrossTraits,
+  selectHybridTraitKeys,
+} from './heredity.js';
+
 export interface PlantTraits {
   color: number;
   shape: number;
@@ -10,14 +21,7 @@ export interface PlantPosition {
   y: number;
 }
 
-export interface OptimalEnvironment {
-  tempMin: number;
-  tempMax: number;
-  humidityMin: number;
-  humidityMax: number;
-  lightMin: number;
-  lightMax: number;
-}
+export type OptimalEnvironment = FlatOptimalEnvironment;
 
 export interface PlantJSON {
   id: string;
@@ -135,10 +139,6 @@ function generateName(): string {
     PLANT_NAMES[Math.floor(Math.random() * PLANT_NAMES.length)];
 }
 
-function clamp(value: number, min: number = 0, max: number = 255): number {
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
 export class Plant {
   public id: string;
   public name: string;
@@ -161,10 +161,10 @@ export class Plant {
     this.id = generateId();
     this.name = generateName();
     this.traits = {
-      color: clamp(traits.color),
-      shape: clamp(traits.shape),
-      height: clamp(traits.height),
-      droughtResistance: clamp(traits.droughtResistance),
+      color: clampTraitValue(traits.color),
+      shape: clampTraitValue(traits.shape),
+      height: clampTraitValue(traits.height),
+      droughtResistance: clampTraitValue(traits.droughtResistance),
     };
     this.generation = generation;
     this.parentIds = [...parentIds];
@@ -183,38 +183,10 @@ export class Plant {
   }
 
   static hybridize(parent1: Plant, parent2: Plant): Plant {
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    const numTraitsToBlend = Math.floor(Math.random() * 2) + 2;
-    const shuffled = [...traitKeys].sort(() => Math.random() - 0.5);
-    const traitsToBlend = shuffled.slice(0, numTraitsToBlend);
-    const traitsToInherit = shuffled.slice(numTraitsToBlend);
-
-    const newTraits: PlantTraits = {
-      color: 0,
-      shape: 0,
-      height: 0,
-      droughtResistance: 0,
-    };
-
-    for (const key of traitsToBlend) {
-      const midValue = (parent1.traits[key] + parent2.traits[key]) / 2;
-      const offset = (Math.random() - 0.5) * 40;
-      newTraits[key] = clamp(midValue + offset);
-    }
-
-    for (const key of traitsToInherit) {
-      const source = Math.random() < 0.5 ? parent1 : parent2;
-      newTraits[key] = source.traits[key];
-    }
-
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round((parent1.optimalEnv.tempMin + parent2.optimalEnv.tempMin) / 2),
-      tempMax: Math.round((parent1.optimalEnv.tempMax + parent2.optimalEnv.tempMax) / 2),
-      humidityMin: Math.round((parent1.optimalEnv.humidityMin + parent2.optimalEnv.humidityMin) / 2),
-      humidityMax: Math.round((parent1.optimalEnv.humidityMax + parent2.optimalEnv.humidityMax) / 2),
-      lightMin: Math.round((parent1.optimalEnv.lightMin + parent2.optimalEnv.lightMin) / 2),
-      lightMax: Math.round((parent1.optimalEnv.lightMax + parent2.optimalEnv.lightMax) / 2),
-    };
+    const random = () => Math.random();
+    const { blend, inherit } = selectHybridTraitKeys(random);
+    const newTraits = mixTraits(parent1.traits, parent2.traits, blend, inherit, random);
+    const newOptimalEnv = mergeOptimalEnvironments(parent1.optimalEnv, parent2.optimalEnv, 0.5);
 
     const newGeneration = Math.max(parent1.generation, parent2.generation) + 1;
     const newLineage = Array.from(new Set([...parent1.lineage, ...parent2.lineage]));
@@ -224,58 +196,28 @@ export class Plant {
   }
 
   static selfCross(plant: Plant): Plant {
-    const newTraits: PlantTraits = {
-      color: plant.traits.color,
-      shape: plant.traits.shape,
-      height: plant.traits.height,
-      droughtResistance: plant.traits.droughtResistance,
-    };
-
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    for (const key of traitKeys) {
-      if (Math.random() < 0.05) {
-        const mutation = (Math.random() - 0.5) * 60;
-        newTraits[key] = clamp(newTraits[key] + mutation);
-      }
-    }
+    const newTraits = mutateSelfCrossTraits(plant.traits, () => Math.random());
+    const newOptimalEnv = mergeOptimalEnvironments(plant.optimalEnv, plant.optimalEnv, 0, false);
 
     const newGeneration = plant.generation + 1;
-    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], { ...plant.optimalEnv });
+    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], newOptimalEnv);
     child.lineage.push(child.id);
     return child;
   }
 
   static backcross(plant: Plant, parent: Plant): Plant {
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    const newTraits: PlantTraits = {
-      color: 0,
-      shape: 0,
-      height: 0,
-      droughtResistance: 0,
-    };
-
-    for (const key of traitKeys) {
-      if (Math.random() < 0.6) {
-        newTraits[key] = parent.traits[key];
-      } else {
-        newTraits[key] = plant.traits[key];
-      }
-    }
-
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round(plant.optimalEnv.tempMin * 0.4 + parent.optimalEnv.tempMin * 0.6),
-      tempMax: Math.round(plant.optimalEnv.tempMax * 0.4 + parent.optimalEnv.tempMax * 0.6),
-      humidityMin: Math.round(plant.optimalEnv.humidityMin * 0.4 + parent.optimalEnv.humidityMin * 0.6),
-      humidityMax: Math.round(plant.optimalEnv.humidityMax * 0.4 + parent.optimalEnv.humidityMax * 0.6),
-      lightMin: Math.round(plant.optimalEnv.lightMin * 0.4 + parent.optimalEnv.lightMin * 0.6),
-      lightMax: Math.round(plant.optimalEnv.lightMax * 0.4 + parent.optimalEnv.lightMax * 0.6),
-    };
+    const newTraits = selectBackcrossTraits(plant.traits, parent.traits, () => Math.random());
+    const newOptimalEnv = mergeOptimalEnvironments(plant.optimalEnv, parent.optimalEnv, 0.6);
 
     const newGeneration = Math.max(plant.generation, parent.generation) + 1;
     const newLineage = Array.from(new Set([...plant.lineage, ...parent.lineage]));
     const child = new Plant(newTraits, newGeneration, [plant.id, parent.id], newLineage, newOptimalEnv);
     child.lineage.push(child.id);
     return child;
+  }
+
+  calculateFitness(environment: FitnessEnvironmentValues): number {
+    return calculateEnvironmentalFitness(environment, this.optimalEnv);
   }
 
   getTraitHash(): string {
