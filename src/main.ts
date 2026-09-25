@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import { AudioVisualizer, PLAYLIST, THEMES, type GestureType, type PlaylistItem, type ColorTheme } from './audio-visualizer';
+import { AudioVisualizer, type ColorTheme } from './audio-visualizer';
 import { ParticleSystem } from './particle-system';
 import { GestureController } from './gesture-controller';
 import { UIOverlay } from './ui-overlay';
+import { AppStore } from './app-store';
+import { GestureActions } from './gesture-actions';
 
 class App {
   private renderer!: THREE.WebGLRenderer;
@@ -13,14 +15,8 @@ class App {
   private particles!: ParticleSystem;
   private gesture!: GestureController;
   private ui!: UIOverlay;
-  private playlist: PlaylistItem[] = PLAYLIST;
-  private currentIndex = 0;
-  private themes: ColorTheme[] = THEMES;
-  private currentThemeIndex = 0;
-  private lastGesture: GestureType = 'none';
-  private gestureHoldFrames = 0;
-  private volumeContinuous = false;
-  private lastVolumeChange = 0;
+  private store!: AppStore;
+  private gestureActions!: GestureActions;
   private rafId = 0;
   private initialized = false;
 
@@ -28,18 +24,51 @@ class App {
     this.initThree();
     this.visualizer = new AudioVisualizer();
     await this.visualizer.init();
+    this.store = new AppStore(this.visualizer);
+    this.gestureActions = new GestureActions(this.store);
     this.particles = new ParticleSystem(this.scene, 3000);
     this.ui = new UIOverlay(document.getElementById('ui-overlay')!);
     this.gesture = new GestureController();
-    this.particles.setTheme(this.themes[this.currentThemeIndex], false);
-    this.applyBodyTheme(this.themes[this.currentThemeIndex]);
-    this.ui.setThemes(this.themes, this.currentThemeIndex, (i) => this.onThemeSelect(i));
-    this.loadSong(0);
-    this.ui.setVolume(this.visualizer.volume);
-    this.ui.setPlaylistHint(`播放列表 ${this.playlist.length} 首 · Web Audio 合成演示`);
+
+    // 初始主题：无过渡直接应用
+    this.particles.setTheme(this.store.currentTheme, false);
+    this.applyBodyTheme(this.store.currentTheme);
+
+    this.bindStateRenderers();
+    this.ui.setThemes(this.store.themes, this.store.getState().themeIndex, (i) => this.store.setTheme(i));
+    this.ui.onSeek((t) => this.store.seek(t));
+    this.ui.setPlaylistHint(`播放列表 ${this.store.songs.length} 首 · Web Audio 合成演示`);
+    this.visualizer.onEnded(() => this.store.onSongEnded());
+    this.store.loadSong(0, false);
     this.bindEvents();
     this.animate();
     this.initialized = true;
+  }
+
+  /** 状态 -> 渲染 的单向绑定：所有订阅在同一个 commit 内同步执行，保证同帧一致 */
+  private bindStateRenderers(): void {
+    this.store.subscribe((state, changed) => {
+      if (changed.has('themeIndex')) {
+        const theme = this.store.currentTheme;
+        this.particles.setTheme(theme, true);
+        this.applyBodyTheme(theme);
+        this.ui.setActiveTheme(state.themeIndex);
+      }
+      if (changed.has('songIndex')) {
+        const song = this.store.currentSong;
+        this.ui.setSongInfo(song.title, `${song.artist} · ${state.songIndex + 1}/${this.store.songs.length}`);
+        this.ui.setProgress(0, song.duration);
+      }
+      if (changed.has('volume')) {
+        this.ui.setVolume(state.volume);
+      }
+      if (changed.has('gesture')) {
+        this.ui.setGestureIcon(state.gesture);
+      }
+      if (changed.has('gestureReady')) {
+        this.ui.setGestureActive(state.gestureReady);
+      }
+    });
   }
 
   private initThree(): void {
@@ -64,53 +93,26 @@ class App {
         const video = document.getElementById('webcam-video') as HTMLVideoElement;
         await this.gesture.init(video);
         this.gesture.start();
-        this.ui.setGestureActive(true);
-        document.getElementById('start-overlay')!.classList.add('hidden');
-        this.gesture.onGestureChange((g, count) => this.onGestureDetected(g, count));
+        this.gesture.onGestureChange((g) => this.gestureActions.enqueue(g));
+        this.store.setGestureReady(true);
       } catch (e) {
+        // 摄像头不可用时退回键鼠控制，其余模块不受影响
         console.warn('摄像头初始化失败，可使用鼠标键盘控制：', e);
-        document.getElementById('start-overlay')!.classList.add('hidden');
+        this.store.setGestureReady(false);
       }
-      this.loadSong(0);
-      this.visualizer.play();
-      this.ui.setVolume(this.visualizer.volume);
+      document.getElementById('start-overlay')!.classList.add('hidden');
+      this.store.loadSong(0, true);
     });
     window.addEventListener('keydown', (e) => {
       if (!this.initialized) return;
       switch (e.code) {
-        case 'Space': e.preventDefault(); this.togglePlay(); break;
-        case 'ArrowRight': this.nextSong(); break;
-        case 'ArrowUp': this.changeVolume(0.05); break;
-        case 'ArrowDown': this.changeVolume(-0.05); break;
-        case 'KeyM': this.mute(); break;
+        case 'Space': e.preventDefault(); this.store.togglePlay(); break;
+        case 'ArrowRight': this.store.nextSong(); break;
+        case 'ArrowUp': this.store.adjustVolume(0.05); break;
+        case 'ArrowDown': this.store.adjustVolume(-0.05); break;
+        case 'KeyM': this.store.toggleMute(); break;
       }
     });
-  }
-
-  private onGestureDetected(g: GestureType, _count: number): void {
-    const now = performance.now();
-    this.lastGesture = g;
-    this.gestureHoldFrames = 0;
-    this.ui.setGestureIcon(g);
-    switch (g) {
-      case '1-finger':
-        this.togglePlay();
-        break;
-      case '2-finger':
-        this.nextSong();
-        break;
-      case 'fist':
-        this.mute();
-        break;
-    }
-    if (g === '3-finger' || g === '4-finger') {
-      this.volumeContinuous = true;
-      this.lastVolumeChange = now;
-      const delta = g === '3-finger' ? 0.04 : -0.04;
-      this.changeVolume(delta);
-    } else {
-      this.volumeContinuous = false;
-    }
   }
 
   private onResize(): void {
@@ -119,73 +121,32 @@ class App {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  private onThemeSelect(i: number): void {
-    this.currentThemeIndex = i;
-    this.particles.setTheme(this.themes[i], true);
-    this.applyBodyTheme(this.themes[i]);
-  }
-
   private applyBodyTheme(theme: ColorTheme): void {
     document.body.style.background = `linear-gradient(to bottom, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`;
-  }
-
-  private loadSong(i: number): void {
-    this.currentIndex = (i + this.playlist.length) % this.playlist.length;
-    const song = this.playlist[this.currentIndex];
-    this.visualizer.loadSong(song);
-    this.ui.setSongInfo(song.title, song.artist + ` · ${this.currentIndex + 1}/${this.playlist.length}`);
-  }
-
-  private togglePlay(): void {
-    if (this.visualizer.getIsPlaying()) this.visualizer.pause();
-    else this.visualizer.play();
-  }
-
-  private nextSong(): void {
-    this.loadSong(this.currentIndex + 1);
-    this.visualizer.play();
-  }
-
-  private changeVolume(delta: number): void {
-    const v = Math.max(0, Math.min(1, this.visualizer.volume + delta));
-    this.visualizer.setVolume(v);
-    this.ui.setVolume(v);
-  }
-
-  private mute(): void {
-    const v = this.visualizer.volume > 0.01 ? 0 : 0.7;
-    this.visualizer.setVolume(v);
-    this.ui.setVolume(v);
   }
 
   private animate = (): void => {
     this.rafId = requestAnimationFrame(this.animate);
     const delta = Math.min(this.clock.getDelta(), 0.05);
+    const now = performance.now();
+
+    // 1) 状态变更：只在这一段发生，全部经由 store 收敛
+    this.visualizer.tick();
+    this.gestureActions.flush(now);
+    this.gestureActions.tick(now);
+
+    // 2) 渲染：只读取状态，不再修改
+    const state = this.store.getState();
     const audio = this.visualizer.getAudioData();
-    if (this.volumeContinuous) {
-      const now = performance.now();
-      if (now - this.lastVolumeChange > 180) {
-        const deltaVol = this.lastGesture === '3-finger' ? 0.035 : -0.035;
-        this.changeVolume(deltaVol);
-        this.lastVolumeChange = now;
-      }
-    }
-    this.particles.update(audio, this.lastGesture, delta);
-    const song = this.visualizer.getCurrentSong();
-    if (song) {
-      this.ui.setProgress(
-        this.visualizer.getCurrentTime(),
-        this.visualizer.getDuration(),
-        (t) => this.visualizer.seek(t)
-      );
-    }
-    const t = performance.now() * 0.0008;
+    this.particles.update(audio, state.gesture, delta);
+    this.ui.setProgress(this.visualizer.getCurrentTime(), this.visualizer.getDuration());
+
+    const t = now * 0.0008;
     this.camera.position.x = Math.sin(t) * 1.5;
     this.camera.position.y = Math.cos(t * 0.7) * 1.0;
     this.camera.position.z = 16 + Math.sin(t * 1.3) * 0.8;
     this.camera.lookAt(0, 0, 0);
     this.renderer.render(this.scene, this.camera);
-    this.visualizer.onEnded(() => this.nextSong());
   };
 }
 

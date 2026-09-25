@@ -424,7 +424,6 @@ export class AudioVisualizer {
 
   seek(time: number): void {
     if (!this.currentSong) return;
-    const wasPlaying = this.isPlaying;
     const was = this.isPlaying;
     this.pause();
     this.pauseTime = Math.max(0, Math.min(time, this.currentSong.duration));
@@ -436,6 +435,20 @@ export class AudioVisualizer {
     this.onEndedCallback = callback;
   }
 
+  /**
+   * 每帧由主循环调用一次：检测自然播放结束并触发 onEnded。
+   * 从 getAudioData 中剥离，保证频谱读取是纯函数，不再夹带状态变更。
+   */
+  tick(): void {
+    if (this.currentSong && this.isPlaying && this.ctx) {
+      const elapsed = this.ctx.currentTime - this.startTime;
+      if (elapsed >= this.currentSong.duration) {
+        this.pause();
+        if (this.onEndedCallback) this.onEndedCallback();
+      }
+    }
+  }
+
   getAudioData(): AudioData {
     if (!this.analyser) {
       return {
@@ -444,7 +457,7 @@ export class AudioVisualizer {
         frequencyData: new Uint8Array(128)
       };
     }
-    this.analyser.getByteFrequencyData(this.frequencyArray);
+    this.analyser.getByteFrequencyData(this.frequencyArray as Uint8Array<ArrayBuffer>);
     const len = this.bufferLength;
     const lowCut = Math.floor(len * 0.15);
     const midCut = Math.floor(len * 0.5);
@@ -467,13 +480,6 @@ export class AudioVisualizer {
       if (now - this.lastBeatTime > 0.2) {
         isBeat = true;
         this.lastBeatTime = now;
-      }
-    }
-    if (this.currentSong && this.isPlaying && this.ctx) {
-      const elapsed = this.ctx.currentTime - this.startTime;
-      if (elapsed >= this.currentSong.duration) {
-        this.pause();
-        if (this.onEndedCallback) this.onEndedCallback();
       }
     }
     return {

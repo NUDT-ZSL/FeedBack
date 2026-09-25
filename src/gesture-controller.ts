@@ -107,23 +107,27 @@ export class GestureController {
       this.stableFrames = 1;
     }
     const now = performance.now();
-    const canFire = now - this.lastFireTime > this.fireCooldown;
-    if (this.stableFrames >= 3 && this.currentStable !== 'none' && canFire && this.currentStable !== this.lastGesture) {
-      this.lastGesture = this.currentStable;
-      this.lastFireTime = now;
-      if (this.gestureCallback) {
-        let emitFinger = fingerCount;
-        if (this.currentStable === 'fist') emitFinger = 0;
-        if (this.currentStable === '1-finger') emitFinger = 1;
-        if (this.currentStable === '2-finger') emitFinger = 2;
-        if (this.currentStable === '3-finger') emitFinger = 3;
-        if (this.currentStable === '4-finger') emitFinger = 4;
-        if (this.currentStable === '5-finger') emitFinger = 5;
-        this.gestureCallback(this.currentStable, emitFinger);
+    // 稳定判定：多数表决 + 连续稳定帧，中间帧抖动不会改变判定结果；
+    // 只有稳定手势发生变化时才对外通知一次（含释放为 none），
+    // 非 none 手势附带冷却，避免识别抖动造成连续触发。
+    if (this.stableFrames >= 3 && this.currentStable !== this.lastGesture) {
+      if (this.currentStable === 'none') {
+        this.lastGesture = 'none';
+        if (this.gestureCallback) this.gestureCallback('none', 0);
+      } else if (now - this.lastFireTime > this.fireCooldown) {
+        this.lastGesture = this.currentStable;
+        this.lastFireTime = now;
+        if (this.gestureCallback) {
+          let emitFinger = fingerCount;
+          if (this.currentStable === 'fist') emitFinger = 0;
+          if (this.currentStable === '1-finger') emitFinger = 1;
+          if (this.currentStable === '2-finger') emitFinger = 2;
+          if (this.currentStable === '3-finger') emitFinger = 3;
+          if (this.currentStable === '4-finger') emitFinger = 4;
+          if (this.currentStable === '5-finger') emitFinger = 5;
+          this.gestureCallback(this.currentStable, emitFinger);
+        }
       }
-    }
-    if (smoothed === 'none') {
-      this.lastGesture = 'none';
     }
   }
 

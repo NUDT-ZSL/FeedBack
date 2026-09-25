@@ -18,7 +18,6 @@ export class UIOverlay {
   private seekCallback: ((time: number) => void) | null = null;
   private isDragging = false;
   private currentDuration = 0;
-  private currentThemeIndex = 0;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -78,7 +77,11 @@ export class UIOverlay {
     this.songArtist.textContent = artist;
   }
 
-  setProgress(current: number, duration: number, onSeek?: (t: number) => void): void {
+  onSeek(callback: (time: number) => void): void {
+    this.seekCallback = callback;
+  }
+
+  setProgress(current: number, duration: number): void {
     this.currentDuration = duration;
     if (!this.isDragging) {
       const pct = duration > 0 ? (current / duration) * 100 : 0;
@@ -86,7 +89,6 @@ export class UIOverlay {
     }
     this.timeCurrent.textContent = this.formatTime(current);
     this.timeDuration.textContent = this.formatTime(duration);
-    if (onSeek) this.seekCallback = onSeek;
   }
 
   setVolume(percent: number): void {
@@ -97,7 +99,7 @@ export class UIOverlay {
 
   setGestureIcon(gesture: GestureType): void {
     this.gestureIcon.classList.remove('bounce');
-    void this.gestureIcon.offsetWidth;
+    void (this.gestureIcon as unknown as HTMLElement).offsetWidth;
     this.gestureIcon.classList.add('bounce');
     this.gestureIcon.innerHTML = this.gestureSVG(gesture);
     this.gestureLabel.textContent = this.gestureLabelText(gesture);
@@ -110,7 +112,6 @@ export class UIOverlay {
   }
 
   setThemes(themes: ColorTheme[], activeIndex: number, onSelect: (i: number) => void): void {
-    this.currentThemeIndex = activeIndex;
     this.themesContainer.innerHTML = '';
     themes.forEach((theme, i) => {
       const btn = document.createElement('div');
@@ -120,20 +121,15 @@ export class UIOverlay {
       const mid = `rgb(${theme.midColor.join(',')})`;
       const high = `rgb(${theme.highColor.join(',')})`;
       btn.style.background = `conic-gradient(from 0deg, ${low}, ${mid}, ${high}, ${low})`;
-      btn.addEventListener('click', () => {
-        if (i === this.currentThemeIndex) return;
-        this.currentThemeIndex = i;
-        const nodes = this.themesContainer.querySelectorAll('.theme-btn');
-        nodes.forEach(n => n.classList.remove('active'));
-        btn.classList.add('active');
-        onSelect(i);
-        const docStyle = document.documentElement.style;
-        docStyle.setProperty('--bg-top', theme.bgTop);
-        docStyle.setProperty('--bg-bottom', theme.bgBottom);
-        document.body.style.background = `linear-gradient(to bottom, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`;
-      });
+      btn.addEventListener('click', () => onSelect(i));
       this.themesContainer.appendChild(btn);
     });
+  }
+
+  /** 主题高亮由状态仓库统一驱动，与粒子颜色、页面背景在同一帧更新 */
+  setActiveTheme(index: number): void {
+    const nodes = this.themesContainer.querySelectorAll('.theme-btn');
+    nodes.forEach((n, i) => n.classList.toggle('active', i === index));
   }
 
   setPlaylistHint(text: string): void {
