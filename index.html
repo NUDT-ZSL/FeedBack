@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D K线曲面可视化</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0a1a;
+      --text-primary: #cce0ff;
+      --accent-green: #00e676;
+      --accent-red: #ff1744;
+      --accent-blue: rgba(60, 130, 255, 0.4);
+      --glass-bg: rgba(15, 20, 40, 0.65);
+      --glass-border: rgba(100, 160, 255, 0.15);
+      --panel-width: 30%;
+      --transition-speed: 0.3s;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    }
+
+    #app {
+      display: flex;
+      width: 100%; height: 100%;
+      position: relative;
+    }
+
+    #canvas-container {
+      width: 70%; height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 100;
+      min-width: 180px;
+    }
+
+    #tooltip.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #tooltip .tt-row {
+      display: flex; justify-content: space-between; gap: 16px;
+    }
+
+    #tooltip .tt-label { color: rgba(180, 200, 230, 0.7); }
+
+    #tooltip .tt-value { font-weight: 600; }
+
+    #tooltip .tt-value.up { color: var(--accent-green); }
+    #tooltip .tt-value.down { color: var(--accent-red); }
+
+    #info-panel {
+      width: var(--panel-width);
+      height: 100%;
+      background: var(--glass-bg);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-left: 1px solid var(--glass-border);
+      padding: 24px 20px;
+      overflow-y: auto;
+      transition: all var(--transition-speed) ease;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 10;
+    }
+
+    #info-panel::-webkit-scrollbar { width: 4px; }
+    #info-panel::-webkit-scrollbar-track { background: transparent; }
+    #info-panel::-webkit-scrollbar-thumb { background: rgba(100,160,255,0.2); border-radius: 2px; }
+
+    .panel-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #cce0ff, #6090ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .panel-subtitle {
+      font-size: 13px;
+      color: rgba(180, 200, 230, 0.5);
+      margin-top: 4px;
+    }
+
+    .stock-switcher {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stock-switcher .switcher-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: rgba(180, 200, 230, 0.45);
+    }
+
+    .stock-btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    .stock-btn {
+      flex: 1;
+      padding: 10px 8px;
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      background: rgba(20, 30, 60, 0.5);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      text-align: center;
+    }
+
+    .stock-btn:hover {
+      background: rgba(40, 60, 120, 0.5);
+      border-color: rgba(100, 160, 255, 0.35);
+    }
+
+    .stock-btn.active {
+      background: linear-gradient(135deg, rgba(40, 70, 160, 0.6), rgba(30, 50, 120, 0.6));
+      border-color: rgba(100, 160, 255, 0.5);
+      box-shadow: 0 0 20px rgba(60, 120, 255, 0.15);
+    }
+
+    .stat-card {
+      background: rgba(15, 22, 50, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 16px;
+      transition: all var(--transition-speed) ease;
+    }
+
+    .stat-card .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .stat-card .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: rgba(180, 200, 230, 0.5);
+    }
+
+    .stat-card .card-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .card-badge.up { background: rgba(0,230,118,0.15); color: var(--accent-green); }
+    .card-badge.down { background: rgba(255,23,68,0.15); color: var(--accent-red); }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(100,160,255,0.06);
+    }
+
+    .stat-row:last-child { border-bottom: none; }
+
+    .stat-label { font-size: 13px; color: rgba(180,200,230,0.55); }
+    .stat-value { font-size: 14px; font-weight: 600; }
+
+    .stat-value.up { color: var(--accent-green); }
+    .stat-value.down { color: var(--accent-red); }
+
+    .volume-chart {
+      width: 100%;
+      height: 60px;
+      margin-top: 8px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .volume-bar {
+      flex: 1;
+      min-width: 3px;
+      background: var(--accent-blue);
+      border-radius: 2px 2px 0 0;
+      transition: height 0.4s ease;
+    }
+
+    .detail-hint {
+      font-size: 11px;
+      color: rgba(180,200,230,0.35);
+      text-align: center;
+      padding: 8px;
+      border-top: 1px solid rgba(100,160,255,0.08);
+    }
+
+    .fps-counter {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      font-size: 11px;
+      color: rgba(180,200,230,0.35);
+      z-index: 50;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 768px) {
+      #app { flex-direction: column; }
+
+      #canvas-container { width: 100%; height: 75%; }
+
+      #info-panel {
+        width: 100%;
+        height: 25%;
+        border-left: none;
+        border-top: 1px solid var(--glass-border);
+        padding: 12px 16px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        overflow-x: auto;
+        gap: 12px;
+      }
+
+      .stat-card { min-width: 200px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+    <div id="tooltip">
+      <div class="tt-row"><span class="tt-label">日期</span><span class="tt-value" id="tt-date"></span></div>
+      <div class="tt-row"><span class="tt-label">开盘</span><span class="tt-value" id="tt-open"></span></div>
+      <div class="tt-row"><span class="tt-label">收盘</span><span class="tt-value" id="tt-close"></span></div>
+      <div class="tt-row"><span class="tt-label">最高</span><span class="tt-value" id="tt-high"></span></div>
+      <div class="tt-row"><span class="tt-label">最低</span><span class="tt-value" id="tt-low"></span></div>
+      <div class="tt-row"><span class="tt-label">涨跌幅</span><span class="tt-value" id="tt-change"></span></div>
+    </div>
+    <div id="info-panel">
+      <div>
+        <div class="panel-title">3D K线曲面</div>
+        <div class="panel-subtitle">实时三维股票数据可视化</div>
+      </div>
+      <div class="stock-switcher">
+        <div class="switcher-label">切换股票</div>
+        <div class="stock-btns">
+          <button class="stock-btn active" data-stock="0">AAPL</button>
+          <button class="stock-btn" data-stock="1">TSLA</button>
+          <button class="stock-btn" data-stock="2">NVDA</button>
+        </div>
+      </div>
+      <div class="stat-card" id="overview-card">
+        <div class="card-header">
+          <span class="card-title">当前概览</span>
+          <span class="card-badge up" id="overview-badge">--</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">股票</span><span class="stat-value" id="stat-stock">AAPL</span></div>
+        <div class="stat-row"><span class="stat-label">最新收盘</span><span class="stat-value" id="stat-close">--</span></div>
+        <div class="stat-row"><span class="stat-label">涨跌幅</span><span class="stat-value" id="stat-change">--</span></div>
+        <div class="stat-row"><span class="stat-label">最高</span><span class="stat-value" id="stat-high">--</span></div>
+        <div class="stat-row"><span class="stat-label">最低</span><span class="stat-value" id="stat-low">--</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="card-header">
+          <span class="card-title">成交量分布</span>
+        </div>
+        <div class="volume-chart" id="volume-chart"></div>
+      </div>
+      <div class="stat-card" id="detail-card" style="display:none;">
+        <div class="card-header">
+          <span class="card-title">详细视图</span>
+          <span class="card-badge up" id="detail-badge">--</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">日期</span><span class="stat-value" id="detail-date">--</span></div>
+        <div class="stat-row"><span class="stat-label">开盘</span><span class="stat-value" id="detail-open">--</span></div>
+        <div class="stat-row"><span class="stat-label">收盘</span><span class="stat-value" id="detail-close">--</span></div>
+        <div class="stat-row"><span class="stat-label">最高</span><span class="stat-value" id="detail-high">--</span></div>
+        <div class="stat-row"><span class="stat-label">最低</span><span class="stat-value" id="detail-low">--</span></div>
+        <div class="stat-row"><span class="stat-label">涨跌幅</span><span class="stat-value" id="detail-change">--</span></div>
+        <div class="stat-row"><span class="stat-label">成交量</span><span class="stat-value" id="detail-volume">--</span></div>
+      </div>
+      <div class="detail-hint">点击柱体查看详细视图 · 拖拽旋转 · 滚轮缩放</div>
+    </div>
+  </div>
+  <div class="fps-counter" id="fps-counter">0 FPS</div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
