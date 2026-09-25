@@ -195,18 +195,27 @@ class CityApp {
   }
 
   private handleParamsChange(params: Partial<CityParams>): void {
-    if ('buildingSpacing' in params) {
-      this.cityBuilder.clearCity();
-      this.cityBuilder.updateParams(params);
-      this.cityBuilder.generateCity();
-    } else {
-      this.cityBuilder.updateParams(params);
-    }
+    this.cityBuilder.updateParams(params);
   }
 
   private handleGenerate(): void {
     this.cityBuilder.generateCity();
     this.hideInfoPanel();
+  }
+
+  private syncSelectedBuilding(): void {
+    if (!this.selectedBuilding) return;
+
+    const current = this.cityBuilder.getBuildingById(this.selectedBuilding.id);
+    if (!current || current.animationType === 'fall') {
+      this.hideInfoPanel();
+      return;
+    }
+
+    this.selectedBuilding = current;
+    if (this.infoPanel.classList.contains('visible')) {
+      this.showInfoPanel(current);
+    }
   }
 
   private animate(currentTime: number = 0): void {
@@ -222,6 +231,8 @@ class CityApp {
     }
 
     this.controls.update();
+
+    this.syncSelectedBuilding();
 
     this.renderer.render(this.scene, this.camera);
   }
