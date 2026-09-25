@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { v4 as uuidv4 } from 'uuid';
 import { DifficultyManager, DifficultyConfig } from './DifficultyManager';
+import { SpawnQuotaPlanner, QuotaSnapshot, TypeCounts, ENEMY_TYPES } from './SpawnQuotaPlanner';
 import { EnemyTemplate, enemyTemplates, EnemyBehavior } from '../configs/enemyTemplates';
 import { Enemy } from '../game/Enemy';
 
@@ -18,11 +19,13 @@ export class EnemySpawner {
   private readonly maxActiveEnemies: number = 20;
   private isPaused: boolean = false;
   private frameCounter: number = 0;
+  private quotaPlanner: SpawnQuotaPlanner;
 
   constructor(scene: Scene, difficultyManager: DifficultyManager) {
     this.scene = scene;
     this.difficultyManager = difficultyManager;
     this.spawnConfig = this.difficultyManager.getDifficultyConfig();
+    this.quotaPlanner = new SpawnQuotaPlanner(this.difficultyManager.getCurrentLevel());
   }
 
   start(): void {
@@ -71,15 +74,9 @@ export class EnemySpawner {
 
   private selectEnemyTemplate(): EnemyTemplate | null {
     this.spawnConfig = this.difficultyManager.getDifficultyConfig();
-    const weights = this.spawnConfig.enemyWeights;
-    const typeList: EnemyBehavior[] = ['melee', 'ranged', 'suicide'];
-    const totalWeight = typeList.reduce((s, t) => s + (weights[t] || 0), 0);
-    let r = Math.random() * totalWeight;
-    let selectedType: EnemyBehavior = 'melee';
-    for (const t of typeList) {
-      r -= weights[t] || 0;
-      if (r <= 0) { selectedType = t; break; }
-    }
+    // Type selection follows the quota planner (deterministic, level-driven);
+    // the template within the chosen type is still picked by template weight.
+    const selectedType: EnemyBehavior = this.quotaPlanner.nextType();
     const matching = enemyTemplates.filter(t => t.type === selectedType);
     if (matching.length === 0) return null;
     const totalTplW = matching.reduce((s, t) => s + t.weight, 0);
@@ -128,9 +125,24 @@ export class EnemySpawner {
       this.difficultyManager.recordKill();
     });
     this.activeEnemies.push(enemy);
+    this.quotaPlanner.recordSpawn(template.type);
     this.difficultyManager.updateMetrics({
       activeEnemies: this.activeEnemies.filter(e => e.isActive()).length
     });
+  }
+
+  private getActiveTypeCounts(): TypeCounts {
+    const counts: TypeCounts = { melee: 0, ranged: 0, suicide: 0 };
+    for (const e of this.activeEnemies) {
+      if (!e.isActive()) continue;
+      const type = e.getType();
+      if (ENEMY_TYPES.includes(type)) counts[type]++;
+    }
+    return counts;
+  }
+
+  getQuotaSnapshot(): QuotaSnapshot {
+    return this.quotaPlanner.snapshot(this.getActiveTypeCounts());
   }
 
   private scaleTemplateByDifficulty(template: EnemyTemplate): EnemyTemplate {
@@ -165,6 +177,8 @@ export class EnemySpawner {
   }
 
   onDifficultyChanged(): void {
+    // Quota planning restarts from scratch under the new level's ratios.
+    this.quotaPlanner.setLevel(this.difficultyManager.getCurrentLevel());
     this.scheduleNextSpawn();
   }
 

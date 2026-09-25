@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:difficulty": "tsc tests/difficultyReplay.test.ts --outDir .tmp-test --module commonjs --target ES2020 --moduleResolution node --skipLibCheck --esModuleInterop --strict && node .tmp-test/tests/difficultyReplay.test.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",

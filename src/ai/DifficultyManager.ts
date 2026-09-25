@@ -1,3 +1,19 @@
+// Adapter between the game loop and the deterministic DifficultyEngine.
+//
+// Game code reports kills / hits / health / time as they happen; the manager
+// buffers them as timestamped events and evaluates them exactly once per
+// frame in flush(). This guarantees that multiple kills or health changes
+// within one frame merge into a single evaluation and can never chain
+// several level changes in one frame.
+
+import {
+  DifficultyEngine,
+  DifficultyEvent,
+  LevelChangeRecord,
+  DifficultyEngineState
+} from './DifficultyEngine';
+import { computeEnemyWeights, computeSpawnInterval } from './SpawnQuotaPlanner';
+
 export interface DifficultyMetrics {
   playerHealth: number;
   maxPlayerHealth: number;
@@ -16,192 +32,105 @@ export interface DifficultyConfig {
 }
 
 export class DifficultyManager {
-  private currentLevel: number = 1;
-  private readonly maxLevel: number = 5;
-  private readonly minLevel: number = 1;
-  private metrics: DifficultyMetrics;
-
-  private readonly consecutiveKillsForLevelUp: number = 5;
-  private readonly healthThresholdForLevelUp: number = 0.8;
-  private readonly healthThresholdForLevelDown: number = 0.3;
-  private readonly consecutiveFailuresForLevelDown: number = 3;
-
-  private readonly levelTimeThresholdSeconds: number = 120;
-  private readonly killRateThreshold: number = 0.08;
-  private lastLevelUpTime: number = 0;
-  private levelStartTime: number = 0;
+  private readonly engine: DifficultyEngine = new DifficultyEngine();
+  private pending: DifficultyEvent[] = [];
+  private currentTime: number = 0;
+  private activeEnemies: number = 0;
 
   private onDifficultyChangeCallback: ((level: number) => void) | null = null;
-
-  constructor() {
-    this.levelStartTime = Date.now();
-    this.lastLevelUpTime = this.levelStartTime;
-    this.metrics = {
-      playerHealth: 100,
-      maxPlayerHealth: 100,
-      killCount: 0,
-      consecutiveKills: 0,
-      consecutiveFailures: 0,
-      levelTime: 0,
-      currentLevel: 1,
-      activeEnemies: 0
-    };
-  }
 
   setOnDifficultyChange(callback: (level: number) => void): void {
     this.onDifficultyChangeCallback = callback;
   }
 
-  updateMetrics(partial: Partial<DifficultyMetrics>): void {
-    if (partial.playerHealth !== undefined) {
-      if (partial.playerHealth < this.metrics.playerHealth) {
-        this.metrics.consecutiveKills = 0;
-      }
-      if (partial.playerHealth <= 0 && this.metrics.playerHealth > 0) {
-        this.metrics.consecutiveFailures++;
-      }
-    }
-    Object.assign(this.metrics, partial);
-
-    if (partial.levelTime !== undefined) {
-      this.metrics.levelTime = partial.levelTime;
-      this.evaluateLevelTime(partial.levelTime);
-    }
-    this.evaluateDifficulty();
-  }
-
   recordKill(): void {
-    this.metrics.killCount++;
-    this.metrics.consecutiveKills++;
-    this.metrics.consecutiveFailures = 0;
-    this.evaluateDifficulty();
+    this.pending.push({ time: this.currentTime, type: 'kill' });
   }
 
   recordPlayerHit(): void {
-    this.metrics.consecutiveKills = 0;
+    this.pending.push({ time: this.currentTime, type: 'playerHit' });
   }
 
-  private evaluateLevelTime(levelTimeSec: number): void {
-    const timeSinceLastLevelUp = (Date.now() - this.lastLevelUpTime) / 1000;
+  updateMetrics(partial: Partial<DifficultyMetrics>): void {
+    if (partial.levelTime !== undefined) {
+      this.currentTime = partial.levelTime;
+    }
+    if (partial.playerHealth !== undefined) {
+      this.pending.push({
+        time: this.currentTime,
+        type: 'healthChange',
+        health: partial.playerHealth,
+        maxHealth: partial.maxPlayerHealth
+      });
+    }
+    if (partial.activeEnemies !== undefined) {
+      this.activeEnemies = partial.activeEnemies;
+    }
+    // killCount reported by the scene is ignored on purpose: the engine
+    // derives its own kill count from recordKill() events so kills are
+    // never double counted.
+  }
 
-    if (
-      timeSinceLastLevelUp >= 30 &&
-      levelTimeSec >= this.levelTimeThresholdSeconds &&
-      this.currentLevel < this.maxLevel
-    ) {
-      const killRate = this.metrics.killCount / Math.max(1, levelTimeSec);
-      const healthRatio = this.metrics.playerHealth / this.metrics.maxPlayerHealth;
-
-      if (killRate >= this.killRateThreshold && healthRatio >= 0.5) {
-        this.currentLevel++;
-        this.metrics.consecutiveKills = 0;
-        this.lastLevelUpTime = Date.now();
-        this.notifyLevelChange();
+  /**
+   * Evaluates all events buffered since the last flush as one timestamp
+   * group (the current frame). Returns the level changes that occurred.
+   */
+  flush(): LevelChangeRecord[] {
+    if (this.currentTime > 0) {
+      this.pending.push({
+        time: this.currentTime,
+        type: 'timeAdvance',
+        levelTime: this.currentTime
+      });
+    }
+    if (this.pending.length === 0) return [];
+    const frameTime = this.currentTime;
+    const events = this.pending.map(e => ({ ...e, time: frameTime }));
+    this.pending = [];
+    const changes = this.engine.ingest(events);
+    for (const change of changes) {
+      if (this.onDifficultyChangeCallback) {
+        this.onDifficultyChangeCallback(change.toLevel);
       }
     }
-
-    if (
-      levelTimeSec >= 60 &&
-      this.metrics.killCount / Math.max(1, levelTimeSec) < 0.02 &&
-      this.currentLevel > this.minLevel
-    ) {
-      this.currentLevel--;
-      this.lastLevelUpTime = Date.now();
-      this.notifyLevelChange();
-    }
-  }
-
-  private evaluateDifficulty(): void {
-    const healthRatio = this.metrics.playerHealth / this.metrics.maxPlayerHealth;
-    let levelChanged = false;
-
-    if (
-      this.metrics.consecutiveKills >= this.consecutiveKillsForLevelUp &&
-      healthRatio >= this.healthThresholdForLevelUp &&
-      this.currentLevel < this.maxLevel
-    ) {
-      this.currentLevel++;
-      this.metrics.consecutiveKills = 0;
-      this.lastLevelUpTime = Date.now();
-      levelChanged = true;
-    }
-
-    if (
-      (healthRatio <= this.healthThresholdForLevelDown ||
-        this.metrics.consecutiveFailures >= this.consecutiveFailuresForLevelDown) &&
-      this.currentLevel > this.minLevel
-    ) {
-      this.currentLevel--;
-      this.metrics.consecutiveFailures = 0;
-      this.metrics.consecutiveKills = 0;
-      levelChanged = true;
-    }
-
-    this.metrics.currentLevel = this.currentLevel;
-
-    if (levelChanged) {
-      this.notifyLevelChange();
-    }
-  }
-
-  private notifyLevelChange(): void {
-    this.metrics.currentLevel = this.currentLevel;
-    if (this.onDifficultyChangeCallback) {
-      this.onDifficultyChangeCallback(this.currentLevel);
-    }
+    return changes;
   }
 
   getDifficultyConfig(): DifficultyConfig {
-    const level = this.currentLevel;
-    const spawnInterval = Phaser.Math.Clamp(
-      2000 - (level - 1) * 375,
-      500,
-      2000
-    );
-    const enemyWeights = this.calculateEnemyWeights();
-
+    const level = this.engine.getCurrentLevel();
     return {
       level,
-      spawnInterval,
-      enemyWeights
-    };
-  }
-
-  private calculateEnemyWeights(): Record<string, number> {
-    const level = this.currentLevel;
-    let meleeWeight = Math.max(30, 60 - level * 5);
-    let suicideWeight = Math.min(40, 10 + level * 6);
-    let rangedWeight = 100 - meleeWeight - suicideWeight;
-    rangedWeight = Math.max(10, rangedWeight);
-
-    return {
-      melee: meleeWeight,
-      ranged: rangedWeight,
-      suicide: suicideWeight
+      spawnInterval: computeSpawnInterval(level),
+      enemyWeights: computeEnemyWeights(level)
     };
   }
 
   getCurrentLevel(): number {
-    return this.currentLevel;
+    return this.engine.getCurrentLevel();
+  }
+
+  getTimeline(): LevelChangeRecord[] {
+    return this.engine.getTimeline();
   }
 
   getMetrics(): DifficultyMetrics {
-    return { ...this.metrics };
+    const s: DifficultyEngineState = this.engine.getState();
+    return {
+      playerHealth: s.playerHealth,
+      maxPlayerHealth: s.maxPlayerHealth,
+      killCount: s.killCount,
+      consecutiveKills: s.consecutiveKills,
+      consecutiveFailures: s.consecutiveFailures,
+      levelTime: s.levelTime,
+      currentLevel: s.currentLevel,
+      activeEnemies: this.activeEnemies
+    };
   }
 
   reset(): void {
-    this.currentLevel = 1;
-    this.levelStartTime = Date.now();
-    this.lastLevelUpTime = this.levelStartTime;
-    this.metrics = {
-      playerHealth: 100,
-      maxPlayerHealth: 100,
-      killCount: 0,
-      consecutiveKills: 0,
-      consecutiveFailures: 0,
-      levelTime: 0,
-      currentLevel: 1,
-      activeEnemies: 0
-    };
+    this.engine.reset();
+    this.pending = [];
+    this.currentTime = 0;
+    this.activeEnemies = 0;
   }
 }

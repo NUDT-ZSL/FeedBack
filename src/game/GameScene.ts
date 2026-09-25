@@ -366,6 +366,8 @@ export class GameScene extends Phaser.Scene {
       killCount: this.killCount,
       levelTime: (Date.now() - this.levelStartTime) / 1000
     });
+    // Evaluate all of this frame's difficulty events exactly once.
+    this.difficultyManager.flush();
   }
 
   private updatePlayerMovement(delta: number): void {
