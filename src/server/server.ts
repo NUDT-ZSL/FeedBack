@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import QRCode from 'qrcode';
+import { pathToFileURL } from 'url';
 import {
   addEvent,
   getEvents,
@@ -129,6 +130,13 @@ app.post('/api/verify', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Activity Registration Server running at http://localhost:${PORT}`);
-});
+const isMainModule =
+  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMainModule) {
+  app.listen(PORT, () => {
+    console.log(`✅ Activity Registration Server running at http://localhost:${PORT}`);
+  });
+}
+
+export { app };
