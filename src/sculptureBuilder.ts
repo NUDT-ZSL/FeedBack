@@ -265,7 +265,7 @@ export class SculptureBuilder {
     return color;
   }
 
-  update(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  update(frequencyData: number[], waveformData: number[], delta: number, _isPlaying: boolean): void {
     if (this.animationState !== 'idle') {
       this.updateTransition(delta);
       return;
@@ -279,24 +279,25 @@ export class SculptureBuilder {
 
     switch (this.currentMode) {
       case VisualizationMode.SPECTRUM:
-        this.updateSpectrumMode(frequencyData, delta, isPlaying);
+        this.updateSpectrumMode(frequencyData, delta);
         break;
       case VisualizationMode.WAVEFORM:
-        this.updateWaveformMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateWaveformMode(frequencyData, waveformData, delta);
         break;
       case VisualizationMode.PARTICLES:
-        this.updateParticlesMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateParticlesMode(frequencyData, waveformData, delta);
         break;
     }
   }
 
-  private updateSpectrumMode(frequencyData: number[], delta: number, isPlaying: boolean): void {
+  private updateSpectrumMode(frequencyData: number[], delta: number): void {
     const stiffness = 180;
     const damping = 12;
 
     for (let x = 0; x < this.GRID_X; x++) {
       const bandIndex = Math.floor(x / (this.GRID_X / frequencyData.length));
-      const energy = isPlaying ? frequencyData[bandIndex] : 0;
+      // 暂停时的回落由 AudioAnalyzer 的平滑器按独立曲线衰减到 0，这里直接消费数据
+      const energy = frequencyData[bandIndex];
       
       for (let z = 0; z < this.GRID_Z; z++) {
         for (let y = 0; y < this.GRID_Y; y++) {
@@ -341,14 +342,14 @@ export class SculptureBuilder {
     }
   }
 
-  private updateWaveformMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateWaveformMode(frequencyData: number[], waveformData: number[], delta: number): void {
     const stiffness = 150;
     const damping = 10;
 
     for (let x = 0; x < this.GRID_X; x++) {
       const waveIndex = Math.floor(x / (this.GRID_X / waveformData.length));
-      const waveValue = isPlaying ? (waveformData[waveIndex] - 0.5) * 2 : 0;
-      const freqEnergy = isPlaying ? frequencyData[Math.floor(x / (this.GRID_X / frequencyData.length))] : 0;
+      const waveValue = (waveformData[waveIndex] - 0.5) * 2;
+      const freqEnergy = frequencyData[Math.floor(x / (this.GRID_X / frequencyData.length))];
       
       for (let z = 0; z < this.GRID_Z; z++) {
         const depthPhase = Math.sin(z * 0.5 + this.sculptureGroup.rotation.y) * 0.3;
@@ -389,7 +390,7 @@ export class SculptureBuilder {
     }
   }
 
-  private updateParticlesMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateParticlesMode(frequencyData: number[], waveformData: number[], delta: number): void {
     if (!this.particleSystem || !this.particleGeometry) return;
 
     const positions = this.particleGeometry.attributes.position.array as Float32Array;
@@ -403,8 +404,8 @@ export class SculptureBuilder {
     for (let i = 0; i < this.particleStates.length; i++) {
       const state = this.particleStates[i];
       const bandIndex = Math.floor((i % this.GRID_X) / (this.GRID_X / frequencyData.length));
-      const energy = isPlaying ? frequencyData[bandIndex] : 0;
-      const waveValue = isPlaying ? (waveformData[i % waveformData.length] - 0.5) * 2 : 0;
+      const energy = frequencyData[bandIndex];
+      const waveValue = (waveformData[i % waveformData.length] - 0.5) * 2;
       
       const gridX = (i % this.GRID_X) / this.GRID_X;
       const gridY = Math.floor((i / this.GRID_X) % this.GRID_Y) / this.GRID_Y;
@@ -448,6 +449,7 @@ export class SculptureBuilder {
       if (this.animationProgress >= 1) {
         this.animationState = 'reforming';
         this.animationProgress = 0;
+        this.initReform();
         this.updateModeVisibility();
       }
     } else if (this.animationState === 'reforming') {
@@ -460,6 +462,52 @@ export class SculptureBuilder {
     }
   }
 
+  private initCollapse(): void {
+    // 从立方体当前的实际视觉位置开始坍塌，避免瞬移
+    for (let x = 0; x < this.GRID_X; x++) {
+      for (let z = 0; z < this.GRID_Z; z++) {
+        for (let y = 0; y < this.GRID_Y; y++) {
+          const state = this.cubeStates[x][z][y];
+          const cube = this.cubes[x][z][y];
+
+          state.currentPosition.copy(cube.position);
+          state.velocityVec.set(
+            (Math.random() - 0.5) * 8,
+            Math.random() * 6 + 2,
+            (Math.random() - 0.5) * 8
+          );
+          state.angularVelocity.set(
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 10
+          );
+        }
+      }
+    }
+  }
+
+  private initReform(): void {
+    for (let x = 0; x < this.GRID_X; x++) {
+      for (let z = 0; z < this.GRID_Z; z++) {
+        for (let y = 0; y < this.GRID_Y; y++) {
+          const state = this.cubeStates[x][z][y];
+          const cube = this.cubes[x][z][y];
+
+          state.currentPosition.set(
+            (Math.random() - 0.5) * 30,
+            (Math.random() - 0.5) * 30,
+            (Math.random() - 0.5) * 30
+          );
+          cube.rotation.set(
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2,
+            Math.random() * Math.PI * 2
+          );
+        }
+      }
+    }
+  }
+
   private updateCollapse(delta: number, progress: number): void {
     const gravity = -9.8;
     
@@ -468,19 +516,6 @@ export class SculptureBuilder {
         for (let y = 0; y < this.GRID_Y; y++) {
           const state = this.cubeStates[x][z][y];
           const cube = this.cubes[x][z][y];
-          
-          if (progress === 0) {
-            state.velocityVec.set(
-              (Math.random() - 0.5) * 8,
-              Math.random() * 6 + 2,
-              (Math.random() - 0.5) * 8
-            );
-            state.angularVelocity.set(
-              (Math.random() - 0.5) * 10,
-              (Math.random() - 0.5) * 10,
-              (Math.random() - 0.5) * 10
-            );
-          }
           
           state.velocityVec.y += gravity * delta;
           state.velocityVec.multiplyScalar(0.99);
@@ -517,19 +552,6 @@ export class SculptureBuilder {
         for (let y = 0; y < this.GRID_Y; y++) {
           const state = this.cubeStates[x][z][y];
           const cube = this.cubes[x][z][y];
-          
-          if (progress === 0) {
-            state.currentPosition.set(
-              (Math.random() - 0.5) * 30,
-              (Math.random() - 0.5) * 30,
-              (Math.random() - 0.5) * 30
-            );
-            cube.rotation.set(
-              Math.random() * Math.PI * 2,
-              Math.random() * Math.PI * 2,
-              Math.random() * Math.PI * 2
-            );
-          }
           
           state.currentPosition.lerp(state.basePosition, Math.min(1, delta * 5 + easeProgress * 0.5));
           cube.position.copy(state.currentPosition);
@@ -607,16 +629,20 @@ export class SculptureBuilder {
   }
 
   async setMode(mode: VisualizationMode): Promise<void> {
+    // 同一模式重复触发、或过渡进行中：直接忽略，不叠加额外过渡
     if (mode === this.currentMode || this.animationState !== 'idle') return;
-    
+
+    // 在过渡开始时即记录目标模式，保证 collapse→reform 边界的可见性切换
+    // 和 reform 阶段的淡入都面向新模式；过渡期间 update() 不会执行模式更新
+    this.currentMode = mode;
     this.animationState = 'collapsing';
     this.animationProgress = 0;
     this.animationDuration = 0.5;
+    this.initCollapse();
     
     await new Promise<void>(resolve => {
       const checkComplete = () => {
         if (this.animationState === 'idle') {
-          this.currentMode = mode;
           resolve();
         } else {
           requestAnimationFrame(checkComplete);
