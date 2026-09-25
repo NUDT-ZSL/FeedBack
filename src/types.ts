@@ -25,14 +25,10 @@ export interface CanvasElement {
   opacity: number;
 }
 
-export type WSMessage =
-  | { type: 'join'; userId: string; timestamp: number }
-  | { type: 'leave'; userId: string; timestamp: number }
-  | { type: 'draw'; userId: string; element: CanvasElement; timestamp: number }
-  | { type: 'update'; userId: string; elementId: string; updates: Partial<CanvasElement>; timestamp: number }
-  | { type: 'delete'; userId: string; elementId: string; timestamp: number }
-  | { type: 'users'; count: number; userIds: string[] }
-  | { type: 'sync'; elements: CanvasElement[] };
+// The wire protocol moved to the versioned incremental sync protocol in
+// src/sync/protocol.ts. Re-exported here for backwards compatibility of
+// existing imports.
+export type { ClientMessage, ServerMessage, Op, VersionedOp, Clock } from './sync/protocol';
 
 export interface CanvasState {
   zoom: number;
