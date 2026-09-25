@@ -26,33 +26,72 @@ if (!fs.existsSync('./uploads')) {
 
 app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
   try {
-    const { scale = '1x', padding = 0, order = '[]' } = req.body;
+    const { scale = '1x', padding = 0, order = '[]', names = '{}' } = req.body;
     const scaleFactor = scale === '3x' ? 3 : scale === '2x' ? 2 : 1;
-    const paddingValue = parseInt(padding) || 0;
-    const orderArr = JSON.parse(order);
+    // padding 按逻辑像素（1x 口径）传入，参与拼接时随倍率放大
+    const paddingValue = Math.max(0, parseInt(padding, 10) || 0);
+    const scaledPadding = paddingValue * scaleFactor;
+
+    let orderArr = [];
+    try { orderArr = JSON.parse(order); } catch { orderArr = []; }
+    let nameMap = {};
+    try { nameMap = JSON.parse(names); } catch { nameMap = {}; }
 
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: '未上传文件' });
     }
 
-    const files = orderArr.length > 0
-      ? orderArr.map(id => req.files.find(f => f.originalname.replace(/\.svg$/i, '') === id) || req.files.find(f => f.originalname === id)).filter(Boolean)
-      : req.files;
+    // 上传阶段前端已为每个图标生成稳定唯一的 id，并以 <id>.svg 作为文件名上传
+    const filesById = new Map();
+    for (const f of req.files) {
+      const id = f.originalname.replace(/\.svg$/i, '');
+      if (!filesById.has(id)) filesById.set(id, f);
+    }
+
+    // 按 order 中的 id 重排；未匹配到的 id 记入 ignored 并跳过，不影响整体生成
+    const ignored = [];
+    let orderedFiles;
+    if (Array.isArray(orderArr) && orderArr.length > 0) {
+      orderedFiles = [];
+      const seen = new Set();
+      for (const id of orderArr) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const file = filesById.get(id);
+        if (file) {
+          orderedFiles.push({ id, file });
+        } else {
+          ignored.push(id);
+        }
+      }
+    } else {
+      orderedFiles = req.files.map((f) => ({ id: f.originalname.replace(/\.svg$/i, ''), file: f }));
+    }
 
     const processedIcons = [];
-    for (const file of files) {
+    for (const { id, file } of orderedFiles) {
       try {
         const metadata = await sharp(file.buffer).metadata();
-        const width = metadata.width || 0;
-        const height = metadata.height || 0;
+        const originalWidth = metadata.width || 24;
+        const originalHeight = metadata.height || 24;
+        const scaledWidth = originalWidth * scaleFactor;
+        const scaledHeight = originalHeight * scaleFactor;
+        // 先按放大后的尺寸栅格化，再参与拼接，保证 2x/3x 下图标清晰且尺寸正确
+        const resizedBuffer = await sharp(file.buffer, { density: 72 * scaleFactor * 4 })
+          .resize(scaledWidth, scaledHeight, {
+            fit: 'contain',
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+          })
+          .png()
+          .toBuffer();
         processedIcons.push({
-          name: file.originalname.replace(/\.svg$/i, ''),
-          originalName: file.originalname,
-          buffer: file.buffer,
-          width: width * scaleFactor,
-          height: height * scaleFactor,
-          originalWidth: width,
-          originalHeight: height,
+          id,
+          name: nameMap[id] || id,
+          buffer: resizedBuffer,
+          width: scaledWidth,
+          height: scaledHeight,
+          originalWidth,
+          originalHeight,
         });
       } catch (e) {
         console.error(`处理 ${file.originalname} 失败:`, e);
@@ -63,10 +102,11 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
       return res.status(400).json({ error: '无法处理任何SVG文件' });
     }
 
-    const maxWidth = Math.max(...processedIcons.map(i => i.width));
-    const maxHeight = Math.max(...processedIcons.map(i => i.height));
-    const totalWidth = processedIcons.reduce((sum, icon) => sum + icon.width + paddingValue, 0) - paddingValue;
-    const spriteHeight = maxHeight;
+    // 拼接图按放大后的物理像素排布；间距只出现在相邻图标之间，末尾不多出 padding
+    const spriteHeight = Math.max(...processedIcons.map((i) => i.height));
+    const totalWidth =
+      processedIcons.reduce((sum, icon) => sum + icon.width, 0) +
+      scaledPadding * (processedIcons.length - 1);
 
     let xOffset = 0;
     const iconPositions = [];
@@ -74,8 +114,8 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
 
     for (const icon of processedIcons) {
       iconPositions.push({
+        id: icon.id,
         name: icon.name,
-        originalName: icon.originalName,
         width: icon.width,
         height: icon.height,
         originalWidth: icon.originalWidth,
@@ -87,9 +127,8 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
         input: icon.buffer,
         left: xOffset,
         top: 0,
-        resize: { width: icon.width, height: icon.height, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } },
       });
-      xOffset += icon.width + paddingValue;
+      xOffset += icon.width + scaledPadding;
     }
 
     const spriteId = uuidv4();
@@ -107,33 +146,45 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
       .png()
       .toFile(spritePath);
 
-    const cssMappings = iconPositions.map(pos => {
-      const bgX = pos.x === 0 ? '0' : `-${pos.x}px`;
-      const bgY = pos.y === 0 ? '0' : `-${pos.y}px`;
+    // CSS 统一使用逻辑像素（1x 口径）：类的宽高、background-position、background-size
+    // 均为物理像素 / scaleFactor，渲染时整图等比缩放，与拼接图位置一一对应
+    const usedClassNames = new Map();
+    const toClassName = (name) => {
+      const base = name.replace(/[^a-zA-Z0-9_-]/g, '_') || 'icon';
+      const count = usedClassNames.get(base) || 0;
+      usedClassNames.set(base, count + 1);
+      return count === 0 ? base : `${base}-${count + 1}`;
+    };
+
+    const cssMappings = iconPositions.map((pos) => {
+      const logicalX = pos.x / scaleFactor;
+      const logicalY = pos.y / scaleFactor;
+      const bgX = logicalX === 0 ? '0' : `-${logicalX}px`;
+      const bgY = logicalY === 0 ? '0' : `-${logicalY}px`;
       return {
+        id: pos.id,
         name: pos.name,
-        originalName: pos.originalName,
-        width: pos.width,
-        height: pos.height,
-        originalWidth: pos.originalWidth,
-        originalHeight: pos.originalHeight,
+        className: toClassName(pos.name),
+        width: pos.originalWidth,
+        height: pos.originalHeight,
+        scaledWidth: pos.width,
+        scaledHeight: pos.height,
         x: pos.x,
         y: pos.y,
         backgroundPosition: `${bgX} ${bgY}`,
       };
     });
 
+    const logicalWidth = totalWidth / scaleFactor;
+    const logicalHeight = spriteHeight / scaleFactor;
+
     let cssCode = `/* SVG Sprite - Generated ${scale} */\n`;
-    cssCode += `.sprite {\n  display: inline-block;\n  background-image: url('sprite.png');\n  background-repeat: no-repeat;\n}\n\n`;
-    cssMappings.forEach(m => {
-      const className = m.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      cssCode += `.sprite-${className} {\n`;
-      cssCode += `  width: ${m.originalWidth}px;\n`;
-      cssCode += `  height: ${m.originalHeight}px;\n`;
+    cssCode += `.sprite {\n  display: inline-block;\n  background-image: url('sprite.png');\n  background-repeat: no-repeat;\n  background-size: ${logicalWidth}px ${logicalHeight}px;\n}\n\n`;
+    cssMappings.forEach((m) => {
+      cssCode += `.sprite-${m.className} {\n`;
+      cssCode += `  width: ${m.width}px;\n`;
+      cssCode += `  height: ${m.height}px;\n`;
       cssCode += `  background-position: ${m.backgroundPosition};\n`;
-      if (scaleFactor !== 1) {
-        cssCode += `  background-size: ${totalWidth / scaleFactor}px auto;\n`;
-      }
       cssCode += `}\n\n`;
     });
 
@@ -142,11 +193,14 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
       spriteUrl: `/uploads/${spriteId}.png`,
       totalWidth,
       spriteHeight,
+      logicalWidth,
+      logicalHeight,
       scale,
       scaleFactor,
       padding: paddingValue,
       cssCode,
       mappings: cssMappings,
+      ignored,
     });
   } catch (error) {
     console.error('生成雪碧图失败:', error);

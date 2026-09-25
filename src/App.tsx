@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import IconCard, { IconItem } from './components/IconCard';
 
 interface SpriteMapping {
+  id: string;
   name: string;
-  originalName: string;
+  className: string;
   width: number;
   height: number;
-  originalWidth: number;
-  originalHeight: number;
+  scaledWidth: number;
+  scaledHeight: number;
   x: number;
   y: number;
   backgroundPosition: string;
@@ -18,11 +19,14 @@ interface GenerateResult {
   spriteUrl: string;
   totalWidth: number;
   spriteHeight: number;
+  logicalWidth: number;
+  logicalHeight: number;
   scale: string;
   scaleFactor: number;
   padding: number;
   cssCode: string;
   mappings: SpriteMapping[];
+  ignored: string[];
 }
 
 interface HistoryItem {
@@ -204,17 +208,15 @@ const App: React.FC = () => {
     try {
       const formData = new FormData();
       selectedIcons.forEach((icon) => {
-        const binaryString = atob(icon.svgDataUrl.split(',')[1]);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: 'image/svg+xml' });
-        formData.append('svgs', blob, `${icon.name}.svg`);
+        const svgText = decodeURIComponent(icon.svgDataUrl.split(',')[1]);
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        // 以上传阶段生成的唯一 id 作为文件名，服务端按 id 精确匹配，同名图标互不干扰
+        formData.append('svgs', blob, `${icon.id}.svg`);
       });
       formData.append('scale', scale);
       formData.append('padding', padding.toString());
-      formData.append('order', JSON.stringify(selectedIcons.map((i) => i.name)));
+      formData.append('order', JSON.stringify(selectedIcons.map((i) => i.id)));
+      formData.append('names', JSON.stringify(Object.fromEntries(selectedIcons.map((i) => [i.id, i.name]))));
 
       const response = await fetch('/api/generate-sprite', {
         method: 'POST',
@@ -615,6 +617,87 @@ const App: React.FC = () => {
                     }}
                     dangerouslySetInnerHTML={{ __html: highlightCss(result.cssCode) }}
                   />
+                </div>
+
+                {result.ignored.length > 0 && (
+                  <div
+                    style={{
+                      background: '#3d2d2d',
+                      border: '1px solid #ff6b6b',
+                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      fontSize: '12px',
+                      color: '#ffb3b3',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    ⚠️ 有 {result.ignored.length} 个标识未匹配到已上传图标，已在生成时忽略：
+                    <span style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{result.ignored.join(', ')}</span>
+                  </div>
+                )}
+
+                <div>
+                  <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '12px' }}>
+                    CSS 映射 <span style={{ color: '#888', fontWeight: 400 }}>({result.mappings.length} 个，按拖拽顺序)</span>
+                  </h2>
+                  <div style={{ background: '#252525', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {result.mappings.map((m, idx) => (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          background: '#2d2d2d',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <span style={{ color: '#666', minWidth: '22px' }}>#{idx + 1}</span>
+                        <span style={{ color: '#a6e22e', fontFamily: 'monospace' }}>.sprite-{m.className}</span>
+                        <span style={{ color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                        <span style={{ marginLeft: 'auto', color: '#aaa', whiteSpace: 'nowrap' }}>{m.width}×{m.height}px</span>
+                        <span style={{ color: '#66d9ef', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{m.backgroundPosition}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '12px' }}>
+                    CSS 渲染预览 <span style={{ color: '#888', fontWeight: 400 }}>(按生成的 CSS 口径渲染每个类)</span>
+                  </h2>
+                  <div
+                    style={{
+                      background: '#252525',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: `${result.padding}px`,
+                      backgroundImage: 'linear-gradient(45deg, #333 25%, transparent 25%), linear-gradient(-45deg, #333 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333 75%), linear-gradient(-45deg, transparent 75%, #333 75%)',
+                      backgroundSize: '16px 16px',
+                      backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                    }}
+                  >
+                    {result.mappings.map((m) => (
+                      <div
+                        key={m.id}
+                        title={`.sprite-${m.className}`}
+                        style={{
+                          display: 'inline-block',
+                          backgroundImage: `url('${result.spriteUrl}')`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundSize: `${result.logicalWidth}px ${result.logicalHeight}px`,
+                          width: `${m.width}px`,
+                          height: `${m.height}px`,
+                          backgroundPosition: m.backgroundPosition,
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 <div>
