@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { v4 as uuidv4 } from 'uuid';
 import { DifficultyManager, DifficultyConfig } from './DifficultyManager';
+import { SpawnQuotaTracker, QuotaSnapshot } from './SpawnQuota.ts';
 import { EnemyTemplate, enemyTemplates, EnemyBehavior } from '../configs/enemyTemplates';
 import { Enemy } from '../game/Enemy';
 
@@ -18,11 +19,16 @@ export class EnemySpawner {
   private readonly maxActiveEnemies: number = 20;
   private isPaused: boolean = false;
   private frameCounter: number = 0;
+  private quotaTracker: SpawnQuotaTracker;
 
   constructor(scene: Scene, difficultyManager: DifficultyManager) {
     this.scene = scene;
     this.difficultyManager = difficultyManager;
     this.spawnConfig = this.difficultyManager.getDifficultyConfig();
+    this.quotaTracker = new SpawnQuotaTracker(
+      this.spawnConfig.level,
+      this.spawnConfig.enemyWeights
+    );
   }
 
   start(): void {
@@ -71,15 +77,9 @@ export class EnemySpawner {
 
   private selectEnemyTemplate(): EnemyTemplate | null {
     this.spawnConfig = this.difficultyManager.getDifficultyConfig();
-    const weights = this.spawnConfig.enemyWeights;
-    const typeList: EnemyBehavior[] = ['melee', 'ranged', 'suicide'];
-    const totalWeight = typeList.reduce((s, t) => s + (weights[t] || 0), 0);
-    let r = Math.random() * totalWeight;
-    let selectedType: EnemyBehavior = 'melee';
-    for (const t of typeList) {
-      r -= weights[t] || 0;
-      if (r <= 0) { selectedType = t; break; }
-    }
+    // Quota-driven selection: spawn the behavior whose actual share lags
+    // its target share the most for the current difficulty level.
+    const selectedType: EnemyBehavior = this.quotaTracker.getNextType();
     const matching = enemyTemplates.filter(t => t.type === selectedType);
     if (matching.length === 0) return null;
     const totalTplW = matching.reduce((s, t) => s + t.weight, 0);
@@ -123,6 +123,7 @@ export class EnemySpawner {
       ...scaled,
       instanceId: uuidv4()
     });
+    this.quotaTracker.recordSpawn(template.type);
     enemy.setOnDeathCallback(() => {
       this.removeEnemy(enemy);
       this.difficultyManager.recordKill();
@@ -165,7 +166,21 @@ export class EnemySpawner {
   }
 
   onDifficultyChanged(): void {
+    // Quota reasoning restarts from the new level: unfinished quota of the
+    // previous level is discarded, targets come from the new weights.
+    const config = this.difficultyManager.getDifficultyConfig();
+    this.quotaTracker.resetForLevel(config.level, config.enemyWeights);
     this.scheduleNextSpawn();
+  }
+
+  /**
+   * Quota snapshot for the current level: target ratios, actual ratios of
+   * spawns since the level started, ratios among active enemies, and the
+   * behavior that should spawn next to approach the targets.
+   */
+  getQuotaSnapshot(): QuotaSnapshot {
+    const activeTypes = this.getActiveEnemies().map(e => e.getType());
+    return this.quotaTracker.getSnapshot(activeTypes);
   }
 
   update(time: number, delta: number, playerX: number, playerY: number): void {
