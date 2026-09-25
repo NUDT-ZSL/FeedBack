@@ -223,15 +223,14 @@ class App {
     requestAnimationFrame(() => this.animate());
     
     const delta = Math.min(this.clock.getDelta(), 0.1);
-    const isPlaying = this.audioAnalyzer.isPlaying();
     
     this.updateAudioData();
     
+    // 频率/波形数据已在 AudioAnalyzer 内做时间平滑与暂停回落
     this.sculptureBuilder.update(
       this.frequencyData,
       this.waveformData,
-      delta,
-      isPlaying
+      delta
     );
     
     this.controls.update();

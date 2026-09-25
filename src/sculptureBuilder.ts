@@ -39,9 +39,13 @@ export class SculptureBuilder {
   private particleColors: Float32Array = new Float32Array();
   
   private currentMode: VisualizationMode = VisualizationMode.SPECTRUM;
+  private targetMode: VisualizationMode = VisualizationMode.SPECTRUM;
   private animationState: 'idle' | 'collapsing' | 'reforming' = 'idle';
   private animationProgress: number = 0;
   private animationDuration: number = 1;
+  private collapseInitialized: boolean = false;
+  private reformInitialized: boolean = false;
+  private transitionResolve: (() => void) | null = null;
   
   private readonly GRID_X = 16;
   private readonly GRID_Y = 8;
@@ -265,7 +269,7 @@ export class SculptureBuilder {
     return color;
   }
 
-  update(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  update(frequencyData: number[], waveformData: number[], delta: number): void {
     if (this.animationState !== 'idle') {
       this.updateTransition(delta);
       return;
@@ -279,24 +283,25 @@ export class SculptureBuilder {
 
     switch (this.currentMode) {
       case VisualizationMode.SPECTRUM:
-        this.updateSpectrumMode(frequencyData, delta, isPlaying);
+        this.updateSpectrumMode(frequencyData, delta);
         break;
       case VisualizationMode.WAVEFORM:
-        this.updateWaveformMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateWaveformMode(frequencyData, waveformData, delta);
         break;
       case VisualizationMode.PARTICLES:
-        this.updateParticlesMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateParticlesMode(frequencyData, waveformData, delta);
         break;
     }
   }
 
-  private updateSpectrumMode(frequencyData: number[], delta: number, isPlaying: boolean): void {
+  private updateSpectrumMode(frequencyData: number[], delta: number): void {
     const stiffness = 180;
     const damping = 12;
 
     for (let x = 0; x < this.GRID_X; x++) {
       const bandIndex = Math.floor(x / (this.GRID_X / frequencyData.length));
-      const energy = isPlaying ? frequencyData[bandIndex] : 0;
+      // 数据已在 AudioAnalyzer 中做时间平滑，暂停时自然回落，这里直接采用
+      const energy = frequencyData[bandIndex] ?? 0;
       
       for (let z = 0; z < this.GRID_Z; z++) {
         for (let y = 0; y < this.GRID_Y; y++) {
@@ -341,14 +346,14 @@ export class SculptureBuilder {
     }
   }
 
-  private updateWaveformMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateWaveformMode(frequencyData: number[], waveformData: number[], delta: number): void {
     const stiffness = 150;
     const damping = 10;
 
     for (let x = 0; x < this.GRID_X; x++) {
       const waveIndex = Math.floor(x / (this.GRID_X / waveformData.length));
-      const waveValue = isPlaying ? (waveformData[waveIndex] - 0.5) * 2 : 0;
-      const freqEnergy = isPlaying ? frequencyData[Math.floor(x / (this.GRID_X / frequencyData.length))] : 0;
+      const waveValue = ((waveformData[waveIndex] ?? 0.5) - 0.5) * 2;
+      const freqEnergy = frequencyData[Math.floor(x / (this.GRID_X / frequencyData.length))] ?? 0;
       
       for (let z = 0; z < this.GRID_Z; z++) {
         const depthPhase = Math.sin(z * 0.5 + this.sculptureGroup.rotation.y) * 0.3;
@@ -389,7 +394,7 @@ export class SculptureBuilder {
     }
   }
 
-  private updateParticlesMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateParticlesMode(frequencyData: number[], waveformData: number[], delta: number): void {
     if (!this.particleSystem || !this.particleGeometry) return;
 
     const positions = this.particleGeometry.attributes.position.array as Float32Array;
@@ -403,8 +408,8 @@ export class SculptureBuilder {
     for (let i = 0; i < this.particleStates.length; i++) {
       const state = this.particleStates[i];
       const bandIndex = Math.floor((i % this.GRID_X) / (this.GRID_X / frequencyData.length));
-      const energy = isPlaying ? frequencyData[bandIndex] : 0;
-      const waveValue = isPlaying ? (waveformData[i % waveformData.length] - 0.5) * 2 : 0;
+      const energy = frequencyData[bandIndex] ?? 0;
+      const waveValue = ((waveformData[i % waveformData.length] ?? 0.5) - 0.5) * 2;
       
       const gridX = (i % this.GRID_X) / this.GRID_X;
       const gridY = Math.floor((i / this.GRID_X) % this.GRID_Y) / this.GRID_Y;
@@ -442,34 +447,123 @@ export class SculptureBuilder {
 
   private updateTransition(delta: number): void {
     this.animationProgress += delta / this.animationDuration;
+    const progress = Math.min(1, this.animationProgress);
     
     if (this.animationState === 'collapsing') {
-      this.updateCollapse(delta, this.animationProgress);
+      this.updateCollapse(delta, progress);
       if (this.animationProgress >= 1) {
+        // 旧模式完全退出：此刻才切换模式并应用新模式的可见性
+        this.currentMode = this.targetMode;
+        this.updateModeVisibility();
+        this.prepareModeEntry();
         this.animationState = 'reforming';
         this.animationProgress = 0;
-        this.updateModeVisibility();
       }
     } else if (this.animationState === 'reforming') {
-      this.updateReform(delta, this.animationProgress);
+      this.updateReform(delta, progress);
       if (this.animationProgress >= 1) {
         this.animationState = 'idle';
         this.animationProgress = 0;
-        this.resetCubeStates();
+        this.finalizeTransition();
       }
     }
   }
 
-  private updateCollapse(delta: number, progress: number): void {
-    const gravity = -9.8;
-    
+  /** 过渡开始前把立方体真实位置/旋转快照到状态中，避免从过期状态起跳 */
+  private snapshotVisualState(): void {
     for (let x = 0; x < this.GRID_X; x++) {
       for (let z = 0; z < this.GRID_Z; z++) {
         for (let y = 0; y < this.GRID_Y; y++) {
           const state = this.cubeStates[x][z][y];
           const cube = this.cubes[x][z][y];
-          
-          if (progress === 0) {
+          state.currentPosition.copy(cube.position);
+        }
+      }
+    }
+  }
+
+  /** 新模式入场准备：清除上一模式残留，让新模式从干净状态接管 */
+  private prepareModeEntry(): void {
+    if (this.currentMode === VisualizationMode.PARTICLES) {
+      this.resetParticlesToGrid();
+    } else {
+      this.resetCubeKinematics();
+    }
+  }
+
+  private finalizeTransition(): void {
+    this.resetCubeStates();
+    if (this.particleSystem) {
+      const particleMat = this.particleSystem.material as THREE.PointsMaterial;
+      particleMat.opacity = this.currentMode === VisualizationMode.PARTICLES ? 0.8 : 0;
+    }
+    // 兜底：确保最终可见性与当前模式严格一致
+    this.updateModeVisibility();
+    const resolve = this.transitionResolve;
+    this.transitionResolve = null;
+    if (resolve) {
+      resolve();
+    }
+  }
+
+  private resetCubeKinematics(): void {
+    for (let x = 0; x < this.GRID_X; x++) {
+      for (let z = 0; z < this.GRID_Z; z++) {
+        for (let y = 0; y < this.GRID_Y; y++) {
+          const state = this.cubeStates[x][z][y];
+          const cube = this.cubes[x][z][y];
+          state.currentHeight = 0;
+          state.targetHeight = 0;
+          state.velocity = 0;
+          state.currentPosition.copy(state.basePosition);
+          state.velocityVec.set(0, 0, 0);
+          state.angularVelocity.set(0, 0, 0);
+          cube.position.copy(state.basePosition);
+          cube.rotation.set(0, 0, 0);
+          cube.scale.set(1, 1, 1);
+        }
+      }
+    }
+  }
+
+  private resetParticlesToGrid(): void {
+    if (!this.particleGeometry) return;
+    const positions = this.particleGeometry.attributes.position.array as Float32Array;
+    const totalWidth = this.GRID_X * (this.CUBE_SIZE + this.CUBE_GAP);
+    const totalDepth = this.GRID_Z * (this.CUBE_SIZE + this.CUBE_GAP);
+    const offsetX = -totalWidth / 2;
+    const offsetZ = -totalDepth / 2;
+
+    for (let i = 0; i < this.particleStates.length; i++) {
+      const state = this.particleStates[i];
+      const gridX = (i % this.GRID_X) / this.GRID_X;
+      const gridY = Math.floor((i / this.GRID_X) % this.GRID_Y) / this.GRID_Y;
+      const gridZ = Math.floor(i / (this.GRID_X * this.GRID_Y)) / this.GRID_Z;
+      state.position.set(
+        offsetX + gridX * totalWidth,
+        gridY * 1.5,
+        offsetZ + gridZ * totalDepth
+      );
+      state.targetPosition.copy(state.position);
+      state.velocity.set(0, 0, 0);
+      positions[i * 3] = state.position.x;
+      positions[i * 3 + 1] = state.position.y;
+      positions[i * 3 + 2] = state.position.z;
+    }
+    this.particleGeometry.attributes.position.needsUpdate = true;
+  }
+
+  private updateCollapse(delta: number, progress: number): void {
+    const gravity = -9.8;
+    // 只动画旧模式实际可见的对象（此阶段 currentMode 仍是旧模式）
+    const cubesActive = this.currentMode !== VisualizationMode.PARTICLES;
+
+    if (!this.collapseInitialized) {
+      this.collapseInitialized = true;
+      for (let x = 0; x < this.GRID_X; x++) {
+        for (let z = 0; z < this.GRID_Z; z++) {
+          for (let y = 0; y < this.GRID_Y; y++) {
+            const state = this.cubeStates[x][z][y];
             state.velocityVec.set(
               (Math.random() - 0.5) * 8,
               Math.random() * 6 + 2,
@@ -481,75 +575,100 @@ export class SculptureBuilder {
               (Math.random() - 0.5) * 10
             );
           }
-          
-          state.velocityVec.y += gravity * delta;
-          state.velocityVec.multiplyScalar(0.99);
-          
-          state.currentPosition.add(state.velocityVec.clone().multiplyScalar(delta));
-          
-          cube.position.copy(state.currentPosition);
-          cube.rotation.x += state.angularVelocity.x * delta;
-          cube.rotation.y += state.angularVelocity.y * delta;
-          cube.rotation.z += state.angularVelocity.z * delta;
-          
-          const opacity = 1 - progress;
-          const material = cube.material as THREE.MeshStandardMaterial;
-          material.opacity = opacity;
-          
-          const edges = cube.children[0] as THREE.LineSegments;
-          const edgeMat = edges.material as THREE.LineBasicMaterial;
-          edgeMat.opacity = opacity * 0.5;
         }
       }
     }
-    
-    if (this.particleSystem) {
+
+    if (cubesActive) {
+      for (let x = 0; x < this.GRID_X; x++) {
+        for (let z = 0; z < this.GRID_Z; z++) {
+          for (let y = 0; y < this.GRID_Y; y++) {
+            const state = this.cubeStates[x][z][y];
+            const cube = this.cubes[x][z][y];
+
+            state.velocityVec.y += gravity * delta;
+            state.velocityVec.multiplyScalar(0.99);
+
+            state.currentPosition.add(state.velocityVec.clone().multiplyScalar(delta));
+
+            cube.position.copy(state.currentPosition);
+            cube.rotation.x += state.angularVelocity.x * delta;
+            cube.rotation.y += state.angularVelocity.y * delta;
+            cube.rotation.z += state.angularVelocity.z * delta;
+
+            const opacity = 1 - progress;
+            const material = cube.material as THREE.MeshStandardMaterial;
+            material.opacity = opacity;
+
+            const edges = cube.children[0] as THREE.LineSegments;
+            const edgeMat = edges.material as THREE.LineBasicMaterial;
+            edgeMat.opacity = opacity * 0.5;
+          }
+        }
+      }
+    }
+
+    if (!cubesActive && this.particleSystem) {
       const particleMat = this.particleSystem.material as THREE.PointsMaterial;
-      particleMat.opacity = 1 - progress;
+      particleMat.opacity = 0.8 * (1 - progress);
     }
   }
 
   private updateReform(delta: number, progress: number): void {
     const easeProgress = this.easeOutCubic(progress);
-    
-    for (let x = 0; x < this.GRID_X; x++) {
-      for (let z = 0; z < this.GRID_Z; z++) {
-        for (let y = 0; y < this.GRID_Y; y++) {
-          const state = this.cubeStates[x][z][y];
-          const cube = this.cubes[x][z][y];
-          
-          if (progress === 0) {
-            state.currentPosition.set(
-              (Math.random() - 0.5) * 30,
-              (Math.random() - 0.5) * 30,
-              (Math.random() - 0.5) * 30
-            );
-            cube.rotation.set(
-              Math.random() * Math.PI * 2,
-              Math.random() * Math.PI * 2,
-              Math.random() * Math.PI * 2
-            );
+    // 只动画新模式的对象（此阶段 currentMode 已是新模式）
+    const cubesActive = this.currentMode !== VisualizationMode.PARTICLES;
+
+    if (cubesActive) {
+      if (!this.reformInitialized) {
+        this.reformInitialized = true;
+        for (let x = 0; x < this.GRID_X; x++) {
+          for (let z = 0; z < this.GRID_Z; z++) {
+            for (let y = 0; y < this.GRID_Y; y++) {
+              const state = this.cubeStates[x][z][y];
+              const cube = this.cubes[x][z][y];
+              state.currentPosition.set(
+                (Math.random() - 0.5) * 30,
+                (Math.random() - 0.5) * 30,
+                (Math.random() - 0.5) * 30
+              );
+              cube.position.copy(state.currentPosition);
+              cube.rotation.set(
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2
+              );
+            }
           }
-          
-          state.currentPosition.lerp(state.basePosition, Math.min(1, delta * 5 + easeProgress * 0.5));
-          cube.position.copy(state.currentPosition);
-          
-          cube.rotation.x *= (1 - delta * 8);
-          cube.rotation.y *= (1 - delta * 8);
-          cube.rotation.z *= (1 - delta * 8);
-          
-          const opacity = easeProgress;
-          const material = cube.material as THREE.MeshStandardMaterial;
-          material.opacity = opacity;
-          
-          const edges = cube.children[0] as THREE.LineSegments;
-          const edgeMat = edges.material as THREE.LineBasicMaterial;
-          edgeMat.opacity = opacity * 0.8;
+        }
+      }
+
+      for (let x = 0; x < this.GRID_X; x++) {
+        for (let z = 0; z < this.GRID_Z; z++) {
+          for (let y = 0; y < this.GRID_Y; y++) {
+            const state = this.cubeStates[x][z][y];
+            const cube = this.cubes[x][z][y];
+
+            state.currentPosition.lerp(state.basePosition, Math.min(1, delta * 5 + easeProgress * 0.5));
+            cube.position.copy(state.currentPosition);
+
+            cube.rotation.x *= (1 - delta * 8);
+            cube.rotation.y *= (1 - delta * 8);
+            cube.rotation.z *= (1 - delta * 8);
+
+            const opacity = easeProgress;
+            const material = cube.material as THREE.MeshStandardMaterial;
+            material.opacity = opacity;
+
+            const edges = cube.children[0] as THREE.LineSegments;
+            const edgeMat = edges.material as THREE.LineBasicMaterial;
+            edgeMat.opacity = opacity * 0.8;
+          }
         }
       }
     }
-    
-    if (this.particleSystem && this.currentMode === VisualizationMode.PARTICLES) {
+
+    if (!cubesActive && this.particleSystem) {
       const particleMat = this.particleSystem.material as THREE.PointsMaterial;
       particleMat.opacity = easeProgress * 0.8;
     }
@@ -606,24 +725,56 @@ export class SculptureBuilder {
     }
   }
 
-  async setMode(mode: VisualizationMode): Promise<void> {
-    if (mode === this.currentMode || this.animationState !== 'idle') return;
-    
+  setMode(mode: VisualizationMode): Promise<void> {
+    // 过渡进行中：忽略新请求，保证任意时刻只有一段过渡
+    if (this.animationState !== 'idle') {
+      return Promise.resolve();
+    }
+    // 重复触发同一模式：不产生额外过渡
+    if (mode === this.currentMode) {
+      return Promise.resolve();
+    }
+
+    this.targetMode = mode;
     this.animationState = 'collapsing';
     this.animationProgress = 0;
     this.animationDuration = 0.5;
-    
-    await new Promise<void>(resolve => {
-      const checkComplete = () => {
-        if (this.animationState === 'idle') {
-          this.currentMode = mode;
-          resolve();
-        } else {
-          requestAnimationFrame(checkComplete);
-        }
-      };
-      checkComplete();
+    this.collapseInitialized = false;
+    this.reformInitialized = false;
+    this.snapshotVisualState();
+
+    return new Promise<void>(resolve => {
+      this.transitionResolve = resolve;
     });
+  }
+
+  /** 以下方法供离线验证与调试使用 */
+  areCubesVisible(): boolean {
+    return this.cubes[0]?.[0]?.[0]?.visible ?? false;
+  }
+
+  areParticlesVisible(): boolean {
+    return this.particleSystem?.visible ?? false;
+  }
+
+  getParticleOpacity(): number {
+    if (!this.particleSystem) return 0;
+    return (this.particleSystem.material as THREE.PointsMaterial).opacity;
+  }
+
+  /** 所有立方体相对基准位置的最大垂直偏移(即当前最大"高度") */
+  getMaxCubeHeight(): number {
+    let max = 0;
+    for (let x = 0; x < this.GRID_X; x++) {
+      for (let z = 0; z < this.GRID_Z; z++) {
+        for (let y = 0; y < this.GRID_Y; y++) {
+          const cube = this.cubes[x][z][y];
+          const state = this.cubeStates[x][z][y];
+          max = Math.max(max, Math.abs(cube.position.y - state.basePosition.y));
+        }
+      }
+    }
+    return max;
   }
 
   getCurrentMode(): VisualizationMode {

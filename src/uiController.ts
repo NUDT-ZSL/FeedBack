@@ -141,13 +141,18 @@ export class UIController {
     this.modeButtons.forEach(btn => {
       btn.addEventListener('click', async () => {
         const mode = btn.dataset.mode as VisualizationMode;
-        if (!this.sculptureBuilder || this.sculptureBuilder.isTransitioning()) return;
-        
-        this.modeButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        
+        if (!this.sculptureBuilder) return;
+        // 过渡进行中或重复点击当前模式：直接忽略，不叠加过渡
+        if (this.sculptureBuilder.isTransitioning()) return;
+        if (mode === this.sculptureBuilder.getCurrentMode()) return;
+
+        this.setModeButton(mode);
+
         await this.sculptureBuilder.setMode(mode);
-        
+
+        // 以实际生效的模式为准，保证按钮状态与场景一致
+        this.setModeButton(this.sculptureBuilder.getCurrentMode());
+
         if (this.modeChangeCallback) {
           this.modeChangeCallback(mode);
         }

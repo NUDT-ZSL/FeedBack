@@ -1,3 +1,5 @@
+import { SpectralSmoother, BAND_SMOOTHER_CONFIG, WAVEFORM_SMOOTHER_CONFIG } from './spectralSmoother';
+
 export class AudioAnalyzer {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -11,6 +13,10 @@ export class AudioAnalyzer {
   private sampleRate: number = 44100;
   private fftSize: number = 2048;
   private bufferSize: number = 4096;
+  private bandSmoother: SpectralSmoother = new SpectralSmoother(BAND_SMOOTHER_CONFIG);
+  private waveSmoother: SpectralSmoother = new SpectralSmoother(WAVEFORM_SMOOTHER_CONFIG);
+  private lastBandTimestamp: number | null = null;
+  private lastWaveTimestamp: number | null = null;
 
   constructor() {
     this.frequencyData = new Float32Array(this.fftSize / 2) as Float32Array<ArrayBuffer>;
@@ -94,6 +100,22 @@ export class AudioAnalyzer {
     this.isPlayingFlag = false;
     this.pauseTime = 0;
     this.startTime = 0;
+    this.bandSmoother.reset();
+    this.waveSmoother.reset();
+    this.lastBandTimestamp = null;
+    this.lastWaveTimestamp = null;
+  }
+
+  private consumeDelta(kind: 'band' | 'wave'): number {
+    const now = performance.now();
+    if (kind === 'band') {
+      const dt = this.lastBandTimestamp === null ? 1 / 60 : (now - this.lastBandTimestamp) / 1000;
+      this.lastBandTimestamp = now;
+      return dt;
+    }
+    const dt = this.lastWaveTimestamp === null ? 1 / 60 : (now - this.lastWaveTimestamp) / 1000;
+    this.lastWaveTimestamp = now;
+    return dt;
   }
 
   seek(time: number): void {
@@ -132,7 +154,8 @@ export class AudioAnalyzer {
       result.push(sum / (end - start));
     }
 
-    return result;
+    // 时间维度平滑：抑制相邻帧跳变；暂停/结束时按独立曲线自然回落
+    return this.bandSmoother.update(result, this.consumeDelta('band'), this.isPlayingFlag);
   }
 
   getWaveformData(samples: number = 128): number[] {
@@ -150,7 +173,8 @@ export class AudioAnalyzer {
       result.push(waveformData[i * step] * 0.5 + 0.5);
     }
 
-    return result;
+    // 暂停时时间域数据会冻结，通过平滑器回落到静止值 0.5
+    return this.waveSmoother.update(result, this.consumeDelta('wave'), this.isPlayingFlag);
   }
 
   getCurrentTime(): number {
