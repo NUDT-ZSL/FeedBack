@@ -2,6 +2,7 @@ import { Ball, Vector2 } from './ball';
 import { Course } from './course';
 import { UI } from './ui';
 import { ParticleSystem } from './particles';
+import { MAX_STROKES } from './simulation';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -53,7 +54,7 @@ class Game {
     this.mousePosition = { x: 0, y: 0 };
 
     this.strokeCount = 0;
-    this.maxStrokes = 10;
+    this.maxStrokes = MAX_STROKES;
 
     this.gameState = 'aiming';
     this.lastTime = performance.now();

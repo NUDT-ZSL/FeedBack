@@ -1,3 +1,5 @@
+import { random } from './rng';
+
 export interface Vector2 {
   x: number;
   y: number;
@@ -97,7 +99,7 @@ export class Ball {
     }
 
     if (directionDeviation > 0) {
-      const deviationAngle = (Math.random() - 0.5) * directionDeviation;
+      const deviationAngle = (random() - 0.5) * directionDeviation;
       const cos = Math.cos(deviationAngle);
       const sin = Math.sin(deviationAngle);
       const newVx = this.velocity.x * cos - this.velocity.y * sin;
