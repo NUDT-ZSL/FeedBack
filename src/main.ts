@@ -169,7 +169,8 @@ class App {
     window.addEventListener('resize', () => this.onResize());
     this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
     this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    this.renderer.domElement.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    this.renderer.domElement.addEventListener('mouseup', () => this.onMouseUp());
+    window.addEventListener('mouseup', () => this.onMouseUp());
     this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseUp());
   }
 
