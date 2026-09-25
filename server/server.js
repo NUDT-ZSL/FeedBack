@@ -3,8 +3,10 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
-const app = express();
 const PORT = process.env.PORT || 4000;
+
+function createApp() {
+const app = express();
 
 app.use(cors());
 app.use(express.json());
@@ -156,7 +158,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
+return app;
+}
+
+if (require.main === module) {
+createApp().listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════╗
 ║                                                      ║
@@ -177,3 +183,6 @@ app.listen(PORT, () => {
 ╚══════════════════════════════════════════════════════╝
   `);
 });
+}
+
+module.exports = { createApp };
