@@ -7,6 +7,8 @@ export interface EnvironmentState {
   targetLight: number;
 }
 
+import { calculateEnvironmentFitness } from './fitness.js';
+
 export interface OptimalEnvironment {
   temperature: { min: number; max: number };
   humidity: { min: number; max: number };
@@ -73,39 +75,14 @@ export class EnvironmentSystem {
   }
 
   calculateFitness(optimalEnv: OptimalEnvironment): number {
-    const tempFitness = this.calculateParameterFitness(
-      this.state.temperature,
-      optimalEnv.temperature.min,
-      optimalEnv.temperature.max
+    return calculateEnvironmentFitness(
+      {
+        temperature: this.state.temperature,
+        humidity: this.state.humidity,
+        light: this.state.light,
+      },
+      optimalEnv
     );
-    const humidityFitness = this.calculateParameterFitness(
-      this.state.humidity,
-      optimalEnv.humidity.min,
-      optimalEnv.humidity.max
-    );
-    const lightFitness = this.calculateParameterFitness(
-      this.state.light,
-      optimalEnv.light.min,
-      optimalEnv.light.max
-    );
-
-    return tempFitness * humidityFitness * lightFitness;
-  }
-
-  private calculateParameterFitness(
-    value: number,
-    min: number,
-    max: number
-  ): number {
-    if (value >= min && value <= max) {
-      return 1;
-    }
-
-    const range = max - min;
-    const distance = value < min ? min - value : value - max;
-    const decayRate = 0.1;
-    const fitness = Math.exp(-decayRate * (distance / range));
-    return Math.max(0, fitness);
   }
 
   getDisplayValues(): { temp: number; humidity: number; light: number } {

@@ -5,6 +5,10 @@ export interface PlantTraits {
   droughtResistance: number;
 }
 
+import { calculateEnvironmentFitness, EnvironmentConditions } from './fitness.js';
+
+const TRAIT_KEYS: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
+
 export interface PlantPosition {
   x: number;
   y: number;
@@ -139,6 +143,108 @@ function clamp(value: number, min: number = 0, max: number = 255): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+/**
+ * 性状遗传与最优环境合并的公共基础操作。
+ * 杂交、自交、回交共享这些操作，仅随机策略（调用这些函数的方式与参数）不同。
+ * 注意：这些函数内部 Math.random() 的调用次数与顺序是行为契约的一部分，
+ * 修改会改变相同随机序列下的子代结果。
+ */
+
+/** 杂交性状混合：随机选 2-3 个性状取中值加随机偏移，其余性状随机继承自一方。 */
+export function blendTraits(parentA: PlantTraits, parentB: PlantTraits): PlantTraits {
+  const numTraitsToBlend = Math.floor(Math.random() * 2) + 2;
+  const shuffled = [...TRAIT_KEYS].sort(() => Math.random() - 0.5);
+  const traitsToBlend = shuffled.slice(0, numTraitsToBlend);
+  const traitsToInherit = shuffled.slice(numTraitsToBlend);
+
+  const newTraits: PlantTraits = {
+    color: 0,
+    shape: 0,
+    height: 0,
+    droughtResistance: 0,
+  };
+
+  for (const key of traitsToBlend) {
+    const midValue = (parentA[key] + parentB[key]) / 2;
+    const offset = (Math.random() - 0.5) * 40;
+    newTraits[key] = clamp(midValue + offset);
+  }
+
+  for (const key of traitsToInherit) {
+    const source = Math.random() < 0.5 ? parentA : parentB;
+    newTraits[key] = source[key];
+  }
+
+  return newTraits;
+}
+
+/** 自交性状复制：每个性状以 mutationChance 概率发生 ±mutationRange/2 的突变。 */
+export function mutateTraits(
+  traits: PlantTraits,
+  mutationChance: number = 0.05,
+  mutationRange: number = 60
+): PlantTraits {
+  const newTraits: PlantTraits = { ...traits };
+
+  for (const key of TRAIT_KEYS) {
+    if (Math.random() < mutationChance) {
+      const mutation = (Math.random() - 0.5) * mutationRange;
+      newTraits[key] = clamp(newTraits[key] + mutation);
+    }
+  }
+
+  return newTraits;
+}
+
+/** 回交性状选择：每个性状以 primaryChance 概率继承 primary，否则继承 secondary。 */
+export function selectTraits(
+  primary: PlantTraits,
+  secondary: PlantTraits,
+  primaryChance: number = 0.6
+): PlantTraits {
+  const newTraits: PlantTraits = {
+    color: 0,
+    shape: 0,
+    height: 0,
+    droughtResistance: 0,
+  };
+
+  for (const key of TRAIT_KEYS) {
+    if (Math.random() < primaryChance) {
+      newTraits[key] = primary[key];
+    } else {
+      newTraits[key] = secondary[key];
+    }
+  }
+
+  return newTraits;
+}
+
+/**
+ * 最优环境合并：按 weightA / (1 - weightA) 加权平均并取整。
+ * 杂交传 0.5（简单平均），回交传 0.4（偏向亲本 0.6）。
+ */
+export function mergeOptimalEnvironments(
+  envA: OptimalEnvironment,
+  envB: OptimalEnvironment,
+  weightA: number
+): OptimalEnvironment {
+  const weightB = 1 - weightA;
+  return {
+    tempMin: Math.round(envA.tempMin * weightA + envB.tempMin * weightB),
+    tempMax: Math.round(envA.tempMax * weightA + envB.tempMax * weightB),
+    humidityMin: Math.round(envA.humidityMin * weightA + envB.humidityMin * weightB),
+    humidityMax: Math.round(envA.humidityMax * weightA + envB.humidityMax * weightB),
+    lightMin: Math.round(envA.lightMin * weightA + envB.lightMin * weightB),
+    lightMax: Math.round(envA.lightMax * weightA + envB.lightMax * weightB),
+  };
+}
+
+/** 最优环境复制（自交使用，子代与原植物完全一致）。 */
+export function cloneOptimalEnvironment(env: OptimalEnvironment): OptimalEnvironment {
+  return { ...env };
+}
+
 export class Plant {
   public id: string;
   public name: string;
@@ -183,38 +289,8 @@ export class Plant {
   }
 
   static hybridize(parent1: Plant, parent2: Plant): Plant {
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    const numTraitsToBlend = Math.floor(Math.random() * 2) + 2;
-    const shuffled = [...traitKeys].sort(() => Math.random() - 0.5);
-    const traitsToBlend = shuffled.slice(0, numTraitsToBlend);
-    const traitsToInherit = shuffled.slice(numTraitsToBlend);
-
-    const newTraits: PlantTraits = {
-      color: 0,
-      shape: 0,
-      height: 0,
-      droughtResistance: 0,
-    };
-
-    for (const key of traitsToBlend) {
-      const midValue = (parent1.traits[key] + parent2.traits[key]) / 2;
-      const offset = (Math.random() - 0.5) * 40;
-      newTraits[key] = clamp(midValue + offset);
-    }
-
-    for (const key of traitsToInherit) {
-      const source = Math.random() < 0.5 ? parent1 : parent2;
-      newTraits[key] = source.traits[key];
-    }
-
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round((parent1.optimalEnv.tempMin + parent2.optimalEnv.tempMin) / 2),
-      tempMax: Math.round((parent1.optimalEnv.tempMax + parent2.optimalEnv.tempMax) / 2),
-      humidityMin: Math.round((parent1.optimalEnv.humidityMin + parent2.optimalEnv.humidityMin) / 2),
-      humidityMax: Math.round((parent1.optimalEnv.humidityMax + parent2.optimalEnv.humidityMax) / 2),
-      lightMin: Math.round((parent1.optimalEnv.lightMin + parent2.optimalEnv.lightMin) / 2),
-      lightMax: Math.round((parent1.optimalEnv.lightMax + parent2.optimalEnv.lightMax) / 2),
-    };
+    const newTraits = blendTraits(parent1.traits, parent2.traits);
+    const newOptimalEnv = mergeOptimalEnvironments(parent1.optimalEnv, parent2.optimalEnv, 0.5);
 
     const newGeneration = Math.max(parent1.generation, parent2.generation) + 1;
     const newLineage = Array.from(new Set([...parent1.lineage, ...parent2.lineage]));
@@ -224,52 +300,17 @@ export class Plant {
   }
 
   static selfCross(plant: Plant): Plant {
-    const newTraits: PlantTraits = {
-      color: plant.traits.color,
-      shape: plant.traits.shape,
-      height: plant.traits.height,
-      droughtResistance: plant.traits.droughtResistance,
-    };
-
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    for (const key of traitKeys) {
-      if (Math.random() < 0.05) {
-        const mutation = (Math.random() - 0.5) * 60;
-        newTraits[key] = clamp(newTraits[key] + mutation);
-      }
-    }
+    const newTraits = mutateTraits(plant.traits);
 
     const newGeneration = plant.generation + 1;
-    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], { ...plant.optimalEnv });
+    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], cloneOptimalEnvironment(plant.optimalEnv));
     child.lineage.push(child.id);
     return child;
   }
 
   static backcross(plant: Plant, parent: Plant): Plant {
-    const traitKeys: (keyof PlantTraits)[] = ['color', 'shape', 'height', 'droughtResistance'];
-    const newTraits: PlantTraits = {
-      color: 0,
-      shape: 0,
-      height: 0,
-      droughtResistance: 0,
-    };
-
-    for (const key of traitKeys) {
-      if (Math.random() < 0.6) {
-        newTraits[key] = parent.traits[key];
-      } else {
-        newTraits[key] = plant.traits[key];
-      }
-    }
-
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round(plant.optimalEnv.tempMin * 0.4 + parent.optimalEnv.tempMin * 0.6),
-      tempMax: Math.round(plant.optimalEnv.tempMax * 0.4 + parent.optimalEnv.tempMax * 0.6),
-      humidityMin: Math.round(plant.optimalEnv.humidityMin * 0.4 + parent.optimalEnv.humidityMin * 0.6),
-      humidityMax: Math.round(plant.optimalEnv.humidityMax * 0.4 + parent.optimalEnv.humidityMax * 0.6),
-      lightMin: Math.round(plant.optimalEnv.lightMin * 0.4 + parent.optimalEnv.lightMin * 0.6),
-      lightMax: Math.round(plant.optimalEnv.lightMax * 0.4 + parent.optimalEnv.lightMax * 0.6),
-    };
+    const newTraits = selectTraits(parent.traits, plant.traits);
+    const newOptimalEnv = mergeOptimalEnvironments(plant.optimalEnv, parent.optimalEnv, 0.4);
 
     const newGeneration = Math.max(plant.generation, parent.generation) + 1;
     const newLineage = Array.from(new Set([...plant.lineage, ...parent.lineage]));
@@ -284,6 +325,18 @@ export class Plant {
       .map(v => v.toString(16).padStart(2, '0'))
       .join('');
     return hash.toUpperCase();
+  }
+
+  /**
+   * 植物侧的环境适应度入口，与 EnvironmentSystem.calculateFitness
+   * 共用同一计算函数，保证两条路径结果一致。
+   */
+  calculateFitness(conditions: EnvironmentConditions): number {
+    return calculateEnvironmentFitness(conditions, {
+      temperature: { min: this.optimalEnv.tempMin, max: this.optimalEnv.tempMax },
+      humidity: { min: this.optimalEnv.humidityMin, max: this.optimalEnv.humidityMax },
+      light: { min: this.optimalEnv.lightMin, max: this.optimalEnv.lightMax },
+    });
   }
 
   toJSON(): PlantJSON {

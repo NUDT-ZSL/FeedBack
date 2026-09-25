@@ -1,0 +1,986 @@
+{
+  "fitness": [
+    {
+      "label": "all-in-range",
+      "fitness": 1
+    },
+    {
+      "label": "all-at-min-boundary",
+      "fitness": 1
+    },
+    {
+      "label": "all-at-max-boundary",
+      "fitness": 1
+    },
+    {
+      "label": "temp-just-below",
+      "fitness": 0.9999900000499998
+    },
+    {
+      "label": "temp-just-above",
+      "fitness": 0.9999900000499998
+    },
+    {
+      "label": "temp-far-below",
+      "fitness": 0.9048374180359595
+    },
+    {
+      "label": "temp-far-above",
+      "fitness": 0.9048374180359595
+    },
+    {
+      "label": "humidity-zero-below",
+      "fitness": 0.8187307530779818
+    },
+    {
+      "label": "humidity-100-above",
+      "fitness": 0.8187307530779818
+    },
+    {
+      "label": "light-zero-below",
+      "fitness": 0.9875778004938814
+    },
+    {
+      "label": "light-100-above",
+      "fitness": 0.9875778004938814
+    },
+    {
+      "label": "all-below",
+      "fitness": 0.7316156289466417
+    },
+    {
+      "label": "all-above",
+      "fitness": 0.7316156289466417
+    },
+    {
+      "label": "cactus-humidity-at-zero-min",
+      "fitness": 1
+    },
+    {
+      "label": "cactus-light-at-100-max",
+      "fitness": 1
+    },
+    {
+      "label": "cactus-all-at-min",
+      "fitness": 1
+    },
+    {
+      "label": "cactus-all-at-max",
+      "fitness": 1
+    },
+    {
+      "label": "cactus-humidity-below-zero",
+      "fitness": 0.9834714538216175
+    }
+  ],
+  "genetics": {
+    "hybridize": [
+      {
+        "name": "暖阳白练",
+        "traits": {
+          "color": 80,
+          "shape": 60,
+          "height": 123,
+          "droughtResistance": 182
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 38,
+          "humidityMin": 15,
+          "humidityMax": 50,
+          "lightMin": 55,
+          "lightMax": 100
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "金鳞缱绻",
+        "traits": {
+          "color": 163,
+          "shape": 180,
+          "height": 134,
+          "droughtResistance": 154
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 38,
+          "humidityMin": 15,
+          "humidityMax": 50,
+          "lightMin": 55,
+          "lightMax": 100
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "晨曦婆娑",
+        "traits": {
+          "color": 220,
+          "shape": 60,
+          "height": 138,
+          "droughtResistance": 182
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 38,
+          "humidityMin": 15,
+          "humidityMax": 50,
+          "lightMin": 55,
+          "lightMax": 100
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "星辰月华",
+        "traits": {
+          "color": 161,
+          "shape": 132,
+          "height": 115,
+          "droughtResistance": 240
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 38,
+          "humidityMin": 15,
+          "humidityMax": 50,
+          "lightMin": 55,
+          "lightMax": 100
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "缱绻蓝田",
+        "traits": {
+          "color": 134,
+          "shape": 100,
+          "height": 144,
+          "droughtResistance": 100
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 38,
+          "humidityMin": 15,
+          "humidityMax": 50,
+          "lightMin": 55,
+          "lightMax": 100
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      }
+    ],
+    "selfCross": [
+      {
+        "name": "星辰细雨",
+        "traits": {
+          "color": 160,
+          "shape": 120,
+          "height": 30,
+          "droughtResistance": 76
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 15,
+          "tempMax": 25,
+          "humidityMin": 60,
+          "humidityMax": 100,
+          "lightMin": 0,
+          "lightMax": 40
+        },
+        "parentCount": 1,
+        "lineageLength": 2
+      },
+      {
+        "name": "暖阳寒霜",
+        "traits": {
+          "color": 160,
+          "shape": 120,
+          "height": 30,
+          "droughtResistance": 76
+        },
+        "generation": 2,
+        "optimalEnv": {
+          "tempMin": 15,
+          "tempMax": 25,
+          "humidityMin": 60,
+          "humidityMax": 100,
+          "lightMin": 0,
+          "lightMax": 40
+        },
+        "parentCount": 1,
+        "lineageLength": 3
+      },
+      {
+        "name": "缱绻丹焰",
+        "traits": {
+          "color": 160,
+          "shape": 120,
+          "height": 30,
+          "droughtResistance": 76
+        },
+        "generation": 3,
+        "optimalEnv": {
+          "tempMin": 15,
+          "tempMax": 25,
+          "humidityMin": 60,
+          "humidityMax": 100,
+          "lightMin": 0,
+          "lightMax": 40
+        },
+        "parentCount": 1,
+        "lineageLength": 4
+      },
+      {
+        "name": "丹焰白练",
+        "traits": {
+          "color": 160,
+          "shape": 120,
+          "height": 30,
+          "droughtResistance": 76
+        },
+        "generation": 4,
+        "optimalEnv": {
+          "tempMin": 15,
+          "tempMax": 25,
+          "humidityMin": 60,
+          "humidityMax": 100,
+          "lightMin": 0,
+          "lightMax": 40
+        },
+        "parentCount": 1,
+        "lineageLength": 5
+      },
+      {
+        "name": "扶摇银辉",
+        "traits": {
+          "color": 160,
+          "shape": 120,
+          "height": 30,
+          "droughtResistance": 76
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 15,
+          "tempMax": 25,
+          "humidityMin": 60,
+          "humidityMax": 100,
+          "lightMin": 0,
+          "lightMax": 40
+        },
+        "parentCount": 1,
+        "lineageLength": 6
+      }
+    ],
+    "backcross": [
+      {
+        "name": "细雨缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 123,
+          "droughtResistance": 120
+        },
+        "generation": 2,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 42,
+          "humidityMax": 82,
+          "lightMin": 28,
+          "lightMax": 68
+        },
+        "parentCount": 2,
+        "lineageLength": 4
+      },
+      {
+        "name": "翩跹细雨",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 120
+        },
+        "generation": 3,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 41,
+          "humidityMax": 81,
+          "lightMin": 29,
+          "lightMax": 69
+        },
+        "parentCount": 2,
+        "lineageLength": 5
+      },
+      {
+        "name": "细雨潋滟",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 120
+        },
+        "generation": 4,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 40,
+          "humidityMax": 80,
+          "lightMin": 30,
+          "lightMax": 70
+        },
+        "parentCount": 2,
+        "lineageLength": 6
+      },
+      {
+        "name": "银辉丹焰",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 120
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 40,
+          "humidityMax": 80,
+          "lightMin": 30,
+          "lightMax": 70
+        },
+        "parentCount": 2,
+        "lineageLength": 7
+      },
+      {
+        "name": "白练缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 120
+        },
+        "generation": 6,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 40,
+          "humidityMax": 80,
+          "lightMin": 30,
+          "lightMax": 70
+        },
+        "parentCount": 2,
+        "lineageLength": 8
+      }
+    ],
+    "multiGen": [
+      {
+        "name": "缱绻迤逦",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 60
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 18,
+          "lightMax": 58
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "青虹暖阳",
+        "traits": {
+          "color": 100,
+          "shape": 200,
+          "height": 150,
+          "droughtResistance": 60
+        },
+        "generation": 2,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 18,
+          "lightMax": 58
+        },
+        "parentCount": 1,
+        "lineageLength": 4
+      },
+      {
+        "name": "青虹迤逦",
+        "traits": {
+          "color": 195,
+          "shape": 131,
+          "height": 30,
+          "droughtResistance": 94
+        },
+        "generation": 1,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 45,
+          "humidityMax": 85,
+          "lightMin": 30,
+          "lightMax": 70
+        },
+        "parentCount": 2,
+        "lineageLength": 3
+      },
+      {
+        "name": "迤逦缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 187,
+          "height": 150,
+          "droughtResistance": 60
+        },
+        "generation": 3,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 18,
+          "lightMax": 58
+        },
+        "parentCount": 1,
+        "lineageLength": 5
+      },
+      {
+        "name": "蓝田月华",
+        "traits": {
+          "color": 195,
+          "shape": 102,
+          "height": 24,
+          "droughtResistance": 94
+        },
+        "generation": 2,
+        "optimalEnv": {
+          "tempMin": 22,
+          "tempMax": 35,
+          "humidityMin": 23,
+          "humidityMax": 58,
+          "lightMin": 40,
+          "lightMax": 85
+        },
+        "parentCount": 2,
+        "lineageLength": 5
+      },
+      {
+        "name": "细雨翠羽",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 150,
+          "droughtResistance": 240
+        },
+        "generation": 4,
+        "optimalEnv": {
+          "tempMin": 22,
+          "tempMax": 35,
+          "humidityMin": 19,
+          "humidityMax": 53,
+          "lightMin": 37,
+          "lightMax": 83
+        },
+        "parentCount": 2,
+        "lineageLength": 7
+      },
+      {
+        "name": "紫玉紫玉",
+        "traits": {
+          "color": 80,
+          "shape": 60,
+          "height": 150,
+          "droughtResistance": 240
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 23,
+          "tempMax": 37,
+          "humidityMin": 11,
+          "humidityMax": 44,
+          "lightMin": 42,
+          "lightMax": 90
+        },
+        "parentCount": 2,
+        "lineageLength": 8
+      },
+      {
+        "name": "星辰缱绻",
+        "traits": {
+          "color": 92,
+          "shape": 122,
+          "height": 150,
+          "droughtResistance": 198
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 20,
+          "tempMax": 33,
+          "humidityMin": 30,
+          "humidityMax": 67,
+          "lightMin": 34,
+          "lightMax": 77
+        },
+        "parentCount": 2,
+        "lineageLength": 8
+      },
+      {
+        "name": "暮光月华",
+        "traits": {
+          "color": 143,
+          "shape": 131,
+          "height": 30,
+          "droughtResistance": 70
+        },
+        "generation": 4,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 29,
+          "humidityMin": 47,
+          "humidityMax": 87,
+          "lightMin": 24,
+          "lightMax": 64
+        },
+        "parentCount": 2,
+        "lineageLength": 8
+      },
+      {
+        "name": "清风星辰",
+        "traits": {
+          "color": 83,
+          "shape": 146,
+          "height": 154,
+          "droughtResistance": 240
+        },
+        "generation": 6,
+        "optimalEnv": {
+          "tempMin": 21,
+          "tempMax": 34,
+          "humidityMin": 26,
+          "humidityMax": 62,
+          "lightMin": 36,
+          "lightMax": 80
+        },
+        "parentCount": 2,
+        "lineageLength": 9
+      },
+      {
+        "name": "月华婆娑",
+        "traits": {
+          "color": 83,
+          "shape": 102,
+          "height": 77,
+          "droughtResistance": 158
+        },
+        "generation": 7,
+        "optimalEnv": {
+          "tempMin": 22,
+          "tempMax": 35,
+          "humidityMin": 25,
+          "humidityMax": 60,
+          "lightMin": 38,
+          "lightMax": 83
+        },
+        "parentCount": 2,
+        "lineageLength": 13
+      },
+      {
+        "name": "蓝田丹焰",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 150,
+          "droughtResistance": 240
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 19,
+          "tempMax": 31,
+          "humidityMin": 36,
+          "humidityMax": 74,
+          "lightMin": 26,
+          "lightMax": 68
+        },
+        "parentCount": 2,
+        "lineageLength": 8
+      },
+      {
+        "name": "清风暖阳",
+        "traits": {
+          "color": 83,
+          "shape": 146,
+          "height": 154,
+          "droughtResistance": 240
+        },
+        "generation": 7,
+        "optimalEnv": {
+          "tempMin": 21,
+          "tempMax": 34,
+          "humidityMin": 26,
+          "humidityMax": 62,
+          "lightMin": 36,
+          "lightMax": 80
+        },
+        "parentCount": 1,
+        "lineageLength": 10
+      },
+      {
+        "name": "金鳞缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 206,
+          "height": 135,
+          "droughtResistance": 60
+        },
+        "generation": 4,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 18,
+          "lightMax": 58
+        },
+        "parentCount": 2,
+        "lineageLength": 6
+      },
+      {
+        "name": "星辰迤逦",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 163,
+          "droughtResistance": 165
+        },
+        "generation": 6,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 42,
+          "humidityMax": 81,
+          "lightMin": 22,
+          "lightMax": 63
+        },
+        "parentCount": 2,
+        "lineageLength": 9
+      },
+      {
+        "name": "暮光潋滟",
+        "traits": {
+          "color": 143,
+          "shape": 131,
+          "height": 150,
+          "droughtResistance": 70
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 20,
+          "lightMax": 60
+        },
+        "parentCount": 2,
+        "lineageLength": 9
+      },
+      {
+        "name": "迤逦缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 150,
+          "droughtResistance": 240
+        },
+        "generation": 6,
+        "optimalEnv": {
+          "tempMin": 21,
+          "tempMax": 33,
+          "humidityMin": 26,
+          "humidityMax": 61,
+          "lightMin": 33,
+          "lightMax": 77
+        },
+        "parentCount": 2,
+        "lineageLength": 9
+      },
+      {
+        "name": "翩跹缱绻",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 163,
+          "droughtResistance": 165
+        },
+        "generation": 7,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 42,
+          "humidityMax": 81,
+          "lightMin": 22,
+          "lightMax": 63
+        },
+        "parentCount": 1,
+        "lineageLength": 10
+      },
+      {
+        "name": "星辰暮光",
+        "traits": {
+          "color": 92,
+          "shape": 122,
+          "height": 137,
+          "droughtResistance": 148
+        },
+        "generation": 6,
+        "optimalEnv": {
+          "tempMin": 19,
+          "tempMax": 31,
+          "humidityMin": 39,
+          "humidityMax": 78,
+          "lightMin": 27,
+          "lightMax": 69
+        },
+        "parentCount": 2,
+        "lineageLength": 13
+      },
+      {
+        "name": "缱绻婆娑",
+        "traits": {
+          "color": 83,
+          "shape": 102,
+          "height": 77,
+          "droughtResistance": 158
+        },
+        "generation": 8,
+        "optimalEnv": {
+          "tempMin": 22,
+          "tempMax": 35,
+          "humidityMin": 25,
+          "humidityMax": 60,
+          "lightMin": 38,
+          "lightMax": 83
+        },
+        "parentCount": 1,
+        "lineageLength": 14
+      },
+      {
+        "name": "扶摇缱绻",
+        "traits": {
+          "color": 122,
+          "shape": 186,
+          "height": 30,
+          "droughtResistance": 79
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 29,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 21,
+          "lightMax": 61
+        },
+        "parentCount": 2,
+        "lineageLength": 10
+      },
+      {
+        "name": "暮光白练",
+        "traits": {
+          "color": 83,
+          "shape": 60,
+          "height": 150,
+          "droughtResistance": 240
+        },
+        "generation": 8,
+        "optimalEnv": {
+          "tempMin": 21,
+          "tempMax": 34,
+          "humidityMin": 26,
+          "humidityMax": 62,
+          "lightMin": 35,
+          "lightMax": 79
+        },
+        "parentCount": 2,
+        "lineageLength": 13
+      },
+      {
+        "name": "翠羽细雨",
+        "traits": {
+          "color": 100,
+          "shape": 60,
+          "height": 163,
+          "droughtResistance": 165
+        },
+        "generation": 7,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 30,
+          "humidityMin": 42,
+          "humidityMax": 81,
+          "lightMin": 22,
+          "lightMax": 63
+        },
+        "parentCount": 2,
+        "lineageLength": 10
+      },
+      {
+        "name": "细雨月华",
+        "traits": {
+          "color": 100,
+          "shape": 131,
+          "height": 163,
+          "droughtResistance": 165
+        },
+        "generation": 8,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 29,
+          "humidityMin": 46,
+          "humidityMax": 85,
+          "lightMin": 21,
+          "lightMax": 61
+        },
+        "parentCount": 2,
+        "lineageLength": 15
+      },
+      {
+        "name": "缥缈暖阳",
+        "traits": {
+          "color": 105,
+          "shape": 209,
+          "height": 135,
+          "droughtResistance": 60
+        },
+        "generation": 5,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 28,
+          "humidityMin": 48,
+          "humidityMax": 88,
+          "lightMin": 18,
+          "lightMax": 58
+        },
+        "parentCount": 2,
+        "lineageLength": 7
+      },
+      {
+        "name": "翩跹蓝田",
+        "traits": {
+          "color": 82,
+          "shape": 97,
+          "height": 137,
+          "droughtResistance": 148
+        },
+        "generation": 9,
+        "optimalEnv": {
+          "tempMin": 21,
+          "tempMax": 33,
+          "humidityMin": 32,
+          "humidityMax": 69,
+          "lightMin": 33,
+          "lightMax": 76
+        },
+        "parentCount": 2,
+        "lineageLength": 19
+      },
+      {
+        "name": "暮光缱绻",
+        "traits": {
+          "color": 110,
+          "shape": 97,
+          "height": 137,
+          "droughtResistance": 144
+        },
+        "generation": 10,
+        "optimalEnv": {
+          "tempMin": 20,
+          "tempMax": 32,
+          "humidityMin": 37,
+          "humidityMax": 75,
+          "lightMin": 28,
+          "lightMax": 70
+        },
+        "parentCount": 2,
+        "lineageLength": 23
+      },
+      {
+        "name": "银辉晨曦",
+        "traits": {
+          "color": 100,
+          "shape": 174,
+          "height": 148,
+          "droughtResistance": 110
+        },
+        "generation": 9,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 29,
+          "humidityMin": 47,
+          "humidityMax": 87,
+          "lightMin": 20,
+          "lightMax": 60
+        },
+        "parentCount": 2,
+        "lineageLength": 18
+      },
+      {
+        "name": "细雨青虹",
+        "traits": {
+          "color": 100,
+          "shape": 131,
+          "height": 163,
+          "droughtResistance": 165
+        },
+        "generation": 9,
+        "optimalEnv": {
+          "tempMin": 17,
+          "tempMax": 29,
+          "humidityMin": 46,
+          "humidityMax": 85,
+          "lightMin": 21,
+          "lightMax": 61
+        },
+        "parentCount": 1,
+        "lineageLength": 16
+      },
+      {
+        "name": "银辉细雨",
+        "traits": {
+          "color": 103,
+          "shape": 209,
+          "height": 137,
+          "droughtResistance": 129
+        },
+        "generation": 8,
+        "optimalEnv": {
+          "tempMin": 18,
+          "tempMax": 29,
+          "humidityMin": 45,
+          "humidityMax": 85,
+          "lightMin": 20,
+          "lightMax": 61
+        },
+        "parentCount": 2,
+        "lineageLength": 13
+      }
+    ]
+  }
+}
