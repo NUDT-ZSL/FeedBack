@@ -2,15 +2,22 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import IconCard, { IconItem } from './components/IconCard';
 
 interface SpriteMapping {
+  id: string;
   name: string;
   originalName: string;
+  className: string;
   width: number;
   height: number;
-  originalWidth: number;
-  originalHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
   x: number;
   y: number;
   backgroundPosition: string;
+}
+
+interface IgnoredOrderItem {
+  id: string;
+  reason: string;
 }
 
 interface GenerateResult {
@@ -18,11 +25,14 @@ interface GenerateResult {
   spriteUrl: string;
   totalWidth: number;
   spriteHeight: number;
+  logicalWidth: number;
+  logicalHeight: number;
   scale: string;
   scaleFactor: number;
   padding: number;
   cssCode: string;
   mappings: SpriteMapping[];
+  ignoredOrder?: IgnoredOrderItem[];
 }
 
 interface HistoryItem {
@@ -30,9 +40,19 @@ interface HistoryItem {
   timestamp: number;
   result: GenerateResult;
   iconNames: string[];
+  iconIds: string[];
 }
 
 const HISTORY_KEY = 'sprite_generator_history';
+
+// Stable unique id assigned at upload time so same-named icons stay distinct
+// through reordering, generation and the result panel.
+const createIconId = (): string => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `icon_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
 
 const App: React.FC = () => {
   const [icons, setIcons] = useState<IconItem[]>([]);
@@ -96,7 +116,7 @@ const App: React.FC = () => {
     return { width: 24, height: 24 };
   };
 
-  const fileToIconItem = (file: File): Promise<IconItem> => {
+  const fileToIconItem = (file: File, id: string): Promise<IconItem> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -104,7 +124,7 @@ const App: React.FC = () => {
         const { width, height } = parseSvgDimensions(svgText);
         const name = file.name.replace(/\.svg$/i, '');
         resolve({
-          id: `${name}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id,
           name,
           svgDataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`,
           width,
@@ -127,9 +147,16 @@ const App: React.FC = () => {
     const remaining = Math.max(0, 20 - icons.length);
     const toProcess = svgFiles.slice(0, remaining);
 
-    const tempItems: IconItem[] = toProcess.map((f) => ({
-      id: `loading_${Date.now()}_${Math.random()}`,
-      name: f.name.replace(/\.svg$/i, ''),
+    // Ids are allocated now and reused after parsing so each icon keeps one
+    // stable identity, even when several files share the same name.
+    const pending = toProcess.map((f) => ({
+      file: f,
+      id: createIconId(),
+    }));
+
+    const tempItems: IconItem[] = pending.map(({ file, id }) => ({
+      id: `loading_${id}`,
+      name: file.name.replace(/\.svg$/i, ''),
       svgDataUrl: '',
       width: 0,
       height: 0,
@@ -138,11 +165,14 @@ const App: React.FC = () => {
     }));
     setIcons((prev) => [...prev, ...tempItems]);
 
-    const newIcons = await Promise.all(toProcess.map(fileToIconItem));
-    setIcons((prev) => {
-      const filtered = prev.filter((i) => !i.id.startsWith('loading_'));
-      return [...filtered, ...newIcons];
-    });
+    const newIcons = await Promise.all(pending.map(({ file, id }) => fileToIconItem(file, id)));
+    setIcons((prev) =>
+      prev.map((i) => {
+        if (!i.id.startsWith('loading_')) return i;
+        const realId = i.id.slice('loading_'.length);
+        return newIcons.find((n) => n.id === realId) ?? i;
+      })
+    );
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -212,9 +242,10 @@ const App: React.FC = () => {
         const blob = new Blob([bytes], { type: 'image/svg+xml' });
         formData.append('svgs', blob, `${icon.name}.svg`);
       });
+      formData.append('iconIds', JSON.stringify(selectedIcons.map((i) => i.id)));
       formData.append('scale', scale);
       formData.append('padding', padding.toString());
-      formData.append('order', JSON.stringify(selectedIcons.map((i) => i.name)));
+      formData.append('order', JSON.stringify(selectedIcons.map((i) => i.id)));
 
       const response = await fetch('/api/generate-sprite', {
         method: 'POST',
@@ -234,6 +265,7 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         result: data,
         iconNames: selectedIcons.map((i) => i.name),
+        iconIds: selectedIcons.map((i) => i.id),
       };
       saveHistory(historyItem);
     } catch (error) {
@@ -615,6 +647,68 @@ const App: React.FC = () => {
                     }}
                     dangerouslySetInnerHTML={{ __html: highlightCss(result.cssCode) }}
                   />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>
+                      CSS 映射 <span style={{ color: '#888', fontWeight: 400 }}>({result.mappings.length} 个)</span>
+                    </h2>
+                    <span style={{ fontSize: '11px', color: '#888' }}>
+                      整图逻辑尺寸 {result.logicalWidth}×{result.logicalHeight}px
+                    </span>
+                  </div>
+                  {result.ignoredOrder && result.ignoredOrder.length > 0 && (
+                    <div
+                      style={{
+                        background: '#3d3526',
+                        border: '1px solid #fd971f',
+                        borderRadius: '6px',
+                        padding: '8px 10px',
+                        marginBottom: '8px',
+                        fontSize: '12px',
+                        color: '#fd971f',
+                      }}
+                    >
+                      {result.ignoredOrder.length} 个无效标识已忽略：
+                      {result.ignoredOrder.map((ignored) => ignored.id || '(空)').join(', ')}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {result.mappings.map((m, idx) => (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          background: '#252525',
+                          borderRadius: '6px',
+                          padding: '7px 10px',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <span style={{ color: '#00d4aa', fontWeight: 600, minWidth: '20px' }}>{idx + 1}</span>
+                        <span style={{ color: '#e0e0e0', minWidth: '72px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m.name}>
+                          {m.name}
+                        </span>
+                        <span style={{ color: '#a6e22e', fontFamily: 'monospace', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={`.${m.className}`}>
+                          .{m.className}
+                        </span>
+                        <span style={{ color: '#888', whiteSpace: 'nowrap' }}>
+                          {m.width}×{m.height} @ ({m.x}, {m.y})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div>

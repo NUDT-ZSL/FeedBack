@@ -17,45 +17,104 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-if (!fs.existsSync('./uploads')) {
-  fs.mkdirSync('./uploads');
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
 }
+
+// Render a pixel value without floating-point artifacts.
+const fmt = (n) => String(Math.round(n * 1000) / 1000);
+
+const parseJsonField = (value, fallback) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
 
 app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
   try {
-    const { scale = '1x', padding = 0, order = '[]' } = req.body;
+    const { scale = '1x', padding = 0 } = req.body;
     const scaleFactor = scale === '3x' ? 3 : scale === '2x' ? 2 : 1;
-    const paddingValue = parseInt(padding) || 0;
-    const orderArr = JSON.parse(order);
+    const paddingValue = Math.max(0, parseInt(padding, 10) || 0);
 
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: '未上传文件' });
     }
 
-    const files = orderArr.length > 0
-      ? orderArr.map(id => req.files.find(f => f.originalname.replace(/\.svg$/i, '') === id) || req.files.find(f => f.originalname === id)).filter(Boolean)
-      : req.files;
+    // `iconIds` is sent in the same order as the `svgs` files. Stable unique
+    // ids let same-named icons from different folders keep independent slots.
+    const rawIconIds = parseJsonField(req.body.iconIds, null);
+    const iconIds = Array.isArray(rawIconIds) && rawIconIds.length === req.files.length
+      ? rawIconIds.map((id, i) => (typeof id === 'string' && id.trim() ? id : `icon-${i + 1}`))
+      : req.files.map((f, i) => `${path.parse(f.originalname).name}-${i + 1}`);
+
+    const uploadedIcons = req.files.map((file, i) => ({
+      id: String(iconIds[i]),
+      name: path.parse(file.originalname).name,
+      originalName: file.originalname,
+      buffer: file.buffer,
+    }));
+    const iconsById = new Map(uploadedIcons.map((icon) => [icon.id, icon]));
+
+    // Reorder strictly by stable id. Unknown/duplicated entries are ignored
+    // instead of failing the request and are reported via `ignoredOrder`.
+    const parsedOrder = parseJsonField(req.body.order, []);
+    const orderList = Array.isArray(parsedOrder) ? parsedOrder : [];
+    const orderedIcons = [];
+    const ignoredOrder = [];
+    const consumedIds = new Set();
+
+    for (const entry of orderList) {
+      const id = String(entry ?? '');
+      if (!id) {
+        ignoredOrder.push({ id, reason: 'empty' });
+        continue;
+      }
+      if (consumedIds.has(id)) {
+        ignoredOrder.push({ id, reason: 'duplicate' });
+        continue;
+      }
+      const icon = iconsById.get(id);
+      if (icon) {
+        consumedIds.add(id);
+        orderedIcons.push(icon);
+        continue;
+      }
+      // Backward compatibility: legacy clients sent bare icon names.
+      const legacyIcon = uploadedIcons.find((it) => !consumedIds.has(it.id) && it.name === id);
+      if (legacyIcon) {
+        consumedIds.add(legacyIcon.id);
+        orderedIcons.push(legacyIcon);
+      } else {
+        ignoredOrder.push({ id, reason: 'not-found' });
+      }
+    }
+
+    // Icons missing from `order` keep their original upload position.
+    for (const icon of uploadedIcons) {
+      if (!consumedIds.has(icon.id)) orderedIcons.push(icon);
+    }
 
     const processedIcons = [];
-    for (const file of files) {
+    for (const icon of orderedIcons) {
       try {
-        const metadata = await sharp(file.buffer).metadata();
-        const width = metadata.width || 0;
-        const height = metadata.height || 0;
+        const metadata = await sharp(icon.buffer).metadata();
+        const logicalWidth = metadata.width || 0;
+        const logicalHeight = metadata.height || 0;
         processedIcons.push({
-          name: file.originalname.replace(/\.svg$/i, ''),
-          originalName: file.originalname,
-          buffer: file.buffer,
-          width: width * scaleFactor,
-          height: height * scaleFactor,
-          originalWidth: width,
-          originalHeight: height,
+          ...icon,
+          logicalWidth,
+          logicalHeight,
+          physicalWidth: logicalWidth * scaleFactor,
+          physicalHeight: logicalHeight * scaleFactor,
         });
       } catch (e) {
-        console.error(`处理 ${file.originalname} 失败:`, e);
+        console.error(`处理 ${icon.originalName} 失败:`, e);
       }
     }
 
@@ -63,42 +122,73 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
       return res.status(400).json({ error: '无法处理任何SVG文件' });
     }
 
-    const maxWidth = Math.max(...processedIcons.map(i => i.width));
-    const maxHeight = Math.max(...processedIcons.map(i => i.height));
-    const totalWidth = processedIcons.reduce((sum, icon) => sum + icon.width + paddingValue, 0) - paddingValue;
-    const spriteHeight = maxHeight;
+    // Padding is part of the physical PNG and scales like the icons. All CSS
+    // coordinates/sizes below are expressed in logical (1x) pixels.
+    const physicalPadding = paddingValue * scaleFactor;
+    const physicalHeight = Math.max(...processedIcons.map((i) => i.physicalHeight));
+    const physicalWidth = processedIcons.reduce(
+      (sum, icon) => sum + icon.physicalWidth + physicalPadding,
+      -physicalPadding
+    );
+    const logicalWidth = physicalWidth / scaleFactor;
+    const logicalHeight = physicalHeight / scaleFactor;
 
-    let xOffset = 0;
-    const iconPositions = [];
+    // Resolve class-name collisions so same-named icons remain independently
+    // addressable in the generated stylesheet.
+    const nameCounts = new Map();
+    for (const icon of processedIcons) {
+      nameCounts.set(icon.name, (nameCounts.get(icon.name) || 0) + 1);
+    }
+    const seenNames = new Map();
+
+    let physicalX = 0;
     const compositeArray = [];
+    const cssMappings = [];
 
     for (const icon of processedIcons) {
-      iconPositions.push({
+      const seen = seenNames.get(icon.name) || 0;
+      seenNames.set(icon.name, seen + 1);
+      const baseClass = `sprite-${icon.name.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const className = nameCounts.get(icon.name) > 1 ? `${baseClass}-${seen + 1}` : baseClass;
+
+      const logicalX = physicalX / scaleFactor;
+      // Rasterize the SVG at physical pixels first; composite's resize does
+      // not upscale vector inputs reliably across sharp versions.
+      const raster = await sharp(icon.buffer)
+        .resize(icon.physicalWidth, icon.physicalHeight, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .png()
+        .toBuffer();
+      compositeArray.push({
+        input: raster,
+        left: physicalX,
+        top: 0,
+      });
+      cssMappings.push({
+        id: icon.id,
         name: icon.name,
         originalName: icon.originalName,
-        width: icon.width,
-        height: icon.height,
-        originalWidth: icon.originalWidth,
-        originalHeight: icon.originalHeight,
-        x: xOffset,
+        className,
+        width: icon.logicalWidth,
+        height: icon.logicalHeight,
+        physicalWidth: icon.physicalWidth,
+        physicalHeight: icon.physicalHeight,
+        x: logicalX,
         y: 0,
+        backgroundPosition: `-${fmt(logicalX)}px 0`,
       });
-      compositeArray.push({
-        input: icon.buffer,
-        left: xOffset,
-        top: 0,
-        resize: { width: icon.width, height: icon.height, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } },
-      });
-      xOffset += icon.width + paddingValue;
+      physicalX += icon.physicalWidth + physicalPadding;
     }
 
     const spriteId = uuidv4();
-    const spritePath = path.join(__dirname, 'uploads', `${spriteId}.png`);
+    const spritePath = path.join(uploadsDir, `${spriteId}.png`);
 
     await sharp({
       create: {
-        width: Math.max(totalWidth, 1),
-        height: Math.max(spriteHeight, 1),
+        width: Math.max(physicalWidth, 1),
+        height: Math.max(physicalHeight, 1),
         channels: 4,
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       },
@@ -107,46 +197,34 @@ app.post('/api/generate-sprite', upload.array('svgs', 20), async (req, res) => {
       .png()
       .toFile(spritePath);
 
-    const cssMappings = iconPositions.map(pos => {
-      const bgX = pos.x === 0 ? '0' : `-${pos.x}px`;
-      const bgY = pos.y === 0 ? '0' : `-${pos.y}px`;
-      return {
-        name: pos.name,
-        originalName: pos.originalName,
-        width: pos.width,
-        height: pos.height,
-        originalWidth: pos.originalWidth,
-        originalHeight: pos.originalHeight,
-        x: pos.x,
-        y: pos.y,
-        backgroundPosition: `${bgX} ${bgY}`,
-      };
-    });
-
+    // Single source of truth: every CSS value (size, position, background-size)
+    // is expressed in logical pixels. The browser then downsamples the @Nx PNG
+    // via background-size, so 1x/2x/3x render identically without stretching.
     let cssCode = `/* SVG Sprite - Generated ${scale} */\n`;
-    cssCode += `.sprite {\n  display: inline-block;\n  background-image: url('sprite.png');\n  background-repeat: no-repeat;\n}\n\n`;
-    cssMappings.forEach(m => {
-      const className = m.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      cssCode += `.sprite-${className} {\n`;
-      cssCode += `  width: ${m.originalWidth}px;\n`;
-      cssCode += `  height: ${m.originalHeight}px;\n`;
+    cssCode += `.sprite {\n  display: inline-block;\n  background-image: url('sprite.png');\n  background-repeat: no-repeat;\n`;
+    cssCode += `  background-size: ${fmt(logicalWidth)}px ${fmt(logicalHeight)}px;\n}\n\n`;
+    cssMappings.forEach((m) => {
+      cssCode += `.${m.className} {\n`;
+      cssCode += `  width: ${fmt(m.width)}px;\n`;
+      cssCode += `  height: ${fmt(m.height)}px;\n`;
       cssCode += `  background-position: ${m.backgroundPosition};\n`;
-      if (scaleFactor !== 1) {
-        cssCode += `  background-size: ${totalWidth / scaleFactor}px auto;\n`;
-      }
+      cssCode += `  background-size: ${fmt(logicalWidth)}px ${fmt(logicalHeight)}px;\n`;
       cssCode += `}\n\n`;
     });
 
     res.json({
       spriteId,
       spriteUrl: `/uploads/${spriteId}.png`,
-      totalWidth,
-      spriteHeight,
+      totalWidth: physicalWidth,
+      spriteHeight: physicalHeight,
+      logicalWidth,
+      logicalHeight,
       scale,
       scaleFactor,
       padding: paddingValue,
       cssCode,
       mappings: cssMappings,
+      ignoredOrder,
     });
   } catch (error) {
     console.error('生成雪碧图失败:', error);
