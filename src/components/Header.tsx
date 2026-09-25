@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatCurrency } from '../utils/format';
 
 interface HeaderProps {
   totalIncome: number;
@@ -6,22 +7,14 @@ interface HeaderProps {
   balance: number;
 }
 
-const Header: React.FC<HeaderProps> = ({ totalIncome, totalExpense, balance }) => {
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('zh-CN', {
-      style: 'currency',
-      currency: 'CNY',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const getBalanceClassName = (): string => {
-    const classes = ['stat-value'];
-    if (balance < 0) {
-      classes.push('balance-negative');
-    }
-    return classes.join(' ');
-  };
+const Header: React.FC<HeaderProps> = ({
+  totalIncome,
+  totalExpense,
+  balance,
+}) => {
+  const balanceClassName = balance < 0
+    ? 'stat-value balance-negative'
+    : 'stat-value';
 
   return (
     <div className="stats-container">
@@ -35,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({ totalIncome, totalExpense, balance }) =
       </div>
       <div className="stat-card fade-in-up fade-in-stagger-3">
         <div className="stat-label">本月结余</div>
-        <div className={getBalanceClassName()}>{formatCurrency(balance)}</div>
+        <div className={balanceClassName}>{formatCurrency(balance)}</div>
       </div>
     </div>
   );
