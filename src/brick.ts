@@ -1,3 +1,5 @@
+import { defaultRandom, RandomSource } from './random';
+
 export interface Brick {
   x: number;
   y: number;
@@ -36,10 +38,12 @@ export class BrickManager {
   private totalBricks: number = 0;
   private canvasWidth: number;
   private canvasHeight: number;
+  private readonly random: RandomSource;
 
-  constructor(canvasWidth: number, canvasHeight: number) {
+  constructor(canvasWidth: number, canvasHeight: number, random: RandomSource = defaultRandom) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
+    this.random = random;
   }
 
   generateHoneycombLayout(): void {
@@ -50,10 +54,13 @@ export class BrickManager {
     const startX = stepX;
     const startY = 60;
     const maxColumns = Math.floor((this.canvasWidth - 2 * stepX) / stepX);
-    let row = 0;
     let total = 0;
 
-    while (total < 80) {
+    for (
+      let row = 0;
+      total < 80 && startY + row * stepY + BRICK_RADIUS < this.canvasHeight * 0.55;
+      row++
+    ) {
       const offsetX = row % 2 === 1 ? stepX / 2 : 0;
       const columnsInRow = row % 2 === 1 ? maxColumns - 1 : maxColumns;
 
@@ -61,19 +68,19 @@ export class BrickManager {
         const x = startX + offsetX + col * stepX;
         const y = startY + row * stepY;
 
-        if (y + BRICK_RADIUS < this.canvasHeight * 0.55) {
-          this.bricks.push({
-            x,
-            y,
-            radius: BRICK_RADIUS,
-            color: BRICK_COLORS[Math.floor(Math.random() * BRICK_COLORS.length)],
-            alive: true
-          });
-          total++;
-          if (total >= 80) break;
+        this.bricks.push({
+          x,
+          y,
+          radius: BRICK_RADIUS,
+          color: BRICK_COLORS[Math.floor(this.random() * BRICK_COLORS.length)],
+          alive: true
+        });
+        total++;
+
+        if (total >= 80) {
+          break;
         }
       }
-      row++;
     }
 
     this.totalBricks = this.bricks.length;
@@ -105,7 +112,7 @@ export class BrickManager {
 
         const adjacentBricks = this.findAdjacentBricks(brick);
         for (const adj of adjacentBricks) {
-          if (adj.alive && Math.random() < 0.3) {
+          if (adj.alive && this.random() < 0.3) {
             adj.alive = false;
             comboChain++;
             const adjParticles = this.createParticles(adj.x, adj.y, adj.color);
@@ -125,38 +132,34 @@ export class BrickManager {
     };
   }
 
-  private findAdjacentBricks(brick: Brick): Brick[] {
-    const adjacent: Brick[] = [];
+  isAdjacent(first: Brick, second: Brick): boolean {
     const brickDiameter = BRICK_RADIUS * 2;
     const stepX = brickDiameter + BRICK_SPACING;
     const stepY = brickDiameter + BRICK_SPACING;
     const tolerance = 2;
 
-    for (const b of this.bricks) {
-      if (b === brick || !b.alive) continue;
+    const dx = Math.abs(second.x - first.x);
+    const dy = Math.abs(second.y - first.y);
 
-      const dx = Math.abs(b.x - brick.x);
-      const dy = Math.abs(b.y - brick.y);
+    return (
+      (Math.abs(dx - stepX) < tolerance && dy < tolerance) ||
+      (Math.abs(dx - stepX / 2) < tolerance && Math.abs(dy - stepY) < tolerance)
+    );
+  }
 
-      const isAdjacent =
-        (Math.abs(dx - stepX) < tolerance && dy < tolerance) ||
-        (Math.abs(dx - stepX / 2) < tolerance && Math.abs(dy - stepY) < tolerance);
-
-      if (isAdjacent) {
-        adjacent.push(b);
-      }
-    }
-
-    return adjacent;
+  private findAdjacentBricks(brick: Brick): Brick[] {
+    return this.bricks.filter(
+      (candidate) => candidate !== brick && candidate.alive && this.isAdjacent(brick, candidate)
+    );
   }
 
   private createParticles(x: number, y: number, color: string): Particle[] {
-    const count = 5 + Math.floor(Math.random() * 4);
+    const count = 5 + Math.floor(this.random() * 4);
     const particles: Particle[] = [];
 
     for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const speed = 1 + Math.random() * 2;
+      const angle = (Math.PI * 2 * i) / count + this.random() * 0.5;
+      const speed = 1 + this.random() * 2;
       particles.push({
         x,
         y,

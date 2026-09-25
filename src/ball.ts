@@ -1,3 +1,5 @@
+import { defaultRandom, RandomSource } from './random';
+
 export interface BallState {
   x: number;
   y: number;
@@ -15,8 +17,9 @@ export class Ball {
   radius: number;
   speed: number;
   baseSpeed: number;
+  private readonly random: RandomSource;
 
-  constructor(x: number, y: number, radius: number = 8) {
+  constructor(x: number, y: number, radius: number = 8, random: RandomSource = defaultRandom) {
     this.x = x;
     this.y = y;
     this.radius = radius;
@@ -24,6 +27,7 @@ export class Ball {
     this.speed = this.baseSpeed;
     this.vx = 0;
     this.vy = 0;
+    this.random = random;
   }
 
   launch(angle: number = -Math.PI / 2): void {
@@ -55,17 +59,17 @@ export class Ball {
     if (this.x - this.radius < 0) {
       this.x = this.radius;
       this.reflectHorizontal();
-      this.addRandomAngleOffset();
+      this.addRandomAngleOffset('vx-positive');
     } else if (this.x + this.radius > canvasWidth) {
       this.x = canvasWidth - this.radius;
       this.reflectHorizontal();
-      this.addRandomAngleOffset();
+      this.addRandomAngleOffset('vx-negative');
     }
 
     if (this.y - this.radius < 0) {
       this.y = this.radius;
       this.reflectVertical();
-      this.addRandomAngleOffset();
+      this.addRandomAngleOffset('vy-positive');
     }
 
     return this.y + this.radius > canvasHeight;
@@ -79,10 +83,21 @@ export class Ball {
     this.vy = -this.vy;
   }
 
-  addRandomAngleOffset(): void {
+  addRandomAngleOffset(
+    keepSign?: 'vx-positive' | 'vx-negative' | 'vy-positive' | 'vy-negative'
+  ): void {
     const offsetRange = (15 * Math.PI) / 180;
-    const offset = (Math.random() - 0.5) * 2 * offsetRange;
+    let offset = (this.random() - 0.5) * 2 * offsetRange;
     const currentAngle = Math.atan2(this.vy, this.vx);
+
+    if (keepSign) {
+      const limit = keepSign.startsWith('vx')
+        ? Math.abs(Math.atan2(this.vy, this.vx))
+        : Math.abs(Math.atan2(this.vx, this.vy));
+      const usableRange = Math.min(offsetRange, Math.max(0, limit - 1e-6));
+      offset = Math.max(-usableRange, Math.min(usableRange, offset));
+    }
+
     const newAngle = currentAngle + offset;
     this.vx = Math.cos(newAngle) * this.speed;
     this.vy = Math.sin(newAngle) * this.speed;
@@ -100,13 +115,14 @@ export class Ball {
     const distanceY = this.y - closestY;
     const distanceSquared = distanceX * distanceX + distanceY * distanceY;
 
-    if (distanceSquared < this.radius * this.radius && this.vy > 0) {
-      const hitPoint = (this.x - paddleX) / paddleWidth - 0.5;
+    if (distanceSquared <= this.radius * this.radius && this.vy > 0) {
+      const relativeHit = Math.max(0, Math.min(1, (this.x - paddleX) / paddleWidth));
+      const hitPoint = relativeHit - 0.5;
       const maxAngle = (60 * Math.PI) / 180;
       const baseAngle = -Math.PI / 2 + hitPoint * maxAngle;
       this.vx = Math.cos(baseAngle) * this.speed;
       this.vy = Math.sin(baseAngle) * this.speed;
-      this.addRandomAngleOffset();
+      this.addRandomAngleOffset('vy-negative');
       this.y = paddleY - this.radius;
       return true;
     }

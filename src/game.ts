@@ -1,6 +1,8 @@
 import { Ball } from './ball';
-import { BrickManager, Particle } from './brick';
+import { BrickManager } from './brick';
 import { Paddle } from './paddle';
+import { defaultRandom, RandomSource } from './random';
+import { stepGameWorld } from './simulation';
 
 interface GameState {
   score: number;
@@ -19,15 +21,16 @@ class Game {
   private paddle: Paddle;
   private state: GameState;
   private lastTime: number = 0;
-  private particles: Particle[] = [];
   private shakeOffsetX: number = 0;
   private shakeOffsetY: number = 0;
   private shakeTime: number = 0;
   private ballLaunched: boolean = false;
   private canvasWidth: number = 800;
   private canvasHeight: number = 600;
+  private readonly random: RandomSource;
 
-  constructor() {
+  constructor(random: RandomSource = defaultRandom) {
+    this.random = random;
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
 
@@ -40,10 +43,12 @@ class Game {
 
     this.ball = new Ball(
       paddleX + paddleWidth / 2,
-      paddleY - 10
+      paddleY - 10,
+      8,
+      this.random
     );
 
-    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight);
+    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight, this.random);
     this.paddle = new Paddle(paddleX, paddleY, paddleWidth, paddleHeight);
     this.paddle.setCanvasWidth(this.canvasWidth);
 
@@ -144,12 +149,12 @@ class Game {
   private handleResize(): void {
     this.setupCanvas();
     this.paddle.setCanvasWidth(this.canvasWidth);
-    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight);
+    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight, this.random);
     this.brickManager.generateHoneycombLayout();
   }
 
   private launchBall(): void {
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+    const angle = -Math.PI / 2 + (this.random() - 0.5) * 0.5;
     this.ball.launch(angle);
     this.ballLaunched = true;
     this.state.isPlaying = true;
@@ -181,7 +186,16 @@ class Game {
   private update(deltaTime: number): void {
     if (this.state.isGameOver) return;
 
-    this.paddle.update();
+    const frame = stepGameWorld(
+      {
+        ball: this.ball,
+        bricks: this.brickManager,
+        paddle: this.paddle,
+        canvasWidth: this.canvasWidth,
+        canvasHeight: this.canvasHeight
+      },
+      deltaTime
+    );
 
     if (this.shakeTime > 0) {
       this.shakeTime -= deltaTime;
@@ -197,9 +211,7 @@ class Game {
       return;
     }
 
-    const ballFell = this.ball.update(this.canvasWidth, this.canvasHeight);
-
-    if (ballFell) {
+    if (frame.ballFell) {
       this.state.lives--;
       if (this.state.lives <= 0) {
         this.endGame();
@@ -209,58 +221,25 @@ class Game {
       return;
     }
 
-    this.ball.checkPaddleCollision(
-      this.paddle.x,
-      this.paddle.y,
-      this.paddle.width,
-      this.paddle.height
-    );
-
-    const collisionResult = this.brickManager.checkCollision(
-      this.ball.x,
-      this.ball.y,
-      this.ball.radius
-    );
-
-    if (collisionResult.hit) {
-      this.ball.reflectVertical();
-      this.ball.addRandomAngleOffset();
-
+    if (frame.brickHit) {
       const baseScore = 10;
-      const comboBonus = collisionResult.comboChain > 1 ? (collisionResult.comboChain - 1) * 5 : 0;
+      const comboBonus = frame.comboChain > 1 ? (frame.comboChain - 1) * 5 : 0;
       this.state.score += baseScore + comboBonus;
-      this.state.comboCount = collisionResult.comboChain;
+      this.state.comboCount = frame.comboChain;
 
       this.triggerShake();
 
-      this.particles.push(...collisionResult.particles);
-      if (this.particles.length > 200) {
-        this.particles = this.particles.slice(-200);
-      }
-
-      const progress = this.brickManager.getProgress();
-      if (progress >= 1) {
+      if (frame.progress >= 1) {
         this.nextLevel();
-      }
-    }
-
-    this.brickManager.updateParticles(deltaTime);
-
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.life -= deltaTime;
-      p.alpha = Math.max(0, p.life / p.maxLife);
-      if (p.life <= 0) {
-        this.particles.splice(i, 1);
       }
     }
   }
 
   private triggerShake(): void {
     this.shakeTime = 100;
-    const shakeAmount = 2 + Math.random() * 1;
-    this.shakeOffsetX = (Math.random() - 0.5) * shakeAmount * 2;
-    this.shakeOffsetY = (Math.random() - 0.5) * shakeAmount * 2;
+    const shakeAmount = 2 + this.random() * 1;
+    this.shakeOffsetX = (this.random() - 0.5) * shakeAmount * 2;
+    this.shakeOffsetY = (this.random() - 0.5) * shakeAmount * 2;
   }
 
   private resetBall(): void {
@@ -310,7 +289,9 @@ class Game {
 
     this.ball = new Ball(
       this.paddle.x + this.paddle.width / 2,
-      this.paddle.y - 10
+      this.paddle.y - 10,
+      8,
+      this.random
     );
 
     this.brickManager.clear();
@@ -320,8 +301,6 @@ class Game {
     this.paddle.reset(paddleX, this.paddle.y);
 
     this.ballLaunched = false;
-    this.particles = [];
-
     const gameOverEl = document.getElementById('game-over');
     if (gameOverEl) {
       gameOverEl.classList.remove('visible');
@@ -338,7 +317,6 @@ class Game {
     this.drawBorder();
     this.brickManager.drawBricks(this.ctx);
     this.brickManager.drawParticles(this.ctx);
-    this.drawParticles();
     this.paddle.draw(this.ctx);
     this.ball.draw(this.ctx);
     this.drawHUD();
@@ -372,20 +350,6 @@ class Game {
     this.ctx.closePath();
     this.ctx.stroke();
     this.ctx.restore();
-  }
-
-  private drawParticles(): void {
-    for (const p of this.particles) {
-      this.ctx.save();
-      this.ctx.globalAlpha = p.alpha;
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, 2 + p.alpha * 2, 0, Math.PI * 2);
-      this.ctx.fillStyle = p.color;
-      this.ctx.shadowColor = p.color;
-      this.ctx.shadowBlur = 5;
-      this.ctx.fill();
-      this.ctx.restore();
-    }
   }
 
   private drawHUD(): void {
