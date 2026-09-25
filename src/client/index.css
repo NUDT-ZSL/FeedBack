@@ -860,6 +860,58 @@ body {
   flex-wrap: wrap;
 }
 
+.inspiration-board-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  min-height: 300px;
+  overflow: visible;
+}
+
+.inspiration-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.inspiration-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspiration-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.inspiration-group-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.inspiration-group-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.inspiration-group-cards.dragging-over {
+  background: var(--highlight);
+}
+
+.inspiration-card-wrapper {
+  width: 240px;
+}
+
 .export-section {
   margin-top: 24px;
   padding-top: 16px;

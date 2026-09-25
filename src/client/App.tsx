@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Book, Note, BookSearchResult } from '../types';
+import { Book, Note, BookSearchResult, InspirationCard } from '../types';
 import BookCard from './components/BookCard';
 import NoteList from './components/NoteList';
 import InspirationBoard from './components/InspirationBoard';
 import { SkeletonGrid, SearchResultSkeleton } from './components/Skeleton';
+import { loadLayout, saveLayout, findCard } from './utils/boardLayout';
 
 const NavBar: React.FC<{ onExport: () => void }> = ({ onExport }) => (
   <nav className="navbar">
@@ -331,15 +332,16 @@ const BookDetailPage: React.FC = () => {
   };
 
   const handleAddToBoard = (note: Note) => {
-    const STORAGE_KEY = 'inspiration_board_layout';
     try {
-      const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      const alreadyAdded = existing.some((c: any) => c.noteId === note.id);
+      const groups = loadLayout();
+      const alreadyAdded = Object.values(groups).some((cards) =>
+        cards.some((c) => c.noteId === note.id)
+      );
       if (alreadyAdded) {
         alert('该笔记已在灵感板中');
         return;
       }
-      const newCard = {
+      const newCard: InspirationCard = {
         id: `insp-${Date.now()}`,
         noteId: note.id,
         bookId: note.bookId,
@@ -348,8 +350,8 @@ const BookDetailPage: React.FC = () => {
         x: 20 + Math.random() * 300,
         y: 20 + Math.random() * 200,
       };
-      existing.push(newCard);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+      groups[note.bookId] = [...(groups[note.bookId] || []), newCard];
+      saveLayout(groups);
       alert('已添加到灵感板！');
     } catch {
       alert('添加失败');
@@ -537,20 +539,48 @@ const BookDetailPage: React.FC = () => {
 const InspirationPage: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([axios.get<Note[]>('/api/notes'), axios.get<Book[]>('/api/books')]).then(
-      ([notesRes, booksRes]) => {
+    Promise.all([axios.get<Note[]>('/api/notes'), axios.get<Book[]>('/api/books')])
+      .then(([notesRes, booksRes]) => {
         setNotes(notesRes.data);
         setBooks(booksRes.data);
-      }
-    );
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  // 卡片跨组落下：把对应笔记的 bookId 改到目标书籍，失败返回 false 让灵感板回滚
+  const handleMoveCard = useCallback(
+    async (cardId: string, targetBookId: string): Promise<boolean> => {
+      const card = findCard(loadLayout(), cardId);
+      if (!card) return false;
+      try {
+        await axios.put(`/api/notes/${card.noteId}`, { bookId: targetBookId });
+        setNotes((prev) =>
+          prev.map((n) => (n.id === card.noteId ? { ...n, bookId: targetBookId } : n))
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    []
+  );
 
   return (
     <div className="main-content">
       <h1 className="section-title">💡 灵感板</h1>
-      <InspirationBoard notes={notes} books={books} onRemoveCard={() => {}} />
+      {loading ? (
+        <SkeletonGrid />
+      ) : (
+        <InspirationBoard
+          notes={notes}
+          books={books}
+          onRemoveCard={() => {}}
+          onMoveCard={handleMoveCard}
+        />
+      )}
       <p
         style={{
           marginTop: 16,
@@ -559,7 +589,7 @@ const InspirationPage: React.FC = () => {
           textAlign: 'center',
         }}
       >
-        拖拽卡片来重新排列你的灵感 · 布局自动保存
+        同组内拖拽调整顺序 · 拖到其他书的分组可改变笔记归属 · 布局自动保存
       </p>
     </div>
   );

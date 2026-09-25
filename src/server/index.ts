@@ -131,11 +131,19 @@ app.put('/api/notes/:id', (req, res) => {
   const notes = readJSON<Note>(NOTES_FILE);
   const index = notes.findIndex((n) => n.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: 'Note not found' });
+  const targetBookId =
+    typeof req.body.bookId === 'string' ? req.body.bookId : notes[index].bookId;
+  if (targetBookId !== notes[index].bookId) {
+    const books = readJSON<Book>(BOOKS_FILE);
+    if (!books.some((b) => b.id === targetBookId)) {
+      return res.status(400).json({ error: 'Target book not found' });
+    }
+  }
   notes[index] = {
     ...notes[index],
     ...req.body,
     id: notes[index].id,
-    bookId: notes[index].bookId,
+    bookId: targetBookId,
     createdAt: notes[index].createdAt,
     updatedAt: new Date().toISOString(),
   };
