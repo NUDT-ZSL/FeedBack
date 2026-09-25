@@ -164,3 +164,24 @@ export function getCardElementById(
 ): HTMLElement | null {
   return gridContainer.querySelector(`[data-card-id="${cardId}"]`);
 }
+
+// 撤销/重做后按数据状态整体同步单张卡片的视觉状态。
+export function syncCardElement(
+  cardElement: HTMLElement,
+  card: CardData
+): void {
+  cardElement.classList.toggle('card--matched', card.isMatched);
+  cardElement.classList.toggle(
+    'card--flipped',
+    !card.isMatched && card.isFlipped
+  );
+  cardElement.classList.remove('card--wrong');
+  const frontFace = cardElement.querySelector('.card__face--front');
+  if (frontFace) {
+    if (card.isMatched) {
+      frontFace.setAttribute('aria-label', '已匹配');
+    } else {
+      frontFace.removeAttribute('aria-label');
+    }
+  }
+}

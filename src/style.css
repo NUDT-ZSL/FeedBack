@@ -129,6 +129,35 @@ body {
   box-shadow: 0 2px 4px var(--shadow);
 }
 
+.history-btn {
+  padding: 10px 16px;
+  border-radius: var(--border-radius);
+  background-color: var(--accent-color);
+  color: var(--text-color);
+  border: 2px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px var(--shadow);
+}
+
+.history-btn:hover:not(:disabled) {
+  border-color: var(--secondary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px var(--shadow);
+}
+
+.history-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+.history-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .stats-bar {
   display: flex;
   justify-content: center;
