@@ -1,8 +1,11 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import type { Selection } from './AudioEngine';
 
 interface SpectrumVisualizerProps {
   frequencyData: Uint8Array | null;
   isPlaying: boolean;
+  selection: Selection | null;
+  sessionId: number;
 }
 
 interface BarState {
@@ -13,12 +16,15 @@ interface BarState {
 
 const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
   frequencyData,
-  isPlaying
+  isPlaying,
+  selection,
+  sessionId
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   const barsRef = useRef<BarState[]>([]);
+  const peaksRef = useRef<number[]>([]);
   const lastDataRef = useRef<Uint8Array | null>(null);
 
   const BAR_COUNT = 128;
@@ -32,7 +38,12 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
       targetHeight: 0,
       velocity: 0
     }));
+    peaksRef.current = Array.from({ length: BAR_COUNT }, () => 0);
   }, []);
+
+  useEffect(() => {
+    peaksRef.current = Array.from({ length: BAR_COUNT }, () => 0);
+  }, [selection, sessionId, BAR_COUNT]);
 
   const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -95,6 +106,10 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
         if (barsRef.current[i]) {
           barsRef.current[i].targetHeight = targetHeight;
         }
+
+        if (isPlaying) {
+          peaksRef.current[i] = Math.max(peaksRef.current[i] ?? 0, targetHeight);
+        }
       }
       
       lastDataRef.current = frequencyData;
@@ -156,6 +171,16 @@ const SpectrumVisualizer: React.FC<SpectrumVisualizerProps> = ({
       ctx.globalAlpha = 0.6;
       ctx.fillRect(x, peakY, barWidth, 2);
       ctx.globalAlpha = 1;
+
+      const peakHeight = peaksRef.current[i] ?? 0;
+      if (peakHeight > minBarHeight) {
+        const peakMarkerY = height - peakHeight;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.fillRect(x, peakMarkerY - 2, barWidth, 3);
+        ctx.shadowBlur = 0;
+      }
     }
 
     ctx.fillStyle = fadeGradient;

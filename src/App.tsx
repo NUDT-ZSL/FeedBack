@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [progressTooltipTime, setProgressTooltipTime] = useState(0);
+  const [sessionId, setSessionId] = useState(0);
   const [rollingValues, setRollingValues] = useState({
     time: false,
     sampleRate: false,
@@ -97,6 +98,7 @@ const App: React.FC = () => {
       setAudioBuffer(buffer);
       setMetadata(meta);
       setCurrentTime(0);
+      setSessionId(prev => prev + 1);
       triggerRolling('time');
       triggerRolling('sampleRate');
       triggerRolling('fileSize');
@@ -153,13 +155,9 @@ const App: React.FC = () => {
     if (isPlaying) {
       audioEngineRef.current.pause();
     } else {
-      if (selection && selection.end > selection.start) {
-        audioEngineRef.current.play(selection);
-      } else {
-        audioEngineRef.current.play();
-      }
+      audioEngineRef.current.play();
     }
-  }, [isPlaying, selection]);
+  }, [isPlaying]);
 
   const handleStop = useCallback(() => {
     if (!audioEngineRef.current) return;
@@ -216,7 +214,9 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectionChange = useCallback((newSelection: Selection | null) => {
-    setSelection(newSelection);
+    if (!audioEngineRef.current) return;
+    const normalized = audioEngineRef.current.setSelection(newSelection);
+    setSelection(normalized);
   }, []);
 
   const getWaveformData = useCallback((samples: number): Float32Array => {
@@ -286,6 +286,8 @@ const App: React.FC = () => {
             <SpectrumVisualizer
               frequencyData={frequencyData}
               isPlaying={isPlaying}
+              selection={selection}
+              sessionId={sessionId}
             />
           </div>
 

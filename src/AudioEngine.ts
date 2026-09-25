@@ -28,8 +28,8 @@ export class AudioEngine {
   private audioBuffer: AudioBuffer | null = null;
   private metadata: AudioMetadata | null = null;
   
-  private frequencyData: Uint8Array | null = null;
-  private timeDomainData: Uint8Array | null = null;
+  private frequencyData: Uint8Array<ArrayBuffer> | null = null;
+  private timeDomainData: Uint8Array<ArrayBuffer> | null = null;
   
   private isPlaying = false;
   private isLooping = false;
@@ -44,6 +44,7 @@ export class AudioEngine {
   
   private readonly FFT_SIZE = 256;
   private readonly SMOOTHING_TIME_CONSTANT = 0.8;
+  private static readonly MIN_SELECTION_WIDTH = 0.001;
 
   constructor() {
     this.initAudioContext();
@@ -104,53 +105,113 @@ export class AudioEngine {
     return this.audioBuffer;
   }
 
-  public play(selection?: Selection): void {
+  public play(): void {
     if (!this.audioContext || !this.audioBuffer || this.isPlaying) return;
 
     if (this.audioContext.state === 'suspended') {
       this.audioContext.resume();
     }
 
-    this.sourceNode = this.audioContext.createBufferSource();
-    this.sourceNode.buffer = this.audioBuffer;
-    this.sourceNode.connect(this.analyser!);
-    
-    this.sourceNode.onended = () => {
-      if (this.isPlaying) {
-        if (this.isLooping) {
-          this.handleLoopEnd();
-        } else {
-          this.stop();
-          this.endedCallback?.();
-        }
+    const selection = this.currentSelection;
+    let offset: number;
+    let playDuration: number | undefined;
+
+    if (selection) {
+      offset = this.pauseTime;
+      if (offset < selection.start || offset >= selection.end) {
+        offset = selection.start;
+      }
+      playDuration = Math.max(0, selection.end - offset);
+    } else {
+      offset = Math.max(0, Math.min(this.pauseTime, this.audioBuffer.duration));
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.audioBuffer;
+    source.connect(this.analyser!);
+
+    source.onended = () => {
+      if (this.sourceNode !== source) return;
+      this.sourceNode = null;
+      this.isPlaying = false;
+      if (this.currentSelection) {
+        this.pauseTime = this.currentSelection.start;
+        this.play();
+      } else if (this.isLooping) {
+        this.pauseTime = 0;
+        this.play();
+      } else {
+        this.pauseTime = 0;
+        this.stateChangeCallback?.(false);
+        this.stopAnalysisLoop();
+        this.endedCallback?.();
       }
     };
 
-    if (selection) {
-      this.currentSelection = selection;
-      const offset = Math.max(0, selection.start);
-      const duration = Math.min(selection.end - selection.start, this.audioBuffer.duration - offset);
-      this.sourceNode.start(0, offset, duration);
-      this.startTime = this.audioContext.currentTime - offset;
+    this.sourceNode = source;
+    if (playDuration !== undefined) {
+      source.start(0, offset, playDuration);
     } else {
-      this.currentSelection = null;
-      const offset = this.pauseTime;
-      this.sourceNode.start(0, offset);
-      this.startTime = this.audioContext.currentTime - offset;
+      source.start(0, offset);
     }
+    this.startTime = this.audioContext.currentTime - offset;
 
     this.isPlaying = true;
     this.stateChangeCallback?.(true);
     this.startAnalysisLoop();
   }
 
-  private handleLoopEnd(): void {
-    if (!this.currentSelection) {
-      this.pauseTime = 0;
-      this.play();
-    } else {
-      this.play(this.currentSelection);
+  private restartPlaybackAt(time: number): void {
+    if (this.sourceNode) {
+      const oldSource = this.sourceNode;
+      this.sourceNode = null;
+      try {
+        oldSource.stop();
+        oldSource.disconnect();
+      } catch (e) {
+        // Already stopped
+      }
     }
+    this.isPlaying = false;
+    this.pauseTime = time;
+    this.play();
+  }
+
+  public setSelection(selection: Selection | null): Selection | null {
+    const duration = this.audioBuffer?.duration ?? 0;
+    let normalized: Selection | null = null;
+
+    if (selection && duration > 0) {
+      const start = Math.max(0, Math.min(Math.min(selection.start, selection.end), duration));
+      const end = Math.max(0, Math.min(Math.max(selection.start, selection.end), duration));
+      if (end - start > AudioEngine.MIN_SELECTION_WIDTH) {
+        normalized = { start, end };
+      }
+    }
+
+    this.currentSelection = normalized;
+
+    if (this.isPlaying) {
+      const currentTime = this.getCurrentTime();
+      let nextTime: number;
+      if (normalized) {
+        nextTime = currentTime >= normalized.start && currentTime < normalized.end
+          ? currentTime
+          : normalized.start;
+      } else {
+        nextTime = Math.max(0, Math.min(currentTime, duration));
+      }
+      this.restartPlaybackAt(nextTime);
+    } else if (normalized && (this.pauseTime < normalized.start || this.pauseTime >= normalized.end)) {
+      this.pauseTime = normalized.start;
+    }
+
+    this.notifyTimeUpdate();
+    return normalized;
+  }
+
+  public getSelection(): Selection | null {
+    return this.currentSelection;
   }
 
   public pause(): void {
@@ -193,16 +254,28 @@ export class AudioEngine {
 
   public seek(time: number): void {
     if (!this.audioBuffer) return;
-    
-    const clampedTime = Math.max(0, Math.min(time, this.audioBuffer.duration));
-    const wasPlaying = this.isPlaying;
-    
-    if (wasPlaying) {
-      this.pause();
-      this.pauseTime = clampedTime;
-      this.play();
+
+    let clampedTime = Math.max(0, Math.min(time, this.audioBuffer.duration));
+    const selection = this.currentSelection;
+    if (selection && (clampedTime < selection.start || clampedTime >= selection.end)) {
+      clampedTime = selection.start;
+    }
+
+    if (this.isPlaying) {
+      this.restartPlaybackAt(clampedTime);
     } else {
       this.pauseTime = clampedTime;
+    }
+    this.notifyTimeUpdate();
+  }
+
+  private notifyTimeUpdate(): void {
+    if (this.analysisCallback && this.frequencyData && this.timeDomainData) {
+      this.analysisCallback({
+        frequencyData: this.frequencyData,
+        timeDomainData: this.timeDomainData,
+        currentTime: this.getCurrentTime()
+      });
     }
   }
 
