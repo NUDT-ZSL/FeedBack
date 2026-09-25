@@ -2,8 +2,10 @@
   "name": "auto4",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev:client": "cd client && npm run dev",
-    "dev:server": "cd server && npm run dev"
+    "dev:server": "cd server && npm run dev",
+    "test": "node --test shared/protocol.test.ts"
   }
 }
