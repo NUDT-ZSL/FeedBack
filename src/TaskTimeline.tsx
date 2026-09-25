@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import type { Task, TaskWithProgress } from './types';
+import type { Task } from './types';
+import {
+  calculateTasksProgress,
+  formatTime,
+  getDotColor,
+  getProgressBarColor,
+  isBlinking,
+} from './utils/taskProgress';
 
 interface TaskTimelineProps {
   tasks: Task[];
@@ -37,39 +44,7 @@ const TaskTimeline: React.FC<TaskTimelineProps> = ({
   const [newTaskDuration, setNewTaskDuration] = useState(5);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const calculateTaskProgress = (task: Task, index: number): TaskWithProgress => {
-    let cumulativeTime = 0;
-    for (let i = 0; i < index; i++) {
-      cumulativeTime += tasks[i].duration * 60;
-    }
-
-    const taskTotalSeconds = task.duration * 60;
-    const taskEndTime = initialTime - cumulativeTime;
-    const taskStartTime = taskEndTime - taskTotalSeconds;
-    const elapsedInTask = Math.max(0, Math.min(taskTotalSeconds, taskEndTime - timeLeft));
-    const progress = (elapsedInTask / taskTotalSeconds) * 100;
-    const remainingInTask = Math.max(0, taskTotalSeconds - elapsedInTask);
-
-    let status: 'pending' | 'active' | 'completed';
-    if (timeLeft > taskEndTime) {
-      status = 'pending';
-    } else if (timeLeft > taskStartTime) {
-      status = 'active';
-    } else {
-      status = 'completed';
-    }
-
-    return {
-      ...task,
-      status,
-      remainingTime: remainingInTask,
-      progress: Math.min(100, Math.max(0, progress)),
-    };
-  };
-
-  const tasksWithProgress = tasks.map((task, index) =>
-    calculateTaskProgress(task, index)
-  );
+  const tasksWithProgress = calculateTasksProgress(tasks, timeLeft, initialTime);
 
   const handleAddTask = () => {
     if (newTaskName.trim() && tasks.length < 5) {
@@ -88,38 +63,6 @@ const TaskTimeline: React.FC<TaskTimelineProps> = ({
     setNewTaskName('');
     setNewTaskDuration(5);
     setShowAddForm(false);
-  };
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getDotColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return '#4CAF50';
-      case 'active':
-        return '#2196F3';
-      default:
-        return '#9e9e9e';
-    }
-  };
-
-  const getProgressBarColor = (task: TaskWithProgress) => {
-    if (task.status === 'completed') return '#4CAF50';
-    if (task.status === 'active') {
-      const taskTotalSeconds = task.duration * 60;
-      if (task.remainingTime <= 10) return '#f44336';
-      if (task.remainingTime < taskTotalSeconds * 0.5) return '#ff9800';
-      return '#2196F3';
-    }
-    return '#9e9e9e';
-  };
-
-  const isBlinking = (task: TaskWithProgress) => {
-    return task.status === 'active' && task.remainingTime <= 10 && task.remainingTime > 0;
   };
 
   return (

@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { TimerState, TimerControl } from '../types';
-
-const STORAGE_KEY = 'classroom-timer-config';
+import {
+  createTimerState,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  setTimerMinutes,
+  tickTimer,
+} from '../utils/timerState';
+import { STORAGE_KEY, serializeConfig, parseConfig } from '../utils/configStorage';
 
 export function useTimer(initialMinutes: number): {
   state: TimerState;
@@ -9,12 +16,7 @@ export function useTimer(initialMinutes: number): {
   saveConfig: (tasks: any[]) => void;
   loadConfig: () => { time: number; tasks: any[] } | null;
 } {
-  const [state, setState] = useState<TimerState>({
-    isRunning: false,
-    isPaused: false,
-    timeLeft: initialMinutes * 60,
-    initialTime: initialMinutes * 60,
-  });
+  const [state, setState] = useState<TimerState>(() => createTimerState(initialMinutes));
 
   const intervalRef = useRef<number | null>(null);
   const onEndRef = useRef<(() => void) | null>(null);
@@ -49,48 +51,27 @@ export function useTimer(initialMinutes: number): {
   }, []);
 
   const start = useCallback(() => {
-    setState(prev => {
-      if (prev.timeLeft <= 0) {
-        return prev;
-      }
-      return { ...prev, isRunning: true, isPaused: false };
-    });
+    setState(prev => startTimer(prev));
   }, []);
 
   const pause = useCallback(() => {
-    setState(prev => ({ ...prev, isRunning: false, isPaused: true }));
+    setState(prev => pauseTimer(prev));
     clearTimer();
   }, [clearTimer]);
 
   const reset = useCallback(() => {
     clearTimer();
-    setState(prev => ({
-      isRunning: false,
-      isPaused: false,
-      timeLeft: prev.initialTime,
-      initialTime: prev.initialTime,
-    }));
+    setState(prev => resetTimer(prev));
   }, [clearTimer]);
 
   const setTime = useCallback((minutes: number) => {
-    const seconds = minutes * 60;
     clearTimer();
-    setState({
-      isRunning: false,
-      isPaused: false,
-      timeLeft: seconds,
-      initialTime: seconds,
-    });
+    setState(prev => setTimerMinutes(prev, minutes));
   }, [clearTimer]);
 
   const saveConfig = useCallback((tasks: any[]) => {
     try {
-      const config = {
-        time: state.initialTime / 60,
-        tasks,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      localStorage.setItem(STORAGE_KEY, serializeConfig(state.initialTime, tasks, Date.now()));
     } catch (e) {
       console.log('Failed to save config');
     }
@@ -98,31 +79,24 @@ export function useTimer(initialMinutes: number): {
 
   const loadConfig = useCallback(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const config = JSON.parse(saved);
-        return {
-          time: config.time || initialMinutes,
-          tasks: config.tasks || [],
-        };
-      }
+      return parseConfig(localStorage.getItem(STORAGE_KEY), initialMinutes);
     } catch (e) {
       console.log('Failed to load config');
+      return null;
     }
-    return null;
   }, [initialMinutes]);
 
   useEffect(() => {
     if (state.isRunning && !state.isPaused) {
       intervalRef.current = window.setInterval(() => {
         setState(prev => {
-          if (prev.timeLeft <= 1) {
+          const next = tickTimer(prev);
+          if (next.ended) {
             clearTimer();
             onEndRef.current?.();
             playBeep();
-            return { ...prev, timeLeft: 0, isRunning: false };
           }
-          return { ...prev, timeLeft: prev.timeLeft - 1 };
+          return next.state;
         });
       }, 1000);
     }
