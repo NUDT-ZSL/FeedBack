@@ -168,7 +168,7 @@ export class AudioVisualizer {
   private analyser: AnalyserNode | null = null;
   private masterGain: GainNode | null = null;
   private bufferLength = 0;
-  private frequencyArray: Uint8Array = new Uint8Array(0);
+  private frequencyArray: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   private isPlaying = false;
   private currentSong: PlaylistItem | null = null;
   private startTime = 0;
@@ -208,7 +208,10 @@ export class AudioVisualizer {
   }
 
   loadSong(song: PlaylistItem): void {
+    // 切歌时完整重置播放状态，避免残留上一首的调度器、发声节点和进度
+    this.stopScheduler();
     this.stopAll();
+    this.isPlaying = false;
     this.currentSong = song;
     this.pauseTime = 0;
     this.currentStep = 0;
@@ -235,6 +238,13 @@ export class AudioVisualizer {
     this.stopScheduler();
     const tick = () => {
       if (!this.isPlaying || !this.ctx || !this.currentSong) return;
+      // 歌曲结束检测放在调度器里（状态变更），而不是渲染读取路径中
+      const elapsed = this.ctx.currentTime - this.startTime;
+      if (elapsed >= this.currentSong.duration) {
+        this.pause();
+        if (this.onEndedCallback) this.onEndedCallback();
+        return;
+      }
       while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
         this.scheduleStep(this.nextNoteTime);
         const secondsPerBeat = 60.0 / this.currentSong.config.bpm;
@@ -425,11 +435,10 @@ export class AudioVisualizer {
   seek(time: number): void {
     if (!this.currentSong) return;
     const wasPlaying = this.isPlaying;
-    const was = this.isPlaying;
     this.pause();
     this.pauseTime = Math.max(0, Math.min(time, this.currentSong.duration));
     this.currentStep = Math.floor((this.pauseTime * this.currentSong.config.bpm / 60) * 4) % 16;
-    if (was) this.play();
+    if (wasPlaying) this.play();
   }
 
   onEnded(callback: () => void): void {
@@ -467,13 +476,6 @@ export class AudioVisualizer {
       if (now - this.lastBeatTime > 0.2) {
         isBeat = true;
         this.lastBeatTime = now;
-      }
-    }
-    if (this.currentSong && this.isPlaying && this.ctx) {
-      const elapsed = this.ctx.currentTime - this.startTime;
-      if (elapsed >= this.currentSong.duration) {
-        this.pause();
-        if (this.onEndedCallback) this.onEndedCallback();
       }
     }
     return {

@@ -78,7 +78,12 @@ export class UIOverlay {
     this.songArtist.textContent = artist;
   }
 
-  setProgress(current: number, duration: number, onSeek?: (t: number) => void): void {
+  /** 绑定一次进度拖动回调（由外部决定 seek 行为），之后每帧只需调用 setProgress 渲染 */
+  onSeek(cb: (time: number) => void): void {
+    this.seekCallback = cb;
+  }
+
+  setProgress(current: number, duration: number): void {
     this.currentDuration = duration;
     if (!this.isDragging) {
       const pct = duration > 0 ? (current / duration) * 100 : 0;
@@ -86,7 +91,6 @@ export class UIOverlay {
     }
     this.timeCurrent.textContent = this.formatTime(current);
     this.timeDuration.textContent = this.formatTime(duration);
-    if (onSeek) this.seekCallback = onSeek;
   }
 
   setVolume(percent: number): void {
@@ -97,7 +101,7 @@ export class UIOverlay {
 
   setGestureIcon(gesture: GestureType): void {
     this.gestureIcon.classList.remove('bounce');
-    void this.gestureIcon.offsetWidth;
+    void (this.gestureIcon as unknown as HTMLElement).offsetWidth;
     this.gestureIcon.classList.add('bounce');
     this.gestureIcon.innerHTML = this.gestureSVG(gesture);
     this.gestureLabel.textContent = this.gestureLabelText(gesture);
@@ -109,6 +113,7 @@ export class UIOverlay {
     else this.gestureStatus.classList.remove('active');
   }
 
+  /** 渲染主题按钮；点击只向外派发选择事件，高亮由 setActiveTheme 统一回写 */
   setThemes(themes: ColorTheme[], activeIndex: number, onSelect: (i: number) => void): void {
     this.currentThemeIndex = activeIndex;
     this.themesContainer.innerHTML = '';
@@ -122,17 +127,19 @@ export class UIOverlay {
       btn.style.background = `conic-gradient(from 0deg, ${low}, ${mid}, ${high}, ${low})`;
       btn.addEventListener('click', () => {
         if (i === this.currentThemeIndex) return;
-        this.currentThemeIndex = i;
-        const nodes = this.themesContainer.querySelectorAll('.theme-btn');
-        nodes.forEach(n => n.classList.remove('active'));
-        btn.classList.add('active');
         onSelect(i);
-        const docStyle = document.documentElement.style;
-        docStyle.setProperty('--bg-top', theme.bgTop);
-        docStyle.setProperty('--bg-bottom', theme.bgBottom);
-        document.body.style.background = `linear-gradient(to bottom, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`;
       });
       this.themesContainer.appendChild(btn);
+    });
+  }
+
+  /** 状态变化后由外部调用，更新主题按钮高亮（与粒子、背景在同一通知内完成） */
+  setActiveTheme(index: number): void {
+    this.currentThemeIndex = index;
+    const nodes = this.themesContainer.querySelectorAll('.theme-btn');
+    nodes.forEach((n, i) => {
+      if (i === index) n.classList.add('active');
+      else n.classList.remove('active');
     });
   }
 
