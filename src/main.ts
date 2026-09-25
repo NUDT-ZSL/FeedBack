@@ -16,10 +16,7 @@ class App {
   private uiManager: UIManager;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
-  private groundPlane: THREE.Mesh;
-  private isMouseDown: boolean = false;
-  private mouseDownPos: THREE.Vector2 = new THREE.Vector2();
-  private hasMoved: boolean = false;
+  private activePointerId: number | null = null;
 
   constructor() {
     this.clock = new THREE.Clock();
@@ -49,7 +46,7 @@ class App {
     if (!container) throw new Error('Canvas container not found');
     container.appendChild(this.renderer.domElement);
 
-    this.groundPlane = this.createRoom();
+    this.createRoom();
     this.createLighting();
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -62,7 +59,7 @@ class App {
     this.controls.target.set(0, 0, 0);
     this.controls.update();
 
-    this.furnitureManager = new FurnitureManager(this.scene, this.groundPlane, this.raycaster);
+    this.furnitureManager = new FurnitureManager(this.scene, this.raycaster);
     
     this.uiManager = new UIManager('toolbar', {
       onAddFurniture: (type: string) => this.addFurniture(type),
@@ -82,7 +79,7 @@ class App {
     this.addFurniture('chair');
   }
 
-  private createRoom(): THREE.Mesh {
+  private createRoom(): void {
     const group = new THREE.Group();
 
     const groundGeometry = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
@@ -135,7 +132,6 @@ class App {
 
     this.scene.add(group);
 
-    return ground;
   }
 
   private createLighting(): void {
@@ -167,72 +163,67 @@ class App {
 
   private setupEventListeners(): void {
     window.addEventListener('resize', () => this.onResize());
-    this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
-    this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    this.renderer.domElement.addEventListener('mouseup', (e) => this.onMouseUp(e));
-    this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseUp());
+    this.renderer.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e), true);
+    window.addEventListener('pointermove', (e) => this.onPointerMove(e));
+    window.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    window.addEventListener('pointercancel', (e) => this.onPointerUp(e));
   }
 
-  private updateMouse(e: MouseEvent): void {
+  private updateMouse(e: PointerEvent): void {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
-  private onMouseDown(e: MouseEvent): void {
+  private onPointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     
-    this.isMouseDown = true;
-    this.hasMoved = false;
-    this.mouseDownPos.set(e.clientX, e.clientY);
     this.updateMouse(e);
 
-    if (!this.furnitureManager.isDraggingActive()) {
-      this.raycaster.setFromCamera(this.mouse, this.camera);
-      const intersects = this.raycaster.intersectObjects(this.scene.children, true);
-      
-      for (const intersect of intersects) {
-        let obj = intersect.object;
-        while (obj.parent && !obj.userData.isFurniture && !obj.userData.furnitureItem) {
-          obj = obj.parent;
-        }
-        
-        const item = obj.userData.furnitureItem as FurnitureItem | undefined;
-        if (item) {
-          this.furnitureManager.selectItem(item);
-          this.controls.enabled = false;
-          this.furnitureManager.startDrag(item, this.mouse, this.camera);
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+    for (const intersect of intersects) {
+      let obj = intersect.object;
+      while (obj.parent && !obj.userData.isFurniture && !obj.userData.furnitureItem) {
+        obj = obj.parent;
+      }
+
+      const item = obj.userData.furnitureItem as FurnitureItem | undefined;
+      if (item) {
+        try {
+          this.renderer.domElement.setPointerCapture(e.pointerId);
+        } catch {
           return;
         }
+        this.activePointerId = e.pointerId;
+        this.furnitureManager.selectItem(item);
+        this.controls.enabled = false;
+        this.furnitureManager.startDrag(item, this.mouse, this.camera);
+        return;
       }
-      
-      this.furnitureManager.selectItem(null);
     }
+
+    this.furnitureManager.selectItem(null);
   }
 
-  private onMouseMove(e: MouseEvent): void {
+  private onPointerMove(e: PointerEvent): void {
+    if (this.activePointerId !== e.pointerId) return;
+
     this.updateMouse(e);
-    
-    if (this.isMouseDown && !this.hasMoved) {
-      const dx = e.clientX - this.mouseDownPos.x;
-      const dy = e.clientY - this.mouseDownPos.y;
-      if (dx * dx + dy * dy > 25) {
-        this.hasMoved = true;
-      }
-    }
-    
-    if (this.furnitureManager.isDraggingActive()) {
-      this.furnitureManager.updateDrag(this.mouse, this.camera);
-    }
+    this.furnitureManager.updateDrag(this.mouse, this.camera);
   }
 
-  private onMouseUp(): void {
-    if (this.furnitureManager.isDraggingActive()) {
-      this.furnitureManager.endDrag();
+  private onPointerUp(e: PointerEvent): void {
+    if (this.activePointerId !== e.pointerId) return;
+
+    if (this.renderer.domElement.hasPointerCapture(e.pointerId)) {
+      this.renderer.domElement.releasePointerCapture(e.pointerId);
     }
+
+    this.furnitureManager.endDrag();
     this.controls.enabled = true;
-    this.isMouseDown = false;
-    this.hasMoved = false;
+    this.activePointerId = null;
   }
 
   private onResize(): void {

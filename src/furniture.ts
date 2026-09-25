@@ -22,11 +22,12 @@ export interface FurnitureItem {
   currentRotation: number;
   isAnimatingRotation: boolean;
   rotationAnimationTime: number;
+  rotationStartRotation: number;
+  rotationIsReverting: boolean;
   isBouncing: boolean;
   bounceStartPosition: THREE.Vector3;
   bounceEndPosition: THREE.Vector3;
   bounceAnimationTime: number;
-  blinkTime: number;
 }
 
 export const FURNITURE_TYPES: Record<string, FurnitureData> = {
@@ -43,6 +44,8 @@ const ROOM_BOUNDS = {
   minZ: -4.5,
   maxZ: 4.5
 };
+
+const CONTACT_EPSILON = 1e-4;
 
 const geometryCache = new Map<string, THREE.BoxGeometry>();
 const materialCache = new Map<number, THREE.MeshStandardMaterial>();
@@ -75,26 +78,20 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function easeOutElastic(t: number): number {
-  const c4 = (2 * Math.PI) / 3;
-  return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-}
-
 export class FurnitureManager {
   private scene: THREE.Scene;
   private items: FurnitureItem[] = [];
   private selectedItem: FurnitureItem | null = null;
   private dragItem: FurnitureItem | null = null;
   private dragOffset: THREE.Vector2 = new THREE.Vector2();
-  private groundPlane: THREE.Mesh;
   private raycaster: THREE.Raycaster;
   private onSelectChange: ((item: FurnitureItem | null) => void) | null = null;
   private dragLight: THREE.PointLight | null = null;
   private groundProjection: THREE.Mesh | null = null;
+  private dragPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-  constructor(scene: THREE.Scene, groundPlane: THREE.Mesh, raycaster: THREE.Raycaster) {
+  constructor(scene: THREE.Scene, raycaster: THREE.Raycaster) {
     this.scene = scene;
-    this.groundPlane = groundPlane;
     this.raycaster = raycaster;
   }
 
@@ -124,7 +121,12 @@ export class FurnitureManager {
     
     const posX = (Math.random() - 0.5) * 2;
     const posZ = (Math.random() - 0.5) * 2;
-    group.position.set(posX, data.height / 2, posZ);
+    const spawnPosition = this.findValidSpawnPosition(data);
+    group.position.set(
+      spawnPosition?.x ?? posX,
+      data.height / 2,
+      spawnPosition?.z ?? posZ
+    );
     
     this.scene.add(group);
     
@@ -141,17 +143,19 @@ export class FurnitureManager {
       currentRotation: 0,
       isAnimatingRotation: false,
       rotationAnimationTime: 0,
+      rotationStartRotation: 0,
+      rotationIsReverting: false,
       isBouncing: false,
       bounceStartPosition: new THREE.Vector3(),
       bounceEndPosition: new THREE.Vector3(),
-      bounceAnimationTime: 0,
-      blinkTime: 0
+      bounceAnimationTime: 0
     };
     
     mesh.userData.furnitureItem = item;
     edgeLines.userData.furnitureItem = item;
-    
+
     this.items.push(item);
+    this.refreshCollisionStates();
     this.selectItem(item);
     
     return item;
@@ -183,14 +187,49 @@ export class FurnitureManager {
     return this.items;
   }
 
+  private findValidSpawnPosition(data: FurnitureData): THREE.Vector3 | null {
+    const halfWidth = data.width / 2;
+    const halfDepth = data.depth / 2;
+    const minX = ROOM_BOUNDS.minX + halfWidth;
+    const maxX = ROOM_BOUNDS.maxX - halfWidth;
+    const minZ = ROOM_BOUNDS.minZ + halfDepth;
+    const maxZ = ROOM_BOUNDS.maxZ - halfDepth;
+    const position = new THREE.Vector3();
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      position.set(
+        THREE.MathUtils.lerp(minX, maxX, Math.random()),
+        data.height / 2,
+        THREE.MathUtils.lerp(minZ, maxZ, Math.random())
+      );
+
+      const hasCollision = this.items.some((other) => this.checkOBBCollision(
+        position,
+        0,
+        data.width,
+        data.depth,
+        other.group.position,
+        other.currentRotation,
+        other.data.width,
+        other.data.depth
+      ));
+
+      if (!hasCollision) return position.clone();
+    }
+
+    return null;
+  }
+
   private updateItemVisual(item: FurnitureItem): void {
     const mesh = item.group.children[0] as THREE.Mesh;
     const material = mesh.material as THREE.MeshStandardMaterial;
     
     if (item.isColliding) {
-      const blinkOn = Math.floor(item.blinkTime / 0.1) % 2 === 0;
-      material.color.setHex(blinkOn ? 0xFF6B6B : item.data.color);
+      material.color.setHex(0xFF4D4D);
+      material.emissive.setHex(0xFF2A2A);
+      material.emissiveIntensity = 0.35;
     } else if (item.isSelected) {
+      material.color.setHex(item.data.color);
       material.emissive.setHex(0xD4A574);
       material.emissiveIntensity = 0.15;
     } else {
@@ -202,20 +241,23 @@ export class FurnitureManager {
 
   startDrag(item: FurnitureItem, mouse: THREE.Vector2, camera: THREE.Camera): void {
     this.raycaster.setFromCamera(mouse, camera);
-    const intersects = this.raycaster.intersectObject(this.groundPlane);
-    
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
+    const point = new THREE.Vector3();
+
+    if (this.raycaster.ray.intersectPlane(this.dragPlane, point)) {
       this.dragItem = item;
       item.isDragging = true;
-      item.originalPosition.copy(item.group.position);
+      item.isBouncing = false;
+      if (!item.originalPosition.equals(item.group.position)) {
+        item.group.position.copy(item.originalPosition);
+      }
       this.dragOffset.set(
         item.group.position.x - point.x,
         item.group.position.z - point.z
       );
-      
-      this.createDragLight(point);
+
+      this.createDragLight(item.group.position);
       this.createGroundProjection(item);
+      this.refreshCollisionStates();
     }
   }
 
@@ -244,12 +286,12 @@ export class FurnitureManager {
     
     this.groundProjection = new THREE.Mesh(geometry, material);
     this.groundProjection.rotation.x = -Math.PI / 2;
+    this.groundProjection.rotation.y = item.currentRotation;
     this.groundProjection.position.set(
       item.group.position.x,
       0.01,
       item.group.position.z
     );
-    this.groundProjection.rotation.y = item.currentRotation;
     this.scene.add(this.groundProjection);
   }
 
@@ -257,69 +299,68 @@ export class FurnitureManager {
     if (!this.dragItem) return;
     
     this.raycaster.setFromCamera(mouse, camera);
-    const intersects = this.raycaster.intersectObject(this.groundPlane);
-    
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
-      
-      let newX = point.x + this.dragOffset.x;
-      let newZ = point.z + this.dragOffset.y;
-      
-      const halfW = this.dragItem.data.width / 2;
-      const halfD = this.dragItem.data.depth / 2;
-      
-      const cos = Math.abs(Math.cos(this.dragItem.currentRotation));
-      const sin = Math.abs(Math.sin(this.dragItem.currentRotation));
-      const boundX = halfW * cos + halfD * sin;
-      const boundZ = halfW * sin + halfD * cos;
-      
-      newX = Math.max(ROOM_BOUNDS.minX + boundX, Math.min(ROOM_BOUNDS.maxX - boundX, newX));
-      newZ = Math.max(ROOM_BOUNDS.minZ + boundZ, Math.min(ROOM_BOUNDS.maxZ - boundZ, newZ));
-      
-      this.dragItem.group.position.x = newX;
-      this.dragItem.group.position.z = newZ;
-      
-      if (this.dragLight) {
-        this.dragLight.position.x = newX;
-        this.dragLight.position.z = newZ;
-      }
-      
-      if (this.groundProjection) {
-        this.groundProjection.position.x = newX;
-        this.groundProjection.position.z = newZ;
-        this.groundProjection.rotation.y = this.dragItem.currentRotation;
-      }
-      
-      this.checkCollisions(this.dragItem);
+    const point = new THREE.Vector3();
+
+    if (!this.raycaster.ray.intersectPlane(this.dragPlane, point)) return;
+
+    const newX = point.x + this.dragOffset.x;
+    const newZ = point.z + this.dragOffset.y;
+
+    this.dragItem.group.position.x = newX;
+    this.dragItem.group.position.z = newZ;
+
+    if (this.dragLight) {
+      this.dragLight.position.x = newX;
+      this.dragLight.position.z = newZ;
     }
+
+    if (this.groundProjection) {
+      this.groundProjection.position.x = newX;
+      this.groundProjection.position.z = newZ;
+      this.groundProjection.rotation.x = -Math.PI / 2;
+      this.groundProjection.rotation.y = this.dragItem.currentRotation;
+    }
+
+    this.refreshCollisionStates();
   }
 
   endDrag(): void {
     if (this.dragItem) {
-      if (this.dragItem.isColliding) {
-        this.startBounce(this.dragItem);
+      const item = this.dragItem;
+      if (item.isColliding) {
+        this.startBounce(item);
       } else {
-        this.dragItem.originalPosition.copy(this.dragItem.group.position);
+        item.originalPosition.copy(item.group.position);
       }
       
-      this.dragItem.isDragging = false;
-      this.dragItem.isColliding = false;
-      this.dragItem.blinkTime = 0;
-      this.updateItemVisual(this.dragItem);
+      item.isDragging = false;
       this.dragItem = null;
+      this.refreshCollisionStates();
     }
     
+    this.removeDragHelpers();
+  }
+
+  private removeDragHelpers(): void {
     if (this.dragLight) {
       this.scene.remove(this.dragLight);
       this.dragLight = null;
     }
-    
+
     if (this.groundProjection) {
       this.scene.remove(this.groundProjection);
       this.groundProjection.geometry.dispose();
       (this.groundProjection.material as THREE.Material).dispose();
       this.groundProjection = null;
     }
+  }
+
+  private updateGroundProjection(): void {
+    if (!this.groundProjection || !this.dragItem) return;
+
+    const material = this.groundProjection.material as THREE.MeshBasicMaterial;
+    material.color.setHex(this.dragItem.isColliding ? 0xFF3B30 : 0xD4A574);
+    material.opacity = this.dragItem.isColliding ? 0.38 : 0.25;
   }
 
   private startBounce(item: FurnitureItem): void {
@@ -330,11 +371,17 @@ export class FurnitureManager {
   }
 
   rotateSelected(): void {
-    if (!this.selectedItem || this.selectedItem.isAnimatingRotation || this.selectedItem.isBouncing) return;
-    
-    this.selectedItem.targetRotation += Math.PI / 4;
-    this.selectedItem.isAnimatingRotation = true;
-    this.selectedItem.rotationAnimationTime = 0;
+    if (!this.selectedItem
+      || this.selectedItem.isDragging
+      || this.selectedItem.isAnimatingRotation
+      || this.selectedItem.isBouncing) return;
+
+    const item = this.selectedItem;
+    item.rotationStartRotation = item.currentRotation;
+    item.targetRotation += Math.PI / 4;
+    item.isAnimatingRotation = true;
+    item.rotationAnimationTime = 0;
+    item.rotationIsReverting = false;
   }
 
   deleteSelected(): void {
@@ -347,6 +394,11 @@ export class FurnitureManager {
     const index = this.items.indexOf(item);
     if (index > -1) {
       this.items.splice(index, 1);
+      if (this.dragItem === item) {
+        item.isDragging = false;
+        this.dragItem = null;
+        this.removeDragHelpers();
+      }
       this.scene.remove(item.group);
       
       const mesh = item.group.children[0] as THREE.Mesh;
@@ -355,89 +407,186 @@ export class FurnitureManager {
       if (this.selectedItem === item) {
         this.selectItem(null);
       }
+      this.refreshCollisionStates();
     }
   }
 
-  private checkCollisions(item: FurnitureItem): void {
-    let colliding = false;
-    
+  private refreshCollisionStates(): void {
+    const nextCollisions = new Set<string>();
+
+    for (const item of this.items) {
+      if (this.isOutsideRoom(item, item.group.position, item.currentRotation)) {
+        nextCollisions.add(item.id);
+      }
+    }
+
+    for (let i = 0; i < this.items.length; i += 1) {
+      for (let j = i + 1; j < this.items.length; j += 1) {
+        const a = this.items[i];
+        const b = this.items[j];
+
+        if (this.checkOBBCollision(
+          a.group.position,
+          a.currentRotation,
+          a.data.width,
+          a.data.depth,
+          b.group.position,
+          b.currentRotation,
+          b.data.width,
+          b.data.depth
+        )) {
+          nextCollisions.add(a.id);
+          nextCollisions.add(b.id);
+        }
+      }
+    }
+
+    for (const item of this.items) {
+      const isColliding = nextCollisions.has(item.id);
+      if (isColliding !== item.isColliding) {
+        item.isColliding = isColliding;
+        this.updateItemVisual(item);
+      }
+    }
+
+    this.updateGroundProjection();
+  }
+
+  private hasCollisionAt(
+    item: FurnitureItem,
+    position: THREE.Vector3,
+    rotation: number
+  ): boolean {
+    if (this.isOutsideRoom(item, position, rotation)) return true;
+
     for (const other of this.items) {
       if (other.id === item.id) continue;
-      
-      if (this.checkOBBCollision(item, other)) {
-        colliding = true;
-        break;
+
+      if (this.checkOBBCollision(
+        position,
+        rotation,
+        item.data.width,
+        item.data.depth,
+        other.group.position,
+        other.currentRotation,
+        other.data.width,
+        other.data.depth
+      )) {
+        return true;
       }
     }
-    
-    if (colliding !== item.isColliding) {
-      item.isColliding = colliding;
-      item.blinkTime = 0;
-      this.updateItemVisual(item);
-    }
+
+    return false;
   }
 
-  private checkOBBCollision(a: FurnitureItem, b: FurnitureItem): boolean {
-    const aCenter = a.group.position;
-    const bCenter = b.group.position;
-    
-    const dx = bCenter.x - aCenter.x;
-    const dz = bCenter.z - aCenter.z;
-    
-    const cosA = Math.cos(a.currentRotation);
-    const sinA = Math.sin(a.currentRotation);
-    const cosB = Math.cos(b.currentRotation);
-    const sinB = Math.sin(b.currentRotation);
-    
-    const aHalfW = a.data.width / 2;
-    const aHalfD = a.data.depth / 2;
-    const bHalfW = b.data.width / 2;
-    const bHalfD = b.data.depth / 2;
-    
+  private isOutsideRoom(
+    item: FurnitureItem,
+    position: THREE.Vector3,
+    rotation: number
+  ): boolean {
+    const cos = Math.abs(Math.cos(rotation));
+    const sin = Math.abs(Math.sin(rotation));
+    const halfX = item.data.width / 2 * cos + item.data.depth / 2 * sin;
+    const halfZ = item.data.width / 2 * sin + item.data.depth / 2 * cos;
+
+    return position.x - halfX < ROOM_BOUNDS.minX - CONTACT_EPSILON
+      || position.x + halfX > ROOM_BOUNDS.maxX + CONTACT_EPSILON
+      || position.z - halfZ < ROOM_BOUNDS.minZ - CONTACT_EPSILON
+      || position.z + halfZ > ROOM_BOUNDS.maxZ + CONTACT_EPSILON;
+  }
+
+  private checkOBBCollision(
+    centerA: THREE.Vector3,
+    rotationA: number,
+    widthA: number,
+    depthA: number,
+    centerB: THREE.Vector3,
+    rotationB: number,
+    widthB: number,
+    depthB: number
+  ): boolean {
+    const deltaX = centerB.x - centerA.x;
+    const deltaZ = centerB.z - centerA.z;
+    const cosA = Math.cos(rotationA);
+    const sinA = Math.sin(rotationA);
+    const cosB = Math.cos(rotationB);
+    const sinB = Math.sin(rotationB);
+    const halfWidthA = widthA / 2;
+    const halfDepthA = depthA / 2;
+    const halfWidthB = widthB / 2;
+    const halfDepthB = depthB / 2;
+
     const axes: Array<[number, number]> = [
-      [cosA, sinA],
-      [-sinA, cosA],
-      [cosB, sinB],
-      [-sinB, cosB]
+      [cosA, -sinA],
+      [sinA, cosA],
+      [cosB, -sinB],
+      [sinB, cosB]
     ];
-    
-    for (const [ax, az] of axes) {
-      const aExtent = aHalfW * Math.abs(ax * cosA + az * sinA) + aHalfD * Math.abs(-ax * sinA + az * cosA);
-      const bExtent = bHalfW * Math.abs(ax * cosB + az * sinB) + bHalfD * Math.abs(-ax * sinB + az * cosB);
-      const distance = Math.abs(dx * ax + dz * az);
-      
-      if (distance > aExtent + bExtent) {
-        return false;
-      }
+
+    for (const [axisX, axisZ] of axes) {
+      const extentA = halfWidthA * Math.abs(axisX * cosA - axisZ * sinA)
+        + halfDepthA * Math.abs(axisX * sinA + axisZ * cosA);
+      const extentB = halfWidthB * Math.abs(axisX * cosB - axisZ * sinB)
+        + halfDepthB * Math.abs(axisX * sinB + axisZ * cosB);
+      const overlap = Math.abs(deltaX * axisX + deltaZ * axisZ) - extentA - extentB;
+
+      if (overlap > CONTACT_EPSILON) return false;
     }
-    
+
     return true;
   }
 
   animate(delta: number): void {
+    let transformChanged = false;
+
     for (const item of this.items) {
       if (item.isAnimatingRotation) {
         item.rotationAnimationTime += delta;
-        const duration = 0.2;
-        const t = Math.min(item.rotationAnimationTime / duration, 1);
-        const eased = easeOutCubic(t);
-        
-        const startRot = item.currentRotation - (Math.PI / 4);
-        item.currentRotation = startRot + (Math.PI / 4) * eased;
-        item.group.rotation.y = item.currentRotation;
-        
-        if (t >= 1) {
-          item.isAnimatingRotation = false;
-          item.currentRotation = item.targetRotation;
-          item.group.rotation.y = item.currentRotation;
+        const duration = 0.18;
+        const invalidHoldDuration = 0.18;
+
+        if (!item.rotationIsReverting) {
+          const t = Math.min(item.rotationAnimationTime / duration, 1);
+          const eased = easeOutCubic(t);
+          item.currentRotation = item.rotationStartRotation
+            + (item.targetRotation - item.rotationStartRotation) * eased;
+
+          if (t >= 1) {
+            item.currentRotation = item.targetRotation;
+
+            if (this.hasCollisionAt(item, item.group.position, item.currentRotation)) {
+              item.rotationIsReverting = true;
+              item.rotationAnimationTime = 0;
+            } else {
+              item.isAnimatingRotation = false;
+            }
+          }
+        } else {
+          if (item.rotationAnimationTime >= invalidHoldDuration) {
+            const revertTime = item.rotationAnimationTime - invalidHoldDuration;
+            const t = Math.min(revertTime / duration, 1);
+            const eased = easeOutCubic(t);
+            item.currentRotation = item.targetRotation
+              + (item.rotationStartRotation - item.targetRotation) * eased;
+
+            if (t >= 1) {
+              item.currentRotation = item.rotationStartRotation;
+              item.targetRotation = item.rotationStartRotation;
+              item.isAnimatingRotation = false;
+              item.rotationIsReverting = false;
+            }
+          }
         }
+
+        item.group.rotation.y = item.currentRotation;
+        transformChanged = true;
       }
       
       if (item.isBouncing) {
         item.bounceAnimationTime += delta;
         const duration = 0.3;
         const t = Math.min(item.bounceAnimationTime / duration, 1);
-        const eased = easeOutElastic(t);
+        const eased = easeOutCubic(t);
         
         item.group.position.lerpVectors(
           item.bounceStartPosition,
@@ -449,12 +598,15 @@ export class FurnitureManager {
           item.isBouncing = false;
           item.group.position.copy(item.originalPosition);
         }
+        transformChanged = true;
       }
       
-      if (item.isColliding) {
-        item.blinkTime += delta;
-        this.updateItemVisual(item);
-      }
+    }
+
+    if (transformChanged) this.refreshCollisionStates();
+
+    for (const item of this.items) {
+      if (item.isColliding) this.updateItemVisual(item);
     }
   }
 
@@ -467,6 +619,9 @@ export class FurnitureManager {
   }
 
   dispose(): void {
+    this.dragItem = null;
+    this.removeDragHelpers();
+
     for (const item of this.items) {
       this.scene.remove(item.group);
       const mesh = item.group.children[0] as THREE.Mesh;
