@@ -135,7 +135,6 @@ app.put('/api/notes/:id', (req, res) => {
     ...notes[index],
     ...req.body,
     id: notes[index].id,
-    bookId: notes[index].bookId,
     createdAt: notes[index].createdAt,
     updatedAt: new Date().toISOString(),
   };

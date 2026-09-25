@@ -333,8 +333,20 @@ const BookDetailPage: React.FC = () => {
   const handleAddToBoard = (note: Note) => {
     const STORAGE_KEY = 'inspiration_board_layout';
     try {
-      const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      const alreadyAdded = existing.some((c: any) => c.noteId === note.id);
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      // 兼容旧格式（扁平数组），统一迁移为按书分组的对象
+      let layout: Record<string, any[]> = {};
+      if (Array.isArray(raw)) {
+        raw.forEach((c: any) => {
+          if (!c || !c.bookId) return;
+          (layout[c.bookId] = layout[c.bookId] || []).push(c);
+        });
+      } else if (raw && typeof raw === 'object') {
+        layout = raw;
+      }
+      const alreadyAdded = Object.values(layout).some((list) =>
+        list.some((c: any) => c.noteId === note.id)
+      );
       if (alreadyAdded) {
         alert('该笔记已在灵感板中');
         return;
@@ -348,8 +360,8 @@ const BookDetailPage: React.FC = () => {
         x: 20 + Math.random() * 300,
         y: 20 + Math.random() * 200,
       };
-      existing.push(newCard);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+      layout[note.bookId] = [...(layout[note.bookId] || []), newCard];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
       alert('已添加到灵感板！');
     } catch {
       alert('添加失败');
@@ -537,20 +549,63 @@ const BookDetailPage: React.FC = () => {
 const InspirationPage: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all([axios.get<Note[]>('/api/notes'), axios.get<Book[]>('/api/books')]).then(
       ([notesRes, booksRes]) => {
         setNotes(notesRes.data);
         setBooks(booksRes.data);
+        setLoaded(true);
       }
     );
   }, []);
 
+  // 灵感板跨组落下：根据 cardId 找到对应笔记，更新它的归属书籍
+  const handleCardMove = async (cardId: string, targetBookId: string): Promise<boolean> => {
+    let noteId: string | undefined;
+    try {
+      const layout = JSON.parse(localStorage.getItem('inspiration_board_layout') || '{}');
+      if (Array.isArray(layout)) {
+        noteId = layout.find((c: any) => c.id === cardId)?.noteId;
+      } else {
+        for (const list of Object.values(layout) as any[][]) {
+          const found = list.find((c: any) => c.id === cardId);
+          if (found) {
+            noteId = found.noteId;
+            break;
+          }
+        }
+      }
+    } catch {
+      return false;
+    }
+    const note = notes.find((n) => n.id === noteId);
+    if (!note) return false;
+    try {
+      await axios.put(`/api/notes/${note.id}`, { ...note, bookId: targetBookId });
+      setNotes((prev) =>
+        prev.map((n) => (n.id === note.id ? { ...n, bookId: targetBookId } : n))
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <div className="main-content">
       <h1 className="section-title">💡 灵感板</h1>
-      <InspirationBoard notes={notes} books={books} onRemoveCard={() => {}} />
+      {loaded ? (
+        <InspirationBoard
+          notes={notes}
+          books={books}
+          onRemoveCard={() => {}}
+          onCardMove={handleCardMove}
+        />
+      ) : (
+        <SkeletonGrid />
+      )}
       <p
         style={{
           marginTop: 16,
