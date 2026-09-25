@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 星云粒子生成器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    }
+
+    body {
+      background: radial-gradient(ellipse at bottom, #0a0a2e 0%, #000000 100%);
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #controls-container {
+      position: absolute;
+      top: 50%;
+      right: 24px;
+      transform: translateY(-50%);
+      width: 320px;
+      padding: 24px;
+      background: rgba(10, 10, 30, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      z-index: 100;
+    }
+
+    .panel-title {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      letter-spacing: 1px;
+      text-align: center;
+      background: linear-gradient(135deg, #ff6b35, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    }
+
+    .control-value {
+      color: #6366f1;
+      font-weight: 600;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      outline: none;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    input[type="range"]:hover {
+      transform: scale(1.02);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffffff, #e0e7ff);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(99, 102, 241, 0.5);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(99, 102, 241, 0.7);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffffff, #e0e7ff);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(99, 102, 241, 0.5);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input[type="range"]::-moz-range-thumb:hover {
+      transform: scale(1.15);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(99, 102, 241, 0.7);
+    }
+
+    .fps-counter {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+      z-index: 100;
+      background: rgba(10, 10, 30, 0.5);
+      padding: 6px 12px;
+      border-radius: 6px;
+      backdrop-filter: blur(4px);
+    }
+
+    .instructions {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+      z-index: 100;
+      background: rgba(10, 10, 30, 0.5);
+      padding: 8px 12px;
+      border-radius: 6px;
+      backdrop-filter: blur(4px);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+    <div class="fps-counter" id="fps-counter">FPS: --</div>
+    <div class="instructions">
+      左键拖拽：旋转视角 | 右键拖拽：平移 | 滚轮：缩放
+    </div>
+    <div id="controls-container"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
