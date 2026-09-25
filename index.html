@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D声波雕塑生成器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0a0515 0%, #1a0a2e 50%, #0d1a2d 100%);
+      color: #ffffff;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .progress-bar-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      z-index: 100;
+      transition: height 0.3s ease;
+    }
+
+    .progress-bar-container:hover {
+      height: 8px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00d4ff 0%, #00ff88 50%, #ff6b35 100%);
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+      transition: width 0.1s linear;
+    }
+
+    .progress-handle {
+      position: absolute;
+      top: 50%;
+      right: -8px;
+      width: 16px;
+      height: 16px;
+      background: #ffffff;
+      border-radius: 50%;
+      transform: translateY(-50%) scale(0);
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+      transition: transform 0.2s ease;
+    }
+
+    .progress-bar-container:hover .progress-handle {
+      transform: translateY(-50%) scale(1);
+    }
+
+    .control-panel {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      z-index: 100;
+      transition: all 0.3s ease;
+    }
+
+    .btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: radial-gradient(circle, rgba(0, 212, 255, 0.3) 0%, transparent 70%);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s ease, height 0.6s ease;
+      pointer-events: none;
+    }
+
+    .btn:hover::before {
+      width: 200%;
+      height: 200%;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(0, 212, 255, 0.5);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .btn.active {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 15px rgba(0, 212, 255, 0.4);
+      transform: translateY(1px);
+    }
+
+    .btn-upload {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(107, 107, 255, 0.2) 100%);
+      border-color: rgba(0, 212, 255, 0.4);
+    }
+
+    .btn-upload:hover {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.3) 0%, rgba(107, 107, 255, 0.3) 100%);
+    }
+
+    .btn-play {
+      width: 50px;
+      height: 50px;
+      padding: 0;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+      border: none;
+      color: #0a0515;
+      font-weight: 700;
+    }
+
+    .btn-play:hover {
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+      transform: translateY(-2px) scale(1.05);
+    }
+
+    .btn-play:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .btn-play.playing {
+      background: linear-gradient(135deg, #ff6b35 0%, #ff3b3b 100%);
+    }
+
+    .btn-play.playing:hover {
+      box-shadow: 0 0 30px rgba(255, 107, 53, 0.5);
+    }
+
+    .mode-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mode-btn {
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+
+    .divider {
+      width: 1px;
+      height: 30px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .sidebar-toggle {
+      display: none;
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      padding: 0;
+      border-radius: 50%;
+      z-index: 101;
+    }
+
+    .time-display {
+      font-size: 12px;
+      font-family: 'Orbitron', monospace;
+      color: rgba(255, 255, 255, 0.7);
+      min-width: 100px;
+      text-align: center;
+    }
+
+    .upload-hint {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 0.5s ease;
+    }
+
+    .upload-hint h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+    }
+
+    .upload-hint p {
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .upload-hint.hidden {
+      opacity: 0;
+    }
+
+    @media (max-width: 1199px) {
+      .control-panel {
+        padding: 12px 16px;
+        gap: 8px;
+      }
+
+      .btn {
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+
+      .mode-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar-toggle {
+        display: flex;
+      }
+
+      .control-panel {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        left: auto;
+        transform: none;
+        flex-direction: column;
+        align-items: stretch;
+        width: 280px;
+        height: 100vh;
+        border-radius: 0;
+        padding: 80px 20px 30px;
+        transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .control-panel.open {
+        right: 0;
+      }
+
+      .divider {
+        width: 100%;
+        height: 1px;
+        margin: 8px 0;
+      }
+
+      .mode-buttons {
+        flex-direction: column;
+      }
+
+      .btn-play {
+        align-self: center;
+      }
+
+      .upload-hint h2 {
+        font-size: 24px;
+      }
+
+      .upload-hint p {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+
+    <div class="progress-bar-container" id="progressContainer">
+      <div class="progress-bar" id="progressBar"></div>
+      <div class="progress-handle" id="progressHandle"></div>
+    </div>
+
+    <div class="upload-hint" id="uploadHint">
+      <h2>3D声波雕塑</h2>
+      <p>上传音频文件，体验音乐可视化艺术</p>
+    </div>
+
+    <button class="btn sidebar-toggle" id="sidebarToggle">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+
+    <div class="control-panel" id="controlPanel">
+      <input type="file" class="file-input" id="fileInput" accept=".wav,.mp3,audio/*">
+      
+      <button class="btn btn-upload" id="uploadBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        上传音频
+      </button>
+
+      <div class="divider"></div>
+
+      <button class="btn btn-play" id="playBtn">
+        <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <svg id="pauseIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
+
+      <div class="time-display" id="timeDisplay">00:00 / 00:00</div>
+
+      <div class="divider"></div>
+
+      <div class="mode-buttons">
+        <button class="btn mode-btn active" data-mode="spectrum">频谱柱</button>
+        <button class="btn mode-btn" data-mode="waveform">波形流</button>
+        <button class="btn mode-btn" data-mode="particles">粒子云</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
