@@ -1,3 +1,5 @@
+import { RandomSource } from './rng.js';
+
 export interface Brick {
   x: number;
   y: number;
@@ -26,9 +28,28 @@ const BRICK_COLORS = [
   '#a55eea'
 ];
 
-const BRICK_RADIUS = 10;
-const BRICK_SPACING = 2;
-const PARTICLE_MAX_COUNT = 200;
+export const BRICK_RADIUS = 10;
+export const BRICK_SPACING = 2;
+export const PARTICLE_MAX_COUNT = 200;
+const BRICK_DIAMETER = BRICK_RADIUS * 2;
+const BRICK_STEP_X = BRICK_DIAMETER + BRICK_SPACING;
+const BRICK_STEP_Y = BRICK_DIAMETER + BRICK_SPACING;
+const HONEYCOMB_TOLERANCE = 2;
+
+export function areBricksAdjacent(
+  first: Pick<Brick, 'x' | 'y'>,
+  second: Pick<Brick, 'x' | 'y'>
+): boolean {
+  const dx = Math.abs(second.x - first.x);
+  const dy = Math.abs(second.y - first.y);
+
+  return (
+    (Math.abs(dx - BRICK_STEP_X) < HONEYCOMB_TOLERANCE &&
+      dy < HONEYCOMB_TOLERANCE) ||
+    (Math.abs(dx - BRICK_STEP_X / 2) < HONEYCOMB_TOLERANCE &&
+      Math.abs(dy - BRICK_STEP_Y) < HONEYCOMB_TOLERANCE)
+  );
+}
 
 export class BrickManager {
   private bricks: Brick[] = [];
@@ -37,46 +58,52 @@ export class BrickManager {
   private canvasWidth: number;
   private canvasHeight: number;
 
-  constructor(canvasWidth: number, canvasHeight: number) {
+  constructor(
+    canvasWidth: number,
+    canvasHeight: number,
+    private random: RandomSource = Math.random
+  ) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
   }
 
   generateHoneycombLayout(): void {
     this.bricks = [];
-    const brickDiameter = BRICK_RADIUS * 2;
-    const stepX = brickDiameter + BRICK_SPACING;
-    const stepY = brickDiameter + BRICK_SPACING;
-    const startX = stepX;
+    const startX = BRICK_STEP_X;
     const startY = 60;
-    const maxColumns = Math.floor((this.canvasWidth - 2 * stepX) / stepX);
+    const maxColumns = Math.floor((this.canvasWidth - 2 * BRICK_STEP_X) / BRICK_STEP_X);
     let row = 0;
     let total = 0;
 
     while (total < 80) {
-      const offsetX = row % 2 === 1 ? stepX / 2 : 0;
+      const offsetX = row % 2 === 1 ? BRICK_STEP_X / 2 : 0;
       const columnsInRow = row % 2 === 1 ? maxColumns - 1 : maxColumns;
+      const y = startY + row * BRICK_STEP_Y;
+
+      if (y + BRICK_RADIUS >= this.canvasHeight * 0.55) break;
 
       for (let col = 0; col < columnsInRow; col++) {
-        const x = startX + offsetX + col * stepX;
-        const y = startY + row * stepY;
+        const x = startX + offsetX + col * BRICK_STEP_X;
 
-        if (y + BRICK_RADIUS < this.canvasHeight * 0.55) {
-          this.bricks.push({
-            x,
-            y,
-            radius: BRICK_RADIUS,
-            color: BRICK_COLORS[Math.floor(Math.random() * BRICK_COLORS.length)],
-            alive: true
-          });
-          total++;
-          if (total >= 80) break;
-        }
+        this.bricks.push({
+          x,
+          y,
+          radius: BRICK_RADIUS,
+          color: BRICK_COLORS[Math.floor(this.random() * BRICK_COLORS.length)],
+          alive: true
+        });
+        total++;
+        if (total >= 80) break;
       }
       row++;
     }
 
     this.totalBricks = this.bricks.length;
+  }
+
+  resize(canvasWidth: number, canvasHeight: number): void {
+    this.canvasWidth = canvasWidth;
+    this.canvasHeight = canvasHeight;
   }
 
   checkCollision(ballX: number, ballY: number, ballRadius: number): {
@@ -105,7 +132,7 @@ export class BrickManager {
 
         const adjacentBricks = this.findAdjacentBricks(brick);
         for (const adj of adjacentBricks) {
-          if (adj.alive && Math.random() < 0.3) {
+          if (adj.alive && this.random() < 0.3) {
             adj.alive = false;
             comboChain++;
             const adjParticles = this.createParticles(adj.x, adj.y, adj.color);
@@ -127,22 +154,10 @@ export class BrickManager {
 
   private findAdjacentBricks(brick: Brick): Brick[] {
     const adjacent: Brick[] = [];
-    const brickDiameter = BRICK_RADIUS * 2;
-    const stepX = brickDiameter + BRICK_SPACING;
-    const stepY = brickDiameter + BRICK_SPACING;
-    const tolerance = 2;
-
     for (const b of this.bricks) {
       if (b === brick || !b.alive) continue;
 
-      const dx = Math.abs(b.x - brick.x);
-      const dy = Math.abs(b.y - brick.y);
-
-      const isAdjacent =
-        (Math.abs(dx - stepX) < tolerance && dy < tolerance) ||
-        (Math.abs(dx - stepX / 2) < tolerance && Math.abs(dy - stepY) < tolerance);
-
-      if (isAdjacent) {
+      if (areBricksAdjacent(brick, b)) {
         adjacent.push(b);
       }
     }
@@ -151,12 +166,12 @@ export class BrickManager {
   }
 
   private createParticles(x: number, y: number, color: string): Particle[] {
-    const count = 5 + Math.floor(Math.random() * 4);
+    const count = 5 + Math.floor(this.random() * 4);
     const particles: Particle[] = [];
 
     for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const speed = 1 + Math.random() * 2;
+      const angle = (Math.PI * 2 * i) / count + this.random() * 0.5;
+      const speed = 1 + this.random() * 2;
       particles.push({
         x,
         y,
@@ -172,7 +187,7 @@ export class BrickManager {
     return particles;
   }
 
-  private addParticles(newParticles: Particle[]): void {
+  addParticles(newParticles: Particle[]): void {
     this.particles.push(...newParticles);
     if (this.particles.length > PARTICLE_MAX_COUNT) {
       this.particles = this.particles.slice(-PARTICLE_MAX_COUNT);

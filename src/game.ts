@@ -1,516 +1,211 @@
-import { Ball } from './ball';
-import { BrickManager, Particle } from './brick';
-import { Paddle } from './paddle';
-
-interface GameState {
-  score: number;
-  lives: number;
-  level: number;
-  isPlaying: boolean;
-  isGameOver: boolean;
-  comboCount: number;
-}
+import { GameEngine } from './engine.js';
 
 class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private ball: Ball;
-  private brickManager: BrickManager;
-  private paddle: Paddle;
-  private state: GameState;
-  private lastTime: number = 0;
-  private particles: Particle[] = [];
-  private shakeOffsetX: number = 0;
-  private shakeOffsetY: number = 0;
-  private shakeTime: number = 0;
-  private ballLaunched: boolean = false;
-  private canvasWidth: number = 800;
-  private canvasHeight: number = 600;
+  private engine: GameEngine;
+  private lastTime = 0;
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
-
-    this.setupCanvas();
-
-    const paddleWidth = 100;
-    const paddleHeight = 15;
-    const paddleY = this.canvasHeight - paddleHeight - 20;
-    const paddleX = (this.canvasWidth - paddleWidth) / 2;
-
-    this.ball = new Ball(
-      paddleX + paddleWidth / 2,
-      paddleY - 10
-    );
-
-    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight);
-    this.paddle = new Paddle(paddleX, paddleY, paddleWidth, paddleHeight);
-    this.paddle.setCanvasWidth(this.canvasWidth);
-
-    this.state = {
-      score: 0,
-      lives: 3,
-      level: 1,
-      isPlaying: false,
-      isGameOver: false,
-      comboCount: 0
-    };
-
+    const { width, height } = this.setupCanvas();
+    this.engine = new GameEngine(width, height);
     this.setupEventListeners();
-    this.init();
-  }
-
-  private setupCanvas(): void {
-    const container = document.getElementById('game-container');
-    if (container) {
-      const rect = container.getBoundingClientRect();
-      this.canvasWidth = Math.min(800, rect.width);
-      this.canvasHeight = (this.canvasWidth * 3) / 4;
-    }
-
-    this.canvas.width = this.canvasWidth;
-    this.canvas.height = this.canvasHeight;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
-    this.ctx.scale(dpr, dpr);
-    this.canvas.style.width = `${rect.width}px`;
-    this.canvas.style.height = `${rect.height}px`;
-    this.canvasWidth = rect.width;
-    this.canvasHeight = rect.height;
-  }
-
-  private setupEventListeners(): void {
-    this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
-    this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-    this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-    this.canvas.addEventListener('mouseleave', this.handleMouseUp.bind(this));
-
-    this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
-    this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-    this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
-
-    const restartBtn = document.getElementById('restart-btn');
-    if (restartBtn) {
-      restartBtn.addEventListener('click', this.restart.bind(this));
-    }
-
-    window.addEventListener('resize', this.handleResize.bind(this));
-  }
-
-  private handleMouseDown(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    if (!this.ballLaunched && !this.state.isGameOver) {
-      this.launchBall();
-    } else {
-      this.paddle.handleMouseDown(e.clientX, rect);
-    }
-  }
-
-  private handleMouseMove(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    this.paddle.handleMouseMove(e.clientX, rect);
-  }
-
-  private handleMouseUp(): void {
-    this.paddle.handleMouseUp();
-  }
-
-  private handleTouchStart(e: TouchEvent): void {
-    e.preventDefault();
-    const rect = this.canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-
-    if (!this.ballLaunched && !this.state.isGameOver) {
-      this.launchBall();
-    } else {
-      this.paddle.handleTouchStart(touch, rect);
-    }
-  }
-
-  private handleTouchMove(e: TouchEvent): void {
-    e.preventDefault();
-    const rect = this.canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    this.paddle.handleTouchMove(touch, rect);
-  }
-
-  private handleTouchEnd(): void {
-    this.paddle.handleTouchEnd();
-  }
-
-  private handleResize(): void {
-    this.setupCanvas();
-    this.paddle.setCanvasWidth(this.canvasWidth);
-    this.brickManager = new BrickManager(this.canvasWidth, this.canvasHeight);
-    this.brickManager.generateHoneycombLayout();
-  }
-
-  private launchBall(): void {
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.5;
-    this.ball.launch(angle);
-    this.ballLaunched = true;
-    this.state.isPlaying = true;
-  }
-
-  private init(): void {
-    this.brickManager.generateHoneycombLayout();
+    this.engine.initialize();
     this.hideLoading();
     this.gameLoop(0);
   }
 
+  private setupCanvas(): { width: number; height: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = width * dpr;
+    this.canvas.height = height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { width, height };
+  }
+
+  private setupEventListeners(): void {
+    this.canvas.addEventListener('mousedown', (event) => {
+      if (!this.engine.ballLaunched && !this.engine.isGameOver) this.engine.launchBall();
+      else this.engine.paddle.handleMouseDown(event.clientX, this.canvas.getBoundingClientRect());
+    });
+    this.canvas.addEventListener('mousemove', (event) =>
+      this.engine.paddle.handleMouseMove(event.clientX, this.canvas.getBoundingClientRect())
+    );
+    this.canvas.addEventListener('mouseup', () => this.engine.paddle.handleMouseUp());
+    this.canvas.addEventListener('mouseleave', () => this.engine.paddle.handleMouseUp());
+
+    this.canvas.addEventListener('touchstart', (event) => {
+      event.preventDefault();
+      const touch = event.touches[0];
+      if (!this.engine.ballLaunched && !this.engine.isGameOver) this.engine.launchBall();
+      else this.engine.paddle.handleTouchStart(touch, this.canvas.getBoundingClientRect());
+    }, { passive: false });
+    this.canvas.addEventListener('touchmove', (event) => {
+      event.preventDefault();
+      this.engine.paddle.handleTouchMove(event.touches[0], this.canvas.getBoundingClientRect());
+    }, { passive: false });
+    this.canvas.addEventListener('touchend', () => this.engine.paddle.handleTouchEnd());
+
+    document.getElementById('restart-btn')?.addEventListener('click', () => {
+      this.engine.restart();
+      document.getElementById('game-over')?.classList.remove('visible');
+    });
+    window.addEventListener('resize', () => {
+      const { width, height } = this.setupCanvas();
+      this.engine.resize(width, height);
+    });
+  }
+
   private hideLoading(): void {
-    const loading = document.getElementById('loading');
-    if (loading) {
-      loading.classList.add('hidden');
-    }
+    document.getElementById('loading')?.classList.add('hidden');
   }
 
   private gameLoop(currentTime: number): void {
     const deltaTime = currentTime - this.lastTime;
     this.lastTime = currentTime;
-
-    this.update(deltaTime);
+    const result = this.engine.update(deltaTime);
     this.render();
-
-    requestAnimationFrame(this.gameLoop.bind(this));
+    if (result.gameOver) this.showGameOver();
+    requestAnimationFrame((time) => this.gameLoop(time));
   }
 
-  private update(deltaTime: number): void {
-    if (this.state.isGameOver) return;
-
-    this.paddle.update();
-
-    if (this.shakeTime > 0) {
-      this.shakeTime -= deltaTime;
-      if (this.shakeTime <= 0) {
-        this.shakeOffsetX = 0;
-        this.shakeOffsetY = 0;
-      }
-    }
-
-    if (!this.ballLaunched) {
-      this.ball.x = this.paddle.getCenterX();
-      this.ball.y = this.paddle.y - this.ball.radius - 2;
-      return;
-    }
-
-    const ballFell = this.ball.update(this.canvasWidth, this.canvasHeight);
-
-    if (ballFell) {
-      this.state.lives--;
-      if (this.state.lives <= 0) {
-        this.endGame();
-      } else {
-        this.resetBall();
-      }
-      return;
-    }
-
-    this.ball.checkPaddleCollision(
-      this.paddle.x,
-      this.paddle.y,
-      this.paddle.width,
-      this.paddle.height
-    );
-
-    const collisionResult = this.brickManager.checkCollision(
-      this.ball.x,
-      this.ball.y,
-      this.ball.radius
-    );
-
-    if (collisionResult.hit) {
-      this.ball.reflectVertical();
-      this.ball.addRandomAngleOffset();
-
-      const baseScore = 10;
-      const comboBonus = collisionResult.comboChain > 1 ? (collisionResult.comboChain - 1) * 5 : 0;
-      this.state.score += baseScore + comboBonus;
-      this.state.comboCount = collisionResult.comboChain;
-
-      this.triggerShake();
-
-      this.particles.push(...collisionResult.particles);
-      if (this.particles.length > 200) {
-        this.particles = this.particles.slice(-200);
-      }
-
-      const progress = this.brickManager.getProgress();
-      if (progress >= 1) {
-        this.nextLevel();
-      }
-    }
-
-    this.brickManager.updateParticles(deltaTime);
-
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.life -= deltaTime;
-      p.alpha = Math.max(0, p.life / p.maxLife);
-      if (p.life <= 0) {
-        this.particles.splice(i, 1);
-      }
-    }
-  }
-
-  private triggerShake(): void {
-    this.shakeTime = 100;
-    const shakeAmount = 2 + Math.random() * 1;
-    this.shakeOffsetX = (Math.random() - 0.5) * shakeAmount * 2;
-    this.shakeOffsetY = (Math.random() - 0.5) * shakeAmount * 2;
-  }
-
-  private resetBall(): void {
-    this.ballLaunched = false;
-    this.state.isPlaying = false;
-    this.state.comboCount = 0;
-    const paddleX = (this.canvasWidth - this.paddle.width) / 2;
-    this.paddle.reset(paddleX, this.paddle.y);
-    this.ball.reset(
-      this.paddle.getCenterX(),
-      this.paddle.y - this.ball.radius - 2
-    );
-  }
-
-  private nextLevel(): void {
-    this.state.level++;
-    this.ball.increaseSpeed(1.05);
-    this.brickManager.clear();
-    this.brickManager.generateHoneycombLayout();
-    this.resetBall();
-  }
-
-  private endGame(): void {
-    this.state.isGameOver = true;
-    this.state.isPlaying = false;
-
-    const finalScoreEl = document.getElementById('final-score-value');
-    if (finalScoreEl) {
-      finalScoreEl.textContent = this.state.score.toString();
-    }
-
-    const gameOverEl = document.getElementById('game-over');
-    if (gameOverEl) {
-      gameOverEl.classList.add('visible');
-    }
-  }
-
-  private restart(): void {
-    this.state = {
-      score: 0,
-      lives: 3,
-      level: 1,
-      isPlaying: false,
-      isGameOver: false,
-      comboCount: 0
-    };
-
-    this.ball = new Ball(
-      this.paddle.x + this.paddle.width / 2,
-      this.paddle.y - 10
-    );
-
-    this.brickManager.clear();
-    this.brickManager.generateHoneycombLayout();
-
-    const paddleX = (this.canvasWidth - this.paddle.width) / 2;
-    this.paddle.reset(paddleX, this.paddle.y);
-
-    this.ballLaunched = false;
-    this.particles = [];
-
-    const gameOverEl = document.getElementById('game-over');
-    if (gameOverEl) {
-      gameOverEl.classList.remove('visible');
-    }
+  private showGameOver(): void {
+    const score = document.getElementById('final-score-value');
+    if (score) score.textContent = this.engine.score.toString();
+    document.getElementById('game-over')?.classList.add('visible');
   }
 
   private render(): void {
-    this.ctx.save();
-    this.ctx.translate(this.shakeOffsetX, this.shakeOffsetY);
-
-    this.ctx.fillStyle = '#1a1a2e';
-    this.ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
-
+    const { canvasWidth, canvasHeight } = this.engine;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(this.engine.shakeOffsetX, this.engine.shakeOffsetY);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     this.drawBorder();
-    this.brickManager.drawBricks(this.ctx);
-    this.brickManager.drawParticles(this.ctx);
-    this.drawParticles();
-    this.paddle.draw(this.ctx);
-    this.ball.draw(this.ctx);
-    this.drawHUD();
-
-    this.ctx.restore();
+    this.engine.brickManager.drawBricks(ctx);
+    this.engine.brickManager.drawParticles(ctx);
+    this.engine.paddle.draw(ctx);
+    this.engine.ball.draw(ctx);
+    this.drawHud();
+    ctx.restore();
   }
 
   private drawBorder(): void {
-    this.ctx.save();
-    this.ctx.strokeStyle = 'rgba(0, 210, 255, 0.5)';
-    this.ctx.lineWidth = 3;
-    this.ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
-    this.ctx.shadowBlur = 10;
+    const ctx = this.ctx;
+    const { canvasWidth, canvasHeight } = this.engine;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 210, 255, 0.5)';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
+    ctx.shadowBlur = 10;
 
     const radius = 16;
-    this.ctx.beginPath();
-    this.ctx.moveTo(radius, 0);
-    this.ctx.lineTo(this.canvasWidth - radius, 0);
-    this.ctx.quadraticCurveTo(this.canvasWidth, 0, this.canvasWidth, radius);
-    this.ctx.lineTo(this.canvasWidth, this.canvasHeight - radius);
-    this.ctx.quadraticCurveTo(
-      this.canvasWidth,
-      this.canvasHeight,
-      this.canvasWidth - radius,
-      this.canvasHeight
-    );
-    this.ctx.lineTo(radius, this.canvasHeight);
-    this.ctx.quadraticCurveTo(0, this.canvasHeight, 0, this.canvasHeight - radius);
-    this.ctx.lineTo(0, radius);
-    this.ctx.quadraticCurveTo(0, 0, radius, 0);
-    this.ctx.closePath();
-    this.ctx.stroke();
-    this.ctx.restore();
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.lineTo(canvasWidth - radius, 0);
+    ctx.quadraticCurveTo(canvasWidth, 0, canvasWidth, radius);
+    ctx.lineTo(canvasWidth, canvasHeight - radius);
+    ctx.quadraticCurveTo(canvasWidth, canvasHeight, canvasWidth - radius, canvasHeight);
+    ctx.lineTo(radius, canvasHeight);
+    ctx.quadraticCurveTo(0, canvasHeight, 0, canvasHeight - radius);
+    ctx.lineTo(0, radius);
+    ctx.quadraticCurveTo(0, 0, radius, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 
-  private drawParticles(): void {
-    for (const p of this.particles) {
-      this.ctx.save();
-      this.ctx.globalAlpha = p.alpha;
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, 2 + p.alpha * 2, 0, Math.PI * 2);
-      this.ctx.fillStyle = p.color;
-      this.ctx.shadowColor = p.color;
-      this.ctx.shadowBlur = 5;
-      this.ctx.fill();
-      this.ctx.restore();
-    }
-  }
+  private drawHud(): void {
+    const ctx = this.ctx;
+    const status = this.engine.getStatus();
+    ctx.save();
+    ctx.font = 'bold 20px "Segoe UI", monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+    ctx.shadowBlur = 10;
+    ctx.textAlign = 'right';
+    ctx.fillText(`得分: ${status.score}`, this.engine.canvasWidth - 20, 20);
 
-  private drawHUD(): void {
-    this.ctx.save();
-    this.ctx.font = 'bold 20px "Segoe UI", monospace';
-    this.ctx.textBaseline = 'top';
-
-    const scoreText = `得分: ${this.state.score}`;
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-    this.ctx.shadowBlur = 10;
-    this.ctx.textAlign = 'right';
-    this.ctx.fillText(scoreText, this.canvasWidth - 20, 20);
-
-    this.ctx.textAlign = 'left';
-    this.ctx.shadowBlur = 8;
-    for (let i = 0; i < this.state.lives; i++) {
-      this.drawHeart(25 + i * 30, 28, 10);
+    ctx.textAlign = 'left';
+    ctx.shadowBlur = 8;
+    for (let index = 0; index < status.lives; index++) {
+      this.drawHeart(25 + index * 30, 28, 10);
     }
 
-    this.ctx.textAlign = 'left';
-    this.ctx.fillStyle = '#00d2ff';
-    this.ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
-    this.ctx.shadowBlur = 10;
-    this.ctx.fillText(`关卡 ${this.state.level}`, 20, 55);
+    ctx.fillStyle = '#00d2ff';
+    ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
+    ctx.shadowBlur = 10;
+    ctx.fillText(`关卡 ${status.level}`, 20, 55);
+    this.drawProgressBar(this.engine.canvasWidth - 150, 55, 130, 12, status.progress);
 
-    const progress = this.brickManager.getProgress();
-    this.drawProgressBar(this.canvasWidth - 150, 55, 130, 12, progress);
-
-    if (this.state.comboCount > 1) {
-      this.ctx.textAlign = 'center';
-      this.ctx.fillStyle = '#ffd32a';
-      this.ctx.shadowColor = 'rgba(255, 211, 42, 0.8)';
-      this.ctx.shadowBlur = 15;
-      this.ctx.font = 'bold 28px "Segoe UI", sans-serif';
-      this.ctx.fillText(
-        `${this.state.comboCount}x 连击!`,
-        this.canvasWidth / 2,
-        this.canvasHeight / 2 - 50
-      );
+    if (status.comboCount > 1) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd32a';
+      ctx.shadowColor = 'rgba(255, 211, 42, 0.8)';
+      ctx.shadowBlur = 15;
+      ctx.font = 'bold 28px "Segoe UI", sans-serif';
+      ctx.fillText(`${status.comboCount}x 连击!`, this.engine.canvasWidth / 2, 250);
     }
 
-    if (!this.ballLaunched && !this.state.isGameOver) {
-      this.ctx.textAlign = 'center';
-      this.ctx.fillStyle = '#00d2ff';
-      this.ctx.shadowColor = 'rgba(0, 210, 255, 0.8)';
-      this.ctx.shadowBlur = 15;
-      this.ctx.font = 'bold 24px "Segoe UI", sans-serif';
-      this.ctx.fillText(
-        '点击屏幕发射小球',
-        this.canvasWidth / 2,
-        this.canvasHeight / 2
-      );
+    if (!status.ballLaunched && !status.isGameOver) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#00d2ff';
+      ctx.shadowColor = 'rgba(0, 210, 255, 0.8)';
+      ctx.shadowBlur = 15;
+      ctx.font = 'bold 24px "Segoe UI", sans-serif';
+      ctx.fillText('点击屏幕发射小球', this.engine.canvasWidth / 2, this.engine.canvasHeight / 2);
     }
-
-    this.ctx.restore();
+    ctx.restore();
   }
 
   private drawHeart(x: number, y: number, size: number): void {
-    this.ctx.save();
-    this.ctx.fillStyle = '#ff4757';
-    this.ctx.shadowColor = 'rgba(255, 71, 87, 0.8)';
-    this.ctx.shadowBlur = 8;
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(x, y + size / 4);
-    this.ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + size / 4);
-    this.ctx.bezierCurveTo(
-      x - size / 2,
-      y + size / 2,
-      x,
-      y + size * 0.75,
-      x,
-      y + size
-    );
-    this.ctx.bezierCurveTo(
-      x,
-      y + size * 0.75,
-      x + size / 2,
-      y + size / 2,
-      x + size / 2,
-      y + size / 4
-    );
-    this.ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + size / 4);
-    this.ctx.fill();
-    this.ctx.restore();
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = '#ff4757';
+    ctx.shadowColor = 'rgba(255, 71, 87, 0.8)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size / 4);
+    ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + size / 4);
+    ctx.bezierCurveTo(x - size / 2, y + size / 2, x, y + size * 0.75, x, y + size);
+    ctx.bezierCurveTo(x, y + size * 0.75, x + size / 2, y + size / 2, x + size / 2, y + size / 4);
+    ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + size / 4);
+    ctx.fill();
+    ctx.restore();
   }
 
-  private drawProgressBar(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    progress: number
-  ): void {
-    this.ctx.save();
+  private drawProgressBar(x: number, y: number, width: number, height: number, progress: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, height / 2);
+    ctx.fill();
 
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width, height, height / 2);
-    this.ctx.fill();
-
-    const gradient = this.ctx.createLinearGradient(x, y, x + width, y);
+    const gradient = ctx.createLinearGradient(x, y, x + width, y);
     gradient.addColorStop(0, '#00d2ff');
     gradient.addColorStop(1, '#3a7bd5');
+    ctx.fillStyle = gradient;
+    ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width * progress, height, height / 2);
+    ctx.fill();
 
-    this.ctx.fillStyle = gradient;
-    this.ctx.shadowColor = 'rgba(0, 210, 255, 0.6)';
-    this.ctx.shadowBlur = 8;
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, width * progress, height, height / 2);
-    this.ctx.fill();
-
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = 'bold 10px "Segoe UI", sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.shadowBlur = 0;
-    this.ctx.fillText(
-      `${Math.round(progress * 100)}%`,
-      x + width / 2,
-      y + height / 2
-    );
-
-    this.ctx.restore();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 0;
+    ctx.fillText(`${Math.round(progress * 100)}%`, x + width / 2, y + height / 2);
+    ctx.restore();
   }
 }
 

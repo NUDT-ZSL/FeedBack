@@ -27,10 +27,7 @@ export class Paddle {
     this.canvasWidth = width;
   }
 
-  handleMouseDown(clientX: number, canvasRect: DOMRect): void {
-    const scaleX = this.canvasWidth / canvasRect.width;
-    const x = (clientX - canvasRect.left) * scaleX;
-
+  startDrag(x: number): void {
     if (x >= this.x && x <= this.x + this.width) {
       this.isDragging = true;
       this.lastMouseX = x;
@@ -38,10 +35,7 @@ export class Paddle {
     }
   }
 
-  handleMouseMove(clientX: number, canvasRect: DOMRect): void {
-    const scaleX = this.canvasWidth / canvasRect.width;
-    const x = (clientX - canvasRect.left) * scaleX;
-
+  dragTo(x: number): void {
     if (this.isDragging) {
       const delta = x - this.lastMouseX;
       this.lastDelta = delta;
@@ -50,6 +44,19 @@ export class Paddle {
       this.lastMouseX = x;
       this.constrainPosition();
     }
+  }
+
+  handleMouseDown(clientX: number, canvasRect: DOMRect): void {
+    const scaleX = this.canvasWidth / canvasRect.width;
+    const x = (clientX - canvasRect.left) * scaleX;
+    this.startDrag(x);
+  }
+
+  handleMouseMove(clientX: number, canvasRect: DOMRect): void {
+    const scaleX = this.canvasWidth / canvasRect.width;
+    const x = (clientX - canvasRect.left) * scaleX;
+
+    this.dragTo(x);
   }
 
   handleMouseUp(): void {

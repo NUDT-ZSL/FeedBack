@@ -1,3 +1,5 @@
+import { RandomSource } from './rng.js';
+
 export interface BallState {
   x: number;
   y: number;
@@ -16,7 +18,12 @@ export class Ball {
   speed: number;
   baseSpeed: number;
 
-  constructor(x: number, y: number, radius: number = 8) {
+  constructor(
+    x: number,
+    y: number,
+    radius: number = 8,
+    private random: RandomSource = Math.random
+  ) {
     this.x = x;
     this.y = y;
     this.radius = radius;
@@ -81,7 +88,7 @@ export class Ball {
 
   addRandomAngleOffset(): void {
     const offsetRange = (15 * Math.PI) / 180;
-    const offset = (Math.random() - 0.5) * 2 * offsetRange;
+    const offset = (this.random() - 0.5) * 2 * offsetRange;
     const currentAngle = Math.atan2(this.vy, this.vx);
     const newAngle = currentAngle + offset;
     this.vx = Math.cos(newAngle) * this.speed;
@@ -100,14 +107,35 @@ export class Ball {
     const distanceY = this.y - closestY;
     const distanceSquared = distanceX * distanceX + distanceY * distanceY;
 
-    if (distanceSquared < this.radius * this.radius && this.vy > 0) {
-      const hitPoint = (this.x - paddleX) / paddleWidth - 0.5;
+    const epsilon = 1e-9;
+    const overlapsPaddleHeight = this.y <= paddleY + paddleHeight;
+    if (
+      distanceSquared <= this.radius * this.radius + epsilon &&
+      this.vy > 0 &&
+      overlapsPaddleHeight
+    ) {
+      const clampedHitX = Math.max(paddleX, Math.min(this.x, paddleX + paddleWidth));
+      let hitPoint = (clampedHitX - paddleX) / paddleWidth - 0.5;
+      hitPoint = Math.max(-0.5, Math.min(0.5, hitPoint));
       const maxAngle = (60 * Math.PI) / 180;
       const baseAngle = -Math.PI / 2 + hitPoint * maxAngle;
       this.vx = Math.cos(baseAngle) * this.speed;
       this.vy = Math.sin(baseAngle) * this.speed;
       this.addRandomAngleOffset();
-      this.y = paddleY - this.radius;
+
+      // Resolve through the real closest point so side/corner contacts cannot
+      // remain embedded after the velocity is changed.
+      const distanceX = this.x - closestX;
+      const distanceY = this.y - closestY;
+      const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+      if (distance < this.radius) {
+        if (distance > 0) {
+          this.x = closestX + (distanceX / distance) * this.radius;
+          this.y = closestY + (distanceY / distance) * this.radius;
+        } else {
+          this.y = paddleY - this.radius;
+        }
+      }
       return true;
     }
     return false;
