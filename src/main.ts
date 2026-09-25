@@ -5,6 +5,8 @@ import { ParticleModule } from './particleSystem/particleModule'
 import { InteractionController } from './interaction/interactionController'
 import { RenderModule } from './renderer/renderModule'
 import { ControlPanel } from './ui/controlPanel'
+import { HistoryBuffer } from './time/historyBuffer'
+import { TimeController } from './time/timeController'
 
 const BOUNDS = {
   minX: -10,
@@ -26,6 +28,8 @@ class App {
   private interactionController: InteractionController
   private renderModule: RenderModule
   private controlPanel: ControlPanel
+  private history: HistoryBuffer
+  private timeController: TimeController
 
   private clock: THREE.Clock
   private frameCount: number = 0
@@ -69,6 +73,13 @@ class App {
     this.interactionController = new InteractionController(this.container, this.camera)
     this.renderModule = new RenderModule(this.scene, this.camera, this.renderer, this.state)
     this.controlPanel = new ControlPanel(this.state)
+    this.history = new HistoryBuffer(600)
+    this.timeController = new TimeController(
+      this.state,
+      this.particleModule,
+      this.renderModule,
+      this.history
+    )
 
     this.setupZoom()
     this.setupResize()
@@ -129,7 +140,9 @@ class App {
     const delta = Math.min(this.clock.getDelta(), 0.1)
 
     this.updateFPS(delta)
-    this.particleModule.update(delta)
+    if (!this.timeController.isPaused) {
+      this.particleModule.update(delta)
+    }
     this.interactionController.update()
     this.renderModule.update(delta, this.currentFps)
     this.renderModule.render()

@@ -46,6 +46,9 @@ export class RenderModule {
   private particleValueEl: HTMLElement | null = null
   private modeValueEl: HTMLElement | null = null
 
+  private overridePositions: Float32Array | null = null
+  private overrideCollisionCount: number | null = null
+
   constructor(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
@@ -68,6 +71,39 @@ export class RenderModule {
     eventBus.on('collision', this.onCollision.bind(this))
     eventBus.on('render-mode-change', this.onModeChange.bind(this))
     eventBus.on('particle-count-change', this.onParticleCountChange.bind(this))
+    eventBus.on('system-reset', this.onSystemReset.bind(this))
+  }
+
+  /**
+   * Show a historical frame without touching live particle state.
+   * Used by timeline scrubbing while paused.
+   */
+  setFrameOverride(positions: Float32Array, collisionCount: number): void {
+    this.overridePositions = positions
+    this.overrideCollisionCount = collisionCount
+  }
+
+  clearFrameOverride(): void {
+    this.overridePositions = null
+    this.overrideCollisionCount = null
+  }
+
+  hasFrameOverride(): boolean {
+    return this.overridePositions !== null
+  }
+
+  private onSystemReset(): void {
+    for (const glow of this.collisionGlows) {
+      glow.active = false
+      glow.life = 0
+      glow.mesh.visible = false
+    }
+    this.collisionGlows.length = 0
+    for (const glow of this.glowPool) {
+      glow.active = false
+      glow.mesh.visible = false
+    }
+    this.clearFrameOverride()
   }
 
   private initHUD(): void {
@@ -256,14 +292,14 @@ export class RenderModule {
       const oldCount = this.positions.length / 3
       const newCount = data.count
 
-      if (newCount > oldCount) {
+      if (newCount !== oldCount) {
         const newPositions = new Float32Array(newCount * 3)
         const newColors = new Float32Array(newCount * 3)
         const newSizes = new Float32Array(newCount)
 
-        newPositions.set(this.positions)
-        newColors.set(this.colors)
-        newSizes.set(this.sizes)
+        newPositions.set(this.positions.subarray(0, Math.min(oldCount, newCount) * 3))
+        newColors.set(this.colors.subarray(0, Math.min(oldCount, newCount) * 3))
+        newSizes.set(this.sizes.subarray(0, Math.min(oldCount, newCount)))
 
         this.positions = newPositions
         this.colors = newColors
@@ -279,6 +315,7 @@ export class RenderModule {
       }
 
       if (this.instancedMesh) {
+        this.scene.remove(this.instancedMesh)
         this.instancedMesh.dispose()
         if (this.sphereGeometry && this.sphereMaterial) {
           this.instancedMesh = new THREE.InstancedMesh(
@@ -303,13 +340,24 @@ export class RenderModule {
   private updatePoints(particles: Particle[]): void {
     if (!this.positions || !this.colors || !this.sizes || !this.pointsGeometry) return
 
-    for (let i = 0; i < particles.length; i++) {
+    const override = this.overridePositions
+    const count = override
+      ? Math.min(particles.length, Math.floor(override.length / 3))
+      : particles.length
+
+    for (let i = 0; i < count; i++) {
       const p = particles[i]
       const i3 = i * 3
 
-      this.positions[i3] = p.position.x
-      this.positions[i3 + 1] = p.position.y
-      this.positions[i3 + 2] = p.position.z
+      if (override) {
+        this.positions[i3] = override[i3]
+        this.positions[i3 + 1] = override[i3 + 1]
+        this.positions[i3 + 2] = override[i3 + 2]
+      } else {
+        this.positions[i3] = p.position.x
+        this.positions[i3 + 1] = p.position.y
+        this.positions[i3 + 2] = p.position.z
+      }
 
       const brightness = 1 + p.glowIntensity
       this.colors[i3] = Math.min(1, p.color.r * brightness)
@@ -328,12 +376,20 @@ export class RenderModule {
     if (!this.instancedMesh || !this.instancedMesh.instanceColor) return
 
     const colors = this.instancedMesh.instanceColor.array as Float32Array
+    const override = this.overridePositions
+    const count = override
+      ? Math.min(particles.length, Math.floor(override.length / 3))
+      : particles.length
 
-    for (let i = 0; i < particles.length; i++) {
+    for (let i = 0; i < count; i++) {
       const p = particles[i]
       const i3 = i * 3
 
-      this.dummy.position.copy(p.position)
+      if (override) {
+        this.dummy.position.set(override[i3], override[i3 + 1], override[i3 + 2])
+      } else {
+        this.dummy.position.copy(p.position)
+      }
       this.dummy.scale.setScalar(p.radius)
       this.dummy.rotation.set(0, 0, 0)
       this.dummy.updateMatrix()
@@ -349,7 +405,7 @@ export class RenderModule {
 
     this.instancedMesh.instanceMatrix.needsUpdate = true
     this.instancedMesh.instanceColor.needsUpdate = true
-    this.instancedMesh.count = particles.length
+    this.instancedMesh.count = count
   }
 
   private updateEffects(delta: number): void {
@@ -373,19 +429,31 @@ export class RenderModule {
     }
 
     const { particles } = this.state
-    for (let i = 0; i < this.glowPool.length && i < particles.length; i++) {
+    const override = this.overridePositions
+    const glowCount = override
+      ? Math.min(this.glowPool.length, particles.length, Math.floor(override.length / 3))
+      : Math.min(this.glowPool.length, particles.length)
+
+    for (let i = 0; i < glowCount; i++) {
       const glow = this.glowPool[i]
       const p = particles[i]
 
       if (p.glowIntensity > 0.01) {
         glow.mesh.visible = true
-        glow.mesh.position.copy(p.position)
+        if (override) {
+          glow.mesh.position.set(override[i * 3], override[i * 3 + 1], override[i * 3 + 2])
+        } else {
+          glow.mesh.position.copy(p.position)
+        }
         glow.mesh.scale.setScalar(p.radius * (2 + p.glowIntensity * 2))
         ;(glow.mesh.material as THREE.MeshBasicMaterial).color.copy(p.color)
         ;(glow.mesh.material as THREE.MeshBasicMaterial).opacity = p.glowIntensity * 0.3
       } else {
         glow.mesh.visible = false
       }
+    }
+    for (let i = glowCount; i < this.glowPool.length; i++) {
+      this.glowPool[i].mesh.visible = false
     }
   }
 
@@ -428,7 +496,10 @@ export class RenderModule {
     }
 
     if (this.collisionValueEl) {
-      this.collisionValueEl.textContent = this.state.collisionCount.toLocaleString()
+      const shown = this.overrideCollisionCount !== null
+        ? this.overrideCollisionCount
+        : this.state.collisionCount
+      this.collisionValueEl.textContent = shown.toLocaleString()
     }
   }
 

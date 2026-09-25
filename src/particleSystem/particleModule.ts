@@ -14,6 +14,10 @@ export class ParticleModule {
   private mouseForce: MouseForceEvent | null = null
   private physicsAccumulator: number = 0
   private physicsTimestep: number = 1 / 30
+  private paused: boolean = false
+  private stepIndex: number = 0
+  private pendingParticleCount: number | null = null
+  private pendingSizeUpdate: boolean = false
 
   constructor(state: SharedState) {
     this.state = state
@@ -25,11 +29,43 @@ export class ParticleModule {
 
     eventBus.on('param-change', (data) => {
       if (data.key === 'particleCount' && typeof data.value === 'number') {
-        this.updateParticleCount(data.value)
+        if (this.paused) {
+          this.pendingParticleCount = data.value
+        } else {
+          this.updateParticleCount(data.value)
+        }
       } else if (data.key === 'particleSizeMin' || data.key === 'particleSizeMax') {
-        this.updateParticleSizes()
+        if (this.paused) {
+          this.pendingSizeUpdate = true
+        } else {
+          this.updateParticleSizes()
+        }
       }
     })
+  }
+
+  get isPaused(): boolean {
+    return this.paused
+  }
+
+  get timestep(): number {
+    return this.physicsTimestep
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused
+  }
+
+  private applyPendingChanges(): void {
+    if (this.pendingParticleCount !== null) {
+      const count = this.pendingParticleCount
+      this.pendingParticleCount = null
+      this.updateParticleCount(count)
+    }
+    if (this.pendingSizeUpdate) {
+      this.pendingSizeUpdate = false
+      this.updateParticleSizes()
+    }
   }
 
   private createParticle(): Particle {
@@ -95,6 +131,51 @@ export class ParticleModule {
     for (let i = 0; i < particleCount; i++) {
       particles.push(this.createParticle())
     }
+    this.emitStep()
+  }
+
+  /**
+   * Full reset back to a fresh initial state: clears collision count,
+   * rebuilds particles from the current particleCount with new random
+   * positions/velocities/colors, and drops any queued forces or
+   * deferred parameter changes.
+   */
+  reset(): void {
+    this.pendingParticleCount = null
+    this.pendingSizeUpdate = false
+    this.mouseForce = null
+    this.physicsAccumulator = 0
+    this.state.collisionCount = 0
+
+    const { particles, particleCount } = this.state
+    particles.length = 0
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(this.createParticle())
+    }
+
+    eventBus.emit('particle-count-change', { count: particleCount })
+    this.emitStep()
+  }
+
+  private emitStep(): void {
+    this.stepIndex++
+    eventBus.emit('physics-step', { stepIndex: this.stepIndex })
+  }
+
+  private stepPhysics(): void {
+    this.applyPhysics(this.physicsTimestep)
+    this.collisionManager.update(this.physicsTimestep)
+    this.emitStep()
+  }
+
+  /**
+   * Advance exactly one fixed physics timestep. Used for single-stepping
+   * while paused; N consecutive calls are equivalent to a continuous
+   * advance of N * timestep seconds.
+   */
+  stepOnce(): void {
+    this.applyPendingChanges()
+    this.stepPhysics()
   }
 
   private applyPhysics(delta: number): void {
@@ -105,7 +186,7 @@ export class ParticleModule {
 
       p.velocity.y -= gravity * delta
 
-      if (this.mouseForce) {
+      if (this.mouseForce && !this.paused) {
         const diff = new THREE.Vector3().subVectors(p.position, this.mouseForce.position)
         const dist = diff.length()
         
@@ -134,11 +215,13 @@ export class ParticleModule {
   }
 
   update(renderDelta: number): void {
+    if (this.paused) return
+
+    this.applyPendingChanges()
     this.physicsAccumulator += renderDelta
 
     while (this.physicsAccumulator >= this.physicsTimestep) {
-      this.applyPhysics(this.physicsTimestep)
-      this.collisionManager.update(this.physicsTimestep)
+      this.stepPhysics()
       this.physicsAccumulator -= this.physicsTimestep
     }
 

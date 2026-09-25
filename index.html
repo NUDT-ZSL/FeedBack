@@ -132,6 +132,104 @@
       background: rgba(0, 240, 255, 0.3);
     }
 
+    #time-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px 20px;
+      background: rgba(10, 10, 31, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      border-radius: 8px;
+      z-index: 10;
+      min-width: 420px;
+    }
+
+    #time-controls .tc-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    #time-controls .tc-btn {
+      flex: 1;
+      padding: 8px 18px;
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 4px;
+      color: #00f0ff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    #time-controls .tc-btn:hover {
+      background: rgba(0, 240, 255, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 240, 255, 0.3);
+    }
+
+    #time-controls .tc-btn.paused {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.3), rgba(255, 0, 255, 0.3));
+      color: #fff;
+    }
+
+    #time-controls .tc-timeline {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #time-controls #timeline {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #00f0ff, #ff00ff);
+      outline: none;
+      cursor: pointer;
+    }
+
+    #time-controls #timeline:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    #time-controls #timeline::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #00f0ff;
+      border: 2px solid #fff;
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+    }
+
+    #time-controls #timeline::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #00f0ff;
+      border: 2px solid #fff;
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+    }
+
+    #time-controls #timeline-label {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      white-space: nowrap;
+      min-width: 130px;
+      text-align: right;
+    }
+
     .lil-gui {
       --background-color: rgba(10, 10, 31, 0.75) !important;
       --widget-color: rgba(0, 240, 255, 0.1) !important;
@@ -237,6 +335,13 @@
         font-size: 12px;
         min-width: 150px;
       }
+
+      #time-controls {
+        min-width: 0;
+        width: calc(100% - 24px);
+        bottom: 12px;
+        padding: 10px 14px;
+      }
     }
 
     @media (max-width: 480px) {
@@ -280,6 +385,17 @@
     <button id="mobile-toggle" aria-label="切换控制面板">
       <span>☰</span>
     </button>
+    <div id="time-controls">
+      <div class="tc-buttons">
+        <button id="btn-pause" class="tc-btn">暂停</button>
+        <button id="btn-step" class="tc-btn">单步</button>
+        <button id="btn-reset" class="tc-btn">重置</button>
+      </div>
+      <div class="tc-timeline">
+        <input type="range" id="timeline" min="0" max="0" value="0" step="1" disabled />
+        <span id="timeline-label">帧 0/0 · 碰撞 0</span>
+      </div>
+    </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
