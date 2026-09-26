@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>音律迷宫 - Rhythm Maze</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a1a;
+      font-family: 'Courier New', monospace;
+      color: #ffffff;
+    }
+
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #start-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(10, 10, 26, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      transition: opacity 0.5s ease;
+    }
+
+    #start-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #start-screen h1 {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #8b5cf6, #00e5ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
+      letter-spacing: 8px;
+    }
+
+    #start-screen p {
+      font-size: 1.2rem;
+      color: #a0a0c0;
+      margin-bottom: 3rem;
+      max-width: 500px;
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    #start-button {
+      padding: 1rem 3rem;
+      font-size: 1.5rem;
+      font-family: 'Courier New', monospace;
+      background: transparent;
+      color: #00e5ff;
+      border: 2px solid #00e5ff;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.3), inset 0 0 20px rgba(0, 229, 255, 0.1);
+    }
+
+    #start-button:hover {
+      background: rgba(0, 229, 255, 0.2);
+      box-shadow: 0 0 40px rgba(0, 229, 255, 0.6), inset 0 0 30px rgba(0, 229, 255, 0.2);
+      transform: scale(1.05);
+    }
+
+    #start-button:active {
+      transform: scale(0.98);
+    }
+
+    .controls-hint {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #6060a0;
+    }
+
+    .controls-hint span {
+      display: inline-block;
+      padding: 4px 10px;
+      margin: 0 4px;
+      border: 1px solid #4040a0;
+      border-radius: 4px;
+      color: #8080c0;
+    }
+
+    #hud-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    #minimap {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: rgba(30, 30, 60, 0.6);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(0, 229, 255, 0.5);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+      overflow: hidden;
+    }
+
+    #minimap-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #score-panel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 30px;
+      background: rgba(30, 30, 60, 0.6);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(0, 229, 255, 0.5);
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+      font-size: 1.2rem;
+      color: #00e5ff;
+      letter-spacing: 2px;
+    }
+
+    #score-label {
+      font-size: 0.8rem;
+      color: #8080c0;
+      margin-bottom: 4px;
+    }
+
+    #score-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    #timer-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 10px 20px;
+      background: rgba(30, 30, 60, 0.6);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(0, 229, 255, 0.5);
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+      font-size: 1rem;
+      color: #00e5ff;
+    }
+
+    #gem-progress-container {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      padding: 15px 20px;
+      background: rgba(30, 30, 60, 0.6);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(0, 229, 255, 0.5);
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+    }
+
+    #gem-progress-label {
+      font-size: 0.85rem;
+      color: #8080c0;
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+
+    #gem-progress-bar {
+      width: 200px;
+      height: 8px;
+      background: rgba(60, 60, 100, 0.5);
+      border-radius: 4px;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .gem-segment {
+      flex: 1;
+      background: rgba(60, 60, 100, 0.5);
+      transition: all 0.3s ease;
+      border-right: 1px solid rgba(10, 10, 26, 0.5);
+    }
+
+    .gem-segment:last-child {
+      border-right: none;
+    }
+
+    .gem-segment.collected {
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    #win-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(10, 10, 26, 0.9);
+      backdrop-filter: blur(10px);
+      z-index: 200;
+    }
+
+    #win-screen.show {
+      display: flex;
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    #win-screen h2 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #ffd700, #00e5ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 6px;
+    }
+
+    #win-screen p {
+      font-size: 1.2rem;
+      color: #a0a0c0;
+      margin-bottom: 0.5rem;
+    }
+
+    #final-stats {
+      margin: 2rem 0;
+      font-size: 1.1rem;
+      color: #00e5ff;
+      text-align: center;
+      line-height: 2;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container">
+    <div id="start-screen">
+      <h1>音律迷宫</h1>
+      <p>在音乐的世界中探索迷宫，收集所有音符宝石，解锁出口。<br/>让节奏指引你的道路。</p>
+      <button id="start-button">开始游戏</button>
+      <div class="controls-hint">
+        移动：<span>W</span><span>A</span><span>S</span><span>D</span>
+      </div>
+    </div>
+
+    <div id="hud-container" style="display: none;">
+      <div id="score-panel">
+        <div id="score-label">得分</div>
+        <div id="score-value">0</div>
+      </div>
+
+      <div id="timer-panel">
+        <div>时间</div>
+        <div id="timer-value">00:00</div>
+      </div>
+
+      <div id="minimap">
+        <canvas id="minimap-canvas" width="160" height="160"></canvas>
+      </div>
+
+      <div id="gem-progress-container">
+        <div id="gem-progress-label">音符宝石</div>
+        <div id="gem-progress-bar"></div>
+      </div>
+    </div>
+
+    <div id="win-screen">
+      <h2>恭喜通关！</h2>
+      <p>你成功收集了所有音符宝石</p>
+      <div id="final-stats"></div>
+      <button id="restart-button" style="padding: 1rem 3rem; font-size: 1.2rem; font-family: 'Courier New', monospace; background: transparent; color: #00e5ff; border: 2px solid #00e5ff; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 4px; box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);">
+        再玩一次
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
