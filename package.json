@@ -1,0 +1,39 @@
+{
+  "name": "event-attendance-platform",
+  "version": "1.0.0",
+  "description": "线上线下活动签到与互动平台",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:client": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "qrcode": "^1.5.3",
+    "chart.js": "^4.4.0",
+    "react-chartjs-2": "^5.2.0",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.9",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^9.0.7",
+    "@types/cors": "^2.8.16",
+    "@types/node": "^20.9.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "tsx": "^4.1.0",
+    "concurrently": "^8.2.2"
+  }
+}
