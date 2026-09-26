@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #FFF8F0;
+  font-family: 'Noto Sans SC', 'Quicksand', sans-serif;
+  min-height: 100vh;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.notification-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.notification-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 4px 0 0 4px;
+  transition: width 0.3s ease;
+}
+
+.notification-card:hover::before {
+  width: 6px;
+}
+
+.notification-card.type-application_received::before {
+  background: linear-gradient(180deg, #FF9A5C, #FFB88C);
+}
+
+.notification-card.type-application_approved::before {
+  background: linear-gradient(180deg, #7BC47F, #A5D6A7);
+}
+
+.notification-card.type-application_rejected::before {
+  background: linear-gradient(180deg, #f87171, #fca5a5);
+}
+
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+.badge-pulse {
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+
+.comment-indent {
+  padding-left: 2rem;
+  border-left: 2px solid rgba(255, 154, 92, 0.3);
+  margin-left: 1.25rem;
+}
+
+.hamburger-menu {
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+
+.hamburger-menu.open {
+  transform: translateX(0);
+}
+
+.hamburger-overlay {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.hamburger-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 154, 92, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 154, 92, 0.5);
+}
+
+.avatar-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: white;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-grid button {
+  padding: 4px;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  transition: background 0.15s;
+}
+
+.emoji-grid button:hover {
+  background: rgba(255, 154, 92, 0.15);
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  outline: none;
+  font-size: 0.875rem;
+}
+
+.input-field:focus {
+  box-shadow: 0 0 0 2px rgba(255, 154, 92, 0.35);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 0.625rem 0;
+  background: #FF9A5C;
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-primary:hover {
+  background: #FFB88C;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
