@@ -1,0 +1,256 @@
+{
+  "plants": [
+    {
+      "id": "427170d6-7f1e-4c76-9936-f29afbb81f91",
+      "name": "小绿",
+      "species": "绿萝",
+      "icon": "🌿",
+      "image": "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=400&h=400&fit=crop",
+      "status": "needs_water",
+      "addedAt": "2026-05-21T16:38:53.962Z",
+      "lastWateredAt": "2026-06-17T16:38:53.962Z"
+    },
+    {
+      "id": "aeab6adc-91b2-490e-9818-04bdec4db5ac",
+      "name": "肉包",
+      "species": "多肉",
+      "icon": "🌵",
+      "image": "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=400&h=400&fit=crop",
+      "status": "watered",
+      "addedAt": "2026-04-21T16:38:53.962Z",
+      "lastWateredAt": "2026-06-19T16:38:53.962Z"
+    },
+    {
+      "id": "d93747e9-2a58-435f-9b20-a8e1acdc58bc",
+      "name": "吊吊",
+      "species": "吊兰",
+      "icon": "🌱",
+      "image": "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=400&h=400&fit=crop",
+      "status": "needs_water",
+      "addedAt": "2026-05-31T16:38:53.962Z",
+      "lastWateredAt": "2026-06-15T16:38:53.962Z"
+    },
+    {
+      "id": "1abac50b-0b7f-4ff0-8ab9-2118bc579b53",
+      "name": "背背",
+      "species": "龟背竹",
+      "icon": "🍃",
+      "image": "https://images.unsplash.com/photo-1463320726281-696a485928c7?w=400&h=400&fit=crop",
+      "status": "watered",
+      "addedAt": "2026-05-06T16:38:53.962Z",
+      "lastWateredAt": "2026-06-18T16:38:53.962Z"
+    },
+    {
+      "id": "b785a568-b7da-41df-9b14-4345a6700921",
+      "name": "橡皮",
+      "species": "橡皮树",
+      "icon": "🌴",
+      "image": "https://images.unsplash.com/photo-1545241047-6083a3684587?w=400&h=400&fit=crop",
+      "status": "needs_water",
+      "addedAt": "2026-03-22T16:38:53.962Z",
+      "lastWateredAt": "2026-06-16T16:38:53.962Z"
+    },
+    {
+      "id": "240b65a4-69fe-47f0-913c-7a9037f91b4f",
+      "name": "虎虎",
+      "species": "虎皮兰",
+      "icon": "🪴",
+      "image": "https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=400&h=400&fit=crop",
+      "status": "watered",
+      "addedAt": "2026-06-05T16:38:53.962Z",
+      "lastWateredAt": "2026-06-20T04:38:53.962Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "436fdf3e-c7f6-4311-bc00-edcaa0551eab",
+      "plantId": "427170d6-7f1e-4c76-9936-f29afbb81f91",
+      "requesterId": "me",
+      "requesterName": "我",
+      "accepterId": "bd85a1b1-4d32-41ac-ace5-b96f4d6f80fc",
+      "accepterName": "小明",
+      "startDate": "2026-06-21",
+      "endDate": "2026-06-27",
+      "status": "accepted",
+      "createdAt": "2026-06-20T16:38:53.962Z"
+    }
+  ],
+  "neighbors": [
+    {
+      "id": "bd85a1b1-4d32-41ac-ace5-b96f4d6f80fc",
+      "name": "小明",
+      "avatar": "👨",
+      "creditScore": 98,
+      "distance": 0.2
+    },
+    {
+      "id": "209d7f6b-a4c2-4c61-91de-93fa147af34c",
+      "name": "小红",
+      "avatar": "👩",
+      "creditScore": 95,
+      "distance": 0.3
+    },
+    {
+      "id": "6753737d-1746-427f-ab59-bb9b2dcb0357",
+      "name": "老王",
+      "avatar": "🧔",
+      "creditScore": 92,
+      "distance": 0.5
+    },
+    {
+      "id": "47b8027e-c7c7-4142-8b24-e7e2e4aeda9d",
+      "name": "阿花",
+      "avatar": "👧",
+      "creditScore": 88,
+      "distance": 0.7
+    },
+    {
+      "id": "1f766068-576d-408f-b7b9-4e91dfaf4bcd",
+      "name": "大刘",
+      "avatar": "👨‍🦱",
+      "creditScore": 85,
+      "distance": 1
+    }
+  ],
+  "wateringRecords": [
+    {
+      "id": "6fd8db40-e0bd-4129-aa97-11464b600247",
+      "plantId": "427170d6-7f1e-4c76-9936-f29afbb81f91",
+      "type": "water",
+      "operatorName": "小明",
+      "photos": [
+        "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=200&h=200&fit=crop"
+      ],
+      "note": "浇透了，土壤湿润",
+      "timestamp": "2026-06-17T16:38:53.962Z"
+    },
+    {
+      "id": "a74995f3-8586-4e11-bf4a-2e66bbdc777c",
+      "plantId": "427170d6-7f1e-4c76-9936-f29afbb81f91",
+      "type": "fertilize",
+      "operatorName": "我",
+      "photos": [],
+      "note": "施了缓释肥",
+      "timestamp": "2026-06-10T16:38:53.962Z"
+    },
+    {
+      "id": "abcd2ab9-5959-4f3f-9853-e99ef33e0b9b",
+      "plantId": "427170d6-7f1e-4c76-9936-f29afbb81f91",
+      "type": "water",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=200&h=200&fit=crop"
+      ],
+      "note": "正常浇水",
+      "timestamp": "2026-06-13T16:38:53.962Z"
+    },
+    {
+      "id": "c1960bc1-f4ba-4076-b7bd-6a5f3f8bd178",
+      "plantId": "aeab6adc-91b2-490e-9818-04bdec4db5ac",
+      "type": "water",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=200&h=200&fit=crop"
+      ],
+      "note": "少量浇水",
+      "timestamp": "2026-06-19T16:38:53.962Z"
+    },
+    {
+      "id": "822a9114-1129-4002-bc15-ef44a1515272",
+      "plantId": "aeab6adc-91b2-490e-9818-04bdec4db5ac",
+      "type": "repot",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=200&h=200&fit=crop",
+        "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=200&h=200&fit=crop"
+      ],
+      "note": "换了新盆和营养土",
+      "timestamp": "2026-06-05T16:38:53.962Z"
+    },
+    {
+      "id": "b2348dba-3416-47d9-8004-e2743bf18aad",
+      "plantId": "d93747e9-2a58-435f-9b20-a8e1acdc58bc",
+      "type": "water",
+      "operatorName": "小红",
+      "photos": [],
+      "note": "浇水完毕",
+      "timestamp": "2026-06-15T16:38:53.962Z"
+    },
+    {
+      "id": "9c187fe7-cd54-43f3-a999-f581588b9d63",
+      "plantId": "d93747e9-2a58-435f-9b20-a8e1acdc58bc",
+      "type": "water",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=200&h=200&fit=crop"
+      ],
+      "note": "",
+      "timestamp": "2026-06-10T16:38:53.962Z"
+    },
+    {
+      "id": "c6ce099a-1e8c-4c57-8553-b3c3959f419c",
+      "plantId": "1abac50b-0b7f-4ff0-8ab9-2118bc579b53",
+      "type": "water",
+      "operatorName": "老王",
+      "photos": [
+        "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=200&h=200&fit=crop",
+        "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=200&h=200&fit=crop",
+        "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=200&h=200&fit=crop"
+      ],
+      "note": "叶子擦干净了",
+      "timestamp": "2026-06-18T16:38:53.962Z"
+    },
+    {
+      "id": "b891757d-0954-463f-bece-93bb34870f71",
+      "plantId": "1abac50b-0b7f-4ff0-8ab9-2118bc579b53",
+      "type": "fertilize",
+      "operatorName": "我",
+      "photos": [],
+      "note": "液肥稀释浇灌",
+      "timestamp": "2026-06-08T16:38:53.962Z"
+    },
+    {
+      "id": "b2f9f51d-a3c4-47c6-a707-5d6e76bba181",
+      "plantId": "b785a568-b7da-41df-9b14-4345a6700921",
+      "type": "water",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=200&h=200&fit=crop"
+      ],
+      "note": "",
+      "timestamp": "2026-06-16T16:38:53.962Z"
+    },
+    {
+      "id": "6326b97e-48ea-414a-b978-a5d86a381cc3",
+      "plantId": "b785a568-b7da-41df-9b14-4345a6700921",
+      "type": "water",
+      "operatorName": "阿花",
+      "photos": [],
+      "note": "浇了约200ml",
+      "timestamp": "2026-06-12T16:38:53.962Z"
+    },
+    {
+      "id": "c3fb9c68-3cb4-4735-84c8-ae7efff01e42",
+      "plantId": "240b65a4-69fe-47f0-913c-7a9037f91b4f",
+      "type": "water",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=200&h=200&fit=crop"
+      ],
+      "note": "",
+      "timestamp": "2026-06-20T04:38:53.962Z"
+    },
+    {
+      "id": "fb061ba1-56eb-46db-9073-6ac84f345735",
+      "plantId": "240b65a4-69fe-47f0-913c-7a9037f91b4f",
+      "type": "repot",
+      "operatorName": "我",
+      "photos": [
+        "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=200&h=200&fit=crop",
+        "https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=200&h=200&fit=crop"
+      ],
+      "note": "分株了两棵小苗",
+      "timestamp": "2026-05-31T16:38:53.962Z"
+    }
+  ]
+}
