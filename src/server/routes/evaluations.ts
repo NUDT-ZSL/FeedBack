@@ -2,9 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { Evaluation, StatsResponse } from '../types.js';
 
-const router = Router();
-
-const evaluations: Evaluation[] = [
+const defaultEvaluations: Evaluation[] = [
   {
     id: uuidv4(),
     courseName: '前端开发基础',
@@ -52,69 +50,85 @@ const evaluations: Evaluation[] = [
   },
 ];
 
-router.post('/', (req: Request, res: Response) => {
-  const { courseName, teacher, rating, comment } = req.body;
+export function createEvaluationsRouter(
+  initialEvaluations: Evaluation[] = defaultEvaluations
+) {
+  const router = Router();
+  const evaluations: Evaluation[] = initialEvaluations.map((evaluation) => ({
+    ...evaluation,
+  }));
 
-  if (!courseName || !teacher || !rating || !comment) {
-    res.status(400).json({ error: '所有字段均为必填' });
-    return;
-  }
+  router.post('/', (req: Request, res: Response) => {
+    const { courseName, teacher, rating, comment } = req.body;
 
-  if (rating < 1 || rating > 5) {
-    res.status(400).json({ error: '评分必须在1-5之间' });
-    return;
-  }
+    if (
+      typeof courseName !== 'string' ||
+      !courseName.trim() ||
+      typeof teacher !== 'string' ||
+      !teacher.trim() ||
+      !Number.isInteger(rating) ||
+      typeof comment !== 'string' ||
+      !comment.trim()
+    ) {
+      res.status(400).json({ error: '所有字段均为必填' });
+      return;
+    }
 
-  const chineseChars = comment.match(/[\u4e00-\u9fff]/g);
-  if (!chineseChars || chineseChars.length < 10) {
-    res.status(400).json({ error: '评论文本不少于10个汉字' });
-    return;
-  }
+    if (rating < 1 || rating > 5) {
+      res.status(400).json({ error: '评分必须在1-5之间' });
+      return;
+    }
 
-  const newEval: Evaluation = {
-    id: uuidv4(),
-    courseName,
-    teacher,
-    rating,
-    comment,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  };
+    const chineseChars = comment.match(/\p{Script=Han}/gu);
+    if (!chineseChars || chineseChars.length < 10) {
+      res.status(400).json({ error: '评论文本不少于10个汉字' });
+      return;
+    }
 
-  evaluations.push(newEval);
-  res.status(201).json(newEval);
-});
+    const newEval: Evaluation = {
+      id: uuidv4(),
+      courseName,
+      teacher,
+      rating,
+      comment,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
 
-router.get('/', (_req: Request, res: Response) => {
-  const sorted = [...evaluations].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-  res.json(sorted);
-});
+    evaluations.push(newEval);
+    res.status(201).json(newEval);
+  });
 
-router.patch('/:id/approve', (req: Request, res: Response) => {
-  const evaluation = evaluations.find((e) => e.id === req.params.id);
-  if (!evaluation) {
-    res.status(404).json({ error: '评价不存在' });
-    return;
-  }
+  router.get('/', (_req: Request, res: Response) => {
+    const sorted = [...evaluations].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    res.json(sorted);
+  });
 
-  evaluation.status = 'approved';
-  res.json(evaluation);
-});
+  router.patch('/:id/approve', (req: Request, res: Response) => {
+    const evaluation = evaluations.find((e) => e.id === req.params.id);
+    if (!evaluation) {
+      res.status(404).json({ error: '评价不存在' });
+      return;
+    }
 
-router.patch('/:id/reject', (req: Request, res: Response) => {
-  const index = evaluations.findIndex((e) => e.id === req.params.id);
-  if (index === -1) {
-    res.status(404).json({ error: '评价不存在' });
-    return;
-  }
+    evaluation.status = 'approved';
+    res.json(evaluation);
+  });
 
-  evaluations.splice(index, 1);
-  res.json({ success: true });
-});
+  router.patch('/:id/reject', (req: Request, res: Response) => {
+    const index = evaluations.findIndex((e) => e.id === req.params.id);
+    if (index === -1) {
+      res.status(404).json({ error: '评价不存在' });
+      return;
+    }
 
-router.get('/stats', (_req: Request, res: Response) => {
+    evaluations.splice(index, 1);
+    res.json({ success: true });
+  });
+
+  router.get('/stats', (_req: Request, res: Response) => {
   const approved = evaluations.filter((e) => e.status === 'approved');
 
   if (approved.length === 0) {
@@ -185,7 +199,10 @@ router.get('/stats', (_req: Request, res: Response) => {
     recentApproved,
   };
 
-  res.json(stats);
-});
+    res.json(stats);
+  });
 
-export default router;
+  return router;
+}
+
+export default createEvaluationsRouter();
