@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/modules/battle/gamescene.tsx","./src/modules/battle/playership.tsx","./src/modules/craft/craftrecipe.ts","./src/modules/craft/synthesispanel.tsx","./server/server.ts"],"version":"5.9.3"}
