@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>手写笔迹识别</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div class="app-container">
+    <h1 class="app-title">手写笔迹识别</h1>
+    
+    <div class="main-content">
+      <div class="canvas-section">
+        <div class="canvas-wrapper">
+          <canvas id="drawing-canvas" width="800" height="600"></canvas>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar"></div>
+            <span class="progress-text" id="progress-text">0 / 0</span>
+          </div>
+        </div>
+        
+        <div class="controls">
+          <div class="control-group">
+            <label class="control-label">笔触粗细</label>
+            <input type="range" id="stroke-width" min="1" max="10" value="3" />
+            <span class="value-display" id="width-value">3px</span>
+          </div>
+          
+          <div class="control-group">
+            <label class="control-label">颜色</label>
+            <div class="color-palette">
+              <button class="color-btn active" data-color="#000000" style="background-color: #000000;"></button>
+              <button class="color-btn" data-color="#1976d2" style="background-color: #1976d2;"></button>
+              <button class="color-btn" data-color="#d32f2f" style="background-color: #d32f2f;"></button>
+              <button class="color-btn" data-color="#388e3c" style="background-color: #388e3c;"></button>
+              <button class="color-btn" data-color="#9e9e9e" style="background-color: #9e9e9e;"></button>
+            </div>
+          </div>
+          
+          <div class="control-group buttons-group">
+            <button class="action-btn" id="btn-undo">撤销</button>
+            <button class="action-btn" id="btn-clear">清空</button>
+            <button class="action-btn" id="btn-export">导出TXT</button>
+          </div>
+        </div>
+        
+        <div class="recognition-result" id="recognition-result">
+          <span class="result-label">识别结果：</span>
+          <span class="result-value" id="result-value">-</span>
+          <span class="result-confidence" id="result-confidence"></span>
+        </div>
+      </div>
+      
+      <div class="preview-section">
+        <label class="preview-label">文本预览</label>
+        <textarea id="text-preview" readonly></textarea>
+        <div class="preview-hint">提示：识别到的字符会自动追加，可使用退格键删除</div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

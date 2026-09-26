@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-10T16:35:13.191Z",
+  "task_name": "auto23",
+  "task_type": "0-1代码生成",
+  "business_domain": "Web前端",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够将用户手写的数字或字母笔迹实时识别为对应Unicode字符并转化为标准字体的交互式应用，主要解决手写笔记数字化需要手动逐字录入效率低的问题。\n\n它应当具备以下能力：\n1) 提供一块手写板（Canvas，尺寸至少800x600px），支持鼠标或触控笔绘制，绘制时线条平滑（使用三次贝塞尔曲线插值），笔触粗细可调（1-10px，滑块控制），颜色默认黑色但支持5种预设色（黑、蓝、红、绿、灰）。\n2) 实现一个轻量级笔迹识别引擎（无需外部API）：基于笔画特征（如笔画数、方向直方图、起点/终点位置、宽高比）与预定义的模板库（至少26个小写字母和10个数字）进行相似度匹配，匹配度最高且超过60%时显示识别结果，低于60%提示“未识别”。\n3) 识别的字符自动追加到下方的文本预览区（textarea），预览区支持光标定位和删除编辑，并且可以用不同颜色高亮显示刚识别到的字符（绿色闪烁2秒后恢复正常）。\n4) 提供一键清空写字板和预览区、撤销上一笔（最多30步）、导出识别文本为.txt文件（通过Blob下载）的功能。\n\n界面方面要求采用极简主义风格，主色调为深灰（#2c2c2c）背景配白色（#ffffff）文字和控件，手写板边框用浅灰（#e0e0e0）圆角矩形，按钮使用半透明玻璃拟态（rgba(255,255,255,0.1)带模糊背景），hover时渐变为浅蓝色（#64b5f6）；写字板底部有进度指示条，显示已识别字符数占笔迹总数的比例，识别过程伴随轻微缩放动画（0.1s ease）。整个页面响应式，在平板和手机上手写板和预览区垂直堆叠。\n\n性能上要求从笔迹绘制结束到识别结果显示的时间不超过150ms，界面交互帧率不低于55FPS，无卡顿。\n\n实现采用TypeScript原生的Canvas API和自定义识别算法（不使用任何机器学习库），按以下文件组织代码：\n - package.json（包含依赖：typescript, vite；启动脚本：npm run dev）\n - index.html（入口页面，含手写板和预览区结构）\n - vite.config.js（构建配置，将index.html作为入口）\n - tsconfig.json（严格模式，target ES2020，moduleResolution bundler）\n - src/strokes-manager.ts（负责笔迹数据存储、撤销栈管理、导出笔迹路径点集，接收Canvas鼠标/触控事件，输出标准化点序列给识别引擎）\n - src/recognition-engine.ts（实现特征提取与模板匹配算法，接收点序列，返回识别字符结果和匹配度）\n - src/ui-controller.ts（管理手写板UI渲染、预览区同步、按钮事件绑定、动画效果，调用strokes-manager和recognition-engine，数据流向：UI事件→strokes-manager→recognition-engine→UI回显）\n\n运行方式：npm install && npm run dev，启动后浏览器打开即可使用。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:ae5188373d787680e7c2583711f99e37_6a29914fe2403c3913d526c9.6a299236e2403c3913d527c0.6a299236c17984031d33d441:Trae CN.T(2026/6/11 00:35:02)",
+    "user_id": "98336997115224",
+    "trace_id": "ae5188373d787680e7c2583711f99e37",
+    "session_id": "6a29914fe2403c3913d526c9",
+    "task_id": "6a299236e2403c3913d527c0",
+    "message_id": "6a299236c17984031d33d441",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/11 00:35:02",
+    "format": "full"
+  },
+  "trace": "null"
+}
