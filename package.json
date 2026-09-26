@@ -1,0 +1,19 @@
+{
+  "name": "star-trails-gallery",
+  "version": "1.0.0",
+  "description": "星轨画廊 - 交互式3D艺术品展示",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  }
+}
