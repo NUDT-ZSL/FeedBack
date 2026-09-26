@@ -425,9 +425,15 @@ router.post('/bookings', authMiddleware, (req: AuthRequest, res) => {
 
 // 签到（从二维码路由调用，也可以直接调用）
 // 数据流向：POST /api/checkin -> 校验qrToken -> 更新预约状态为checked-in
-router.post('/checkin', authMiddleware, (req, res) => {
+router.post('/checkin', authMiddleware, (req, res, next) => {
   try {
     const { bookingId } = req.body;
+
+    // 二维码核销请求（携带qrToken而非bookingId）放行给qrcode路由处理，
+    // 否则本路由会拦截前端的扫码签到请求，导致核销链路不可用
+    if (!bookingId && req.body && req.body.qrToken) {
+      return next();
+    }
 
     if (!bookingId) {
       return res.status(400).json({ message: '缺少预约ID' });

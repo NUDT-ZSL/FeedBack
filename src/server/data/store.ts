@@ -112,6 +112,15 @@ initSampleData();
 
 export const getStore = () => store;
 
+// 测试支持：重置内存数据，保证用例之间互不污染
+// 原地清空数组，保持 getStore() 返回的对象引用不变
+export const resetStore = () => {
+  store.users.length = 0;
+  store.coaches.length = 0;
+  store.courses.length = 0;
+  store.bookings.length = 0;
+};
+
 // 用户操作
 export const addUser = (user: Omit<User, 'id' | 'createdAt'>) => {
   const newUser: User = {

@@ -9,6 +9,8 @@
     "dev:client": "vite",
     "build": "tsc && vite build",
     "start": "node dist/server/index.js"
+    ,
+    "test": "node -r ts-node/register tests/run.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
