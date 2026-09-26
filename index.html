@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>气泡邮筒 - 写给未来的信</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #0A0E27;
+    }
+    
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    
+    .ui-container {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: flex-end;
+      gap: 20px;
+      z-index: 100;
+    }
+    
+    .input-wrapper {
+      position: relative;
+    }
+    
+    #textInput {
+      width: 600px;
+      height: 120px;
+      padding: 16px;
+      background: #1A1D3A;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 16px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+    }
+    
+    #textInput::placeholder {
+      color: #64748B;
+    }
+    
+    .char-count {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      color: #64748B;
+      font-size: 12px;
+    }
+    
+    #sendBtn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #7C3AED 0%, #EC4899 100%);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(124, 58, 237, 0.5), 0 0 40px rgba(236, 72, 153, 0.3);
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+    
+    #sendBtn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(124, 58, 237, 0.7), 0 0 60px rgba(236, 72, 153, 0.5);
+    }
+    
+    #sendBtn:active {
+      transform: scale(0.95);
+    }
+    
+    #sendBtn svg {
+      width: 24px;
+      height: 24px;
+      fill: white;
+      transform: translateX(2px);
+    }
+    
+    #sendBtn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .info-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 240px;
+      background: #1A1D3A;
+      border-radius: 12px;
+      padding: 16px;
+      z-index: 100;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    
+    .info-panel::-webkit-scrollbar {
+      width: 4px;
+    }
+    
+    .info-panel::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    .info-panel::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 2px;
+    }
+    
+    .bubble-count {
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 16px;
+    }
+    
+    .bubble-count span {
+      background: linear-gradient(135deg, #7C3AED 0%, #EC4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .sentence-list {
+      margin-bottom: 16px;
+    }
+    
+    .sentence-item {
+      color: #94A3B8;
+      font-size: 13px;
+      line-height: 1.8;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .sentence-item:hover {
+      background: rgba(124, 58, 237, 0.2);
+      color: white;
+    }
+    
+    .sentence-item::before {
+      content: '- ';
+    }
+    
+    .clear-btn {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .clear-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+    
+    .empty-tip {
+      color: #64748B;
+      font-size: 13px;
+      text-align: center;
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div class="ui-container">
+    <div class="input-wrapper">
+      <textarea id="textInput" placeholder="写一段给未来自己的话...（最长200字）" maxlength="200"></textarea>
+      <div class="char-count"><span id="charCount">0</span>/200</div>
+    </div>
+    <button id="sendBtn" disabled>
+      <svg viewBox="0 0 24 24">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+  
+  <div class="info-panel">
+    <div class="bubble-count">气泡数量: <span id="bubbleCount">0</span></div>
+    <div class="sentence-list" id="sentenceList">
+      <div class="empty-tip">还没有气泡~</div>
+    </div>
+    <button class="clear-btn" id="clearBtn">清空所有</button>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
