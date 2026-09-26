@@ -9,7 +9,8 @@
     "dev:client": "vite",
     "build": "tsc && vite build",
     "build:client": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import tsx --test src/server/evaluations.test.ts"
   },
   "dependencies": {
     "express": "^4.18.2",

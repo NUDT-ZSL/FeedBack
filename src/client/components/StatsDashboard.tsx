@@ -108,9 +108,9 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ stats }) => {
                   borderRadius: '8px',
                   color: '#e0e0e0',
                 }}
-                formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
+                formatter={(value: number, _name: string, props: { payload?: { fullName?: string } }) => [
                   `${value} 分`,
-                  props.payload.fullName,
+                  props.payload?.fullName ?? '',
                 ]}
               />
               <Bar dataKey="平均分" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />

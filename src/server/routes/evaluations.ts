@@ -2,9 +2,8 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { Evaluation, StatsResponse } from '../types.js';
 
-const router = Router();
-
-const evaluations: Evaluation[] = [
+export function seedEvaluations(): Evaluation[] {
+  return [
   {
     id: uuidv4(),
     courseName: '前端开发基础',
@@ -50,17 +49,30 @@ const evaluations: Evaluation[] = [
     status: 'pending',
     createdAt: new Date(Date.now() - 86400000).toISOString(),
   },
-];
+  ];
+}
+
+export function createEvaluationsRouter(initialEvaluations: Evaluation[] = []) {
+  const router = Router();
+  const evaluations = initialEvaluations.map((evaluation) => ({ ...evaluation }));
 
 router.post('/', (req: Request, res: Response) => {
   const { courseName, teacher, rating, comment } = req.body;
 
-  if (!courseName || !teacher || !rating || !comment) {
+  if (
+    typeof courseName !== 'string' ||
+    courseName.trim() === '' ||
+    typeof teacher !== 'string' ||
+    teacher.trim() === '' ||
+    typeof rating !== 'number' ||
+    typeof comment !== 'string' ||
+    comment.trim() === ''
+  ) {
     res.status(400).json({ error: '所有字段均为必填' });
     return;
   }
 
-  if (rating < 1 || rating > 5) {
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
     res.status(400).json({ error: '评分必须在1-5之间' });
     return;
   }
@@ -188,4 +200,7 @@ router.get('/stats', (_req: Request, res: Response) => {
   res.json(stats);
 });
 
-export default router;
+  return router;
+}
+
+export default createEvaluationsRouter(seedEvaluations());
