@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-10T16:33:34.591Z",
+  "task_name": "auto20",
+  "task_type": "0-1代码生成",
+  "business_domain": "全栈web应用",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够将用户输入的数学公式（如一元二次方程、三角函数积分）实时转换为LaTeX代码并渲染为排版预览的Web应用，主要解决学术写作中手动编辑LaTeX繁琐且容易出错的问题。\n\n它应当具备以下能力：\n1) 提供一个文本输入框，支持用户使用自然语言或简写符号（如\"a^2 + b^2 = c^2\"或\"积分 sin(x) dx\"）输入数学公式，输入框支持实时语法高亮（用不同颜色区分运算符、变量、函数名），并提供至少5个预设示例按钮（如\"牛顿-莱布尼茨公式\"\"欧拉公式\"\"方差公式\"）一键填充。\n2) 后端接收输入后，使用自定义解析引擎（基于正则表达式和字典映射，无需外部数学库）将输入转换为标准LaTeX字符串，支持至少10种常见数学结构（包括分数、根号、上下标、积分、累加、矩阵、分式、括号自动调整、极限、三角函数），转换后立即返回结果。\n3) 前端接收到LaTeX代码后，使用MathJax或KaTeX渲染为矢量排版预览（SVG格式），预览区域至少占界面右侧50%宽度，支持缩放查看（鼠标滚轮缩放，范围0.5x到3x）。\n4) 提供一键复制LaTeX源码按钮（点击后自动选中源码并复制到剪贴板），以及导出预览为PNG图片的功能（使用Canvas捕获SVG并导出，图片分辨率至少300dpi）。\n\n界面方面要求：采用双栏并排布局（左侧输入区、右侧预览区），整体配色为蓝灰主题（主色#2c3e50，辅助色#3498db），输入框边缘有柔和发光动画（2s循环脉冲），转换成功时预览区沿Y轴旋转180度翻转进场（CSS 3D旋转，持续0.6s），与屏幕边缘保持20px安全间距，当视口宽度小于768px时自动切换为上下排列，所有交互按钮在鼠标悬停时有0.3s缩放微动效（transform: scale(1.05)）。性能上需要从输入到预览渲染完成总耗时不超过500ms（不包括首次加载），后端解析延迟低于50ms。\n\n实现采用TypeScript和React（前端）+ Node.js + Express（后端），按以下文件组织代码：\n - package.json（依赖：react, react-dom, typescript, vite, express, cors, katex；启动脚本：npm run dev，后端启动：node server.js）\n - index.html（入口页面，包含React挂载点和MathJax/KaTeX CDN链接）\n - vite.config.js（构建配置，将index.html作为入口）\n - tsconfig.json（严格模式，target ES2020，moduleResolution bundler）\n - src/App.tsx（主应用组件，管理输入状态、调用后端API、渲染LaTeX预览，数据流向：用户输入→发送至后端→解析返回LaTeX→传递至渲染组件）\n - src/FormulaInput.tsx（输入框组件，负责语法高亮、预设示例按钮、实时校验输入合法性，输出：原始公式字符串）\n - src/FormulaPreview.tsx（预览组件，接收LaTeX字符串，使用KaTeX渲染并支持缩放、复制、导出图片）\n - server/server.ts（Express后端，包含/parse路由，接收POST请求中的公式文本，返回LaTeX字符串，解析引擎实现在独立模块中）\n - server/engine.ts（LaTeX解析引擎，包含字典映射和正则匹配逻辑，接收原始公式字符串，输出标准LaTeX代码）\n\n运行方式：cd server && npm install && node server.js & cd .. && npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:f81fa434ed00d16aa8195ff8a341c565_6a299149e2403c3913d526c3.6a2991c3e2403c3913d5273c.6a2991c366d826fd68b4c9f4:Trae CN.T(2026/6/11 00:33:07)",
+    "user_id": "98336997115224",
+    "trace_id": "f81fa434ed00d16aa8195ff8a341c565",
+    "session_id": "6a299149e2403c3913d526c3",
+    "task_id": "6a2991c3e2403c3913d5273c",
+    "message_id": "6a2991c366d826fd68b4c9f4",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/11 00:33:07",
+    "format": "full"
+  },
+  "trace": "null"
+}
