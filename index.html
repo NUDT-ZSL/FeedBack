@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D分子结构查看器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+
+    #app {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      background: #1a1a2e;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .atom-label {
+      position: absolute;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid rgba(100, 150, 255, 0.5);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      min-width: 150px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .atom-label.visible {
+      opacity: 1;
+    }
+
+    .atom-label .element-name {
+      font-size: 14px;
+      font-weight: bold;
+      color: #64b5f6;
+      margin-bottom: 4px;
+    }
+
+    .atom-label .label-row {
+      font-size: 11px;
+      color: #bbb;
+      margin: 2px 0;
+    }
+
+    #control-panel {
+      width: 300px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      transition: transform 0.3s ease;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #64b5f6;
+      text-align: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    select, button {
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    select:hover, button:hover {
+      background: rgba(100, 150, 255, 0.2);
+      border-color: rgba(100, 150, 255, 0.5);
+      transform: translateY(-1px);
+    }
+
+    select option {
+      background: #2a2a4e;
+      color: #e0e0e0;
+    }
+
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+    }
+
+    .toggle-indicator {
+      width: 40px;
+      height: 20px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.15);
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-indicator::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      top: 2px;
+      left: 2px;
+      transition: left 0.2s ease;
+    }
+
+    .toggle-btn.active .toggle-indicator {
+      background: #4caf50;
+    }
+
+    .toggle-btn.active .toggle-indicator::after {
+      left: 22px;
+    }
+
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-value {
+      font-size: 12px;
+      color: #64b5f6;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #64b5f6;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .measurements-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    .measurement-item {
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .measurement-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .measurement-type {
+      font-weight: bold;
+      color: #64b5f6;
+    }
+
+    .measurement-value {
+      color: #ddd;
+    }
+
+    .delete-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      background: rgba(255, 80, 80, 0.2);
+      border: 1px solid rgba(255, 80, 80, 0.4);
+      color: #ff6b6b;
+    }
+
+    .delete-btn:hover {
+      background: rgba(255, 80, 80, 0.4);
+      transform: none;
+    }
+
+    .mobile-toggle {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      padding: 12px 24px;
+      background: rgba(100, 150, 255, 0.8);
+      border: none;
+      border-radius: 20px;
+      color: #fff;
+      font-size: 14px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    @media (max-width: 768px) {
+      #app {
+        flex-direction: column;
+      }
+
+      #canvas-container {
+        width: 100%;
+        height: 100%;
+      }
+
+      #control-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-height: 60vh;
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        transform: translateY(100%);
+        z-index: 150;
+      }
+
+      #control-panel.open {
+        transform: translateY(0);
+      }
+
+      .mobile-toggle {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container">
+      <div class="atom-label" id="atom-label">
+        <div class="element-name" id="label-element"></div>
+        <div class="label-row" id="label-index"></div>
+        <div class="label-row" id="label-distance"></div>
+      </div>
+    </div>
+    
+    <div id="control-panel">
+      <div class="panel-title">分子查看器</div>
+      
+      <div class="control-group">
+        <label class="control-label">选择分子</label>
+        <select id="molecule-select">
+          <option value="water">水 (H₂O)</option>
+          <option value="methane">甲烷 (CH₄)</option>
+          <option value="co2">二氧化碳 (CO₂)</option>
+        </select>
+      </div>
+      
+      <div class="control-group">
+        <label class="control-label">测量模式</label>
+        <button class="toggle-btn" id="measure-mode-btn">
+          <span>开启测量</span>
+          <span class="toggle-indicator"></span>
+        </button>
+      </div>
+      
+      <div class="control-group">
+        <label class="control-label">自动旋转</label>
+        <button class="toggle-btn" id="auto-rotate-btn">
+          <span>开启旋转</span>
+          <span class="toggle-indicator"></span>
+        </button>
+      </div>
+      
+      <div class="control-group slider-group">
+        <div style="display: flex; justify-content: space-between;">
+          <label class="control-label">旋转速度</label>
+          <span class="slider-value" id="speed-value">1.0 转/分钟</span>
+        </div>
+        <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1" />
+      </div>
+      
+      <div class="control-group">
+        <label class="control-label">测量数据</label>
+        <div class="measurements-list" id="measurements-list">
+          <div style="font-size: 12px; color: #777; text-align: center; padding: 10px;">
+            暂无测量数据
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <button class="mobile-toggle" id="mobile-toggle">控制面板</button>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
