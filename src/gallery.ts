@@ -26,11 +26,19 @@ export interface GalleryCallbacks {
   onNearestDistance?: (distance: number) => void;
 }
 
+export interface TeleportHandle {
+  readonly targetIndex: number;
+  readonly active: boolean;
+  cancel: () => void;
+}
+
 export interface Gallery {
   artworks: Artwork[];
   raycaster: THREE.Raycaster;
   mouse: THREE.Vector2;
-  teleportTo: (index: number, camera: THREE.PerspectiveCamera) => void;
+  teleportTo: (index: number, camera: THREE.PerspectiveCamera) => TeleportHandle | null;
+  cancelTeleport: () => boolean;
+  isTeleporting: () => boolean;
   update: (delta: number, camera: THREE.PerspectiveCamera) => void;
   handleClick: (event: MouseEvent | Touch, camera: THREE.PerspectiveCamera) => void;
   hoverArtwork: Artwork | null;
@@ -415,24 +423,127 @@ export function createGallery(scene: THREE.Scene, callbacks: GalleryCallbacks = 
 
   createRoom();
 
-  function teleportTo(index: number, camera: THREE.PerspectiveCamera): void {
+  interface FlightState {
+    targetIndex: number;
+    fromPos: THREE.Vector3;
+    fromQuat: THREE.Quaternion;
+    toPos: THREE.Vector3;
+    toQuat: THREE.Quaternion;
+    elapsed: number;
+    duration: number;
+  }
+
+  let flight: FlightState | null = null;
+
+  const FOCUS_ENTER_DIST = 2.0;
+  const FOCUS_EXIT_DIST = 3.0;
+  let focusedArtwork: Artwork | null = null;
+
+  function easeInOutCubic(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function setFocus(artwork: Artwork | null, distance: number): void {
+    if (focusedArtwork === artwork) return;
+    focusedArtwork = artwork;
+    if (callbacks.onArtworkFocus) {
+      callbacks.onArtworkFocus(artwork, distance);
+    }
+  }
+
+  function horizontalDistance(camera: THREE.PerspectiveCamera, artwork: Artwork): number {
+    const dx = camera.position.x - artwork.group.position.x;
+    const dz = camera.position.z - artwork.group.position.z;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
+
+  function updateFocus(nearest: Artwork | null, minDist: number, camera: THREE.PerspectiveCamera): void {
+    if (focusedArtwork) {
+      const distToFocused = horizontalDistance(camera, focusedArtwork);
+      if (nearest && nearest !== focusedArtwork && minDist < FOCUS_ENTER_DIST && minDist < distToFocused) {
+        setFocus(nearest, minDist);
+      } else if (distToFocused > FOCUS_EXIT_DIST) {
+        setFocus(nearest && minDist < FOCUS_ENTER_DIST ? nearest : null, minDist);
+      }
+    } else if (nearest && minDist < FOCUS_ENTER_DIST) {
+      setFocus(nearest, minDist);
+    }
+  }
+
+  function cancelTeleport(): boolean {
+    if (!flight) return false;
+    flight = null;
+    return true;
+  }
+
+  function isTeleporting(): boolean {
+    return flight !== null;
+  }
+
+  function teleportTo(index: number, camera: THREE.PerspectiveCamera): TeleportHandle | null {
     const artwork = artworks[index];
-    if (!artwork) return;
+    if (!artwork) return null;
+
+    if (flight && flight.targetIndex === index) {
+      const ongoing = flight;
+      return {
+        targetIndex: index,
+        get active() { return flight === ongoing; },
+        cancel() { if (flight === ongoing) flight = null; }
+      };
+    }
 
     const dir = new THREE.Vector3();
     dir.subVectors(artwork.group.position, new THREE.Vector3(0, artwork.group.position.y, 0)).normalize();
     const targetPos = artwork.group.position.clone().add(dir.multiplyScalar(2.5));
     targetPos.y = camera.position.y;
 
-    camera.position.copy(targetPos);
-    camera.lookAt(artwork.group.position);
+    const lookCam = camera.clone();
+    lookCam.position.copy(targetPos);
+    lookCam.lookAt(artwork.group.position);
+
+    const distance = camera.position.distanceTo(targetPos);
+    const duration = Math.min(2.4, Math.max(0.6, distance / 5));
+
+    const current: FlightState = {
+      targetIndex: index,
+      fromPos: camera.position.clone(),
+      fromQuat: camera.quaternion.clone(),
+      toPos: targetPos,
+      toQuat: lookCam.quaternion.clone(),
+      elapsed: 0,
+      duration
+    };
+    flight = current;
+
+    return {
+      targetIndex: index,
+      get active() { return flight === current; },
+      cancel() { if (flight === current) flight = null; }
+    };
   }
 
   function update(delta: number, camera: THREE.PerspectiveCamera): void {
     const time = performance.now() / 1000;
 
+    if (flight) {
+      flight.elapsed += delta;
+      const t = Math.min(1, flight.elapsed / flight.duration);
+      const eased = easeInOutCubic(t);
+      camera.position.lerpVectors(flight.fromPos, flight.toPos, eased);
+      camera.quaternion.slerpQuaternions(flight.fromQuat, flight.toQuat, eased);
+      if (t >= 1) {
+        const arrived = artworks[flight.targetIndex];
+        flight = null;
+        if (arrived) {
+          setFocus(arrived, horizontalDistance(camera, arrived));
+        }
+      }
+    }
+
     let minDistance = Infinity;
-    let nearestArtwork: Artwork | null = null;
+    let minFocusDist = Infinity;
+    let nearestFocusArtwork: Artwork | null = null;
 
     for (const art of artworks) {
       art.group.position.y = art.baseY + Math.sin(time * art.floatSpeed + art.floatOffset) * 0.1;
@@ -456,19 +567,17 @@ export function createGallery(scene: THREE.Scene, callbacks: GalleryCallbacks = 
       const dist = camera.position.distanceTo(art.group.position);
       if (dist < minDistance) {
         minDistance = dist;
-        nearestArtwork = art;
       }
 
-      const wasNear = art.isNear;
+      const focusDist = horizontalDistance(camera, art);
+      if (focusDist < minFocusDist) {
+        minFocusDist = focusDist;
+        nearestFocusArtwork = art;
+      }
+
       art.isNear = dist < 2.0;
       art.targetGlow = art.isNear ? 1 : 0;
       art.glowIntensity += (art.targetGlow - art.glowIntensity) * Math.min(1, delta * 5);
-
-      if (art.isNear && !wasNear && callbacks.onArtworkFocus) {
-        callbacks.onArtworkFocus(art, dist);
-      } else if (!art.isNear && wasNear && callbacks.onArtworkFocus) {
-        callbacks.onArtworkFocus(null, dist);
-      }
 
       if (art.ringMesh) {
         const elapsed = time - art.ringStartTime;
@@ -487,6 +596,10 @@ export function createGallery(scene: THREE.Scene, callbacks: GalleryCallbacks = 
 
       const labelMat = art.label.material as THREE.SpriteMaterial;
       labelMat.opacity = 0.6 + art.glowIntensity * 0.4;
+    }
+
+    if (!flight) {
+      updateFocus(nearestFocusArtwork, minFocusDist, camera);
     }
 
     if (callbacks.onNearestDistance) {
@@ -567,6 +680,8 @@ export function createGallery(scene: THREE.Scene, callbacks: GalleryCallbacks = 
     raycaster,
     mouse,
     teleportTo,
+    cancelTeleport,
+    isTeleporting,
     update,
     handleClick,
     hoverArtwork: null,

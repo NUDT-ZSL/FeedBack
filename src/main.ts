@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createGallery, type Artwork } from './gallery';
+import { createGallery } from './gallery';
 import { createUI } from './ui';
 import { createStarParticles } from './particles';
 
@@ -47,7 +47,8 @@ scene.add(fillLight);
 
 const particles = createStarParticles(scene);
 
-let focusedArtwork: Artwork | null = null;
+const focusLog: (number | null)[] = [];
+
 let infoPanelOpen = false;
 
 const ui = createUI(app, {
@@ -61,7 +62,7 @@ const ui = createUI(app, {
 
 const gallery = createGallery(scene, {
   onArtworkFocus: (artwork) => {
-    focusedArtwork = artwork;
+    focusLog.push(artwork ? artwork.id : null);
     ui.setFocusedArtwork(artwork);
   },
   onArtworkClick: (artwork) => {
@@ -104,6 +105,24 @@ function updateCameraRotationFromDelta(dx: number, dy: number): void {
   targetPitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, targetPitch));
 }
 
+let wasFlying = false;
+
+function syncAnglesFromCamera(): void {
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+  yaw = e.y;
+  pitch = e.x;
+  targetYaw = e.y;
+  targetPitch = e.x;
+}
+
+function takeoverFlight(): void {
+  if (gallery.isTeleporting()) {
+    gallery.cancelTeleport();
+    syncAnglesFromCamera();
+    wasFlying = false;
+  }
+}
+
 renderer.domElement.addEventListener('mousedown', (e) => {
   if (infoPanelOpen) return;
   isDragging = true;
@@ -115,6 +134,7 @@ renderer.domElement.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
   const dx = e.clientX - lastMouseX;
   const dy = e.clientY - lastMouseY;
+  if (dx !== 0 || dy !== 0) takeoverFlight();
   updateCameraRotationFromDelta(dx, dy);
   lastMouseX = e.clientX;
   lastMouseY = e.clientY;
@@ -144,6 +164,7 @@ renderer.domElement.addEventListener('touchmove', (e) => {
     if (t.identifier === touchId) {
       const dx = t.clientX - touchStartX;
       const dy = t.clientY - touchStartY;
+      if (dx !== 0 || dy !== 0) takeoverFlight();
       updateCameraRotationFromDelta(dx, dy);
       touchStartX = t.clientX;
       touchStartY = t.clientY;
@@ -233,13 +254,31 @@ function animate(): void {
   gallery.update(delta, camera);
   particles.update(delta);
 
-  yaw += (targetYaw - yaw) * (1 - Math.pow(DAMPING, delta * 60));
-  pitch += (targetPitch - pitch) * (1 - Math.pow(DAMPING, delta * 60));
+  if (gallery.isTeleporting()) {
+    const moveKeyActive =
+      keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD'] ||
+      keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight'];
+    const joy = ui.getJoystickVector();
+    const joystickActive = Math.abs(joy.x) > 0.05 || Math.abs(joy.y) > 0.05;
+    if (moveKeyActive || joystickActive) {
+      takeoverFlight();
+    }
+  }
 
-  euler.set(pitch, yaw, 0, 'YXZ');
-  camera.quaternion.setFromEuler(euler);
+  if (wasFlying && !gallery.isTeleporting()) {
+    syncAnglesFromCamera();
+  }
+  wasFlying = gallery.isTeleporting();
 
-  if (!infoPanelOpen) {
+  if (!wasFlying) {
+    yaw += (targetYaw - yaw) * (1 - Math.pow(DAMPING, delta * 60));
+    pitch += (targetPitch - pitch) * (1 - Math.pow(DAMPING, delta * 60));
+
+    euler.set(pitch, yaw, 0, 'YXZ');
+    camera.quaternion.setFromEuler(euler);
+  }
+
+  if (!infoPanelOpen && !wasFlying) {
     const joyVec = ui.getJoystickVector();
 
     let moveX = 0;
@@ -279,3 +318,5 @@ function animate(): void {
 }
 
 animate();
+
+(window as unknown as Record<string, unknown>).__app = { camera, gallery, ui, focusLog };
