@@ -1,3 +1,5 @@
+export type ExchangeStatus = 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled';
+
 export interface User {
   id: string;
   username: string;
@@ -29,7 +31,7 @@ export interface Exchange {
   requester?: User;
   ownerId: string;
   owner?: User;
-  status: 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled';
+  status: ExchangeStatus;
   message?: string;
   createdAt: string;
   updatedAt: string;
@@ -45,5 +47,7 @@ export interface Message {
   type: 'system' | 'exchange' | 'chat' | 'exchange_request' | 'exchange_update';
   isRead: boolean;
   relatedExchangeId?: string;
+  /** 通知携带的申请状态标记，须始终与关联交换记录的 status 保持一致 */
+  exchangeStatus?: ExchangeStatus;
   createdAt: string;
 }

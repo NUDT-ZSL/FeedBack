@@ -5,7 +5,8 @@ import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { User, Book, Exchange, Message } from './types';
+import { User, Book, Exchange, Message, ExchangeStatus } from './types';
+import { ExchangeNotificationStore } from './services/exchangeDomain';
 
 const app = express();
 const PORT = 3002;
@@ -16,8 +17,9 @@ app.use(express.json());
 
 const users: User[] = [];
 const books: Book[] = [];
-const exchanges: Exchange[] = [];
-const messages: Message[] = [];
+const store = new ExchangeNotificationStore();
+const exchanges: Exchange[] = store.exchanges;
+const messages: Message[] = store.messages;
 
 interface AuthRequest extends Request {
   userId?: string;
@@ -236,8 +238,7 @@ app.get('/api/users/:userId/books', (req: Request, res: Response) => {
 });
 
 app.get('/api/exchanges', verifyToken, (req: AuthRequest, res: Response) => {
-  const userExchanges = exchanges.filter((e) => e.requesterId === req.userId || e.ownerId === req.userId);
-  res.json(userExchanges);
+  res.json(store.getExchangesForUser(req.userId!));
 });
 
 app.post('/api/exchanges', verifyToken, (req: AuthRequest, res: Response) => {
@@ -249,103 +250,65 @@ app.post('/api/exchanges', verifyToken, (req: AuthRequest, res: Response) => {
   if (book.ownerId === req.userId) {
     return res.status(400).json({ error: '不能交换自己的书籍' });
   }
-  const existingExchange = exchanges.find(
-    (e) => e.bookId === bookId && e.requesterId === req.userId && e.status === 'pending'
-  );
-  if (existingExchange) {
-    return res.status(400).json({ error: '已向此书籍发送过交换请求' });
-  }
-
-  const exchange: Exchange = {
-    id: uuidv4(),
+  const requester = users.find((u) => u.id === req.userId);
+  const result = store.createExchange({
     bookId,
     requesterId: req.userId!,
     ownerId: book.ownerId,
-    status: 'pending',
     message: exchangeMessage || '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  exchanges.push(exchange);
-
-  const requester = users.find((u) => u.id === req.userId);
-  const message: Message = {
-    id: uuidv4(),
-    senderId: req.userId!,
-    receiverId: book.ownerId,
-    content: `${requester?.username || '有人'} 向您请求交换《${book.title}》`,
-    type: 'exchange_request',
-    isRead: false,
-    createdAt: new Date().toISOString(),
-    relatedExchangeId: exchange.id,
-  };
-  messages.push(message);
-  sendNotification(book.ownerId, message);
-
-  res.json(exchange);
+    notificationContent: `${requester?.username || '有人'} 向您请求交换《${book.title}》`,
+  });
+  if (!result.ok) {
+    return res.status(400).json({ error: '已向此书籍发送过交换请求' });
+  }
+  sendNotification(book.ownerId, result.notification!);
+  res.json(result.exchange);
 });
 
 app.put('/api/exchanges/:id', verifyToken, (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { status } = req.body;
-  const exchangeIndex = exchanges.findIndex((e) => e.id === id);
-  if (exchangeIndex === -1) {
-    return res.status(404).json({ error: '交换请求不存在' });
-  }
-  const exchange = exchanges[exchangeIndex];
-  if (exchange.ownerId !== req.userId && exchange.requesterId !== req.userId) {
-    return res.status(403).json({ error: '无权限修改' });
-  }
-  exchanges[exchangeIndex] = { ...exchange, status, updatedAt: new Date().toISOString() };
-
-  const recipientId = exchange.requesterId === req.userId ? exchange.ownerId : exchange.requesterId;
+  const { status } = req.body as { status: ExchangeStatus };
+  const existing = store.findExchange(id);
   const updater = users.find((u) => u.id === req.userId);
-  const book = books.find((b) => b.id === exchange.bookId);
-
+  const book = existing ? books.find((b) => b.id === existing.bookId) : undefined;
   const statusText: Record<string, string> = {
     approved: '已接受',
     rejected: '已拒绝',
     completed: '已完成',
     cancelled: '已取消',
   };
-
-  const message: Message = {
-    id: uuidv4(),
-    senderId: req.userId!,
-    receiverId: recipientId,
-    content: `${updater?.username || '有人'} ${statusText[status] || '更新了'} 您关于《${book?.title || '书籍'}》的交换请求`,
-    type: 'exchange_update',
-    isRead: false,
-    createdAt: new Date().toISOString(),
-    relatedExchangeId: exchange.id,
-  };
-  messages.push(message);
-  sendNotification(recipientId, message);
-
-  res.json(exchanges[exchangeIndex]);
+  const content = `${updater?.username || '有人'} ${statusText[status] || '更新了'} 您关于《${book?.title || '书籍'}》的交换请求`;
+  const result = store.processExchange(id, status, req.userId!, content);
+  if (!result.ok) {
+    if (result.error === 'EXCHANGE_NOT_FOUND') {
+      return res.status(404).json({ error: '交换请求不存在' });
+    }
+    if (result.error === 'FORBIDDEN') {
+      return res.status(403).json({ error: '无权限修改' });
+    }
+    return res.status(400).json({ error: '非法的状态流转' });
+  }
+  if (result.changed && result.notification) {
+    sendNotification(result.notification.receiverId, result.notification);
+  }
+  res.json(result.exchange);
 });
 
 app.get('/api/messages', verifyToken, (req: AuthRequest, res: Response) => {
-  const userMessages = messages.filter((m) => m.receiverId === req.userId);
-  res.json(userMessages);
+  res.json(store.getMessagesForUser(req.userId!));
 });
 
 app.put('/api/messages/read-all', verifyToken, (req: AuthRequest, res: Response) => {
-  messages.forEach((m) => {
-    if (m.receiverId === req.userId) {
-      m.isRead = true;
-    }
-  });
+  store.markAllRead(req.userId!);
   res.json({ message: '所有消息已标记为已读' });
 });
 
 app.put('/api/messages/:id/read', verifyToken, (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const message = messages.find((m) => m.id === id && m.receiverId === req.userId);
+  const message = store.markMessageRead(id, req.userId!);
   if (!message) {
     return res.status(404).json({ error: '消息不存在' });
   }
-  message.isRead = true;
   res.json(message);
 });
 
@@ -389,4 +352,4 @@ server.listen(PORT, () => {
   console.log(`WebSocket server is running on ws://localhost:${PORT}/ws/messages`);
 });
 
-export { app, server, users, books, exchanges, messages };
+export { app, server, store, users, books, exchanges, messages };

@@ -5,7 +5,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server/app.js",
-    "dev": "concurrently \"nodemon --exec ts-node src/server/app.ts\" \"vite\""
+    "dev": "concurrently \"nodemon --exec ts-node src/server/app.ts\" \"vite\"",
+    "verify": "ts-node src/server/tests/runTests.ts",
+    "test": "npm run verify"
   },
   "dependencies": {
     "react": "^18.2.0",
