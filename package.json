@@ -1,0 +1,38 @@
+{
+  "name": "book-exchange-platform",
+  "version": "1.0.0",
+  "main": "dist/server/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server/app.js",
+    "dev": "concurrently \"nodemon --exec ts-node src/server/app.ts\" \"vite\""
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/ws": "^8.5.10",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.1",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.0",
+    "nodemon": "^3.0.0"
+  }
+}
