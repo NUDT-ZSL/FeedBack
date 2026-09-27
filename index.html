@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D水下珊瑚礁生态系统观察器</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(to bottom, #003366 0%, #000a1a 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, #003366 0%, #000a1a 100%);
+    }
+
+    #hud {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 20, 40, 0.7);
+      padding: 15px 20px;
+      border-radius: 8px;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      z-index: 10;
+      border: 1px solid rgba(100, 200, 255, 0.3);
+      backdrop-filter: blur(5px);
+    }
+
+    #hud div {
+      margin: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #hud .fps {
+      color: #4caf50;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    #hud i {
+      width: 18px;
+      text-align: center;
+    }
+
+    #menu-toggle {
+      display: none;
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 20, 40, 0.8);
+      color: #fff;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 100;
+      transition: all 0.2s ease;
+    }
+
+    #menu-toggle:hover {
+      transform: scale(1.1);
+      background: rgba(0, 50, 100, 0.9);
+    }
+
+    #gui-container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 50;
+      transition: transform 0.3s ease;
+    }
+
+    #gui-container.collapsed {
+      transform: translateX(400px);
+    }
+
+    .lil-gui {
+      --background-color: rgba(0, 20, 40, 0.8) !important;
+      --widget-color: rgba(0, 50, 100, 0.6) !important;
+      --focus-color: rgba(100, 200, 255, 0.3) !important;
+      --hover-color: rgba(0, 80, 150, 0.6) !important;
+      --font-color: #ffffff !important;
+      --title-background-color: rgba(0, 40, 80, 0.9) !important;
+      --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      border-radius: 8px !important;
+      backdrop-filter: blur(10px) !important;
+      border: 1px solid rgba(100, 200, 255, 0.3) !important;
+      overflow: hidden !important;
+    }
+
+    .lil-gui .controller {
+      padding: 6px 10px !important;
+    }
+
+    .lil-gui .slider {
+      border-radius: 8px !important;
+      height: 20px !important;
+    }
+
+    .lil-gui .slider .fill {
+      border-radius: 8px 0 0 8px !important;
+      background: linear-gradient(90deg, #2196f3, #64b5f6) !important;
+    }
+
+    .lil-gui .slider .widget {
+      border-radius: 8px !important;
+      background: rgba(0, 80, 160, 0.5) !important;
+    }
+
+    .lil-gui .boolean .widget,
+    .lil-gui .button {
+      border-radius: 6px !important;
+      cursor: pointer !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .lil-gui .boolean .widget:hover,
+    .lil-gui .button:hover {
+      transform: scale(1.05) !important;
+      filter: brightness(1.2) !important;
+    }
+
+    @media (max-width: 768px) {
+      #menu-toggle {
+        display: block;
+      }
+
+      #gui-container {
+        position: fixed;
+        top: 0;
+        right: 0;
+        height: 100vh;
+        overflow-y: auto;
+        transform: translateX(100%);
+        padding-top: 0;
+      }
+
+      #gui-container.open {
+        transform: translateX(0);
+      }
+
+      .lil-gui {
+        min-height: 100vh;
+        border-radius: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <button id="menu-toggle"><i class="fas fa-bars"></i></button>
+    <div id="hud">
+      <div><i class="fas fa-tachometer-alt"></i><span class="fps"><span id="fps">60</span> FPS</span></div>
+      <div><i class="fas fa-fish"></i>鱼群数量: <span id="fish-count">0</span></div>
+      <div><i class="fas fa-leaf"></i>珊瑚数量: <span id="coral-count">0</span></div>
+      <div><i class="fas fa-thermometer-half"></i>水温: <span id="water-temp">25</span>°C</div>
+    </div>
+    <div id="gui-container"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
