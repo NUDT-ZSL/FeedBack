@@ -1,0 +1,6 @@
+{
+    "任务类型": "0-1代码生成",
+    "业务领域": "全栈web应用",
+    "修改范围": "模块内多文件",
+    "提示词内容": "我想做一个在线协作白板工具的项目，想法是让用户能在一个网页上实时画图、贴便签、拖拽图片，给远程团队提供一种轻量级的头脑风暴空间。希望它能做到：第一，用户可以通过鼠标自由绘制线条和形状（矩形、圆形），支持选择颜色和线条粗细，画布无限缩放和平移，缩放时保持画笔坐标精准；第二，支持添加彩色便签卡片，卡片可以双击编辑文字内容，拖拽移动位置，右上角有小叉号删除，添加时有从中心向外扩散的弹性动画（0.3秒）;第三，画布右下角有一个缩略图导航器，实时显示当前视口在整个画布中的位置，点击缩略图可快速跳转，缩略图跟随主画布更新时带淡入效果。界面上希望采用暖灰米白主色调（#f5f0e6）配柔和蓝绿色点缀（#4a9e8f），操作按钮集中在顶部工具栏，带圆角10px和微弱的阴影悬浮效果，点击时有下压反馈（translateY(2px)），所有面板在移动端自动折叠为汉堡菜单，画布始终自适应窗口大小。性能上要求拖拽和绘画的帧率不低于50fps，画布在2000个绘制元素内操作不卡顿。\n\n实现用TypeScript和React（Vite构建），把代码拆成以下文件：\n - package.json（含依赖：react、react-dom、konva、react-konva、typescript、@types/react、@types/react-dom、vite、@vitejs/plugin-react，启动脚本：npm run dev）\n - vite.config.ts（React插件配置）\n - tsconfig.json（严格模式，jsx: 'react-jsx'）\n - index.html（入口，设置meta viewport：width=device-width, initial-scale=1.0）\n - src/main.tsx（ReactDOM挂载点）\n - src/App.tsx（主组件，管理画布状态和工具栏布局，调用Canvas组件和Nav组件）\n - src/components/Canvas.tsx（Konva舞台封装，处理绘制、缩放、平移事件，数据流向：接收App的绘图配置→输出坐标数组给App存储）\n - src/components/Nav.tsx（缩略图导航器组件，从App获取全量绘图数据，响应点击事件跳转到对应坐标）\n\n跑 npm install && npm run dev 就能直接看到效果。"
+}
