@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "test": "tsc -p tsconfig.test.json && node --test tests/"
   },
   "dependencies": {
     "axios": "^1.7.9",
