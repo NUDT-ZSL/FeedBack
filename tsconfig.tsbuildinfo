@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/travelapi.ts","./src/components/detailpanel.tsx","./src/components/eventcard.tsx","./src/components/timeline.tsx"],"version":"5.8.3"}
