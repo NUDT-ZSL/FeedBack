@@ -26,10 +26,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
+import { planMarkerSync } from '../utils/citySnapshot'
 import type { City } from '../types'
 
 const emit = defineEmits<{
@@ -46,7 +46,7 @@ const markers: Map<string, L.Marker> = new Map()
 let polyline: L.Polyline | null = null
 let animationFrame: number | null = null
 
-const sortedCities = store.sortedCities
+const sortedCities = computed(() => store.sortedCities)
 
 function createCustomIcon(letter: string, isNew: boolean = false): L.DivIcon {
   const animationClass = isNew ? 'marker-animate' : ''
@@ -85,16 +85,7 @@ function initMap() {
     store.setActiveCity(null)
   })
 
-  renderExistingCities()
-  drawRoute()
-}
-
-function renderExistingCities() {
-  if (!map) return
-
-  sortedCities.forEach((city, index) => {
-    addMarker(city, false)
-  })
+  syncMapWithCities(sortedCities.value, { animate: false, flyToAdded: false })
 }
 
 function addMarker(city: City, animate: boolean = true) {
@@ -124,20 +115,50 @@ function removeMarker(cityId: string) {
   }
 }
 
-function drawRoute() {
-  if (!map || sortedCities.length < 2) {
-    if (polyline) {
-      polyline.remove()
-      polyline = null
-    }
-    return
+interface SyncOptions {
+  animate: boolean
+  flyToAdded: boolean
+}
+
+/**
+ * 以城市集合本身为准同步地图：先移除已不在集合中的标记，
+ * 再补上缺失的标记，最后按当前排序重建路线。
+ */
+function syncMapWithCities(cities: readonly City[], options: SyncOptions) {
+  if (!map) return
+
+  const plan = planMarkerSync(markers.keys(), cities)
+
+  plan.toRemove.forEach(removeMarker)
+  plan.toAdd.forEach(city => addMarker(city, options.animate))
+
+  drawRoute(cities)
+
+  if (options.flyToAdded && plan.toAdd.length > 0) {
+    flyToCity(plan.toAdd[plan.toAdd.length - 1])
   }
+}
+
+function cancelRouteAnimation() {
+  if (animationFrame !== null) {
+    cancelAnimationFrame(animationFrame)
+    animationFrame = null
+  }
+}
+
+function drawRoute(cities: readonly City[]) {
+  cancelRouteAnimation()
 
   if (polyline) {
     polyline.remove()
+    polyline = null
   }
 
-  const points: L.LatLngExpression[] = sortedCities.map(city => [city.lat, city.lng])
+  if (!map || cities.length < 2) {
+    return
+  }
+
+  const points: L.LatLngExpression[] = cities.map(city => [city.lat, city.lng])
 
   polyline = L.polyline(points, {
     weight: 4,
@@ -147,34 +168,45 @@ function drawRoute() {
     className: 'route-polyline'
   }).addTo(map)
 
-  animateRouteDrawing()
+  animateRouteDrawing(cities.length)
 }
 
-function animateRouteDrawing() {
-  if (!polyline || animationFrame) return
+function animateRouteDrawing(cityCount: number) {
+  if (!polyline) return
 
   const path = polyline.getElement()
   if (!path) return
 
-  const length = (path as SVGPathElement).getTotalLength()
+  const svgPath = path as SVGPathElement
+  // 部分环境（如测试用的 jsdom）没有实现 getTotalLength，
+  // 此时跳过描边动画，直接应用渐变，保证路线样式一致。
+  if (typeof svgPath.getTotalLength !== 'function') {
+    applyGradientColors()
+    return
+  }
+
+  const length = svgPath.getTotalLength()
   let progress = 0
-  const duration = 2000 * Math.max(1, sortedCities.length - 1)
+  const duration = 2000 * Math.max(1, cityCount - 1)
   const startTime = performance.now()
 
-  path.style.strokeDasharray = `${length}`
-  path.style.strokeDashoffset = `${length}`
+  svgPath.style.strokeDasharray = `${length}`
+  svgPath.style.strokeDashoffset = `${length}`
 
   function animate(currentTime: number) {
+    // 动画已被取消（路线重建或组件卸载）时，停止写旧路径
+    if (animationFrame === null) return
+
     const elapsed = currentTime - startTime
     progress = Math.min(elapsed / duration, 1)
 
-    path.style.strokeDashoffset = `${length * (1 - progress)}`
+    svgPath.style.strokeDashoffset = `${length * (1 - progress)}`
 
     if (progress < 1) {
       animationFrame = requestAnimationFrame(animate)
     } else {
-      path.style.strokeDasharray = 'none'
-      path.style.strokeDashoffset = '0'
+      svgPath.style.strokeDasharray = 'none'
+      svgPath.style.strokeDashoffset = '0'
       applyGradientColors()
       animationFrame = null
     }
@@ -248,57 +280,38 @@ watch(() => store.activeCity, (newCity) => {
   }
 })
 
-let previousLength = 0
-
-watch(
-  () => sortedCities.length,
-  (newLength) => {
-    if (newLength > previousLength && sortedCities.length > 0) {
-      const newCity = sortedCities[sortedCities.length - 1]
-      nextTick(() => {
-        addMarker(newCity, true)
-        drawRoute()
-        flyToCity(newCity)
-      })
-    } else if (newLength < previousLength) {
-      const currentIds = new Set(sortedCities.map(c => c.id))
-      markers.forEach((_, id) => {
-        if (!currentIds.has(id)) {
-          removeMarker(id)
-        }
-      })
-      drawRoute()
-    }
-    previousLength = newLength
-  },
-  { immediate: false }
-)
+watch(sortedCities, (cities) => {
+  nextTick(() => {
+    syncMapWithCities(cities, { animate: true, flyToAdded: true })
+  })
+})
 
 function checkMobile() {
   isMobile.value = window.innerWidth < 768
 }
 
+function handleResize() {
+  invalidateSize()
+  checkMobile()
+}
+
 onMounted(() => {
   checkMobile()
-  previousLength = sortedCities.length
   nextTick(() => {
     initMap()
-    window.addEventListener('resize', () => {
-      invalidateSize()
-      checkMobile()
-    })
+    window.addEventListener('resize', handleResize)
   })
 })
 
 onBeforeUnmount(() => {
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
-  }
+  cancelRouteAnimation()
+  window.removeEventListener('resize', handleResize)
   if (map) {
     map.remove()
     map = null
   }
   markers.clear()
+  polyline = null
 })
 
 defineExpose({

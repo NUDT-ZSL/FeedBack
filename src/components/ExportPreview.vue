@@ -66,11 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
 import html2canvas from 'html2canvas'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
+import { createCitiesSnapshot } from '../utils/citySnapshot'
 import type { City } from '../types'
 
 const props = defineProps<{
@@ -87,9 +87,16 @@ const exportMapRef = ref<HTMLDivElement | null>(null)
 const isExporting = ref(false)
 
 let exportMap: L.Map | null = null
-const exportMarkers: L.Marker[] = []
+let exportMarkers: L.Marker[] = []
+let exportPolyline: L.Polyline | null = null
+let initTimer: ReturnType<typeof setTimeout> | null = null
+// 每次打开/关闭预览都会递增，用于让异步回调识别自己是否已过期
+let sessionId = 0
 
-const sortedCities = computed(() => store.sortedCities)
+// 打开预览时固定的不可变快照；导出期间 store 的任何变化都不会影响它
+const snapshotCities = ref<ReadonlyArray<City>>([])
+
+const sortedCities = computed(() => snapshotCities.value)
 const displayCities = computed(() => sortedCities.value.slice(0, 6))
 
 function formatDate(dateStr: string): string {
@@ -104,27 +111,24 @@ function formatDate(dateStr: string): string {
 function initExportMap() {
   if (!exportMapRef.value || sortedCities.value.length === 0) return
 
-  if (exportMap) {
-    exportMap.remove()
-    exportMap = null
-  }
-  exportMarkers.length = 0
+  destroyExportMap()
 
   const bounds = L.latLngBounds(sortedCities.value.map(c => [c.lat, c.lng]))
   const center = bounds.getCenter()
   const zoom = Math.min(10, Math.max(3, exportMapRef.value.clientWidth > 600 ? 5 : 4))
 
-  exportMap = L.map(exportMapRef.value, {
+  const map = L.map(exportMapRef.value, {
     center: [center.lat, center.lng],
     zoom,
     zoomControl: false,
     attributionControl: false
   })
+  exportMap = map
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap',
     maxZoom: 19
-  }).addTo(exportMap)
+  }).addTo(map)
 
   sortedCities.value.forEach((city, index) => {
     const icon = L.divIcon({
@@ -138,33 +142,61 @@ function initExportMap() {
       iconAnchor: [14, 14]
     })
 
-    const marker = L.marker([city.lat, city.lng], { icon }).addTo(exportMap)
+    const marker = L.marker([city.lat, city.lng], { icon }).addTo(map)
     exportMarkers.push(marker)
   })
 
   if (sortedCities.value.length >= 2) {
     const points: L.LatLngExpression[] = sortedCities.value.map(city => [city.lat, city.lng])
 
-    L.polyline(points, {
+    exportPolyline = L.polyline(points, {
       weight: 4,
       opacity: 0.9,
       lineJoin: 'round',
       lineCap: 'round',
       color: '#ff6b6b'
-    }).addTo(exportMap)
+    }).addTo(map)
   }
 
-  exportMap.fitBounds(bounds, { padding: [40, 40] })
+  map.fitBounds(bounds, { padding: [40, 40] })
+}
+
+function destroyExportMap() {
+  if (exportMap) {
+    exportMap.remove()
+    exportMap = null
+  }
+  exportMarkers = []
+  exportPolyline = null
+}
+
+// 关闭预览或组件卸载时调用：作废旧会话的异步回调并释放全部地图资源
+function cleanupSession() {
+  sessionId++
+  if (initTimer !== null) {
+    clearTimeout(initTimer)
+    initTimer = null
+  }
+  destroyExportMap()
+  isExporting.value = false
 }
 
 async function handleExport() {
-  if (!exportContainerRef.value || isExporting.value) return
+  if (!exportContainerRef.value || isExporting.value || !props.visible) return
+
+  // 固定当前会话与快照引用；导出期间的增删、激活切换、
+  // 重复点击都不会改变正在截图的这份数据
+  const session = sessionId
+  const cities = sortedCities.value
+  if (cities.length === 0) return
 
   isExporting.value = true
 
   try {
     await nextTick()
     await new Promise(resolve => setTimeout(resolve, 500))
+
+    if (session !== sessionId) return
 
     const target = document.getElementById('export-content')
     if (!target) return
@@ -179,6 +211,8 @@ async function handleExport() {
       logging: false
     })
 
+    if (session !== sessionId) return
+
     const link = document.createElement('a')
     link.download = `我的旅行足迹_${Date.now()}.png`
     link.href = canvas.toDataURL('image/png')
@@ -187,7 +221,9 @@ async function handleExport() {
     console.error('Export failed:', error)
     alert('导出失败，请稍后重试')
   } finally {
-    isExporting.value = false
+    if (session === sessionId) {
+      isExporting.value = false
+    }
   }
 }
 
@@ -197,18 +233,25 @@ function handleClose() {
 
 watch(() => props.visible, (newVal) => {
   if (newVal) {
+    sessionId++
+    const session = sessionId
+    // 打开瞬间固定一份与当前排序一致的不可变快照
+    snapshotCities.value = createCitiesSnapshot(store.sortedCities)
     nextTick(() => {
-      setTimeout(() => {
+      initTimer = setTimeout(() => {
+        initTimer = null
+        if (session !== sessionId) return
         initExportMap()
       }, 100)
     })
   } else {
-    if (exportMap) {
-      exportMap.remove()
-      exportMap = null
-    }
-    exportMarkers.length = 0
+    cleanupSession()
+    snapshotCities.value = []
   }
+})
+
+onBeforeUnmount(() => {
+  cleanupSession()
 })
 </script>
 
