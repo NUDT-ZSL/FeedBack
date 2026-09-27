@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-08T08:16:07.104Z",
+  "task_name": "auto7",
+  "task_type": "0-1代码生成",
+  "business_domain": "Web前端",
+  "modification_scope": "模块内多文件",
+  "prompt": "开发一个交互式数据故事讲述工具，让用户能以幻灯片形式组合图表、文本和图片，并配有平滑的页面切换动画。使用TypeScript、React和Vite实现。文件结构如下：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、d3、@types/d3、framer-motion，启动脚本：npm run dev）\n - vite.config.js（Vite构建配置，启用React和TypeScript）\n - tsconfig.json（严格模式，JSX保留，ESNext模块）\n - index.html（入口页面，CSS重置和字体引入）\n - src/main.tsx（React根组件，挂载App并提供全局状态）\n - src/App.tsx（主应用组件，管理幻灯片索引和过渡逻辑）\n - src/Slide.tsx（单个幻灯片组件，渲染标题、图表或文本，支持进入/离开动画）\n - src/DataViz.tsx（封装D3图表的组件，根据数据生成柱状图或折线图，响应式缩放）\n - src/styles.css（全局样式，定义暗色主题和过渡关键帧）\n\n具体需求：\n1. 用户可创建最多10张幻灯片，每张包含一个标题栏、一个可视化区域（D3图表）和一个文本注释区。切换幻灯片时使用framer-motion实现翻页动画（向左滑出/滑入，持续0.5秒，带easeInOut曲线）。\n2. 支持在每张幻灯片中配置图表类型（柱状图或折线图）和数据点（至少5个数据点），图表渲染时带从底部向上生长的入场动画（0.8秒）。\n3. 提供导航控件：底部导航栏显示圆点进度条（当前页高亮缩放1.2倍），左右箭头按钮点击切换，按键盘左右方向键也可切换，切换过程中圆点有弹性过渡动画。\n4. 允许用户在文本注释区输入富文本（粗体、斜体、列表），支持调整字号（12px到32px），输入时文本区有柔和的焦点高亮边框（#7c3aed过渡到#a78bfa，持续0.3秒）。\n5. 提供一个“演示模式”按钮，进入全屏隐藏编辑控件，仅展示幻灯片内容，按ESC或空格键退出全屏。进入演示模式时，当前幻灯片缩放到视口中央并添加一个浅色背景遮罩雾化效果（backdrop-filter: blur(4px)）。\n\n界面方面：采用深色科技风主题——主背景色为#0f172a，卡片背景为#1e293b，标题文字#f8fafc，正文#cbd5e1，强调色使用紫色渐变#7c3aed到#a78bfa。页面居中布局，最大宽度1200px，左右留白自适应。幻灯片卡片带圆角16px和轻微阴影（box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3)）。所有按钮带悬停缩放效果（transform: scale(1.05)）和颜色切换过渡（0.2秒）。整体响应式设计：在768px以下屏幕，幻灯片卡片宽度占满可用空间，导航圆点缩小至8px。\n\n性能要求：幻灯片切换动画保持60FPS，图表渲染在300ms内完成，D3数据更新时使用过渡动画而非强制重绘。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:da21091c20cc3b2b8a75aee393c7d44a_6a26790005e577665867d79b.6a267a2305e577665867d869.6a267a23b6a4fba7d17fd23c:Trae CN.T(2026/6/8 16:15:31)",
+    "user_id": "98336997115224",
+    "trace_id": "da21091c20cc3b2b8a75aee393c7d44a",
+    "session_id": "6a26790005e577665867d79b",
+    "task_id": "6a267a2305e577665867d869",
+    "message_id": "6a267a23b6a4fba7d17fd23c",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/8 16:15:31",
+    "format": "full"
+  },
+  "trace": "null"
+}
