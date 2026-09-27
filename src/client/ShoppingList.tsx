@@ -4,6 +4,7 @@ import {
   Check, ChevronRight,
 } from 'lucide-react';
 import { Recipe, ShoppingItem, IngredientCategory, CATEGORY_LABELS, CATEGORY_COLORS } from './types';
+import { preserveCheckedState } from '../shared/shoppingList';
 
 interface ShoppingListProps {
   recipes: Recipe[];
@@ -80,13 +81,7 @@ const ShoppingList: React.FC<ShoppingListProps> = ({ recipes, onViewRecipeDetail
       });
       if (!res.ok) throw new Error('生成购物清单失败');
       const data: ShoppingItem[] = await res.json();
-      setItems((prev) => {
-        const idToChecked = new Map(prev.map((i) => [i.name.toLowerCase(), i.checked]));
-        return data.map((item) => ({
-          ...item,
-          checked: idToChecked.get(item.name.toLowerCase()) || false,
-        }));
-      });
+      setItems((prev) => preserveCheckedState(prev, data));
     } catch (err) {
       console.error('生成购物清单失败:', err);
       alert('生成购物清单失败，请重试');
