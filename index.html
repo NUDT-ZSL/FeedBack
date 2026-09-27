@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>平衡球闯关 - Balance Ball 3D</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a24;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      touch-action: none;
+    }
+    #canvas-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud-top {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    #lives {
+      display: flex;
+      gap: 6px;
+    }
+    .heart {
+      width: 28px;
+      height: 28px;
+      filter: drop-shadow(0 0 4px rgba(255, 60, 80, 0.6));
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .heart.lost {
+      opacity: 0.2;
+      transform: scale(0.8);
+      filter: none;
+    }
+    #stars {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #ffd700;
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.4);
+    }
+    .star-icon {
+      width: 28px;
+      height: 28px;
+      filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.9));
+    }
+    #score {
+      font-size: 28px;
+      font-weight: bold;
+      color: #ff8c00;
+      text-shadow: 0 0 8px rgba(255, 140, 0, 0.6);
+      font-family: 'Courier New', monospace;
+      min-width: 100px;
+      text-align: right;
+      perspective: 400px;
+    }
+    #score .digit {
+      display: inline-block;
+      transition: transform 0.15s ease-out;
+      transform-style: preserve-3d;
+    }
+    #score .digit.flip {
+      transform: rotateX(360deg);
+    }
+    #damage-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      box-shadow: inset 0 0 100px 30px rgba(255, 0, 0, 0);
+      transition: box-shadow 0.2s ease-out;
+      z-index: 5;
+    }
+    #damage-overlay.active {
+      box-shadow: inset 0 0 150px 50px rgba(255, 0, 0, 0.7);
+    }
+    #joystick-container {
+      position: fixed;
+      bottom: 32px;
+      left: 32px;
+      width: 140px;
+      height: 140px;
+      pointer-events: auto;
+      z-index: 20;
+    }
+    #joystick-canvas {
+      width: 100%;
+      height: 100%;
+    }
+    #message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 36px;
+      font-weight: bold;
+      color: #ff8c00;
+      text-shadow: 0 0 20px rgba(255, 140, 0, 0.8);
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+      z-index: 30;
+      text-align: center;
+    }
+    #message.show {
+      opacity: 1;
+    }
+    #message .sub {
+      display: block;
+      font-size: 18px;
+      color: #aaa;
+      margin-top: 12px;
+      text-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="damage-overlay"></div>
+  <div id="hud">
+    <div id="hud-top">
+      <div id="lives"></div>
+      <div id="stars">
+        <svg class="star-icon" viewBox="0 0 24 24" fill="#ffd700">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        <span id="star-count">0</span>
+        <span style="color:#666; font-size:18px;">/ 3</span>
+      </div>
+      <div id="score"></div>
+    </div>
+    <div id="joystick-container">
+      <canvas id="joystick-canvas" width="280" height="280"></canvas>
+    </div>
+    <div id="message"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
