@@ -229,27 +229,27 @@ export class EnvironmentManager {
       false
     );
 
-    if (this.hoveredJellyfish) {
-      const idx = this.jellyfish.indexOf(this.hoveredJellyfish);
-      if (idx !== -1) {
-        const baseScale = this.baseJellyfishScales[idx];
-        this.hoveredJellyfish.scale.lerp(new THREE.Vector3(baseScale, baseScale, baseScale), 0.1);
-        this.jellyfishLights[idx].intensity += (this.baseLightIntensities[idx] - this.jellyfishLights[idx].intensity) * 0.1;
-      }
-      this.hoveredJellyfish = null;
-    }
-
+    this.hoveredJellyfish = null;
     if (intersects.length > 0) {
       const bell = intersects[0].object;
       const jellyfish = this.jellyfish.find(j => j.userData.bell === bell);
       if (jellyfish) {
         this.hoveredJellyfish = jellyfish;
-        const idx = this.jellyfish.indexOf(jellyfish);
-        const baseScale = this.baseJellyfishScales[idx];
-        const targetScale = baseScale * 1.5;
-        jellyfish.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
-        this.jellyfishLights[idx].intensity += (this.baseLightIntensities[idx] * 2 - this.jellyfishLights[idx].intensity) * 0.1;
       }
+    }
+
+    // 每帧对所有水母向目标状态插值：悬停者放大/增亮，其余回到基准，
+    // 保证鼠标移出后缩放与光强能持续收敛回基准值。
+    for (let i = 0; i < this.jellyfish.length; i++) {
+      const isHovered = this.jellyfish[i] === this.hoveredJellyfish;
+      const baseScale = this.baseJellyfishScales[i];
+      const targetScale = isHovered ? baseScale * 1.5 : baseScale;
+      this.jellyfish[i].scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+      const targetIntensity = isHovered
+        ? this.baseLightIntensities[i] * 2
+        : this.baseLightIntensities[i];
+      this.jellyfishLights[i].intensity +=
+        (targetIntensity - this.jellyfishLights[i].intensity) * 0.1;
     }
   }
 
