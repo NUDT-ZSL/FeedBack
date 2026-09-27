@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-amber-50: #FFFBEB;
+  --color-amber-100: #FEF3C7;
+  --color-amber-200: #FDE68A;
+  --color-amber-500: #F59E0B;
+  --color-amber-600: #D97706;
+  --color-amber-700: #B45309;
+  --color-amber-900: #78350F;
+  --color-stone-50: #FAFAF9;
+  --color-stone-100: #F5F5F4;
+  --color-stone-200: #E7E5E4;
+  --color-stone-600: #57534E;
+  --color-stone-800: #292524;
+  --color-green-500: #22C55E;
+  --color-green-600: #16A34A;
+  
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 50%, #FDE68A 100%);
+  color: var(--color-amber-900);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.font-serif {
+  font-family: 'Noto Serif SC', serif;
+}
+
+.auction-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.auction-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(120, 53, 15, 0.15);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  color: white;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+  background: linear-gradient(135deg, #D97706 0%, #B45309 100%);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.price-flash {
+  animation: priceFlash 2s ease-out;
+  display: inline-block;
+}
+
+@keyframes priceFlash {
+  0% {
+    color: #22C55E;
+    transform: scale(1.3);
+    text-shadow: 0 0 20px rgba(34, 197, 94, 0.6), 0 0 40px rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  25% {
+    color: #16A34A;
+    transform: scale(1.2);
+    text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    color: #15803D;
+    transform: scale(1.15);
+    text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+  }
+  75% {
+    color: #166534;
+    transform: scale(1.05);
+  }
+  100% {
+    color: #92400E;
+    transform: scale(1);
+    text-shadow: none;
+    background: transparent;
+    padding: 0;
+  }
+}
+
+.countdown-urgent {
+  animation: shake 0.5s ease-in-out infinite;
+  color: #DC2626;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.masonry-grid {
+  column-count: 3;
+  column-gap: 20px;
+}
+
+@media (max-width: 1023px) {
+  .masonry-grid {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 767px) {
+  .masonry-grid {
+    column-count: 1;
+  }
+}
+
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 20px;
+}
+
+.modal-overlay {
+  background: rgba(120, 53, 15, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+input, textarea, select {
+  outline: none;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #F59E0B;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.status-pending_payment { background: #FEF3C7; color: #D97706; }
+.status-paid { background: #DBEAFE; color: #2563EB; }
+.status-pending_shipping { background: #F3E8FF; color: #7C3AED; }
+.status-shipped { background: #CFFAFE; color: #0891B2; }
+.status-completed { background: #DCFCE7; color: #16A34A; }
