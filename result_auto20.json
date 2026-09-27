@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-08T08:44:47.061Z",
+  "task_name": "auto20",
+  "task_type": "0-1代码生成",
+  "business_domain": "全栈web应用",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够帮助用户快速生成并管理个人阅读书单与读书笔记的应用，主要解决纸质和电子书籍阅读记录分散、读书笔记难以系统整理和回顾的问题。\n\n它应当具备以下能力：\n1) 用户可以通过ISBN号或书名搜索书籍（调用Google Books API），自动获取书封、作者、出版社、页数和简介，手动补充阅读状态（想读/在读/已读）、个人评分（1-5星）和开始/完成日期；添加书籍时，书封从列表底部以向上翻转动画出现（0.4秒，带轻微阴影变化）。\n2) 阅读笔记功能：每本书可添加多条笔记，每条笔记支持富文本编辑（加粗、斜体、列表、插入图片），笔记按创建时间逆序排列，并显示字数统计；笔记卡片在添加上方时以从左向右滑入动画（0.3秒ease-out）呈现。\n3) 阅读统计看板：首页显示总阅读量、本月阅读量、平均评分、最爱的书籍标签词云（按出现频率调整字体大小，从12px到48px），词云区域在页面加载时以逐个放大的渐变动画出现。\n\n界面方面要求：整体采用米白（#f7f3ee）和深蓝（#1a3a5c）的海洋风格配色，卡片使用柔和圆角（12px）和浅灰阴影（#d6d0c8），书籍列表采用三列网格布局，每张卡片包含书封和书名，鼠标悬停时卡片上移3px并阴影加深（#b0a99f）。详情页分为左半书籍信息和右半笔记列表，中间用1px虚线分隔。响应式适配：网格在宽度小于768px时变为单列布局，小于480px时卡片宽度占用90%并居中。所有按钮悬停时有颜色切换动画（0.2秒），点击时缩放至0.95再恢复。\n\n性能上需要：搜索输入防抖300ms，本地数据读写延迟不超过100ms，页面首次渲染时间小于1.5秒。\n\n实现采用TypeScript、React、Vite和localStorage，按以下文件组织代码：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、axios、@types/react-dom，启动脚本：npm run dev）\n - vite.config.js（Vite构建配置，启用React和TypeScript）\n - tsconfig.json（严格模式，JSX保留，ESNext模块）\n - index.html（入口页面，加载root div，引入全局字体和基础样式）\n - src/types.ts（定义Book、Note等类型接口，用于组件间数据传递）\n - src/App.tsx（应用根组件，管理路由、初始化localStorage数据，分发props给子组件）\n - src/components/BookCard.tsx（渲染单本书卡片，接收book数据和onClick回调，触发详情页跳转）\n - src/components/BookDetail.tsx（书籍详情页，左侧展示书籍信息，右侧展示笔记列表，支持新增/编辑/删除笔记，调用localStorage API更新数据）\n - src/utils/storage.ts（封装localStorage的CRUD操作，提供getBooks、saveBook、deleteBook、getNotes、saveNote等方法，所有方法返回Promise模拟异步）\n\n运行方式：npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:4e673b00c5bbc2f86d6eee6eefcdbd40_6a26800f4640a949b378c85c.6a2680dc4640a949b378c8e6.6a2680dce54ef0f31b50263f:Trae CN.T(2026/6/8 16:44:12)",
+    "user_id": "98336997115224",
+    "trace_id": "4e673b00c5bbc2f86d6eee6eefcdbd40",
+    "session_id": "6a26800f4640a949b378c85c",
+    "task_id": "6a2680dc4640a949b378c8e6",
+    "message_id": "6a2680dce54ef0f31b50263f",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/8 16:44:12",
+    "format": "full"
+  },
+  "trace": "null"
+}
