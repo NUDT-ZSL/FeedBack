@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChefHat, Bell, Menu, LogOut, User, X } from 'lucide-react';
 import { useAuth } from '../store/AppContext';
 import { cn } from '@/lib/utils';
@@ -7,19 +7,11 @@ import SearchBar from './SearchBar';
 
 export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasNotification] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const isLoginPage = location.pathname === '/login';
-
-  useEffect(() => {
-    if (!isAuthenticated && !isLoginPage) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, isLoginPage, navigate]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -47,10 +39,6 @@ export default function Navbar() {
   const visibleLinks = navLinks.filter(
     (link) => !link.showWhenLoggedIn || isAuthenticated
   );
-
-  if (isLoginPage) {
-    return null;
-  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50">

@@ -97,5 +97,4 @@ export interface AppContextType {
   register: (username: string, password: string, email?: string) => Promise<void>;
   toggleFavorite: (recipeId: string) => Promise<void>;
   toggleFollow: (userId: string) => Promise<void>;
-  toggleLike: (recipeId: string) => void;
 }

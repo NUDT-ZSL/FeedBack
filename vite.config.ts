@@ -2,8 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
+import path from 'path';
 
-// https://vite.dev/config/
+// Single Vite config. Previously vite.config.js and vite.config.ts coexisted
+// with drifting contents; Vite resolves the .js file first, so this file
+// preserves exactly the behavior that was effectively in use.
 export default defineConfig({
   plugins: [
     react({
@@ -24,24 +27,26 @@ export default defineConfig({
     }), 
     tsconfigPaths(),
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@client': path.resolve(__dirname, './src/client'),
+      '@server': path.resolve(__dirname, './src/server'),
+    },
+  },
   server: {
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
-        configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
-            console.log('proxy error', err);
-          });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('Sending Request to the Target:', req.method, req.url);
-          });
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
-          });
-        },
-      }
+      },
+      '/ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
+        changeOrigin: true,
+      },
     }
   }
 })

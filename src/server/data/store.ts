@@ -183,7 +183,7 @@ export const searchRecipes = (query: string): Recipe[] => {
   const searchTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 1)
 
   if (searchTerms.length === 0) {
-    return store.recipes.sort(
+    return [...store.recipes].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
   }
@@ -291,8 +291,6 @@ export const updateRecipe = (id: string, updates: Partial<Recipe>): Recipe | und
 }
 
 export default {
-  users: store.users,
-  recipes: store.recipes,
   clearAll,
   addUser,
   findUserById,

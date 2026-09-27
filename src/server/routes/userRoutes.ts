@@ -3,43 +3,35 @@ import bcrypt from 'bcryptjs'
 import type { User, AuthRequest } from '../types/index.js'
 import store from '../data/store.js'
 import { authMiddleware, generateToken } from '../middleware/auth.js'
+import { ApiError, handle, requireUserId } from '../lib/http.js'
 
 const router = Router()
 
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  try {
+function toPublicUser(user: User): Omit<User, 'password'> {
+  const { password, ...userWithoutPassword } = user
+  void password
+  return userWithoutPassword
+}
+
+router.post(
+  '/register',
+  handle('注册失败', async (req: Request, res: Response) => {
     const { username, email, password } = req.body
 
     if (!username || !password) {
-      res.status(400).json({
-        success: false,
-        error: '用户名和密码是必填项',
-      })
-      return
+      throw new ApiError(400, '用户名和密码是必填项')
     }
 
     if (password.length < 6) {
-      res.status(400).json({
-        success: false,
-        error: '密码至少需要6个字符',
-      })
-      return
+      throw new ApiError(400, '密码至少需要6个字符')
     }
 
     if (email && store.findUserByEmail(email)) {
-      res.status(400).json({
-        success: false,
-        error: '该邮箱已被注册',
-      })
-      return
+      throw new ApiError(400, '该邮箱已被注册')
     }
 
     if (store.findUserByUsername(username)) {
-      res.status(400).json({
-        success: false,
-        error: '该用户名已被使用',
-      })
-      return
+      throw new ApiError(400, '该用户名已被使用')
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
@@ -53,34 +45,24 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     const token = generateToken({ id: user.id, username: user.username })
 
-    const { password: _password, ...userWithoutPassword } = user
-
     res.status(201).json({
       success: true,
       data: {
-        user: userWithoutPassword,
+        user: toPublicUser(user),
         token,
       },
       message: '用户注册成功',
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '注册失败',
-    })
-  }
-})
+  }),
+)
 
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  try {
+router.post(
+  '/login',
+  handle('登录失败', async (req: Request, res: Response) => {
     const { email, username, password } = req.body
 
     if (!password) {
-      res.status(400).json({
-        success: false,
-        error: '密码是必填项',
-      })
-      return
+      throw new ApiError(400, '密码是必填项')
     }
 
     let user: User | undefined
@@ -92,61 +74,36 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     if (!user || !user.password) {
-      res.status(401).json({
-        success: false,
-        error: '用户名或密码错误',
-      })
-      return
+      throw new ApiError(401, '用户名或密码错误')
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password)
     if (!isPasswordValid) {
-      res.status(401).json({
-        success: false,
-        error: '用户名或密码错误',
-      })
-      return
+      throw new ApiError(401, '用户名或密码错误')
     }
 
     const token = generateToken({ id: user.id, username: user.username })
 
-    const { password: _password, ...userWithoutPassword } = user
-
     res.status(200).json({
       success: true,
       data: {
-        user: userWithoutPassword,
+        user: toPublicUser(user),
         token,
       },
       message: '登录成功',
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '登录失败',
-    })
-  }
-})
+  }),
+)
 
-router.get('/feed', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.userId
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: '需要认证',
-      })
-      return
-    }
+router.get(
+  '/feed',
+  authMiddleware,
+  handle<AuthRequest>('获取动态失败', (req, res) => {
+    const userId = requireUserId(req)
 
     const user = store.findUserById(userId)
     if (!user) {
-      res.status(404).json({
-        success: false,
-        error: '用户不存在',
-      })
-      return
+      throw new ApiError(404, '用户不存在')
     }
 
     const feed = store.getFeedRecipes(user.following)
@@ -155,50 +112,27 @@ router.get('/feed', authMiddleware, async (req: AuthRequest, res: Response): Pro
       success: true,
       data: feed,
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '获取动态失败',
-    })
-  }
-})
+  }),
+)
 
-router.post('/follow', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const followerId = req.userId
+router.post(
+  '/follow',
+  authMiddleware,
+  handle<AuthRequest>('关注失败', (req, res) => {
+    const followerId = requireUserId(req)
     const { userId } = req.body
 
-    if (!followerId) {
-      res.status(401).json({
-        success: false,
-        error: '需要认证',
-      })
-      return
-    }
-
     if (!userId) {
-      res.status(400).json({
-        success: false,
-        error: '用户ID是必填项',
-      })
-      return
+      throw new ApiError(400, '用户ID是必填项')
     }
 
     if (followerId === userId) {
-      res.status(400).json({
-        success: false,
-        error: '不能关注自己',
-      })
-      return
+      throw new ApiError(400, '不能关注自己')
     }
 
     const targetUser = store.findUserById(userId)
     if (!targetUser) {
-      res.status(404).json({
-        success: false,
-        error: '用户不存在',
-      })
-      return
+      throw new ApiError(404, '用户不存在')
     }
 
     store.followUser(followerId, userId)
@@ -207,42 +141,23 @@ router.post('/follow', authMiddleware, async (req: AuthRequest, res: Response): 
       success: true,
       message: '关注成功',
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '关注失败',
-    })
-  }
-})
+  }),
+)
 
-router.post('/unfollow', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const followerId = req.userId
+router.post(
+  '/unfollow',
+  authMiddleware,
+  handle<AuthRequest>('取消关注失败', (req, res) => {
+    const followerId = requireUserId(req)
     const { userId } = req.body
 
-    if (!followerId) {
-      res.status(401).json({
-        success: false,
-        error: '需要认证',
-      })
-      return
-    }
-
     if (!userId) {
-      res.status(400).json({
-        success: false,
-        error: '用户ID是必填项',
-      })
-      return
+      throw new ApiError(400, '用户ID是必填项')
     }
 
     const targetUser = store.findUserById(userId)
     if (!targetUser) {
-      res.status(404).json({
-        success: false,
-        error: '用户不存在',
-      })
-      return
+      throw new ApiError(404, '用户不存在')
     }
 
     store.unfollowUser(followerId, userId)
@@ -251,45 +166,28 @@ router.post('/unfollow', authMiddleware, async (req: AuthRequest, res: Response)
       success: true,
       message: '取消关注成功',
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '取消关注失败',
-    })
-  }
-})
+  }),
+)
 
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params
-
-    const user = store.findUserById(id)
+router.get(
+  '/:id',
+  handle('获取用户资料失败', (req: Request, res: Response) => {
+    const user = store.findUserById(req.params.id)
     if (!user) {
-      res.status(404).json({
-        success: false,
-        error: '用户不存在',
-      })
-      return
+      throw new ApiError(404, '用户不存在')
     }
 
-    const { password: _password, ...userWithoutPassword } = user
-
-    const userRecipes = store.findRecipesByAuthorId(id)
+    const userRecipes = store.findRecipesByAuthorId(user.id)
 
     res.status(200).json({
       success: true,
       data: {
-        ...userWithoutPassword,
+        ...toPublicUser(user),
         recipes: userRecipes,
         recipesCount: userRecipes.length,
       },
     })
-  } catch {
-    res.status(500).json({
-      success: false,
-      error: '获取用户资料失败',
-    })
-  }
-})
+  }),
+)
 
 export default router

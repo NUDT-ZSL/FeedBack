@@ -1,211 +1,136 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { User, AppContextType, ApiResponse, AuthResponse } from '../types';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from 'react';
+import type { User, AppContextType } from '../types';
+import { authApi, recipeApi, userApi } from '../api/endpoints';
+import { useOptimisticList } from '../hooks/useOptimisticList';
+import {
+  clearAuth,
+  loadAuth,
+  loadFavorites,
+  saveAuth,
+  saveFavorites,
+} from './authStorage';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
-const FAVORITES_KEY = 'auth_favorites';
-
-interface AppProviderProps {
-  children: ReactNode;
-}
-
-export function AppProvider({ children }: AppProviderProps) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [following, setFollowing] = useState<string[]>([]);
+  const {
+    items: favoriteItems,
+    setItems: setFavoriteItems,
+    toggle: toggleFavoriteItem,
+  } = useOptimisticList();
+  const {
+    items: followingItems,
+    setItems: setFollowingItems,
+    toggle: toggleFollowingItem,
+  } = useOptimisticList();
 
   const isAuthenticated = !!user && !!token;
 
+  // Session hydration is the only place localStorage auth data is read.
   useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-    const savedFavorites = localStorage.getItem(FAVORITES_KEY);
-
-    if (savedToken && savedUser) {
-      try {
-        const parsedUser: User = JSON.parse(savedUser);
-        setToken(savedToken);
-        setUser(parsedUser);
-        setFollowing(parsedUser.following || []);
-      } catch {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        localStorage.removeItem(FAVORITES_KEY);
-      }
+    const persisted = loadAuth();
+    if (persisted) {
+      setToken(persisted.token);
+      setUser(persisted.user);
+      setFollowingItems(persisted.user.following || []);
     }
-
-    if (savedFavorites) {
-      try {
-        setFavorites(JSON.parse(savedFavorites));
-      } catch {
-        localStorage.removeItem(FAVORITES_KEY);
-      }
-    }
-  }, []);
-
-  const saveAuthToStorage = useCallback((userData: User, authToken: string) => {
-    localStorage.setItem(TOKEN_KEY, authToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(userData));
-  }, []);
-
-  const clearAuthFromStorage = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }, []);
-
-  const login = useCallback(async (username: string, password: string) => {
-    const response = await fetch('/api/user/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, password }),
-    });
-
-    const data: ApiResponse<AuthResponse> = await response.json();
-
-    if (!data.success || !data.data) {
-      throw new Error(data.error || '登录失败');
-    }
-
-    const { user: userData, token: authToken } = data.data;
-    setUser(userData);
-    setToken(authToken);
-    setFollowing(userData.following || []);
-    saveAuthToStorage(userData, authToken);
-  }, [saveAuthToStorage]);
-
-  const register = useCallback(async (username: string, password: string, email?: string) => {
-    const response = await fetch('/api/user/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, email, password }),
-    });
-
-    const data: ApiResponse<AuthResponse> = await response.json();
-
-    if (!data.success || !data.data) {
-      throw new Error(data.error || '注册失败');
-    }
-
-    const { user: userData, token: authToken } = data.data;
-    setUser(userData);
-    setToken(authToken);
-    setFollowing(userData.following || []);
-    saveAuthToStorage(userData, authToken);
-  }, [saveAuthToStorage]);
+    setFavoriteItems(loadFavorites());
+  }, [setFavoriteItems, setFollowingItems]);
 
   useEffect(() => {
-    if (favorites.length > 0) {
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-    } else {
-      localStorage.removeItem(FAVORITES_KEY);
-    }
-  }, [favorites]);
+    saveFavorites(favoriteItems);
+  }, [favoriteItems]);
+
+  const applyAuth = useCallback(
+    (userData: User, authToken: string) => {
+      setUser(userData);
+      setToken(authToken);
+      setFollowingItems(userData.following || []);
+      saveAuth(userData, authToken);
+    },
+    [setFollowingItems],
+  );
+
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const { user: userData, token: authToken } = await authApi.login(
+        username,
+        password,
+      );
+      applyAuth(userData, authToken);
+    },
+    [applyAuth],
+  );
+
+  const register = useCallback(
+    async (username: string, password: string, email?: string) => {
+      const { user: userData, token: authToken } = await authApi.register(
+        username,
+        password,
+        email,
+      );
+      applyAuth(userData, authToken);
+    },
+    [applyAuth],
+  );
 
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
-    setFavorites([]);
-    setFollowing([]);
-    clearAuthFromStorage();
-  }, [clearAuthFromStorage]);
+    setFavoriteItems([]);
+    setFollowingItems([]);
+    clearAuth();
+  }, [setFavoriteItems, setFollowingItems]);
 
-  const toggleFavorite = useCallback(async (recipeId: string) => {
+  const requireToken = useCallback(() => {
     if (!token || !user) {
       throw new Error('需要登录');
     }
+    return token;
+  }, [token, user]);
 
-    const isFavorited = favorites.includes(recipeId);
-
-    setFavorites(prev =>
-      isFavorited ? prev.filter(id => id !== recipeId) : [...prev, recipeId]
-    );
-
-    try {
-      const response = await fetch(`/api/recipe/${recipeId}/favorite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data: ApiResponse<{ favorited: boolean }> = await response.json();
-
-      if (!data.success) {
-        setFavorites(prev =>
-          isFavorited ? [...prev, recipeId] : prev.filter(id => id !== recipeId)
-        );
-        throw new Error(data.error || '操作失败');
-      }
-    } catch (error) {
-      setFavorites(prev =>
-        isFavorited ? [...prev, recipeId] : prev.filter(id => id !== recipeId)
+  const toggleFavorite = useCallback(
+    async (recipeId: string) => {
+      const authToken = requireToken();
+      await toggleFavoriteItem(recipeId, () =>
+        recipeApi.toggleFavorite(authToken, recipeId),
       );
-      throw error;
-    }
-  }, [token, user, favorites]);
+    },
+    [requireToken, toggleFavoriteItem],
+  );
 
-  const toggleFollow = useCallback(async (userId: string) => {
-    if (!token || !user) {
-      throw new Error('需要登录');
-    }
-
-    const isFollowing = following.includes(userId);
-
-    setFollowing(prev =>
-      isFollowing ? prev.filter(id => id !== userId) : [...prev, userId]
-    );
-
-    try {
-      const endpoint = isFollowing ? '/api/user/unfollow' : '/api/user/follow';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ userId }),
-      });
-
-      const data: ApiResponse = await response.json();
-
-      if (!data.success) {
-        setFollowing(prev =>
-          isFollowing ? [...prev, userId] : prev.filter(id => id !== userId)
-        );
-        throw new Error(data.error || '操作失败');
-      }
-    } catch (error) {
-      setFollowing(prev =>
-        isFollowing ? [...prev, userId] : prev.filter(id => id !== userId)
+  const toggleFollow = useCallback(
+    async (userId: string) => {
+      const authToken = requireToken();
+      await toggleFollowingItem(userId, (isFollowing) =>
+        isFollowing
+          ? userApi.unfollow(authToken, userId)
+          : userApi.follow(authToken, userId),
       );
-      throw error;
-    }
-  }, [token, user, following]);
-
-  const toggleLike = useCallback((recipeId: string) => {
-    console.log('toggleLike', recipeId);
-  }, []);
+    },
+    [requireToken, toggleFollowingItem],
+  );
 
   const value: AppContextType = {
     user,
     isAuthenticated,
     token,
-    favorites,
-    following,
+    favorites: favoriteItems,
+    following: followingItems,
     login,
     logout,
     register,
     toggleFavorite,
     toggleFollow,
-    toggleLike,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
