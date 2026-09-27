@@ -3,6 +3,9 @@ import { EnvironmentManager } from './environment';
 import { CoralManager } from './coral';
 import { FishManager } from './fish';
 import { GUIManager } from './gui';
+import { CameraRig } from './cameraRig';
+import { updateHUD } from './hud';
+import { resetReef } from './reefReset';
 
 class UnderwaterScene {
   public scene!: THREE.Scene;
@@ -12,21 +15,10 @@ class UnderwaterScene {
   public coralManager!: CoralManager;
   public fishManager!: FishManager;
   public guiManager!: GUIManager;
+  public cameraRig: CameraRig = new CameraRig();
 
   public clock: THREE.Clock;
   public time: number = 0;
-
-  public isDragging: boolean = false;
-  public previousMousePosition: { x: number; y: number } = { x: 0, y: 0 };
-  public cameraAngle: number = 0;
-  public cameraHeight: number = 20;
-  public cameraDistance: number = 40;
-  public targetCameraAngle: number = 0;
-  public targetCameraHeight: number = 20;
-  public targetCameraDistance: number = 40;
-  public autoRotatePhase: number = 0;
-  public isUserInteracting: boolean = false;
-  public lastInteractionTime: number = 0;
 
   public fpsFrames: number = 0;
   public fpsTime: number = 0;
@@ -48,7 +40,7 @@ class UnderwaterScene {
       0.1,
       500
     );
-    this.updateCameraPosition();
+    this.cameraRig.applyToCamera(this.camera);
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -90,87 +82,40 @@ class UnderwaterScene {
     window.addEventListener('resize', () => this.onResize());
   }
 
-  private updateCameraPosition(): void {
-    const x = Math.sin(this.cameraAngle) * this.cameraDistance;
-    const z = Math.cos(this.cameraAngle) * this.cameraDistance;
-    this.camera.position.set(x, this.cameraHeight, z);
-    this.camera.lookAt(0, 3, 0);
-  }
-
   private setupControls(): void {
     const canvas = this.renderer.domElement;
 
     canvas.addEventListener('mousedown', (e) => {
-      this.isDragging = true;
-      this.isUserInteracting = true;
-      this.lastInteractionTime = this.time;
-      this.previousMousePosition = { x: e.clientX, y: e.clientY };
+      this.cameraRig.beginDrag(e.clientX, e.clientY, this.time);
     });
 
     window.addEventListener('mouseup', () => {
-      this.isDragging = false;
-      this.lastInteractionTime = this.time;
+      this.cameraRig.endDrag(this.time);
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (this.isDragging) {
-        const deltaX = e.clientX - this.previousMousePosition.x;
-        const deltaY = e.clientY - this.previousMousePosition.y;
-        this.targetCameraAngle -= deltaX * 0.005;
-        this.targetCameraHeight = THREE.MathUtils.clamp(
-          this.targetCameraHeight + deltaY * 0.1,
-          2,
-          30
-        );
-        this.previousMousePosition = { x: e.clientX, y: e.clientY };
-        this.lastInteractionTime = this.time;
-      }
+      this.cameraRig.dragTo(e.clientX, e.clientY, this.time);
     });
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.targetCameraDistance = THREE.MathUtils.clamp(
-        this.targetCameraDistance + e.deltaY * 0.05,
-        10,
-        80
-      );
-      this.isUserInteracting = true;
-      this.lastInteractionTime = this.time;
+      this.cameraRig.zoom(e.deltaY, this.time);
     }, { passive: false });
 
     canvas.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
-        this.isDragging = true;
-        this.isUserInteracting = true;
-        this.lastInteractionTime = this.time;
-        this.previousMousePosition = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-        };
+        this.cameraRig.beginDrag(e.touches[0].clientX, e.touches[0].clientY, this.time);
       }
     });
 
     canvas.addEventListener('touchmove', (e) => {
-      if (this.isDragging && e.touches.length === 1) {
-        const deltaX = e.touches[0].clientX - this.previousMousePosition.x;
-        const deltaY = e.touches[0].clientY - this.previousMousePosition.y;
-        this.targetCameraAngle -= deltaX * 0.005;
-        this.targetCameraHeight = THREE.MathUtils.clamp(
-          this.targetCameraHeight + deltaY * 0.1,
-          2,
-          30
-        );
-        this.previousMousePosition = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-        };
-        this.lastInteractionTime = this.time;
+      if (e.touches.length === 1) {
+        this.cameraRig.dragTo(e.touches[0].clientX, e.touches[0].clientY, this.time);
       }
     });
 
     canvas.addEventListener('touchend', () => {
-      this.isDragging = false;
-      this.lastInteractionTime = this.time;
+      this.cameraRig.endDrag(this.time);
     });
   }
 
@@ -181,26 +126,22 @@ class UnderwaterScene {
   }
 
   private resetEnvironment(): void {
-    this.coralManager.reset();
-    const clusterCenters = this.coralManager.getClusterCenters();
-    this.fishManager.reset(clusterCenters);
+    resetReef(
+      this.environment,
+      this.coralManager,
+      this.fishManager,
+      this.cameraRig,
+      document
+    );
     this.guiManager.reset();
-    this.cameraAngle = 0;
-    this.targetCameraAngle = 0;
-    this.cameraHeight = 20;
-    this.targetCameraHeight = 20;
-    this.cameraDistance = 40;
-    this.targetCameraDistance = 40;
-    this.autoRotatePhase = 0;
   }
 
   private updateHUD(): void {
-    const fpsEl = document.getElementById('fps');
-    const fishEl = document.getElementById('fish-count');
-    const coralEl = document.getElementById('coral-count');
-    if (fpsEl) fpsEl.textContent = Math.round(this.currentFps).toString();
-    if (fishEl) fishEl.textContent = this.fishManager.fishCount.toString();
-    if (coralEl) coralEl.textContent = this.coralManager.coralCount.toString();
+    updateHUD(document, {
+      fps: this.currentFps,
+      fishCount: this.fishManager.fishCount,
+      coralCount: this.coralManager.coralCount,
+    });
   }
 
   private animate = (): void => {
@@ -218,24 +159,8 @@ class UnderwaterScene {
       this.updateHUD();
     }
 
-    if (this.time - this.lastInteractionTime > 5) {
-      this.isUserInteracting = false;
-    }
-
-    if (!this.isUserInteracting && !this.isDragging) {
-      this.autoRotatePhase += delta * (2 * Math.PI / 30);
-      const autoAngle = Math.sin(this.autoRotatePhase) * (15 * Math.PI / 180);
-      this.targetCameraAngle = autoAngle;
-    }
-
-    const damping = 0.1;
-    this.cameraAngle += (this.targetCameraAngle - this.cameraAngle) * damping;
-    this.cameraHeight += (this.targetCameraHeight - this.cameraHeight) * damping;
-
-    const zoomSmooth = 1 - Math.pow(0.001, delta / 0.3);
-    this.cameraDistance += (this.targetCameraDistance - this.cameraDistance) * zoomSmooth;
-
-    this.updateCameraPosition();
+    this.cameraRig.update(delta, this.time);
+    this.cameraRig.applyToCamera(this.camera);
 
     this.environment.update(delta, this.time);
     this.environment.checkJellyfishHover(this.camera);

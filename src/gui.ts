@@ -2,6 +2,11 @@ import GUI from 'lil-gui';
 import { EnvironmentManager } from './environment';
 import { CoralManager } from './coral';
 import { FishManager } from './fish';
+import {
+  DEFAULT_WATER_PARAMS,
+  formatTemperature,
+  setHUDField,
+} from './hud';
 
 export interface GUICallbacks {
   onReset: () => void;
@@ -32,9 +37,9 @@ export class GUIManager {
     this.fishManager = fishManager;
     this.callbacks = callbacks;
     this.params = {
-      temperature: 25,
-      lightIntensity: 80,
-      turbidity: 10,
+      temperature: DEFAULT_WATER_PARAMS.temperature,
+      lightIntensity: DEFAULT_WATER_PARAMS.lightIntensity,
+      turbidity: DEFAULT_WATER_PARAMS.turbidity,
     };
 
     this.gui = new GUI({
@@ -55,7 +60,7 @@ export class GUIManager {
       .name('🌡️ 水温 (°C)')
       .onChange((value: number) => {
         this.environment.setTemperature(value);
-        this.updateHUDField('water-temp', value.toFixed(1));
+        this.updateHUDField('water-temp', formatTemperature(value));
       });
 
     const lightCtrl = waterFolder
@@ -103,20 +108,17 @@ export class GUIManager {
   }
 
   public updateHUDField(id: string, value: string): void {
-    const el = document.getElementById(id);
-    if (el) {
-      el.textContent = value;
-    }
+    setHUDField(document, id, value);
   }
 
   public reset(): void {
-    this.params.temperature = 25;
-    this.params.lightIntensity = 80;
-    this.params.turbidity = 10;
-    this.environment.setTemperature(25);
-    this.environment.setLightIntensity(80);
-    this.environment.setTurbidity(10);
-    this.updateHUDField('water-temp', '25.0');
+    this.params.temperature = DEFAULT_WATER_PARAMS.temperature;
+    this.params.lightIntensity = DEFAULT_WATER_PARAMS.lightIntensity;
+    this.params.turbidity = DEFAULT_WATER_PARAMS.turbidity;
+    this.environment.setTemperature(DEFAULT_WATER_PARAMS.temperature);
+    this.environment.setLightIntensity(DEFAULT_WATER_PARAMS.lightIntensity);
+    this.environment.setTurbidity(DEFAULT_WATER_PARAMS.turbidity);
+    this.updateHUDField('water-temp', formatTemperature(DEFAULT_WATER_PARAMS.temperature));
     this.gui.controllersRecursive().forEach(c => c.updateDisplay());
   }
 }

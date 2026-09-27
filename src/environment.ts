@@ -18,6 +18,7 @@ export class EnvironmentManager {
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private hoveredJellyfish: THREE.Group | null = null;
+  private restoringJellyfish: THREE.Group | null = null;
   private baseJellyfishScales: number[] = [];
   private baseLightIntensities: number[] = [];
 
@@ -229,27 +230,52 @@ export class EnvironmentManager {
       false
     );
 
-    if (this.hoveredJellyfish) {
-      const idx = this.jellyfish.indexOf(this.hoveredJellyfish);
-      if (idx !== -1) {
-        const baseScale = this.baseJellyfishScales[idx];
-        this.hoveredJellyfish.scale.lerp(new THREE.Vector3(baseScale, baseScale, baseScale), 0.1);
-        this.jellyfishLights[idx].intensity += (this.baseLightIntensities[idx] - this.jellyfishLights[idx].intensity) * 0.1;
+    const newHovered =
+      intersects.length > 0
+        ? this.jellyfish.find(j => j.userData.bell === intersects[0].object) ?? null
+        : null;
+
+    // Hover moved elsewhere: the previous jellyfish keeps easing back to its
+    // baseline until it has fully recovered (previously it only restored a
+    // single 10% step and then stayed inflated forever).
+    if (this.hoveredJellyfish && this.hoveredJellyfish !== newHovered) {
+      this.restoringJellyfish = this.hoveredJellyfish;
+    }
+    this.hoveredJellyfish = newHovered;
+
+    if (this.restoringJellyfish) {
+      if (this.restoringJellyfish === newHovered) {
+        this.restoringJellyfish = null;
+      } else {
+        const idx = this.jellyfish.indexOf(this.restoringJellyfish);
+        if (idx === -1) {
+          // Target vanished from the scene: stop tracking it.
+          this.restoringJellyfish = null;
+        } else {
+          const baseScale = this.baseJellyfishScales[idx];
+          const baseIntensity = this.baseLightIntensities[idx];
+          const g = this.restoringJellyfish;
+          g.scale.lerp(new THREE.Vector3(baseScale, baseScale, baseScale), 0.1);
+          const light = this.jellyfishLights[idx];
+          light.intensity += (baseIntensity - light.intensity) * 0.1;
+          if (
+            Math.abs(g.scale.x - baseScale) < 0.01 &&
+            Math.abs(light.intensity - baseIntensity) < 0.01
+          ) {
+            g.scale.set(baseScale, baseScale, baseScale);
+            light.intensity = baseIntensity;
+            this.restoringJellyfish = null;
+          }
+        }
       }
-      this.hoveredJellyfish = null;
     }
 
-    if (intersects.length > 0) {
-      const bell = intersects[0].object;
-      const jellyfish = this.jellyfish.find(j => j.userData.bell === bell);
-      if (jellyfish) {
-        this.hoveredJellyfish = jellyfish;
-        const idx = this.jellyfish.indexOf(jellyfish);
-        const baseScale = this.baseJellyfishScales[idx];
-        const targetScale = baseScale * 1.5;
-        jellyfish.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
-        this.jellyfishLights[idx].intensity += (this.baseLightIntensities[idx] * 2 - this.jellyfishLights[idx].intensity) * 0.1;
-      }
+    if (this.hoveredJellyfish) {
+      const idx = this.jellyfish.indexOf(this.hoveredJellyfish);
+      const baseScale = this.baseJellyfishScales[idx];
+      const targetScale = baseScale * 1.5;
+      this.hoveredJellyfish.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+      this.jellyfishLights[idx].intensity += (this.baseLightIntensities[idx] * 2 - this.jellyfishLights[idx].intensity) * 0.1;
     }
   }
 
