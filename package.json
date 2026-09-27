@@ -6,7 +6,8 @@
   "scripts": {
     "client:dev": "vite",
     "server:dev": "nodemon --watch src/server --exec \"tsx src/server/server.ts\"",
-    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
+    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
+    "test": "tsx tests/run-all.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
