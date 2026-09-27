@@ -45,5 +45,7 @@ export interface Message {
   type: 'system' | 'exchange' | 'chat' | 'exchange_request' | 'exchange_update';
   isRead: boolean;
   relatedExchangeId?: string;
+  // 通知创建时对应的交换申请状态标记，用于与交换记录状态对账
+  exchangeStatus?: Exchange['status'];
   createdAt: string;
 }
