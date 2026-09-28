@@ -1,0 +1,810 @@
+[
+  {
+    "id": "1",
+    "title": "肖申克的救赎",
+    "director": "弗兰克·德拉邦特",
+    "year": 1994,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E8%82%96%E7%94%B3%E5%85%8B%E7%9A%84%E6%95%91%E8%B5%8E",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "银行家安迪被冤枉杀害妻子及其情人，被判终身监禁。在肖申克监狱中，他与瑞德建立了深厚的友谊，并利用自己的金融知识为监狱官洗钱，最终策划了一场惊天越狱。"
+  },
+  {
+    "id": "2",
+    "title": "教父",
+    "director": "弗朗西斯·福特·科波拉",
+    "year": 1972,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%95%99%E7%88%B6",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "柯里昂家族是美国最有权势的黑手党家族之一。老教父维托·柯里昂在女儿婚礼上拒绝了毒品交易的提议，引发了一系列家族恩怨和权力斗争。"
+  },
+  {
+    "id": "3",
+    "title": "阿甘正传",
+    "director": "罗伯特·泽米吉斯",
+    "year": 1994,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%98%BF%E7%94%98%E6%AD%A3%E4%BC%A0",
+    "genres": ["剧情", "爱情"],
+    "synopsis": "智商只有75的阿甘，虽然天生不完美，但他的人生却因为善良、诚实和勇气而变得非凡。他经历了美国历史上的重要时刻，影响了许多人的命运。"
+  },
+  {
+    "id": "4",
+    "title": "泰坦尼克号",
+    "director": "詹姆斯·卡梅隆",
+    "year": 1997,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%B3%B0%E5%9D%A6%E5%B0%BC%E5%8F%B7",
+    "genres": ["剧情", "爱情", "灾难"],
+    "synopsis": "1912年，泰坦尼克号从英国出发前往纽约。贵族少女露丝与穷画家杰克在船上相遇相爱，然而冰山撞击让这艘巨轮沉没，两人的爱情也面临生死考验。"
+  },
+  {
+    "id": "5",
+    "title": "盗梦空间",
+    "director": "克里斯托弗·诺兰",
+    "year": 2010,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E7%9B%97%E6%A2%A6%E7%A9%BA%E9%97%B4",
+    "genres": ["科幻", "动作", "悬疑"],
+    "synopsis": "道姆·柯布是一名经验丰富的盗梦者，能够潜入他人梦境窃取秘密。为了回到自己的孩子身边，他接受了一项几乎不可能完成的任务：植入意念。"
+  },
+  {
+    "id": "6",
+    "title": "星际穿越",
+    "director": "克里斯托弗·诺兰",
+    "year": 2014,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%98%9F%E9%99%85%E7%A9%BF%E8%B6%8A",
+    "genres": ["科幻", "剧情", "冒险"],
+    "synopsis": "未来地球环境恶化，人类面临灭绝危机。一组宇航员穿越虫洞，寻找适合人类居住的新星球。这是一场关于爱、时间与牺牲的史诗旅程。"
+  },
+  {
+    "id": "7",
+    "title": "黑客帝国",
+    "director": "沃卓斯基姐妹",
+    "year": 1999,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%BB%91%E5%AE%A2%E5%B8%9D%E5%9B%BD",
+    "genres": ["科幻", "动作"],
+    "synopsis": "程序员尼奥发现他所生活的世界其实是机器制造的虚拟现实。在莫斐斯的引导下，尼奥觉醒并成为人类的救世主，与机器帝国展开对抗。"
+  },
+  {
+    "id": "8",
+    "title": "霸王别姬",
+    "director": "陈凯歌",
+    "year": 1993,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%9C%B8%E7%8E%8B%E5%88%AB%E5%A7%AC",
+    "genres": ["剧情", "爱情"],
+    "synopsis": "两个京剧演员从小一起长大，经历了中国近半个世纪的风云变幻。程蝶衣对艺术的执着和对段小楼的情感，在时代的洪流中演绎了一段悲怆的人生。"
+  },
+  {
+    "id": "9",
+    "title": "千与千寻",
+    "director": "宫崎骏",
+    "year": 2001,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%8D%83%E4%B8%8E%E5%8D%83%E5%AF%BB",
+    "genres": ["动画", "奇幻", "冒险"],
+    "synopsis": "10岁的千寻在搬家途中误入神灵世界。为了拯救变成猪的父母，她必须在汤婆婆的澡堂里工作，并在这个神秘的世界中学会勇敢和成长。"
+  },
+  {
+    "id": "10",
+    "title": "阿凡达",
+    "director": "詹姆斯·卡梅隆",
+    "year": 2009,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%98%BF%E5%87%A1%E8%BE%BE",
+    "genres": ["科幻", "动作", "冒险"],
+    "synopsis": "2154年，人类为了开采潘多拉星球上的稀有矿物，派遣阿凡达与纳美人接触。瘫痪的海军陆战队员杰克·萨利在任务中爱上了纳美公主，最终选择站在纳美人一边。"
+  },
+  {
+    "id": "11",
+    "title": "教父2",
+    "director": "弗朗西斯·福特·科波拉",
+    "year": 1974,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%95%99%E7%88%B62",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "影片同时讲述了老教父维托·柯里昂的发家史，以及迈克尔·柯里昂接管家族生意后面临的种种危机，展现了黑手党家族的兴衰荣辱。"
+  },
+  {
+    "id": "12",
+    "title": "低俗小说",
+    "director": "昆汀·塔伦蒂诺",
+    "year": 1994,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E4%BD%8E%E4%BF%97%E5%B0%8F%E8%AF%B4",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "几个相互交织的犯罪故事：两名杀手执行任务、一个拳击手背叛老板、一对情侣在餐厅抢劫。昆汀以独特的叙事结构和黑色幽默打造了这部经典。"
+  },
+  {
+    "id": "13",
+    "title": "辛德勒的名单",
+    "director": "史蒂文·斯皮尔伯格",
+    "year": 1993,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E8%BE%9B%E5%BE%B7%E5%8B%92%E7%9A%84%E5%90%8D%E5%8D%95",
+    "genres": ["剧情", "历史", "战争"],
+    "synopsis": "德国商人奥斯卡·辛德勒在二战期间，利用自己的工厂保护了1200名犹太人免遭纳粹屠杀。这是一部关于人性光辉的震撼之作。"
+  },
+  {
+    "id": "14",
+    "title": "十二怒汉",
+    "director": "西德尼·吕美特",
+    "year": 1957,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%8D%81%E4%BA%8C%E6%80%92%E6%B1%89",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "一个来自贫民窟的18岁男孩被指控谋杀父亲，12名陪审员需要一致裁定他是否有罪。在闷热的房间里，陪审员们展开了激烈的辩论，真相逐渐浮出水面。"
+  },
+  {
+    "id": "15",
+    "title": "黑暗骑士",
+    "director": "克里斯托弗·诺兰",
+    "year": 2008,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%BB%91%E6%9A%97%E9%AA%91%E5%A3%AB",
+    "genres": ["动作", "科幻", "犯罪"],
+    "synopsis": "蝙蝠侠、戈登和新任检察官哈维·丹特联手打击哥谭市的犯罪势力。然而，小丑的出现让整个城市陷入混乱，蝙蝠侠必须在混乱与秩序之间做出选择。"
+  },
+  {
+    "id": "16",
+    "title": "机器人总动员",
+    "director": "安德鲁·斯坦顿",
+    "year": 2008,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%9C%BA%E5%99%A8%E4%BA%BA%E6%80%BB%E5%8A%A8%E5%91%98",
+    "genres": ["动画", "科幻", "爱情"],
+    "synopsis": "地球被垃圾覆盖，人类移居太空。垃圾清理机器人瓦力在孤独地工作了700年后，遇到了来自太空的探测机器人伊芙，并跟随她展开了一场太空冒险。"
+  },
+  {
+    "id": "17",
+    "title": "搏击俱乐部",
+    "director": "大卫·芬奇",
+    "year": 1999,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%90%8F%E5%87%BB%E4%BF%B1%E4%B9%90%E9%83%A8",
+    "genres": ["剧情", "悬疑", "惊悚"],
+    "synopsis": "一个普通的白领职员遇到了肥皂商人泰勒·德顿，两人创建了地下搏击俱乐部。随着俱乐部的扩张，事情逐渐失控，真相令人震惊。"
+  },
+  {
+    "id": "18",
+    "title": "飞越疯人院",
+    "director": "米洛斯·福尔曼",
+    "year": 1975,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%A3%9E%E8%B6%8A%E7%96%AF%E4%BA%BA%E9%99%A2",
+    "genres": ["剧情"],
+    "synopsis": "为了逃避监狱劳动，麦克墨菲假装精神失常被送进精神病院。他的到来打破了医院压抑的秩序，与护士长拉契特展开了一场关于自由与控制的斗争。"
+  },
+  {
+    "id": "19",
+    "title": "绿皮书",
+    "director": "彼得·法雷里",
+    "year": 2018,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E7%BB%BF%E7%9A%AE%E4%B9%A6",
+    "genres": ["剧情", "喜剧", "传记"],
+    "synopsis": "1962年，黑人钢琴家唐·谢利南下巡回演出，雇佣了白人司机托尼·利普。两人在旅途中建立了跨越种族和阶级的友谊。"
+  },
+  {
+    "id": "20",
+    "title": "寄生虫",
+    "director": "奉俊昊",
+    "year": 2019,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%AF%84%E7%94%9F%E8%99%AB",
+    "genres": ["剧情", "惊悚", "喜剧"],
+    "synopsis": "贫穷的金家人通过欺骗手段，一个个进入富裕的朴家工作。然而，一个意外的秘密让他们的计划失控，最终走向悲剧。"
+  },
+  {
+    "id": "21",
+    "title": "这个杀手不太冷",
+    "director": "吕克·贝松",
+    "year": 1994,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E8%BF%99%E4%B8%AA%E6%9D%80%E6%89%8B%E4%B8%8D%E5%A4%AA%E5%86%B7",
+    "genres": ["剧情", "动作", "犯罪"],
+    "synopsis": "职业杀手莱昂救下了被灭门的小女孩玛蒂尔达。两人在相处中产生了特殊的感情，玛蒂尔达决心为家人报仇，莱昂则要保护她免受伤害。"
+  },
+  {
+    "id": "22",
+    "title": "哈利·波特与魔法石",
+    "director": "克里斯·哥伦布",
+    "year": 2001,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%93%88%E5%88%A9%E6%B3%A2%E7%89%B9",
+    "genres": ["奇幻", "冒险", "家庭"],
+    "synopsis": "孤儿哈利·波特在11岁生日时得知自己是一名巫师，被邀请进入霍格沃茨魔法学校学习。在那里，他结识了好友，发现了自己的身世之谜，并卷入了一场与黑魔王的斗争。"
+  },
+  {
+    "id": "23",
+    "title": "指环王：护戒使者",
+    "director": "彼得·杰克逊",
+    "year": 2001,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%8C%87%E7%8E%AF%E7%8E%8B",
+    "genres": ["奇幻", "冒险", "剧情"],
+    "synopsis": "霍比特人弗罗多继承了一枚能够统治世界的魔戒。为了拯救中土世界，他与来自各族的守护者组成护戒远征队，踏上了摧毁魔戒的危险旅程。"
+  },
+  {
+    "id": "24",
+    "title": "当幸福来敲门",
+    "director": "加布里尔·穆奇诺",
+    "year": 2006,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%BD%93%E5%B9%B8%E7%A6%8F%E6%9D%A5%E6%95%B2%E9%97%A8",
+    "genres": ["剧情", "传记"],
+    "synopsis": "克里斯·加德纳是一个穷困潦倒的推销员，妻子离开他，他独自带着儿子生活。在经历了无数挫折后，他凭借毅力和智慧成为了一名成功的股票经纪人。"
+  },
+  {
+    "id": "25",
+    "title": "楚门的世界",
+    "director": "彼得·威尔",
+    "year": 1998,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%A5%9A%E9%97%A8%E7%9A%84%E4%B8%96%E7%95%8C",
+    "genres": ["剧情", "科幻", "喜剧"],
+    "synopsis": "楚门从出生起就生活在一个巨大的摄影棚里，他的一切都是真人秀的一部分。当他发现真相后，决定逃离这个虚假的世界，寻找真正的自由。"
+  },
+  {
+    "id": "26",
+    "title": "音乐之声",
+    "director": "罗伯特·怀斯",
+    "year": 1965,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%9F%B3%E4%B9%90%E4%B9%8B%E5%A3%B0",
+    "genres": ["音乐", "剧情", "爱情"],
+    "synopsis": "年轻的见习修女玛丽亚来到特拉普上校家担任家庭教师。她用音乐和爱心温暖了上校的七个孩子，并与上校相爱，最终带领全家逃离纳粹的统治。"
+  },
+  {
+    "id": "27",
+    "title": "拯救大兵瑞恩",
+    "director": "史蒂文·斯皮尔伯格",
+    "year": 1998,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%8B%AF%E6%95%91%E5%A4%A7%E5%85%B5%E7%91%9E%E6%81%A9",
+    "genres": ["战争", "剧情", "动作"],
+    "synopsis": "诺曼底登陆后，米勒上尉带领八名士兵深入敌后，寻找在战场上失去三个兄弟的瑞恩，将他安全带回家。这是一场关于生命价值的战争史诗。"
+  },
+  {
+    "id": "28",
+    "title": "罗马假日",
+    "director": "威廉·惠勒",
+    "year": 1953,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%BD%97%E9%A9%AC%E5%81%87%E6%97%A5",
+    "genres": ["爱情", "喜剧", "剧情"],
+    "synopsis": "欧洲某国的安妮公主在罗马访问期间偷偷溜出王宫，与美国记者乔相遇。两人在罗马度过了浪漫的一天，却不得不面对身份的差异和责任。"
+  },
+  {
+    "id": "29",
+    "title": "寻梦环游记",
+    "director": "李·昂克里奇",
+    "year": 2017,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%AF%BB%E6%A2%A6%E7%8E%AF%E6%B8%B8%E8%AE%B0",
+    "genres": ["动画", "奇幻", "音乐"],
+    "synopsis": "墨西哥男孩米格尔热爱音乐，但家族却禁止音乐。在亡灵节当天，他意外进入亡灵世界，在那里他遇到了家人们的灵魂，并揭开了家族的秘密。"
+  },
+  {
+    "id": "30",
+    "title": "盗梦空间",
+    "director": "克里斯托弗·诺兰",
+    "year": 2010,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%9B%97%E6%A2%A6%E7%A9%BA%E9%97%B42",
+    "genres": ["科幻", "动作", "悬疑"],
+    "synopsis": "道姆·柯布是一名经验丰富的盗梦者，能够潜入他人梦境窃取秘密。为了回到自己的孩子身边，他接受了一项几乎不可能完成的任务：植入意念。"
+  },
+  {
+    "id": "31",
+    "title": "宿醉",
+    "director": "托德·菲利普斯",
+    "year": 2009,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%AE%BF%E9%86%89",
+    "genres": ["喜剧"],
+    "synopsis": "道格和三个朋友去拉斯维加斯举办单身派对，结果第二天醒来发现道格失踪了，他们完全不记得前一晚发生了什么。三人必须找到道格，及时赶回洛杉矶参加婚礼。"
+  },
+  {
+    "id": "32",
+    "title": "钢铁侠",
+    "director": "乔恩·费儒",
+    "year": 2008,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%92%A2%E9%93%81%E4%BE%A0",
+    "genres": ["科幻", "动作", "冒险"],
+    "synopsis": "亿万富翁托尼·斯塔克在阿富汗被恐怖分子绑架，他在山洞中制造了一套高科技铠甲逃脱。回到美国后，他改进了铠甲，成为了超级英雄钢铁侠。"
+  },
+  {
+    "id": "33",
+    "title": "速度与激情",
+    "director": "罗伯·科恩",
+    "year": 2001,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%80%9F%E5%BA%A6%E4%B8%8E%E6%BF%80%E6%83%85",
+    "genres": ["动作", "犯罪", "惊悚"],
+    "synopsis": "卧底警察布莱恩·奥康纳潜入洛杉矶街头赛车界，调查一系列货车抢劫案。他与赛车老大多米尼克·托雷托成为朋友，却爱上了多米尼克的妹妹米娅。"
+  },
+  {
+    "id": "34",
+    "title": "碟中谍",
+    "director": "布莱恩·德·帕尔玛",
+    "year": 1996,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%A2%9F%E4%B8%AD%E8%B0%8D",
+    "genres": ["动作", "冒险", "惊悚"],
+    "synopsis": "IMF特工伊森·亨特在一次任务中被出卖，队友全部牺牲，他成为了唯一的幸存者。为了洗清自己的罪名并找出内鬼，他展开了一系列惊险的行动。"
+  },
+  {
+    "id": "35",
+    "title": "加勒比海盗",
+    "director": "戈尔·维宾斯基",
+    "year": 2003,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%8A%A0%E5%8B%92%E6%AF%94%E6%B5%B7%E7%9B%97",
+    "genres": ["奇幻", "冒险", "动作"],
+    "synopsis": "古怪的海盗船长杰克·斯帕罗与铁匠威尔·特纳联手，从邪恶的巴博萨船长手中救出了被绑架的伊丽莎白·斯旺。然而，巴博萨和他的船员都受到了古老的诅咒。"
+  },
+  {
+    "id": "36",
+    "title": "暮光之城",
+    "director": "凯瑟琳·哈德威克",
+    "year": 2008,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%9A%AE%E5%85%89%E4%B9%8B%E5%9F%8E",
+    "genres": ["爱情", "奇幻", "青春"],
+    "synopsis": "少女贝拉·斯旺搬到福克斯小镇上学，与神秘的爱德华·卡伦相遇并相爱。她很快发现爱德华是一个吸血鬼，他们的爱情面临着巨大的危险。"
+  },
+  {
+    "id": "37",
+    "title": "变形金刚",
+    "director": "迈克尔·贝",
+    "year": 2007,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%8F%98%E5%BD%A2%E9%87%91%E5%88%9A",
+    "genres": ["科幻", "动作", "冒险"],
+    "synopsis": "来自塞伯坦星球的变形金刚分为正义的汽车人和邪恶的霸天虎两派，他们来到地球寻找能量块。少年山姆·维特维奇无意中卷入了这场星际战争。"
+  },
+  {
+    "id": "38",
+    "title": "哈利·波特与死亡圣器（下）",
+    "director": "大卫·叶茨",
+    "year": 2011,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%93%88%E5%88%A9%E6%B3%A2%E7%89%B97",
+    "genres": ["奇幻", "冒险", "剧情"],
+    "synopsis": "哈利·波特与伏地魔的最终决战在霍格沃茨魔法学校打响。哈利必须找出并销毁剩下的魂器，才能彻底击败黑魔王，拯救魔法世界。"
+  },
+  {
+    "id": "39",
+    "title": "复仇者联盟",
+    "director": "乔斯·韦登",
+    "year": 2012,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%A4%8D%E4%BB%87%E8%80%85%E8%81%94%E7%9B%9F",
+    "genres": ["科幻", "动作", "冒险"],
+    "synopsis": "当洛基带领外星军队入侵地球时，神盾局召集了钢铁侠、美国队长、雷神、绿巨人、黑寡妇和鹰眼，组成了复仇者联盟，共同保护地球。"
+  },
+  {
+    "id": "40",
+    "title": "冰雪奇缘",
+    "director": "克里斯·巴克",
+    "year": 2013,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%86%B0%E9%9B%AA%E5%A5%87%E7%BC%98",
+    "genres": ["动画", "奇幻", "音乐"],
+    "synopsis": "阿伦黛尔王国的艾莎公主天生拥有冰雪魔法，却在加冕礼上失控让整个王国陷入了永恒的冬天。她的妹妹安娜踏上了寻找姐姐、拯救王国的冒险旅程。"
+  },
+  {
+    "id": "41",
+    "title": "星际争霸",
+    "director": "史蒂文·斯皮尔伯格",
+    "year": 2018,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%A6%96%E9%A1%B5%E7%8E%A9%E5%AE%B6",
+    "genres": ["科幻", "冒险"],
+    "synopsis": "韦德·沃兹是一个生活在贫民窟的少年，他沉迷于虚拟世界'绿洲'。当'绿洲'的创造者留下遗嘱，找到彩蛋的人将继承遗产时，一场全球范围的寻宝游戏开始了。"
+  },
+  {
+    "id": "42",
+    "title": "哪吒之魔童降世",
+    "director": "饺子",
+    "year": 2019,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%93%AA%E5%90%92",
+    "genres": ["动画", "奇幻", "喜剧"],
+    "synopsis": "魔丸转世的哪吒生来就被视为妖怪，注定要遭受天雷。然而，他选择与命运抗争，用自己的方式证明自己的价值，最终赢得了世人的尊重。"
+  },
+  {
+    "id": "43",
+    "title": "流浪地球",
+    "director": "郭帆",
+    "year": 2019,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%B5%81%E6%B5%AA%E5%9C%B0%E7%90%83",
+    "genres": ["科幻", "灾难", "冒险"],
+    "synopsis": "太阳即将毁灭，人类在地球表面建造了上万座行星发动机，试图将地球推离太阳系，前往新的家园。在地球即将撞上木星之际，全人类展开了一场生死救援。"
+  },
+  {
+    "id": "44",
+    "title": "战狼2",
+    "director": "吴京",
+    "year": 2017,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%88%98%E7%8B%BC2",
+    "genres": ["动作", "战争"],
+    "synopsis": "退伍军人冷锋在非洲遭到了叛乱武装分子的袭击，他本来可以安全撤离，但作为军人的使命感让他毅然重返战场，解救被困的同胞和难民。"
+  },
+  {
+    "id": "45",
+    "title": "你好，李焕英",
+    "director": "贾玲",
+    "year": 2021,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E4%BD%A0%E5%A5%BD%E6%9D%8E%E7%84%95%E8%8B%B1",
+    "genres": ["喜剧", "剧情", "奇幻"],
+    "synopsis": "贾晓玲在母亲李焕英意外去世后，穿越回到了1981年，遇到了年轻时的母亲。她希望能改变母亲的命运，让她过上更幸福的生活，却发现了母亲的秘密。"
+  },
+  {
+    "id": "46",
+    "title": "长津湖",
+    "director": "陈凯歌、徐克、林超贤",
+    "year": 2021,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%95%BF%E6%B4%A5%E6%B9%96",
+    "genres": ["战争", "历史", "剧情"],
+    "synopsis": "1950年冬天，中国人民志愿军第九兵团冒着零下四十多度的严寒，在长津湖地区与美军精锐部队展开了一场史诗般的战役。"
+  },
+  {
+    "id": "47",
+    "title": "八佰",
+    "director": "管虎",
+    "year": 2020,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%85%AB%E4%BD%B0",
+    "genres": ["战争", "历史", "剧情"],
+    "synopsis": "1937年淞沪会战末期，八百壮士坚守上海四行仓库，与日军展开了四天四夜的激烈战斗。他们用血肉之躯唤醒了国人的抗争精神。"
+  },
+  {
+    "id": "48",
+    "title": "流浪地球2",
+    "director": "郭帆",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%B5%81%E6%B5%AA%E5%9C%B0%E7%90%832",
+    "genres": ["科幻", "灾难", "冒险"],
+    "synopsis": "太阳危机迫在眉睫，人类在'移山计划'和'数字生命计划'之间做出选择。当月球发动机过载爆炸后，人类必须联合起来，共同面对这场灭顶之灾。"
+  },
+  {
+    "id": "49",
+    "title": "满江红",
+    "director": "张艺谋",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%BB%A1%E6%B1%9F%E7%BA%A2",
+    "genres": ["悬疑", "喜剧", "历史"],
+    "synopsis": "南宋绍兴年间，岳飞死后四年，金国使者在宰相秦桧驻地被杀，密信失踪。一名小兵和他的伙伴被卷入了这场阴谋，真相层层揭开。"
+  },
+  {
+    "id": "50",
+    "title": "消失的她",
+    "director": "崔睿、刘翔",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%B6%88%E5%A4%B1%E7%9A%84%E5%A5%B9",
+    "genres": ["悬疑", "犯罪"],
+    "synopsis": "何非和妻子李木子在东南亚海岛庆祝结婚周年旅行，妻子却神秘失踪。当她再次出现时，何非却坚称这个女人不是他的妻子。真相在层层反转中浮出水面。"
+  },
+  {
+    "id": "51",
+    "title": "功夫熊猫",
+    "director": "马克·奥斯本",
+    "year": 2008,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%8A%9F%E5%A4%AB%E7%86%8A%E7%8C%AB",
+    "genres": ["动画", "喜剧", "动作"],
+    "synopsis": "笨拙的熊猫阿宝一直梦想成为功夫大师，却意外被选中成为传说中的神龙大侠。他必须在短时间内学会功夫，打败邪恶的太郎，保护和平谷。"
+  },
+  {
+    "id": "52",
+    "title": "穿普拉达的女王",
+    "director": "大卫·弗兰科尔",
+    "year": 2006,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%A9%BF%E6%99%AE%E6%8B%89%E8%BE%BE%E7%9A%84%E5%A5%B3%E7%8E%8B",
+    "genres": ["剧情", "喜剧", "爱情"],
+    "synopsis": "刚刚大学毕业的安迪来到纽约，成为了顶级时尚杂志主编米兰达的助理。她必须在苛刻的工作环境中生存，并找到自己真正想要的生活。"
+  },
+  {
+    "id": "53",
+    "title": "美人鱼",
+    "director": "周星驰",
+    "year": 2016,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E7%BE%8E%E4%BA%BA%E9%B1%BC",
+    "genres": ["喜剧", "爱情", "奇幻"],
+    "synopsis": "富豪刘轩为了地产项目声纳驱赶鱼类，人鱼族派出美人鱼珊珊前去暗杀他。然而，两人在相处中相爱，刘轩最终决定保护海洋生态。"
+  },
+  {
+    "id": "54",
+    "title": "西虹市首富",
+    "director": "闫非、彭大魔",
+    "year": 2018,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E8%A5%BF%E8%99%B9%E5%B8%82%E9%A6%96%E5%AF%8C",
+    "genres": ["喜剧"],
+    "synopsis": "落魄的守门员王多鱼意外获得了十亿遗产，但前提是必须在一个月内花光十个亿。在这场疯狂的花钱挑战中，他领悟到了金钱的真正意义。"
+  },
+  {
+    "id": "55",
+    "title": "夏洛特烦恼",
+    "director": "闫非、彭大魔",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%A4%8F%E6%B4%9B%E7%89%B9%E7%83%A6%E6%81%BC",
+    "genres": ["喜剧", "爱情", "奇幻"],
+    "synopsis": "夏洛在高中同学的婚礼上大闹一场，醒来后发现自己穿越回到了高中时代。他凭借对未来的记忆成为了明星，却发现最珍贵的人一直就在身边。"
+  },
+  {
+    "id": "56",
+    "title": "唐人街探案",
+    "director": "陈思诚",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%94%90%E4%BA%BA%E8%A1%97%E6%8E%A2%E6%A1%88",
+    "genres": ["喜剧", "悬疑", "犯罪"],
+    "synopsis": "秦风因为警校落榜，被送到泰国找表舅唐仁散心。没想到唐仁意外卷入了一场黄金失窃杀人案，两人必须在七天内找到真凶，洗清冤屈。"
+  },
+  {
+    "id": "57",
+    "title": "人在囧途",
+    "director": "叶伟民",
+    "year": 2010,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E4%BA%BA%E5%9C%A8%E5%9B%A7%E9%80%94",
+    "genres": ["喜剧"],
+    "synopsis": "老板李成功和挤奶工牛耿在春节回家的路上相遇，两人一路囧事不断，经历了各种交通工具的折腾，最终成为了朋友。"
+  },
+  {
+    "id": "58",
+    "title": "泰囧",
+    "director": "徐峥",
+    "year": 2012,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%B3%B0%E5%9B%A7",
+    "genres": ["喜剧"],
+    "synopsis": "徐朗为了得到授权书前往泰国，在路上遇到了王宝，两人一路同行，发生了一连串令人啼笑皆非的故事，徐朗也重新思考了人生的意义。"
+  },
+  {
+    "id": "59",
+    "title": "港囧",
+    "director": "徐峥",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%B8%AF%E5%9B%A7",
+    "genres": ["喜剧"],
+    "synopsis": "徐来带着妻子去香港旅游，实际上是为了见自己的初恋女友。然而，一连串的意外让他的计划泡汤，还让他重新审视了自己的婚姻。"
+  },
+  {
+    "id": "60",
+    "title": "煎饼侠",
+    "director": "董成鹏",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%85%8E%E9%A5%BC%E4%BE%A0",
+    "genres": ["喜剧"],
+    "synopsis": "当红艺人大鹏因为一次意外丑闻跌入谷底，为了还债他被迫拍摄一部超级英雄电影。在拍摄过程中，他重新找回了梦想和朋友。"
+  },
+  {
+    "id": "61",
+    "title": "煎饼侠",
+    "director": "董成鹏",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E7%85%8E%E9%A5%BC%E4%BE%A02",
+    "genres": ["喜剧"],
+    "synopsis": "当红艺人大鹏因为一次意外丑闻跌入谷底，为了还债他被迫拍摄一部超级英雄电影。在拍摄过程中，他重新找回了梦想和朋友。"
+  },
+  {
+    "id": "62",
+    "title": "缝纫机乐队",
+    "director": "董成鹏",
+    "year": 2017,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%BC%9D%E7%BA%AB%E6%9C%BA%E4%B9%90%E9%98%9F",
+    "genres": ["喜剧", "音乐"],
+    "synopsis": "集安青年胡亮为了保住家乡的摇滚公园，邀请经纪人程宫帮忙组建乐队。一群看似不可能的人聚在一起，为了摇滚梦想而努力。"
+  },
+  {
+    "id": "63",
+    "title": "老炮儿",
+    "director": "管虎",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E8%80%81%E7%82%AE%E5%84%BF",
+    "genres": ["剧情", "犯罪"],
+    "synopsis": "曾经的京城老炮儿六爷，在儿子晓波得罪了富二代小飞后，不得不重出江湖。他用自己的方式解决问题，却发现时代已经变了。"
+  },
+  {
+    "id": "64",
+    "title": "老男孩",
+    "director": "肖央",
+    "year": 2014,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E8%80%81%E7%94%B7%E5%AD%A9",
+    "genres": ["喜剧", "剧情"],
+    "synopsis": "肖大宝和王小帅曾经是校园里的风云人物，长大后却过着平凡的生活。一个偶然的机会让他们重新燃起了音乐梦想，参加了选秀比赛。"
+  },
+  {
+    "id": "65",
+    "title": "分手大师",
+    "director": "邓超、俞白眉",
+    "year": 2014,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%88%86%E6%89%8B%E5%A4%A7%E5%B8%88",
+    "genres": ["喜剧", "爱情"],
+    "synopsis": "梅远贵是一名职业分手大师，专门帮人解决各种分手难题。在一次任务中，他遇到了女汉子叶小春，两人在打打闹闹中产生了感情。"
+  },
+  {
+    "id": "66",
+    "title": "恶棍天使",
+    "director": "邓超、俞白眉",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%81%B6%E6%A3%8D%E5%A4%A9%E4%BD%BF",
+    "genres": ["喜剧"],
+    "synopsis": "恶棍莫非里和学霸查小刀因为一次车祸相遇，两人性格迥异却被迫成为搭档。在一系列搞笑的事件中，他们互相改变，找到了生活的意义。"
+  },
+  {
+    "id": "67",
+    "title": "从你的全世界路过",
+    "director": "张一白",
+    "year": 2016,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E4%BB%8E%E4%BD%A0%E7%9A%84%E5%85%A8%E4%B8%96%E7%95%8C%E8%B7%AF%E8%BF%87",
+    "genres": ["爱情", "剧情"],
+    "synopsis": "电台DJ陈末和他的朋友们经历着各自的爱情故事，有的甜蜜，有的遗憾。他们在各自的人生道路上寻找着属于自己的幸福。"
+  },
+  {
+    "id": "68",
+    "title": "微微一笑很倾城",
+    "director": "赵天宇",
+    "year": 2016,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%BE%AE%E5%BE%AE%E4%B8%80%E7%AC%91%E5%BE%88%E5%80%BE%E5%9F%8E",
+    "genres": ["爱情", "青春"],
+    "synopsis": "学霸贝微微在网络游戏中与大神肖奈相遇，两人从线上走到线下，开启了一段甜蜜的校园爱情故事。"
+  },
+  {
+    "id": "69",
+    "title": "何以笙箫默",
+    "director": "杨文军",
+    "year": 2015,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E4%BD%95%E4%BB%A5%E7%AC%99%E7%AE%AB%E9%BB%98",
+    "genres": ["爱情", "剧情"],
+    "synopsis": "赵默笙和何以琛在大学时相爱，却因为误会分离。七年后两人重逢，旧情复燃，却面临着更多的考验和阻碍。"
+  },
+  {
+    "id": "70",
+    "title": "致我们终将逝去的青春",
+    "director": "赵薇",
+    "year": 2013,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E8%87%B4%E9%9D%92%E6%98%A5",
+    "genres": ["爱情", "剧情", "青春"],
+    "synopsis": "郑微从大学时代开始，经历了与陈孝正、林静的感情纠葛。从青涩的校园生活到步入社会，她在成长中体会着爱情的甜蜜与痛苦。"
+  },
+  {
+    "id": "71",
+    "title": "那些年，我们一起追的女孩",
+    "director": "九把刀",
+    "year": 2011,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%82%A3%E4%BA%9B%E5%B9%B4",
+    "genres": ["爱情", "青春", "喜剧"],
+    "synopsis": "柯景腾和他的朋友们都喜欢班上的优等生沈佳宜。在追求沈佳宜的过程中，他们度过了难忘的青春时光，也留下了永远的遗憾。"
+  },
+  {
+    "id": "72",
+    "title": "小时代",
+    "director": "郭敬明",
+    "year": 2013,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%B0%8F%E6%97%B6%E4%BB%A3",
+    "genres": ["剧情", "爱情"],
+    "synopsis": "林萧、南湘、顾里、唐宛如四个从小一起长大的女孩，在上海这座繁华的城市里，经历着友情、爱情和事业的种种考验。"
+  },
+  {
+    "id": "73",
+    "title": "后会无期",
+    "director": "韩寒",
+    "year": 2014,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%90%8E%E4%BC%9A%E6%97%A0%E6%9C%9F",
+    "genres": ["剧情", "公路", "喜剧"],
+    "synopsis": "三个住在东极岛的年轻人决定离开家乡，开始一段横跨大陆的自驾旅途。一路上他们遇到了各种人和事，对人生有了新的感悟。"
+  },
+  {
+    "id": "74",
+    "title": "乘风破浪",
+    "director": "韩寒",
+    "year": 2017,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E4%B9%98%E9%A3%8E%E7%A0%B4%E6%B5%AA",
+    "genres": ["剧情", "喜剧", "奇幻"],
+    "synopsis": "赛车手徐太浪一直与父亲关系紧张，在一次夺冠后遭遇车祸，意外穿越回到了1998年。他遇到了年轻时的父亲，两人成为了兄弟。"
+  },
+  {
+    "id": "75",
+    "title": "飞驰人生",
+    "director": "韩寒",
+    "year": 2019,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E9%A3%9E%E9%A1%B0%E4%BA%BA%E7%94%9F",
+    "genres": ["喜剧", "运动"],
+    "synopsis": "曾经的顶级赛车手张弛因为非法飙车被禁赛五年，他决定重返赛场。在经历了重重困难后，他终于证明了自己对赛车的热爱。"
+  },
+  {
+    "id": "76",
+    "title": "囧妈",
+    "director": "徐峥",
+    "year": 2020,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%9B%A7%E5%A6%88",
+    "genres": ["喜剧", "剧情"],
+    "synopsis": "徐伊万因为商业纠纷，阴差阳错地和母亲坐上了开往俄罗斯的火车。在六天六夜的旅途中，母子俩发生了一系列啼笑皆非的故事。"
+  },
+  {
+    "id": "77",
+    "title": "我和我的祖国",
+    "director": "多位导演",
+    "year": 2019,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%88%91%E5%92%8C%E6%88%91%E7%9A%84%E7%A5%96%E5%9B%BD",
+    "genres": ["剧情", "历史"],
+    "synopsis": "七个故事，讲述了新中国成立七十年来，普通人与国家大事息息相关的经历，展现了大时代下小人物的家国情怀。"
+  },
+  {
+    "id": "78",
+    "title": "我和我的家乡",
+    "director": "多位导演",
+    "year": 2020,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E6%88%91%E5%92%8C%E6%88%91%E7%9A%84%E5%AE%B6%E4%B9%A1",
+    "genres": ["喜剧", "剧情"],
+    "synopsis": "五个发生在中国东西南北中五大地域的家乡故事，通过喜剧的形式展现了家乡的发展变化和人们的故土情怀。"
+  },
+  {
+    "id": "79",
+    "title": "我和我的父辈",
+    "director": "多位导演",
+    "year": 2021,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%88%91%E5%92%8C%E6%88%91%E7%9A%84%E7%88%B6%E8%BE%88",
+    "genres": ["剧情", "喜剧"],
+    "synopsis": "四个故事，以革命、建设、改革开放和新时代为历史坐标，讲述了不同时期父辈们的奋斗历程和精神传承。"
+  },
+  {
+    "id": "80",
+    "title": "长津湖之水门桥",
+    "director": "徐克",
+    "year": 2022,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E9%95%BF%E6%B4%A5%E6%B9%962",
+    "genres": ["战争", "历史", "剧情"],
+    "synopsis": "第七穿插连在结束了新兴里和下碣隅里的战斗后，接到了更艰巨的任务——炸毁水门桥，阻止美军陆战一师撤退。"
+  },
+  {
+    "id": "81",
+    "title": "这个杀手不太冷静",
+    "director": "邢文雄",
+    "year": 2022,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E6%9D%80%E6%89%8B%E4%B8%8D%E5%A4%AA%E5%86%B7%E9%9D%99",
+    "genres": ["喜剧"],
+    "synopsis": "群演魏成功被女明星米兰邀请出演电影男主角，扮演杀手卡尔。然而他不知道的是，这一切都是一场精心策划的骗局。"
+  },
+  {
+    "id": "82",
+    "title": "奇迹·笨小孩",
+    "director": "文牧野",
+    "year": 2022,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%A5%87%E8%BF%B9",
+    "genres": ["剧情"],
+    "synopsis": "少年景浩为了给妹妹筹集手术费，来到深圳打拼。他抓住了一个商机，带领一群普通人创业，创造了属于自己的奇迹。"
+  },
+  {
+    "id": "83",
+    "title": "独行月球",
+    "director": "张吃鱼",
+    "year": 2022,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E7%8B%AC%E8%A1%8C%E6%9C%88%E7%90%83",
+    "genres": ["科幻", "喜剧"],
+    "synopsis": "维修工独孤月因为意外被遗留在了月球上，目睹了小行星撞击地球。他在月球上开始了独自一人的生活，却不知道地球上的人类一直在看着他。"
+  },
+  {
+    "id": "84",
+    "title": "人生大事",
+    "director": "刘江江",
+    "year": 2022,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E4%BA%BA%E7%94%9F%E5%A4%A7%E4%BA%8B",
+    "genres": ["剧情", "家庭"],
+    "synopsis": "殡葬师莫三妹在一次葬礼上遇到了孤儿武小文，两人的生活从此紧紧联系在一起。在相处中，他们重新理解了生命的意义。"
+  },
+  {
+    "id": "85",
+    "title": "封神第一部：朝歌风云",
+    "director": "乌尔善",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%B0%81%E7%A5%9E",
+    "genres": ["奇幻", "神话", "动作"],
+    "synopsis": "商王殷寿与妲己勾结，暴虐无道。西伯侯之子姬发在朝歌为质子，目睹了纣王的暴行，最终选择回到西岐，举起了反商的大旗。"
+  },
+  {
+    "id": "86",
+    "title": "孤注一掷",
+    "director": "申奥",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%AD%A4%E6%B3%A8%E4%B8%80%E6%8A%9B",
+    "genres": ["犯罪", "剧情"],
+    "synopsis": "一群人被高薪诱惑前往境外从事网络诈骗，却发现自己陷入了一个巨大的骗局。他们在诈骗集团中遭受非人待遇，必须想办法逃出生天。"
+  },
+  {
+    "id": "87",
+    "title": "八角笼中",
+    "director": "王宝强",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%85%AB%E8%A7%92%E7%AC%BC%E4%B8%AD",
+    "genres": ["剧情", "运动"],
+    "synopsis": "向腾辉为了让一群大山里的孩子有出路，带领他们练习格斗。然而，一段早年的视频被曝光，让他们陷入了舆论的漩涡。"
+  },
+  {
+    "id": "88",
+    "title": "热烈",
+    "director": "大鹏",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E7%83%AD%E7%83%88",
+    "genres": ["剧情", "运动"],
+    "synopsis": "街舞少年陈烁为了追逐梦想，加入了丁雷的街舞俱乐部。在经历了重重困难后，他终于站在了全国大赛的舞台上。"
+  },
+  {
+    "id": "89",
+    "title": "坚如磐石",
+    "director": "张艺谋",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/1a1a2e/e94560?text=%E5%9D%9A%E5%A6%82%E5%8F%91%E7%9F%B3",
+    "genres": ["犯罪", "剧情", "悬疑"],
+    "synopsis": "年轻警察苏见明为了调查一起犯罪案件，不顾身为副市长的父亲的劝阻，深入虎穴，逐渐揭开了一个巨大的黑恶势力网络。"
+  },
+  {
+    "id": "90",
+    "title": "志愿军：雄兵出击",
+    "director": "陈凯歌",
+    "year": 2023,
+    "posterUrl": "https://via.placeholder.com/300x450/16213e/e94560?text=%E5%BF%97%E6%84%BF%E5%86%9B",
+    "genres": ["战争", "历史", "剧情"],
+    "synopsis": "1950年，朝鲜战争爆发，中国人民志愿军跨过鸭绿江，抗美援朝。影片全景式展现了志愿军战士们的英勇无畏和
