@@ -1,0 +1,1390 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f7fa;
+  color: #333;
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
+  color: white;
+  padding: 24px 32px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(30, 136, 229, 0.3);
+}
+
+.app-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.app-header p {
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0;
+}
+
+.nav-tab {
+  padding: 12px 24px;
+  border: none;
+  background: none;
+  font-size: 15px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s ease;
+}
+
+.nav-tab:hover {
+  color: #1E88E5;
+}
+
+.nav-tab.active {
+  color: #1E88E5;
+  border-bottom-color: #1E88E5;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1E88E5;
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background-color: #1E88E5;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1565C0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(30, 136, 229, 0.3);
+}
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.btn-danger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.trip-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.trip-card {
+  cursor: pointer;
+}
+
+.trip-card h3 {
+  font-size: 18px;
+  color: #1E88E5;
+  margin-bottom: 8px;
+}
+
+.trip-card .trip-dates {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.trip-card .trip-budget {
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.budget-dashboard {
+  margin-bottom: 24px;
+}
+
+.budget-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.budget-stat {
+  text-align: center;
+  padding: 16px;
+}
+
+.budget-stat .stat-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.budget-stat .stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1E88E5;
+  transition: all 0.3s ease;
+}
+
+.budget-stat.over-budget .stat-value {
+  color: #ef4444;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background-color: #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease, background-color 0.6s ease;
+}
+
+.progress-bar.over-budget {
+  background-color: #ef4444;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.daily-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.daily-budget-item {
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.daily-budget-item .date-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.trip-planner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.day-column {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  min-height: 300px;
+}
+
+.day-column h3 {
+  font-size: 16px;
+  color: #1E88E5;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e3f2fd;
+}
+
+.day-column .day-date {
+  font-size: 13px;
+  color: #666;
+  font-weight: normal;
+}
+
+.activities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100px;
+}
+
+.activity-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: grab;
+  transition: all 0.2s ease;
+  border-left: 4px solid #1E88E5;
+  position: relative;
+}
+
+.activity-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+}
+
+.activity-card:active {
+  cursor: grabbing;
+}
+
+.activity-card.dragging {
+  opacity: 0.5;
+}
+
+.activity-card.drag-over-top::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: #1E88E5;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.activity-card .activity-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1E88E5;
+  margin-bottom: 4px;
+}
+
+.activity-card .activity-location {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-card .activity-desc {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.activity-card .activity-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #888;
+}
+
+.activity-card .activity-cost {
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.add-activity-btn {
+  width: 100%;
+  padding: 10px;
+  margin-top: 12px;
+  border: 2px dashed #bbdefb;
+  background: #f5f9ff;
+  color: #1E88E5;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.add-activity-btn:hover {
+  border-color: #1E88E5;
+  background: #e3f2fd;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  color: #1E88E5;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.modal-close:hover {
+  color: #333;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.report-container {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.report-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.report-header h2 {
+  font-size: 28px;
+  color: #1E88E5;
+  margin-bottom: 8px;
+}
+
+.report-header .report-subtitle {
+  color: #666;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.summary-item {
+  text-align: center;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.summary-item .summary-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.summary-item .summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1E88E5;
+}
+
+.timeline {
+  margin-bottom: 32px;
+}
+
+.timeline h3 {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.timeline-day {
+  position: relative;
+  padding-left: 30px;
+  margin-bottom: 24px;
+  border-left: 3px solid #1E88E5;
+}
+
+.timeline-day::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 0;
+  width: 15px;
+  height: 15px;
+  background: #1E88E5;
+  border-radius: 50%;
+}
+
+.timeline-day .day-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1E88E5;
+  margin-bottom: 12px;
+}
+
+.timeline-activity {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.timeline-activity .activity-time {
+  font-size: 13px;
+  color: #1E88E5;
+  font-weight: 500;
+}
+
+.timeline-activity .activity-name {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.timeline-activity .activity-cost {
+  font-size: 13px;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.chart-section {
+  margin-bottom: 32px;
+}
+
+.chart-section h3 {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.chart-container {
+  max-width: 350px;
+  margin: 0 auto;
+}
+
+.report-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding-top: 20px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-state p {
+  font-size: 16px;
+}
+
+.select-trip-prompt {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+}
+
+.category-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.category-transport { background: #e3f2fd; color: #1565C0; }
+.category-accommodation { background: #f3e5f5; color: #7b1fa2; }
+.category-food { background: #fff3e0; color: #e65100; }
+.category-ticket { background: #e8f5e9; color: #2e7d32; }
+.category-other { background: #eceff1; color: #546e7a; }
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 12px;
+  }
+
+  .app-header {
+    padding: 16px 20px;
+  }
+
+  .app-header h1 {
+    font-size: 22px;
+  }
+
+  .budget-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .report-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .days-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .nav-tab {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .budget-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-list {
+    grid-template-columns: 1fr;
+  }
+
+  .app-container {
+    padding: 8px;
+  }
+
+  .app-header {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .app-header h1 {
+    font-size: 20px;
+  }
+
+  .app-header p {
+    font-size: 13px;
+  }
+
+  .nav-tabs {
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+
+  .nav-tab {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .card {
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .card h2 {
+    font-size: 16px;
+  }
+
+  .card h3 {
+    font-size: 14px;
+  }
+
+  .card p {
+    font-size: 13px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .trip-card h3 {
+    font-size: 15px;
+  }
+
+  .trip-card .trip-dates {
+    font-size: 12px;
+  }
+
+  .trip-card .trip-budget {
+    font-size: 13px;
+  }
+
+  .trip-card p {
+    font-size: 12px;
+  }
+
+  .budget-stat {
+    padding: 12px;
+  }
+
+  .budget-stat .stat-label {
+    font-size: 12px;
+  }
+
+  .budget-stat .stat-value {
+    font-size: 18px;
+  }
+
+  .day-column {
+    padding: 12px;
+  }
+
+  .day-column h3 {
+    font-size: 14px;
+  }
+
+  .activity-card {
+    padding: 10px;
+  }
+
+  .activity-card .activity-time {
+    font-size: 12px;
+  }
+
+  .activity-card .activity-location {
+    font-size: 13px;
+  }
+
+  .activity-card .activity-desc {
+    font-size: 12px;
+  }
+
+  .activity-card .activity-footer {
+    font-size: 11px;
+  }
+
+  .add-activity-btn {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .report-container {
+    padding: 16px;
+  }
+
+  .report-header h2 {
+    font-size: 20px;
+  }
+
+  .report-header .report-subtitle {
+    font-size: 13px;
+  }
+
+  .report-summary {
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .summary-item {
+    padding: 14px;
+  }
+
+  .summary-item .summary-label {
+    font-size: 12px;
+  }
+
+  .summary-item .summary-value {
+    font-size: 18px;
+  }
+
+  .timeline-day {
+    padding-left: 22px;
+    margin-bottom: 16px;
+  }
+
+  .timeline-day .day-title {
+    font-size: 14px;
+  }
+
+  .timeline-activity {
+    padding: 10px;
+  }
+
+  .timeline-activity .activity-time {
+    font-size: 12px;
+  }
+
+  .timeline-activity .activity-name {
+    font-size: 13px;
+  }
+
+  .timeline-activity .activity-cost {
+    font-size: 12px;
+  }
+
+  .report-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .report-actions .btn {
+    width: 100%;
+  }
+
+  .modal-content {
+    padding: 16px;
+    width: 95%;
+  }
+
+  .modal-header h2 {
+    font-size: 16px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-container {
+    padding: 6px;
+  }
+
+  .app-header {
+    padding: 10px 12px;
+  }
+
+  .app-header h1 {
+    font-size: 18px;
+  }
+
+  .app-header p {
+    font-size: 12px;
+  }
+
+  .nav-tab {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .card h2 {
+    font-size: 15px;
+  }
+
+  .card h3 {
+    font-size: 13px;
+  }
+
+  .card p {
+    font-size: 12px;
+  }
+
+  .btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .trip-card h3 {
+    font-size: 14px;
+  }
+
+  .trip-card .trip-dates {
+    font-size: 11px;
+  }
+
+  .trip-card .trip-budget {
+    font-size: 12px;
+  }
+
+  .trip-card p {
+    font-size: 11px;
+  }
+
+  .budget-stat .stat-label {
+    font-size: 11px;
+  }
+
+  .budget-stat .stat-value {
+    font-size: 16px;
+  }
+
+  .day-column h3 {
+    font-size: 13px;
+  }
+
+  .activity-card .activity-time {
+    font-size: 11px;
+  }
+
+  .activity-card .activity-location {
+    font-size: 12px;
+  }
+
+  .activity-card .activity-desc {
+    font-size: 11px;
+  }
+
+  .activity-card .activity-footer {
+    font-size: 10px;
+  }
+
+  .report-header h2 {
+    font-size: 18px;
+  }
+
+  .report-header .report-subtitle {
+    font-size: 12px;
+  }
+
+  .summary-item {
+    padding: 12px;
+  }
+
+  .summary-item .summary-label {
+    font-size: 11px;
+  }
+
+  .summary-item .summary-value {
+    font-size: 16px;
+  }
+
+  .timeline-day .day-title {
+    font-size: 13px;
+  }
+
+  .timeline-activity .activity-time {
+    font-size: 11px;
+  }
+
+  .timeline-activity .activity-name {
+    font-size: 12px;
+  }
+
+  .timeline-activity .activity-cost {
+    font-size: 11px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 320px) {
+  .app-container {
+    padding: 4px;
+  }
+
+  .app-header {
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+
+  .app-header h1 {
+    font-size: min(16px, 5vw);
+  }
+
+  .app-header p {
+    font-size: 11px;
+  }
+
+  .nav-tabs {
+    gap: 2px;
+    margin-bottom: 8px;
+  }
+
+  .nav-tab {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .card {
+    padding: 8px;
+    margin-bottom: 6px;
+  }
+
+  .card h2 {
+    font-size: 14px;
+  }
+
+  .card h3 {
+    font-size: min(14px, 4.4vw);
+  }
+
+  .card p,
+  .card div,
+  .card span,
+  p,
+  div,
+  span {
+    font-size: min(12px, 3.8vw);
+  }
+
+  .btn {
+    padding: 6px 10px;
+    font-size: min(12px, 3.8vw);
+  }
+
+  .btn-sm {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .trip-list {
+    gap: 6px;
+  }
+
+  .trip-card {
+    padding: 8px;
+  }
+
+  .trip-card h3 {
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .trip-card .trip-dates {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .trip-card .trip-budget {
+    font-size: 11px;
+  }
+
+  .trip-card p {
+    font-size: 11px;
+  }
+
+  .budget-dashboard {
+    margin-bottom: 8px;
+  }
+
+  .budget-stats {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .budget-stat {
+    padding: 8px;
+  }
+
+  .budget-stat .stat-label {
+    font-size: min(11px, 3.5vw);
+    margin-bottom: 4px;
+  }
+
+  .budget-stat .stat-value {
+    font-size: min(16px, 5vw);
+  }
+
+  .daily-budget-grid {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .daily-budget-item {
+    padding: 6px;
+  }
+
+  .daily-budget-item .date-label {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .trip-planner {
+    gap: 8px;
+  }
+
+  .days-grid {
+    gap: 6px;
+  }
+
+  .day-column {
+    padding: 8px;
+    min-height: 200px;
+  }
+
+  .day-column h3 {
+    font-size: 13px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+  }
+
+  .day-column .day-date {
+    font-size: 11px;
+  }
+
+  .activities-list {
+    gap: 4px;
+    min-height: 60px;
+  }
+
+  .activity-card {
+    padding: 8px;
+    border-left-width: 3px;
+  }
+
+  .activity-card .activity-time {
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+
+  .activity-card .activity-location {
+    font-size: 12px;
+    margin-bottom: 2px;
+    gap: 2px;
+  }
+
+  .activity-card .activity-desc {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .activity-card .activity-footer {
+    font-size: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .add-activity-btn {
+    padding: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+
+  .report-container {
+    padding: 8px;
+  }
+
+  .report-header {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }
+
+  .report-header h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+
+  .report-header .report-subtitle {
+    font-size: 11px;
+  }
+
+  .report-summary {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .summary-item {
+    padding: 8px;
+  }
+
+  .summary-item .summary-label {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .summary-item .summary-value {
+    font-size: 16px;
+  }
+
+  .timeline {
+    margin-bottom: 12px;
+  }
+
+  .timeline h3 {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .timeline-day {
+    padding-left: 16px;
+    margin-bottom: 12px;
+    border-left-width: 2px;
+  }
+
+  .timeline-day::before {
+    left: -6px;
+    width: 11px;
+    height: 11px;
+  }
+
+  .timeline-day .day-title {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .timeline-activity {
+    padding: 6px;
+    margin-bottom: 4px;
+  }
+
+  .timeline-activity .activity-time {
+    font-size: 11px;
+  }
+
+  .timeline-activity .activity-name {
+    font-size: 12px;
+    margin: 2px 0;
+  }
+
+  .timeline-activity .activity-cost {
+    font-size: 11px;
+  }
+
+  .chart-section {
+    margin-bottom: 12px;
+  }
+
+  .chart-section h3 {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .report-actions {
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+  }
+
+  .report-actions .btn {
+    width: 100%;
+  }
+
+  .empty-state {
+    padding: 20px 8px;
+  }
+
+  .empty-state .empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+
+  .empty-state p {
+    font-size: 12px;
+  }
+
+  .select-trip-prompt {
+    padding: 20px 8px;
+  }
+
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  .form-group label {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  .modal-content {
+    width: 98%;
+    padding: 12px;
+  }
+
+  .modal-header {
+    margin-bottom: 12px;
+  }
+
+  .modal-header h2 {
+    font-size: 14px;
+  }
+
+  .modal-close {
+    font-size: 20px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+
+  .activity-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 12px;
+  }
+
+  .category-tag {
+    padding: 1px 6px;
+    font-size: 10px;
+  }
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  .app-header,
+  .nav-tabs,
+  .report-actions,
+  .add-activity-btn {
+    display: none !important;
+  }
+
+  .report-container {
+    box-shadow: none;
+  }
+}
