@@ -1,0 +1,11 @@
+{
+  "watch": ["src/server"],
+  "ext": "js,mjs,json",
+  "ignore": ["src/server/dist/*"],
+  "exec": "node src/server/app.js",
+  "env": {
+    "NODE_ENV": "development",
+    "PORT": "3001"
+  },
+  "delay": 500
+}

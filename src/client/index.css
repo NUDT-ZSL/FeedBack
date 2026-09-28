@@ -1,0 +1,292 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-theater-bg text-theater-text font-body antialiased;
+    background-image:
+      radial-gradient(ellipse at top, rgba(114, 47, 55, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(212, 175, 55, 0.05) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-gold-500/40 text-theater-text;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-theater-bg;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-wine-700/60 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-wine-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-theater-card rounded-card shadow-card border border-theater-border/50
+      transition-all duration-300 ease-theater;
+  }
+
+  .card-hover {
+    @apply hover:-translate-y-1 hover:shadow-cardHover hover:border-gold-500/40;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg
+      font-medium text-sm transition-all duration-200 ease-theater
+      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-theater-bg
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-wine-700 to-wine-600 text-white
+      hover:from-wine-600 hover:to-wine-500
+      focus:ring-wine-500 shadow-lg shadow-wine-900/40;
+  }
+
+  .btn-gold {
+    @apply btn bg-gradient-to-r from-gold-600 to-gold-500 text-wine-950 font-semibold
+      hover:from-gold-500 hover:to-gold-400
+      focus:ring-gold-500 shadow-gold;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-theater-text border border-theater-border
+      hover:bg-theater-cardHover hover:border-gold-500/50;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600/90 text-white hover:bg-red-500 focus:ring-red-500;
+  }
+
+  .btn-shake:active {
+    animation: shake 0.4s ease-in-out;
+  }
+
+  .input {
+    @apply w-full px-4 py-2.5 rounded-lg bg-theater-bg border border-theater-border
+      text-theater-text placeholder:text-theater-textMuted
+      focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20
+      transition-all duration-200;
+  }
+
+  .input-label {
+    @apply block text-sm font-medium text-theater-textDim mb-1.5;
+  }
+
+  .page-title {
+    @apply font-display text-3xl md:text-4xl font-bold text-theater-text;
+    background: linear-gradient(135deg, #F5F5F5 0%, #D4AF37 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-theater-textDim
+      transition-all duration-200 ease-theater cursor-pointer
+      hover:bg-gold-500/10 hover:text-gold-400;
+  }
+
+  .sidebar-link.active {
+    @apply bg-wine-700/80 text-white shadow-lg shadow-wine-900/30;
+  }
+
+  .badge {
+    @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .fade-in-up {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+
+  .stagger > * {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.15s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.2s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.25s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.3s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.35s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.4s; }
+  .stagger > *:nth-child(9) { animation-delay: 0.45s; }
+  .stagger > *:nth-child(10) { animation-delay: 0.5s; }
+  .stagger > *:nth-child(11) { animation-delay: 0.55s; }
+  .stagger > *:nth-child(12) { animation-delay: 0.6s; }
+
+  .countdown-num {
+    @apply font-mono font-semibold tabular-nums;
+  }
+
+  .rbc-calendar {
+    @apply font-body !important;
+  }
+  .rbc-toolbar-label {
+    @apply font-display text-xl text-gold-400 font-semibold !important;
+  }
+  .rbc-month-view,
+  .rbc-time-view,
+  .rbc-agenda-view {
+    @apply border-theater-border rounded-card overflow-hidden !important;
+    background: #2D2D3A !important;
+  }
+  .rbc-header,
+  .rbc-time-header-content,
+  .rbc-time-content,
+  .rbc-day-bg,
+  .rbc-month-row {
+    @apply border-theater-border !important;
+  }
+  .rbc-header {
+    @apply bg-wine-900/50 text-gold-400 font-semibold py-2 !important;
+  }
+  .rbc-off-range-bg {
+    background: rgba(26, 26, 46, 0.6) !important;
+  }
+  .rbc-today {
+    background: rgba(114, 47, 55, 0.3) !important;
+  }
+  .rbc-event {
+    @apply rounded-lg border-2 border-gold-500/60 !important;
+    background: linear-gradient(135deg, rgba(114, 47, 55, 0.9), rgba(212, 175, 55, 0.8)) !important;
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2) !important;
+  }
+  .rbc-event-content {
+    @apply text-white font-medium px-1 !important;
+  }
+  .rbc-show-more {
+    @apply text-gold-400 font-semibold !important;
+    background: rgba(212, 175, 55, 0.15) !important;
+  }
+  .rbc-btn-group {
+    @apply rounded-lg overflow-hidden border-theater-border !important;
+  }
+  .rbc-btn-group button {
+    @apply bg-theater-card text-theater-textDim border-theater-border hover:bg-wine-700/50 hover:text-white transition-all !important;
+  }
+  .rbc-btn-group button.rbc-active {
+    @apply bg-wine-700 text-white !important;
+  }
+  .rbc-agenda-content,
+  .rbc-agenda-date-cell,
+  .rbc-agenda-time-cell,
+  .rbc-agenda-event-cell {
+    @apply border-theater-border !important;
+    color: #F5F5F5 !important;
+  }
+}
+
+@layer utilities {
+  .gold-gradient-text {
+    background: linear-gradient(135deg, #D4AF37 0%, #F0D78C 50%, #D4AF37 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .wine-gradient {
+    background: linear-gradient(135deg, #722F37 0%, #8d3b43 100%);
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-md bg-theater-card/80 border border-theater-border/60;
+  }
+
+  .gold-border-dashed {
+    border: 2px dashed rgba(212, 175, 55, 0.5);
+  }
+
+  .drag-preview {
+    @apply shadow-cardHover rotate-2 scale-105 cursor-grabbing z-50;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(6px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+  90% { transform: translateX(2px); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.markdown-body h1 {
+  @apply font-display text-2xl md:text-3xl font-bold mb-4 mt-6 gold-gradient-text;
+}
+.markdown-body h2 {
+  @apply font-display text-xl md:text-2xl font-semibold mb-3 mt-5 text-gold-400;
+}
+.markdown-body h3 {
+  @apply font-display text-lg md:text-xl font-semibold mb-2 mt-4 text-gold-500;
+}
+.markdown-body p {
+  @apply text-theater-textDim leading-relaxed mb-3;
+}
+.markdown-body strong {
+  @apply text-theater-text font-semibold;
+}
+.markdown-body em {
+  @apply text-gold-300 italic;
+}
+.markdown-body ul {
+  @apply list-disc list-inside mb-3 text-theater-textDim space-y-1;
+}
+.markdown-body ol {
+  @apply list-decimal list-inside mb-3 text-theater-textDim space-y-1;
+}
+.markdown-body blockquote {
+  @apply border-l-4 border-gold-500 pl-4 italic text-theater-textDim my-4;
+}
+.markdown-body code {
+  @apply bg-theater-bg px-2 py-0.5 rounded text-sm text-gold-300;
+}
+.markdown-body pre {
+  @apply bg-theater-bg p-4 rounded-card my-4 overflow-x-auto border border-theater-border;
+}
+.markdown-body pre code {
+  @apply bg-transparent p-0;
+}
