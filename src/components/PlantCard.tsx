@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plant } from '../utils/chartHelper';
+import { getPlantStatus, PLANT_STATUS_META } from '../utils/plantStatus';
 
 interface PlantCardProps {
   plant: Plant;
@@ -8,21 +9,11 @@ interface PlantCardProps {
   isNew?: boolean;
 }
 
-function getPlantStatus(plant: Plant): 'needs-water' | 'healthy' | 'wilted' {
-  const now = new Date();
-  const waterLogs = plant.logs.filter((l) => l.activityType === 'water');
-  if (waterLogs.length === 0) return 'wilted';
-  const lastWater = new Date(waterLogs[0].date);
-  const diffDays = Math.floor((now.getTime() - lastWater.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays >= 7) return 'wilted';
-  if (diffDays >= 4) return 'needs-water';
-  return 'healthy';
-}
-
 const PlantCard: React.FC<PlantCardProps> = ({ plant, onClick, onNameChange, isNew }) => {
   const [editing, setEditing] = useState(false);
   const [tempName, setTempName] = useState(plant.name);
-  const status = getPlantStatus(plant);
+  const status = getPlantStatus(plant.logs);
+  const statusMeta = PLANT_STATUS_META[status];
 
   const handleNameClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -71,18 +62,13 @@ const PlantCard: React.FC<PlantCardProps> = ({ plant, onClick, onNameChange, isN
         )}
       </div>
       <div className={`plant-status plant-status-${status}`}>
-        {status === 'needs-water' && (
-          <span className="status-icon blinking" title="需要浇水">💧</span>
-        )}
-        {status === 'healthy' && (
-          <span className="status-icon" title="健康">🍃</span>
-        )}
-        {status === 'wilted' && (
-          <span className="status-icon" title="缺水">🥀</span>
-        )}
-        <span className="status-label">
-          {status === 'needs-water' ? '需浇水' : status === 'healthy' ? '健康' : '缺水'}
+        <span
+          className={`status-icon${status === 'needs-water' ? ' blinking' : ''}`}
+          title={statusMeta.title}
+        >
+          {statusMeta.icon}
         </span>
+        <span className="status-label">{statusMeta.label}</span>
       </div>
       <div className="plant-species">{plant.species}</div>
     </div>

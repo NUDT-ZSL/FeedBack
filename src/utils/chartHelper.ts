@@ -39,15 +39,22 @@ export interface Plant {
   createdAt: string;
 }
 
-export function generateWaterTrendData(logs: CareLog[]) {
-  const now = new Date();
+/** 格式化为本地日历日期 'YYYY-MM-DD'，避免 toISOString() 的 UTC 时区错位。 */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function generateWaterTrendData(logs: CareLog[], now: Date = new Date()) {
   const labels: string[] = [];
   const data: number[] = [];
 
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = toLocalDateStr(d);
     const shortLabel = `${d.getMonth() + 1}/${d.getDate()}`;
     labels.push(shortLabel);
     const count = logs.filter(
@@ -127,14 +134,13 @@ export function waterTrendOptions() {
   };
 }
 
-export function generateFertilizeBarData(logs: CareLog[]) {
-  const now = new Date();
+export function generateFertilizeBarData(logs: CareLog[], now: Date = new Date()) {
   const labels: string[] = [];
   const data: number[] = [];
 
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - i);
+    // 以当月 1 号为基准做月份回退，避免 31 号等月末日期回退时溢出到错误月份
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const shortLabel = `${d.getMonth() + 1}月`;
     labels.push(shortLabel);
