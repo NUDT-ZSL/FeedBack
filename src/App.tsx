@@ -1,13 +1,16 @@
-import { useState, useCallback, useMemo } from 'react';
-import type { Order, Ingredient, CakeSize, CakeFlavor, IngredientName } from './types';
-import { initialOrders, initialIngredients, calculateIngredients, calculateDuration, generateId } from './data';
+import { useState, useCallback, useMemo, useReducer } from 'react';
+import type { Order, CakeSize, CakeFlavor } from './types';
+import { initialOrders, initialIngredients, generateId } from './data';
+import { appReducer } from './orderLogic';
 import OrderCard from './components/OrderCard';
 import IngredientPanel from './components/IngredientPanel';
 import styles from './App.module.css';
 
 export default function App() {
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
+  const [{ orders, ingredients }, dispatch] = useReducer(appReducer, {
+    orders: initialOrders,
+    ingredients: initialIngredients,
+  });
   const [flashingOrderId, setFlashingOrderId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     size: 8 as CakeSize,
@@ -40,7 +43,7 @@ export default function App() {
       submittedAt: new Date(),
     };
     
-    setOrders(prev => [...prev, newOrder]);
+    dispatch({ type: 'submit-order', order: newOrder });
     setFormData({
       size: 8,
       layers: 1,
@@ -50,43 +53,16 @@ export default function App() {
   }, [formData]);
 
   const handleStartMaking = useCallback((orderId: string) => {
-    setOrders(prev => prev.map(order => {
-      if (order.id === orderId && order.status === 'pending') {
-        return {
-          ...order,
-          status: 'in-progress',
-          startedAt: new Date(),
-          estimatedDuration: calculateDuration(order.layers),
-        };
-      }
-      return order;
-    }));
+    dispatch({ type: 'start-making', orderId });
   }, []);
 
   const handleComplete = useCallback((orderId: string) => {
-    setOrders(prev => {
-      const order = prev.find(o => o.id === orderId);
-      if (!order || order.status === 'completed') return prev;
-
-      if (order.status === 'in-progress') {
-        const consumption = calculateIngredients(order.size, order.flavor);
-        setIngredients(prevIngredients => prevIngredients.map(ing => {
-          const amount = consumption[ing.name as IngredientName];
-          if (amount !== undefined) {
-            return { ...ing, consumed: ing.consumed + amount };
-          }
-          return ing;
-        }));
-      }
-
-      setFlashingOrderId(orderId);
-      setTimeout(() => setFlashingOrderId(null), 1000);
-
-      return prev.map(o => 
-        o.id === orderId ? { ...o, status: 'completed' as const } : o
-      );
-    });
-  }, []);
+    const order = orders.find(o => o.id === orderId);
+    if (!order || order.status === 'completed') return;
+    dispatch({ type: 'complete-order', orderId });
+    setFlashingOrderId(orderId);
+    setTimeout(() => setFlashingOrderId(null), 1000);
+  }, [orders]);
 
   return (
     <div className={styles.app}>

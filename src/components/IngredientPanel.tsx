@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Ingredient } from '../types';
+import { isLowStock } from '../orderLogic';
 import styles from './IngredientPanel.module.css';
 
 interface IngredientPanelProps {
@@ -10,12 +11,7 @@ export default function IngredientPanel({ ingredients }: IngredientPanelProps) {
   const [shakingRows, setShakingRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const lowStockIngredients = ingredients.filter(
-      ing => {
-        const remaining = ing.initialStock - ing.consumed;
-        return remaining < ing.initialStock * 0.2;
-      }
-    );
+    const lowStockIngredients = ingredients.filter(isLowStock);
 
     if (lowStockIngredients.length === 0) {
       setShakingRows(new Set());
@@ -34,9 +30,7 @@ export default function IngredientPanel({ ingredients }: IngredientPanelProps) {
     return () => clearInterval(interval);
   }, [ingredients]);
 
-  const lowStockCount = ingredients.filter(
-    ing => (ing.initialStock - ing.consumed) < ing.initialStock * 0.2
-  ).length;
+  const lowStockCount = ingredients.filter(isLowStock).length;
 
   const totalConsumedValue = ingredients.reduce((sum, ing) => {
     if (ing.unit === 'g') {
@@ -66,23 +60,23 @@ export default function IngredientPanel({ ingredients }: IngredientPanelProps) {
           {ingredients.map(ingredient => {
             const remaining = ingredient.initialStock - ingredient.consumed;
             const remainingPercent = (remaining / ingredient.initialStock) * 100;
-            const isLowStock = remaining < ingredient.initialStock * 0.2;
+            const lowStock = isLowStock(ingredient);
             const isShaking = shakingRows.has(ingredient.id);
 
             return (
               <tr key={ingredient.id} className={isShaking ? styles.lowStock : ''}>
-                <td className={`${styles.ingredientName} ${isLowStock ? styles.lowStock : ''}`}>
+                <td className={`${styles.ingredientName} ${lowStock ? styles.lowStock : ''}`}>
                   {ingredient.name}
-                  {isLowStock && <span className={styles.warningBadge}>库存不足</span>}
+                  {lowStock && <span className={styles.warningBadge}>库存不足</span>}
                 </td>
-                <td className={isLowStock ? styles.lowStock : ''}>
+                <td className={lowStock ? styles.lowStock : ''}>
                   {ingredient.consumed}{ingredient.unit}
                 </td>
-                <td className={isLowStock ? styles.lowStock : ''}>
+                <td className={lowStock ? styles.lowStock : ''}>
                   {remaining}{ingredient.unit}
                   <div className={styles.stockBar}>
                     <div 
-                      className={`${styles.stockFill} ${isLowStock ? styles.low : ''}`}
+                      className={`${styles.stockFill} ${lowStock ? styles.low : ''}`}
                       style={{ width: `${Math.max(0, remainingPercent)}%` }}
                     />
                   </div>

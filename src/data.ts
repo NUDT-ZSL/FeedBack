@@ -1,4 +1,4 @@
-import type { Order, Ingredient, CakeSize, CakeFlavor, IngredientName } from './types';
+import type { Order, Ingredient, CakeSize, CakeFlavor, IngredientName } from './types.js';
 
 export const initialOrders: Order[] = [
   {

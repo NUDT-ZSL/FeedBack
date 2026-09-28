@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Order } from '../types';
 import { calculateDuration } from '../data';
+import { isCountdownExpired } from '../orderLogic';
 import styles from './OrderCard.module.css';
 
 interface OrderCardProps {
@@ -47,16 +48,14 @@ export default function OrderCard({ order, onStartMaking, onComplete, isFlashing
     }
 
     const updateRemaining = () => {
-      const now = Date.now();
-      const startedAt = order.startedAt!.getTime();
-      const durationMs = order.estimatedDuration! * 60 * 1000;
-      const elapsed = now - startedAt;
-      const remaining = durationMs - elapsed;
-      
-      if (remaining <= 0) {
+      if (isCountdownExpired(order)) {
         onComplete(order.id);
         return;
       }
+      const now = Date.now();
+      const startedAt = order.startedAt!.getTime();
+      const durationMs = order.estimatedDuration! * 60 * 1000;
+      const remaining = durationMs - (now - startedAt);
       setRemainingTime(remaining);
     };
 
