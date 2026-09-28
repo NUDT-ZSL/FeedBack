@@ -1,0 +1,462 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'ZCOOL XiaoWei', 'KaiTi', 'STKaiti', serif;
+  background-color: #f5f0e1;
+  color: #2c2c2c;
+}
+
+.app-title {
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 28px;
+  color: #2c2c2c;
+  text-align: center;
+  padding: 12px 0;
+  letter-spacing: 4px;
+  border-bottom: 1px solid rgba(44, 44, 44, 0.1);
+  background: linear-gradient(180deg, rgba(245, 240, 225, 0.9) 0%, rgba(245, 240, 225, 0.7) 100%);
+  backdrop-filter: blur(4px);
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background-color: #f5f0e1;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 280px;
+  background: linear-gradient(180deg, #f8f4e8 0%, #f0ebe0 100%);
+  border-right: 1px solid rgba(44, 44, 44, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sidebar-content {
+  padding: 20px;
+  flex: 1;
+}
+
+.section-title {
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 18px;
+  color: #2c2c2c;
+  margin-bottom: 12px;
+  letter-spacing: 2px;
+}
+
+.poem-textarea {
+  width: 100%;
+  height: 180px;
+  padding: 12px;
+  border: 1px solid rgba(44, 44, 44, 0.2);
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.6);
+  font-family: 'ZCOOL XiaoWei', 'KaiTi', serif;
+  font-size: 14px;
+  line-height: 1.8;
+  resize: none;
+  color: #2c2c2c;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.poem-textarea:focus {
+  outline: none;
+  border-color: #cc3d0f;
+  box-shadow: 0 0 0 3px rgba(204, 61, 15, 0.1);
+}
+
+.poem-meta {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.poem-meta input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid rgba(44, 44, 44, 0.2);
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.6);
+  font-family: 'ZCOOL XiaoWei', 'KaiTi', serif;
+  font-size: 13px;
+  color: #2c2c2c;
+}
+
+.poem-meta input:focus {
+  outline: none;
+  border-color: #cc3d0f;
+}
+
+.render-btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 15px;
+  background: linear-gradient(135deg, #cc3d0f 0%, #a03010 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 16px;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(204, 61, 15, 0.3);
+}
+
+.render-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(204, 61, 15, 0.4);
+}
+
+.render-btn:active {
+  transform: translateY(0);
+}
+
+.imagery-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.imagery-tag {
+  padding: 4px 12px;
+  background-color: rgba(204, 61, 15, 0.1);
+  color: #cc3d0f;
+  border-radius: 20px;
+  font-size: 13px;
+  font-family: 'ZCOOL XiaoWei', serif;
+  border: 1px solid rgba(204, 61, 15, 0.2);
+}
+
+.canvas-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-container {
+  position: relative;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 20px rgba(0, 0, 0, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.canvas-container.drawing {
+  cursor: crosshair;
+}
+
+.paint-canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, rgba(248, 244, 232, 0.95) 0%, rgba(240, 235, 224, 0.95) 100%);
+  border-top: 1px solid rgba(44, 44, 44, 0.1);
+  backdrop-filter: blur(8px);
+  flex-wrap: wrap;
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-divider {
+  width: 1px;
+  height: 32px;
+  background-color: rgba(44, 44, 44, 0.15);
+}
+
+.tool-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background-color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  font-size: 16px;
+}
+
+.tool-btn:hover {
+  background-color: #cc3d0f;
+  color: white;
+  transform: scale(1.1);
+}
+
+.tool-btn.active {
+  background-color: #cc3d0f;
+  color: white;
+  border-color: #a03010;
+  transform: scale(1.05);
+}
+
+.tool-btn .tooltip {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(44, 44, 44, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 100;
+}
+
+.tool-btn:hover .tooltip {
+  opacity: 1;
+}
+
+.color-palette {
+  display: flex;
+  gap: 6px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.color-swatch.active {
+  transform: scale(1.2);
+  border-color: #cc3d0f;
+  box-shadow: 0 0 0 3px rgba(204, 61, 15, 0.3);
+}
+
+.size-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.size-slider input[type="range"] {
+  width: 100px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(44, 44, 44, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.size-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #cc3d0f;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.size-slider input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.size-value {
+  font-size: 13px;
+  color: #2c2c2c;
+  min-width: 32px;
+  text-align: center;
+  font-family: 'ZCOOL XiaoWei', serif;
+}
+
+.save-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 14px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.save-btn:hover {
+  background: linear-gradient(135deg, #cc3d0f 0%, #a03010 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(204, 61, 15, 0.4);
+}
+
+.save-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: 60px;
+    border-right: none;
+    border-bottom: 1px solid rgba(44, 44, 44, 0.1);
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebar-content {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .poem-textarea {
+    height: 40px;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 8px;
+  }
+
+  .poem-meta {
+    display: none;
+  }
+
+  .render-btn {
+    padding: 6px 16px;
+    font-size: 13px;
+    margin-top: 0;
+    white-space: nowrap;
+    letter-spacing: 2px;
+  }
+
+  .imagery-tags {
+    display: none;
+  }
+
+  .app-title {
+    font-size: 20px;
+    padding: 8px 0;
+  }
+
+  .canvas-wrapper {
+    padding: 10px;
+  }
+
+  .toolbar {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .tool-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .color-swatch {
+    width: 24px;
+    height: 24px;
+  }
+
+  .size-slider input[type="range"] {
+    width: 60px;
+  }
+
+  .save-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    letter-spacing: 2px;
+  }
+}
+
+@keyframes ink-spread {
+  0% {
+    transform: scale(0);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.element-item {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
