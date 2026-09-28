@@ -15,6 +15,8 @@ import {
 import { useAuth } from '../store/AppContext';
 import { cn } from '@/lib/utils';
 import type { Ingredient, Step } from '../types';
+import { createRecipe } from '../api/recipes';
+import { ApiError } from '../api/client';
 
 const AVAILABLE_TAGS = [
   '川菜',
@@ -197,35 +199,24 @@ export default function CreateRecipePage() {
           imageUrl: step.imageUrl,
         }));
 
-      const response = await fetch('/api/recipe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          coverImage: coverImage.trim(),
-          ingredients: validIngredients,
-          steps: validSteps,
-          cookTime,
-          difficulty,
-          tags: selectedTags,
-        }),
+      const recipe = await createRecipe(token, {
+        title: title.trim(),
+        coverImage: coverImage.trim(),
+        ingredients: validIngredients,
+        steps: validSteps,
+        cookTime,
+        difficulty,
+        tags: selectedTags,
       });
 
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        setShowSuccess(true);
-        setTimeout(() => {
-          navigate(`/recipe/${data.data.id}`);
-        }, 1500);
-      } else {
-        setErrors({ submit: data.error || '发布失败，请重试' });
-      }
-    } catch {
-      setErrors({ submit: '网络错误，请稍后重试' });
+      setShowSuccess(true);
+      setTimeout(() => {
+        navigate(`/recipe/${recipe.id}`);
+      }, 1500);
+    } catch (error) {
+      setErrors({
+        submit: error instanceof ApiError ? error.message : '网络错误，请稍后重试',
+      });
     } finally {
       setIsSubmitting(false);
     }

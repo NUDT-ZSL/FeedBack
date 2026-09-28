@@ -17,10 +17,23 @@ export function verifyToken(token: string): { id: string; username: string } | n
   }
 }
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
+function extractToken(req: AuthRequest): string | null {
   const authHeader = req.headers.authorization
-
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null
+  }
+  return authHeader.substring(7)
+}
+
+function attachAuth(req: AuthRequest, decoded: { id: string; username: string }): void {
+  req.user = decoded
+  req.userId = decoded.id
+}
+
+export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
+  const token = extractToken(req)
+
+  if (!token) {
     res.status(401).json({
       success: false,
       error: '未提供认证令牌',
@@ -28,7 +41,6 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     return
   }
 
-  const token = authHeader.substring(7)
   const decoded = verifyToken(token)
 
   if (!decoded) {
@@ -39,20 +51,17 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     return
   }
 
-  req.user = decoded
-  req.userId = decoded.id
+  attachAuth(req, decoded)
   next()
 }
 
 export const optionalAuthMiddleware = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers.authorization
+  const token = extractToken(req)
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
+  if (token) {
     const decoded = verifyToken(token)
     if (decoded) {
-      req.user = decoded
-      req.userId = decoded.id
+      attachAuth(req, decoded)
     }
   }
 

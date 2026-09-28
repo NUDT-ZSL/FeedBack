@@ -183,7 +183,7 @@ export const searchRecipes = (query: string): Recipe[] => {
   const searchTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 1)
 
   if (searchTerms.length === 0) {
-    return store.recipes.sort(
+    return [...store.recipes].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
   }
@@ -225,20 +225,24 @@ export const getFeedRecipes = (userIds: string[]): Recipe[] => {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
+const toggleMembership = (list: string[], userId: string): boolean => {
+  const index = list.indexOf(userId)
+  if (index === -1) {
+    list.push(userId)
+    return true
+  }
+  list.splice(index, 1)
+  return false
+}
+
 export const likeRecipe = (recipeId: string, userId: string): { liked: boolean; likesCount: number } => {
   const recipe = store.recipes.find(r => r.id === recipeId)
   if (!recipe) {
     return { liked: false, likesCount: 0 }
   }
 
-  const likeIndex = recipe.likes.indexOf(userId)
-  if (likeIndex === -1) {
-    recipe.likes.push(userId)
-    return { liked: true, likesCount: recipe.likes.length }
-  } else {
-    recipe.likes.splice(likeIndex, 1)
-    return { liked: false, likesCount: recipe.likes.length }
-  }
+  const liked = toggleMembership(recipe.likes, userId)
+  return { liked, likesCount: recipe.likes.length }
 }
 
 export const favoriteRecipe = (
@@ -250,14 +254,8 @@ export const favoriteRecipe = (
     return { favorited: false, favoritesCount: 0 }
   }
 
-  const favIndex = recipe.favorites.indexOf(userId)
-  if (favIndex === -1) {
-    recipe.favorites.push(userId)
-    return { favorited: true, favoritesCount: recipe.favorites.length }
-  } else {
-    recipe.favorites.splice(favIndex, 1)
-    return { favorited: false, favoritesCount: recipe.favorites.length }
-  }
+  const favorited = toggleMembership(recipe.favorites, userId)
+  return { favorited, favoritesCount: recipe.favorites.length }
 }
 
 export const addComment = (recipeId: string, userId: string, content: string): Comment | undefined => {
@@ -291,8 +289,6 @@ export const updateRecipe = (id: string, updates: Partial<Recipe>): Recipe | und
 }
 
 export default {
-  users: store.users,
-  recipes: store.recipes,
   clearAll,
   addUser,
   findUserById,
