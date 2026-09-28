@@ -17,6 +17,7 @@ export class ControlPanel {
   
   private _pendingUiUpdates: Set<string> = new Set();
   private _animationFrameId: number | null = null;
+  private _unsubscribeBuildingChanges: (() => void) | null = null;
 
   private constructor() {
     this._container = document.createElement('div');
@@ -38,6 +39,27 @@ export class ControlPanel {
     this._bindEvents();
     this._startFpsUpdate();
     this._checkResponsive();
+
+    // 建筑增删时收敛选中状态并刷新列表，避免残留失效 id
+    this._unsubscribeBuildingChanges = buildingSystem.onChange(() => {
+      this._syncSelectionState();
+    });
+  }
+
+  private _syncSelectionState(): void {
+    const existingIds = new Set(buildingSystem.getBuildings().map(b => b.id));
+
+    for (const id of Array.from(this._selectedBuildings)) {
+      if (!existingIds.has(id)) {
+        this._selectedBuildings.delete(id);
+      }
+    }
+
+    if (this._selectedBuildingId && !existingIds.has(this._selectedBuildingId)) {
+      this._selectedBuildingId = null;
+    }
+
+    this._requestUiUpdate('buildingList');
   }
 
   public static get instance(): ControlPanel {
@@ -363,15 +385,23 @@ export class ControlPanel {
   }
 
   private _handleBulkDelete(): void {
-    if (this._selectedBuildings.size === 0) {
+    // 先剔除选中集合里已不存在的 id，保证计数与删除目标一致
+    const validIds = Array.from(new Set(this._selectedBuildings)).filter(
+      id => buildingSystem.getBuildingById(id) !== undefined
+    );
+
+    if (validIds.length !== this._selectedBuildings.size) {
+      this._syncSelectionState();
+    }
+
+    if (validIds.length === 0) {
       alert('请先选中要删除的建筑');
       return;
     }
 
-    const confirmed = confirm(`确定要删除选中的 ${this._selectedBuildings.size} 栋建筑吗？`);
+    const confirmed = confirm(`确定要删除选中的 ${validIds.length} 栋建筑吗？`);
     if (confirmed) {
-      const ids = Array.from(this._selectedBuildings);
-      buildingSystem.removeBuildings(ids);
+      buildingSystem.removeBuildings(validIds);
       this._selectedBuildings.clear();
       this._selectedBuildingId = null;
       this._requestUiUpdate('buildingList');
@@ -690,6 +720,10 @@ export class ControlPanel {
   }
 
   public dispose(): void {
+    if (this._unsubscribeBuildingChanges) {
+      this._unsubscribeBuildingChanges();
+      this._unsubscribeBuildingChanges = null;
+    }
     if (this._animationFrameId) {
       cancelAnimationFrame(this._animationFrameId);
     }

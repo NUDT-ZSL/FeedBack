@@ -4,14 +4,29 @@ import * as THREE from 'three';
 
 export type DayNightMode = 'day' | 'night';
 
+const AMBIENT_INTENSITY: Record<DayNightMode, number> = {
+  day: 0.8,
+  night: 0.1,
+};
+
+const TOP_LIGHT_ON_INTENSITY = 2;
+const TOP_LIGHT_OFF_INTENSITY = 0;
+
 export class LightingController {
   private static _instance: LightingController;
   private _currentMode: DayNightMode = 'day';
   private _isAnimating: boolean = false;
-  private _animationCancelled: boolean = false;
   private _animationProgress: number = 0;
+  private _animationGeneration: number = 0;
 
-  private constructor() {}
+  private constructor() {
+    buildingSystem.onChange((event) => {
+      if (event.type === 'add') {
+        // 新增建筑（含切换动画进行中）立即收敛到目标模式的灯光状态
+        this.updateBuildingLight(event.building);
+      }
+    });
+  }
 
   public static get instance(): LightingController {
     if (!LightingController._instance) {
@@ -29,26 +44,25 @@ export class LightingController {
   }
 
   public switchMode(mode: DayNightMode): void {
-    if (this._isAnimating) {
-      this._animationCancelled = true;
-    }
-
     if (mode === this._currentMode) return;
 
     this._currentMode = mode;
     buildingSystem.setNightMode(mode === 'night');
 
-    const ambientLight = sceneManager.getAmbientLight();
+    const generation = ++this._animationGeneration;
 
+    const ambientLight = sceneManager.getAmbientLight();
     if (ambientLight) {
-      if (mode === 'day') {
-        this._animateAmbientLight(ambientLight, 0.1, 0.8, 500);
-        this._animateSwitch('day');
-      } else {
-        this._animateAmbientLight(ambientLight, 0.8, 0.1, 500);
-        this._animateSwitch('night');
-      }
+      this._animateAmbientLight(
+        ambientLight,
+        ambientLight.intensity,
+        AMBIENT_INTENSITY[mode],
+        500,
+        generation
+      );
     }
+
+    this._animateSwitch(mode, generation);
   }
 
   public toggleMode(): DayNightMode {
@@ -61,11 +75,14 @@ export class LightingController {
     light: THREE.AmbientLight,
     from: number,
     to: number,
-    duration: number
+    duration: number,
+    generation: number
   ): void {
     const startTime = performance.now();
 
     const animate = () => {
+      if (generation !== this._animationGeneration) return;
+
       const elapsed = performance.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
@@ -80,32 +97,37 @@ export class LightingController {
     requestAnimationFrame(animate);
   }
 
-  private _animateSwitch(mode: DayNightMode): void {
+  private _animateSwitch(mode: DayNightMode, generation: number): void {
     this._isAnimating = true;
-    this._animationCancelled = false;
+    this._animationProgress = 0;
 
     const buildings = buildingSystem.getBuildings();
     
     const sortedBuildings = this._sortBuildingsByDistanceFromCenter(buildings);
+    const total = sortedBuildings.length;
 
     const interval = 100;
     let index = 0;
 
     const processNext = () => {
-      if (this._animationCancelled) {
-        this._isAnimating = false;
+      if (generation !== this._animationGeneration) {
         return;
       }
 
-      if (index >= sortedBuildings.length) {
+      if (index >= total) {
         this._isAnimating = false;
+        this._animationProgress = 1;
         return;
       }
 
       const building = sortedBuildings[index];
-      this._setBuildingLight(building, mode === 'night');
+      // 动画进行中建筑可能已被删除，跳过不存在的建筑
+      if (buildingSystem.getBuildingById(building.id)) {
+        this._setBuildingLight(building, mode === 'night', generation);
+      }
 
       index++;
+      this._animationProgress = total === 0 ? 1 : index / total;
       setTimeout(processNext, interval);
     };
 
@@ -129,15 +151,20 @@ export class LightingController {
     });
   }
 
-  private _setBuildingLight(building: BuildingData, on: boolean): void {
+  private _setBuildingLight(building: BuildingData, on: boolean, generation: number): void {
     if (!building.topLight) return;
 
-    const targetIntensity = on ? 2 : 0;
+    const targetIntensity = on ? TOP_LIGHT_ON_INTENSITY : TOP_LIGHT_OFF_INTENSITY;
     const startIntensity = building.topLight.intensity;
     const duration = 300;
     const startTime = performance.now();
 
     const animate = () => {
+      if (generation !== this._animationGeneration) return;
+      // 建筑在动画期间被删除时停止对其顶灯的写操作
+      if (!buildingSystem.getBuildingById(building.id)) return;
+      if (!building.topLight) return;
+
       const elapsed = performance.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
@@ -157,30 +184,37 @@ export class LightingController {
   }
 
   public setAllLightsImmediate(mode: DayNightMode): void {
+    this._currentMode = mode;
+    this._animationGeneration++;
+    this._isAnimating = false;
+    this._animationProgress = 1;
+
+    buildingSystem.setNightMode(mode === 'night');
+
     const buildings = buildingSystem.getBuildings();
     
     for (const building of buildings) {
       if (building.topLight) {
         building.topLight.visible = mode === 'night';
-        building.topLight.intensity = mode === 'night' ? 2 : 0;
+        building.topLight.intensity = mode === 'night' ? TOP_LIGHT_ON_INTENSITY : TOP_LIGHT_OFF_INTENSITY;
       }
     }
 
     const ambientLight = sceneManager.getAmbientLight();
     if (ambientLight) {
-      ambientLight.intensity = mode === 'day' ? 0.8 : 0.1;
+      ambientLight.intensity = AMBIENT_INTENSITY[mode];
     }
   }
 
   public pauseAnimation(): void {
-    this._animationCancelled = true;
+    this._animationGeneration++;
+    this._isAnimating = false;
   }
 
   public resumeAnimation(): void {
-    if (this._animationCancelled) {
-      this._animationCancelled = false;
-      this._animateSwitch(this._currentMode);
-    }
+    if (this._isAnimating) return;
+    const generation = ++this._animationGeneration;
+    this._animateSwitch(this._currentMode, generation);
   }
 
   public updateBuildingLight(building: BuildingData): void {
@@ -188,11 +222,18 @@ export class LightingController {
 
     if (this._currentMode === 'night') {
       building.topLight.visible = true;
-      building.topLight.intensity = 2;
+      building.topLight.intensity = TOP_LIGHT_ON_INTENSITY;
     } else {
       building.topLight.visible = false;
-      building.topLight.intensity = 0;
+      building.topLight.intensity = TOP_LIGHT_OFF_INTENSITY;
     }
+  }
+
+  public getBuildingLightState(buildingId: string): boolean | null {
+    const building = buildingSystem.getBuildingById(buildingId);
+    if (!building) return null;
+    // 返回目标模式下的最终灯光状态，而非切换动画的中间态
+    return this._currentMode === 'night';
   }
 
   public getAnimationProgress(): number {

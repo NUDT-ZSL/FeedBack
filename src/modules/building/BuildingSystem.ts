@@ -11,6 +11,15 @@ export interface BuildingData {
   topLight: THREE.PointLight | null;
 }
 
+export type BuildingChangeType = 'add' | 'remove';
+
+export interface BuildingChangeEvent {
+  type: BuildingChangeType;
+  building: BuildingData;
+}
+
+export type BuildingChangeListener = (event: BuildingChangeEvent) => void;
+
 export const BUILDING_COLORS = [
   0x3498db,
   0xe74c3c,
@@ -34,6 +43,7 @@ export class BuildingSystem {
   private _nextId: number = 1;
   private _isNightMode: boolean = false;
   private _sortByHeight: 'asc' | 'desc' | null = null;
+  private _changeListeners: Set<BuildingChangeListener> = new Set();
 
   private constructor() {}
 
@@ -42,6 +52,20 @@ export class BuildingSystem {
       BuildingSystem._instance = new BuildingSystem();
     }
     return BuildingSystem._instance;
+  }
+
+  public onChange(listener: BuildingChangeListener): () => void {
+    this._changeListeners.add(listener);
+    return () => {
+      this._changeListeners.delete(listener);
+    };
+  }
+
+  private _emitChange(type: BuildingChangeType, building: BuildingData): void {
+    const event: BuildingChangeEvent = { type, building };
+    for (const listener of this._changeListeners) {
+      listener(event);
+    }
   }
 
   private _snapToGrid(value: number): number {
@@ -119,6 +143,8 @@ export class BuildingSystem {
 
     this._buildings.push(building);
     sceneManager.addObject(group);
+
+    this._emitChange('add', building);
 
     this._animateBuildIn(group, mesh, clampedHeight);
 
@@ -223,12 +249,14 @@ export class BuildingSystem {
     }
 
     this._buildings.splice(index, 1);
+    this._emitChange('remove', building);
     return true;
   }
 
   public removeBuildings(ids: string[]): number {
     let count = 0;
-    for (const id of ids) {
+    const uniqueIds = Array.from(new Set(ids));
+    for (const id of uniqueIds) {
       if (this.removeBuilding(id)) {
         count++;
       }
