@@ -1,0 +1,360 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #1a1a2e;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  color: #fff;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#scene-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.season-controls {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 100;
+  padding: 8px;
+  background: rgba(26, 26, 46, 0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 50px;
+  border: 1px solid rgba(142, 45, 226, 0.3);
+}
+
+.season-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 30px;
+  background: linear-gradient(135deg, #4a00e0, #8e2de2);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.season-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(142, 45, 226, 0.5);
+}
+
+.season-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  font-weight: 600;
+  box-shadow: 0 0 12px #8e2de2;
+  min-width: 96px;
+}
+
+.analysis-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 260px;
+  padding: 18px;
+  background: rgba(26, 26, 46, 0.75);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+  border: 1px solid rgba(142, 45, 226, 0.3);
+  z-index: 100;
+}
+
+.analysis-panel h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(135deg, #4a00e0, #8e2de2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.analysis-item {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysis-item:last-child {
+  margin-bottom: 0;
+}
+
+.analysis-item .label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.analysis-item .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.analysis-item .value.lux {
+  font-size: 20px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a00e0, #8e2de2);
+  border-radius: 4px;
+  transition: width 0.1s ease;
+  width: 0%;
+}
+
+.sun-path-container {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  padding: 12px;
+  background: rgba(26, 26, 46, 0.75);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+  border: 1px solid rgba(142, 45, 226, 0.3);
+  z-index: 100;
+}
+
+#sun-path-canvas {
+  display: block;
+  border-radius: 8px;
+}
+
+.sun-path-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-item .dot.spring { background: #7fff7f; }
+.legend-item .dot.summer { background: #ff6b6b; }
+.legend-item .dot.autumn { background: #ffd93d; }
+.legend-item .dot.winter { background: #6bcfff; }
+
+.time-control {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 500px;
+  padding: 14px 20px;
+  background: rgba(26, 26, 46, 0.6);
+  backdrop-filter: blur(15px);
+  border-radius: 50px;
+  border: 1px solid rgba(142, 45, 226, 0.3);
+  z-index: 100;
+}
+
+.time-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.time-display #current-time {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4a00e0, #8e2de2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.time-display .angle-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#time-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(90deg, #4a00e0, #8e2de2, #4a00e0);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+#time-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), 0 0 8px #8e2de2;
+  transition: transform 0.2s ease;
+}
+
+#time-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+#time-slider::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+}
+
+#time-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), 0 0 8px #8e2de2;
+  transition: transform 0.2s ease;
+}
+
+@media screen and (max-width: 1400px) {
+  .season-controls {
+    top: 12px;
+  }
+
+  .season-btn {
+    padding: 8px 18px;
+    font-size: 13px;
+    min-width: 68px;
+  }
+
+  .season-btn.active {
+    min-width: 82px;
+  }
+
+  .analysis-panel {
+    top: 12px;
+    right: 12px;
+    width: 220px;
+    padding: 14px;
+  }
+
+  .analysis-panel h3 {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .analysis-item .value {
+    font-size: 16px;
+  }
+
+  .sun-path-container {
+    bottom: 70px;
+    left: 12px;
+    padding: 10px;
+  }
+
+  #sun-path-canvas {
+    width: 160px;
+    height: 160px;
+  }
+
+  .time-control {
+    bottom: 12px;
+    width: 420px;
+    padding: 12px 16px;
+  }
+
+  .time-display #current-time {
+    font-size: 18px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .season-controls {
+    top: 10px;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .season-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: 56px;
+  }
+
+  .season-btn.active {
+    min-width: 68px;
+  }
+
+  .analysis-panel {
+    top: auto;
+    bottom: 70px;
+    right: 10px;
+    width: 180px;
+    padding: 12px;
+  }
+
+  .sun-path-container {
+    left: 10px;
+    bottom: 70px;
+  }
+
+  #sun-path-canvas {
+    width: 120px;
+    height: 120px;
+  }
+
+  .time-control {
+    width: calc(100% - 20px);
+    padding: 10px 14px;
+  }
+
+  .time-display .angle-info {
+    font-size: 11px;
+  }
+}
