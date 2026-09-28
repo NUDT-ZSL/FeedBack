@@ -1,0 +1,189 @@
+.game-board-container {
+  position: relative;
+  max-width: 480px;
+  margin: auto;
+}
+
+.game-board {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  padding: 8px;
+  background: #2d1b4e;
+  border-radius: 12px;
+}
+
+.cell {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+}
+
+.cell.empty {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(4px);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.cell.filled {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.cell:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.cell.selected-red {
+  box-shadow: 0 0 12px #ff1744, 0 0 24px rgba(255, 23, 68, 0.4);
+  border: 2px solid #ff1744;
+}
+
+.cell.selected-blue {
+  box-shadow: 0 0 12px #00e5ff, 0 0 24px rgba(0, 229, 255, 0.4);
+  border: 2px solid #00e5ff;
+}
+
+.cell.selected-green {
+  box-shadow: 0 0 12px #00e676, 0 0 24px rgba(0, 230, 118, 0.4);
+  border: 2px solid #00e676;
+}
+
+.cell.eliminating {
+  animation: particleBurst 0.4s ease-out forwards;
+}
+
+.rune-svg {
+  width: 70%;
+  height: 70%;
+  margin: auto;
+  display: block;
+  pointer-events: none;
+}
+
+.color-palette {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.palette-color {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.palette-color.active {
+  border-color: white;
+  transform: scale(1.2);
+  box-shadow: 0 0 16px currentColor;
+}
+
+.palette-color-red {
+  background: #ff1744;
+  color: #ff1744;
+}
+
+.palette-color-blue {
+  background: #00e5ff;
+  color: #00e5ff;
+}
+
+.palette-color-green {
+  background: #00e676;
+  color: #00e676;
+}
+
+.chain-glow {
+  animation: goldenPulse 1s ease-in-out infinite;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particleFly 0.4s ease-out forwards;
+}
+
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.8;
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+}
+
+@keyframes particleBurst {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes goldenPulse {
+  0% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+  }
+}
+
+@keyframes particleFly {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--px), var(--py)) scale(0.3);
+  }
+}
+
+@media (max-width: 768px) {
+  .game-board-container {
+    width: 85vw;
+  }
+
+  .game-board {
+    gap: 3px;
+    padding: 6px;
+  }
+
+  .cell {
+    border-radius: 6px;
+  }
+
+  .rune-svg {
+    width: 60%;
+    height: 60%;
+  }
+
+  .palette-color {
+    width: 32px;
+    height: 32px;
+  }
+}
