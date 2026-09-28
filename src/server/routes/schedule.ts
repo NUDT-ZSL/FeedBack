@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { store, persistStore } from '../data/store.js';
 import { Schedule } from '../types/index.js';
-import { checkTimeConflict, formatConflictMessage, validateTimeGranularity } from '../utils/conflict.js';
+import { checkTimeConflict, checkBandConflict, formatConflictMessage, validateTimeGranularity, resolveTimestamps } from '../utils/conflict.js';
 
 interface ClientInfo {
   ws: any;
@@ -54,7 +54,14 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 router.post('/', (req: Request, res: Response) => {
-  const { bandId, stage, startTime, endTime } = req.body;
+  const { bandId, stage, startTime, endTime, requestId } = req.body;
+
+  if (requestId) {
+    const existing = store.schedules.find(s => (s as any).requestId === requestId);
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+  }
 
   if (!bandId || !stage || !startTime || !endTime) {
     return res.status(400).json({ message: '请填写完整信息' });
@@ -74,17 +81,9 @@ router.post('/', (req: Request, res: Response) => {
     return res.status(400).json({ message: '该乐队未通过审核，无法安排排期' });
   }
 
-  const start = new Date(startTime).getTime();
-  const end = new Date(endTime).getTime();
-
-  if (start >= end) {
-    const startDate = new Date(startTime);
-    const endDate = new Date(endTime);
-    const nextDayEnd = new Date(endDate);
-    nextDayEnd.setDate(nextDayEnd.getDate() + 1);
-    if (nextDayEnd.getTime() <= start) {
-      return res.status(400).json({ message: '结束时间必须晚于开始时间' });
-    }
+  const { start, end } = resolveTimestamps(startTime, endTime);
+  if (end <= start) {
+    return res.status(400).json({ message: '结束时间必须晚于开始时间' });
   }
 
   const conflict = checkTimeConflict(store.schedules, stage, startTime, endTime);
@@ -92,6 +91,14 @@ router.post('/', (req: Request, res: Response) => {
     return res.status(400).json({
       message: formatConflictMessage(conflict),
       conflict
+    });
+  }
+
+  const bandConflict = checkBandConflict(store.schedules, bandId, startTime, endTime);
+  if (bandConflict) {
+    return res.status(400).json({
+      message: formatConflictMessage(bandConflict),
+      conflict: bandConflict
     });
   }
 
@@ -103,7 +110,11 @@ router.post('/', (req: Request, res: Response) => {
     startTime,
     endTime,
     genres: band.genres
-  };
+  } as Schedule & { requestId?: string };
+
+  if (requestId) {
+    (newSchedule as any).requestId = requestId;
+  }
 
   store.schedules.push(newSchedule);
   persistStore();
@@ -148,6 +159,21 @@ router.put('/:id', (req: Request, res: Response) => {
     return res.status(400).json({
       message: formatConflictMessage(conflict),
       conflict
+    });
+  }
+
+  const bandConflict = checkBandConflict(
+    store.schedules,
+    schedule.bandId,
+    checkStart,
+    checkEnd,
+    schedule.id
+  );
+
+  if (bandConflict) {
+    return res.status(400).json({
+      message: formatConflictMessage(bandConflict),
+      conflict: bandConflict
     });
   }
 

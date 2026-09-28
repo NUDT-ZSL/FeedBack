@@ -5,7 +5,9 @@ import { DataStore, Band, Schedule, Admin } from '../types/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_FILE = path.join(__dirname, 'festival-data.json');
+const DATA_FILE = process.env.FESTIVAL_DATA_FILE
+  ? path.resolve(process.env.FESTIVAL_DATA_FILE)
+  : path.join(__dirname, 'festival-data.json');
 
 const initialBands: Band[] = [
   {
@@ -120,6 +122,7 @@ function loadData(): DataStore {
 }
 
 function saveData(data: DataStore): void {
+  if (process.env.FESTIVAL_PERSIST === '0') return;
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (e) {
@@ -131,4 +134,11 @@ export const store: DataStore = loadData();
 
 export function persistStore(): void {
   saveData(store);
+}
+
+export function resetStore(data?: DataStore): void {
+  const fresh = data ?? (JSON.parse(JSON.stringify(defaultData)) as DataStore);
+  store.bands = fresh.bands;
+  store.schedules = fresh.schedules;
+  store.admins = fresh.admins;
 }

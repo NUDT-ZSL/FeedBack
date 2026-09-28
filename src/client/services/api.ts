@@ -67,6 +67,7 @@ export const scheduleApi = {
     stage: string;
     startTime: string;
     endTime: string;
+    requestId?: string;
   }): Promise<Schedule> => {
     return request('/schedule', {
       method: 'POST',

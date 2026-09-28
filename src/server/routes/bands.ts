@@ -108,6 +108,14 @@ router.post('/:id/review', (req: Request, res: Response) => {
     return res.status(404).json({ message: '乐队不存在' });
   }
 
+  if (store.bands[bandIndex].status !== 'pending') {
+    return res.status(409).json({
+      id: store.bands[bandIndex].id,
+      status: store.bands[bandIndex].status,
+      message: '该乐队已审核，状态不可重复修改'
+    });
+  }
+
   store.bands[bandIndex].status = status;
   persistStore();
 

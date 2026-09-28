@@ -20,7 +20,7 @@ export function validateTimeGranularity(startTime: string, endTime: string): str
   return null;
 }
 
-function resolveTimestamps(startTime: string, endTime: string): { start: number; end: number } {
+export function resolveTimestamps(startTime: string, endTime: string): { start: number; end: number } {
   let start = normalizeToTimestamp(startTime);
   let end = normalizeToTimestamp(endTime);
 
@@ -45,6 +45,37 @@ export function checkTimeConflict(
 
   for (const schedule of schedules) {
     if (schedule.stage !== stage) continue;
+    if (excludeId && schedule.id === excludeId) continue;
+
+    const { start: existStart, end: existEnd } = resolveTimestamps(
+      schedule.startTime,
+      schedule.endTime
+    );
+
+    if (newStart < existEnd && newEnd > existStart) {
+      return {
+        stage: schedule.stage,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        bandName: schedule.bandName
+      };
+    }
+  }
+
+  return null;
+}
+
+export function checkBandConflict(
+  schedules: Schedule[],
+  bandId: string,
+  startTime: string,
+  endTime: string,
+  excludeId?: string
+): ConflictInfo | null {
+  const { start: newStart, end: newEnd } = resolveTimestamps(startTime, endTime);
+
+  for (const schedule of schedules) {
+    if (schedule.bandId !== bandId) continue;
     if (excludeId && schedule.id === excludeId) continue;
 
     const { start: existStart, end: existEnd } = resolveTimestamps(

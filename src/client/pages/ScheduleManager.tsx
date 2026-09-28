@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Calendar, Clock, Music, AlertTriangle, Trash2 } from 'lucide-react';
 import { Schedule, Band } from '../types';
 import { scheduleApi, bandsApi } from '../services/api';
@@ -25,6 +25,7 @@ export default function ScheduleManager() {
 
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const requestIdRef = useRef<string>('');
 
   const approvedBands = bands.filter(b => b.status === 'approved');
   const timeSlots = generateTimeSlots(12, 24, 15);
@@ -68,16 +69,22 @@ export default function ScheduleManager() {
     setSubmitting(true);
     setConflictError(null);
 
+    if (!requestIdRef.current) {
+      requestIdRef.current = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    }
+
     try {
       const newSchedule = await scheduleApi.createSchedule({
         bandId: formData.bandId,
         stage: formData.stage,
         startTime,
-        endTime
+        endTime,
+        requestId: requestIdRef.current
       });
 
       addSchedule(newSchedule);
       addNotification({ message: '排期创建成功', type: 'success' });
+      requestIdRef.current = '';
       setShowForm(false);
       setFormData({
         bandId: '',
@@ -251,6 +258,7 @@ export default function ScheduleManager() {
                   setShowForm(false);
                   setConflictError(null);
                   setShowConflict(false);
+                  requestIdRef.current = '';
                 }}
               >
                 取消
