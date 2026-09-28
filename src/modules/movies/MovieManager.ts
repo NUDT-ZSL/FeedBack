@@ -1,5 +1,6 @@
 import type { Movie, UserMovie, WatchStatus } from '@/types';
 import moviesData from '@/data/movies.json';
+import { dedupeUserMovies } from '@/modules/stats/ratingStats';
 
 const STORAGE_KEY = 'cinecollect_user_movies';
 
@@ -30,7 +31,8 @@ class MovieManager {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as UserMovie[];
-        parsed.forEach((userMovie) => {
+        // 同一影片重复收藏时按最早收藏时间保留一条，与统计模块口径一致
+        dedupeUserMovies(parsed).forEach((userMovie) => {
           this.userMovies.set(userMovie.movieId, userMovie);
         });
       }

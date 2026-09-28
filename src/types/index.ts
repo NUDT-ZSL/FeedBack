@@ -28,6 +28,7 @@ export interface Review {
 export interface AnnualReportData {
   year: number;
   totalMovies: number;
+  ratedCount: number;
   averageRating: number;
   favoriteGenre: string;
   topMovies: Movie[];
