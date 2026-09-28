@@ -1,7 +1,9 @@
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { ThumbsUp } from 'lucide-react';
 import type { Photo } from '../types';
 import { getTagColor } from '../utils/tagColors';
+
+const LIKE_LOCK_MS = 200;
 
 interface PhotoCardProps {
   photo: Photo;
@@ -12,15 +14,31 @@ interface PhotoCardProps {
 const PhotoCard: React.FC<PhotoCardProps> = memo(function PhotoCard({ photo, onLike, onClick }) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [likeKey, setLikeKey] = useState(0);
+  // 同步锁：动画窗口内的重复点击在事件层就被吞掉，
+  // 不依赖 React 重渲染后的 state，连续快速点击只会累加一次点赞
+  const likeLockRef = useRef(false);
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (lockTimerRef.current !== null) {
+        clearTimeout(lockTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleLike = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isAnimating) return;
+    if (likeLockRef.current) return;
+    likeLockRef.current = true;
     setIsAnimating(true);
     setLikeKey(prev => prev + 1);
     onLike(photo.id);
-    setTimeout(() => setIsAnimating(false), 200);
-  }, [photo.id, onLike, isAnimating]);
+    lockTimerRef.current = setTimeout(() => {
+      likeLockRef.current = false;
+      setIsAnimating(false);
+    }, LIKE_LOCK_MS);
+  }, [photo.id, onLike]);
 
   const handleCardClick = useCallback(() => {
     onClick(photo);

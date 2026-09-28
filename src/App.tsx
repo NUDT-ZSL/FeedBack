@@ -1,101 +1,84 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useReducer, useMemo, useCallback, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Gallery from './components/Gallery';
 import PhotoModal from './components/PhotoModal';
 import { initialPhotos } from './data/photos';
-import { sortByLikes, sortByDate } from './utils/sort';
 import { useDebounce } from './hooks/useDebounce';
+import {
+  createInitialState,
+  portfolioReducer,
+  selectAllTags,
+  selectFilteredPhotos,
+  selectTopPhotos,
+  selectMaxLikes,
+  selectSelectedPhoto,
+} from './store/portfolio';
 import type { Photo, SortType } from './types';
 
 const App: React.FC = () => {
-  const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<SortType>('likes');
-  const [searchInput, setSearchInput] = useState('');
-  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 单一数据源：照片集合、筛选条件、排序方式、模态框目标、侧边栏状态
+  const [state, dispatch] = useReducer(portfolioReducer, initialPhotos, createInitialState);
+  const { photos, selectedTags, sortBy, searchQuery, selectedPhotoId, sidebarOpen } = state;
 
-  const debouncedSearch = useDebounce(searchInput, 200);
+  const debouncedSearch = useDebounce(searchQuery, 200);
 
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    photos.forEach(photo => photo.tags.forEach(tag => tagSet.add(tag)));
-    return Array.from(tagSet).sort();
-  }, [photos]);
+  // 所有派生视图都从同一份状态派生，筛选/排序/点赞变化时各视图天然同步
+  const allTags = useMemo(() => selectAllTags(photos), [photos]);
 
-  const filteredPhotos = useMemo(() => {
-    let result = [...photos];
+  const filteredPhotos = useMemo(
+    () => selectFilteredPhotos(photos, selectedTags, debouncedSearch, sortBy),
+    [photos, selectedTags, debouncedSearch, sortBy],
+  );
 
-    if (selectedTags.length > 0) {
-      result = result.filter(photo =>
-        selectedTags.some(tag => photo.tags.includes(tag))
-      );
-    }
+  const topPhotos = useMemo(() => selectTopPhotos(photos), [photos]);
+  const maxLikes = useMemo(() => selectMaxLikes(photos), [photos]);
 
-    if (debouncedSearch.trim()) {
-      const query = debouncedSearch.toLowerCase().trim();
-      result = result.filter(photo =>
-        photo.title.toLowerCase().includes(query)
-      );
-    }
-
-    if (sortBy === 'likes') {
-      result = sortByLikes(result);
-    } else {
-      result = sortByDate(result);
-    }
-
-    return result;
-  }, [photos, selectedTags, sortBy, debouncedSearch]);
+  // 模态框只持有 id，展示对象从 photos 实时派生，打开期间的点赞会同步进来
+  const selectedPhoto = useMemo(
+    () => selectSelectedPhoto(photos, selectedPhotoId),
+    [photos, selectedPhotoId],
+  );
 
   const handleLike = useCallback((id: number) => {
-    setPhotos(prev =>
-      prev.map(photo =>
-        photo.id === id ? { ...photo, likes: photo.likes + 1 } : photo
-      )
-    );
+    dispatch({ type: 'LIKE_PHOTO', id });
   }, []);
 
   const handleTagToggle = useCallback((tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
+    dispatch({ type: 'TOGGLE_TAG', tag });
   }, []);
 
   const handlePhotoClick = useCallback((photo: Photo) => {
-    setSelectedPhoto(photo);
+    dispatch({ type: 'OPEN_PHOTO', id: photo.id });
   }, []);
 
   const handleCloseModal = useCallback(() => {
-    setSelectedPhoto(null);
+    dispatch({ type: 'CLOSE_PHOTO' });
   }, []);
 
   const handleToggleSidebar = useCallback(() => {
-    setSidebarOpen(prev => !prev);
+    dispatch({ type: 'TOGGLE_SIDEBAR' });
   }, []);
 
   const handleSearchChange = useCallback((query: string) => {
-    setSearchInput(query);
+    dispatch({ type: 'SET_SEARCH', query });
   }, []);
 
   const handleSortChange = useCallback((sort: SortType) => {
-    setSortBy(sort);
+    dispatch({ type: 'SET_SORT', sortBy: sort });
   }, []);
 
   const handleRankingClick = useCallback((photo: Photo) => {
-    setSelectedPhoto(photo);
+    dispatch({ type: 'OPEN_PHOTO', id: photo.id });
     if (window.innerWidth <= 768) {
-      setSidebarOpen(false);
+      dispatch({ type: 'CLOSE_SIDEBAR' });
     }
   }, []);
 
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 768) {
-        setSidebarOpen(false);
+        dispatch({ type: 'CLOSE_SIDEBAR' });
       }
     };
     window.addEventListener('resize', handleResize);
@@ -105,7 +88,7 @@ const App: React.FC = () => {
   return (
     <div className="app-container">
       <Navbar
-        searchQuery={searchInput}
+        searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         sortBy={sortBy}
         onSortChange={handleSortChange}
@@ -113,7 +96,8 @@ const App: React.FC = () => {
       />
       <div className="main-content">
         <Sidebar
-          photos={photos}
+          topPhotos={topPhotos}
+          maxLikes={maxLikes}
           allTags={allTags}
           selectedTags={selectedTags}
           onTagToggle={handleTagToggle}

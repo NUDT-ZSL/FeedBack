@@ -1,10 +1,10 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import type { Photo } from '../types';
-import { getTopPhotos } from '../utils/sort';
 import { getTagColor } from '../utils/tagColors';
 
 interface SidebarProps {
-  photos: Photo[];
+  topPhotos: Photo[];
+  maxLikes: number;
   allTags: string[];
   selectedTags: string[];
   onTagToggle: (tag: string) => void;
@@ -13,16 +13,14 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
-  photos,
+  topPhotos,
+  maxLikes,
   allTags,
   selectedTags,
   onTagToggle,
   onRankingClick,
   isOpen = true,
 }) => {
-  const topPhotos = useMemo(() => getTopPhotos(photos, 5), [photos]);
-  const maxLikes = useMemo(() => Math.max(...photos.map(p => p.likes)), [photos]);
-
   const handleTagClick = useCallback((tag: string) => {
     onTagToggle(tag);
   }, [onTagToggle]);
@@ -66,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className="ranking-progress-bar">
                   <div
                     className="ranking-progress-fill"
-                    style={{ width: `${(photo.likes / maxLikes) * 100}%` }}
+                    style={{ width: maxLikes > 0 ? `${(photo.likes / maxLikes) * 100}%` : '0%' }}
                   />
                 </div>
               </div>
