@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CareLog } from '../utils/chartHelper';
+import { CareLog } from '../utils/types';
 
 interface LogFormProps {
   onSubmit: (log: Omit<CareLog, 'id'>) => void;

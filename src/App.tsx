@@ -3,13 +3,12 @@ import { Line, Bar } from 'react-chartjs-2';
 import PlantCard from './components/PlantCard';
 import LogForm from './components/LogForm';
 import {
-  Plant,
-  CareLog,
   generateWaterTrendData,
   waterTrendOptions,
   generateFertilizeBarData,
   fertilizeBarOptions,
 } from './utils/chartHelper';
+import { Plant, CareLog } from './utils/types';
 
 const SPECIES_OPTIONS = ['多肉', '绿萝', '仙人掌', '蕨类', '其他'];
 

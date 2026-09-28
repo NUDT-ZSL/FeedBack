@@ -10,6 +10,14 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import {
+  addCalendarMonths,
+  calendarDayKey,
+  calendarMonthKey,
+  normalizeReferenceDate,
+  parseCalendarDate,
+} from './date';
+import { CareLog } from './types';
 
 ChartJS.register(
   CategoryScale,
@@ -23,37 +31,36 @@ ChartJS.register(
   Filler
 );
 
-export interface CareLog {
-  id: string;
-  date: string;
-  activityType: 'water' | 'fertilize' | 'prune';
-  notes: string;
-}
-
-export interface Plant {
-  id: string;
-  name: string;
-  species: string;
-  photoFileName?: string;
-  logs: CareLog[];
-  createdAt: string;
-}
-
-export function generateWaterTrendData(logs: CareLog[]) {
-  const now = new Date();
+export function generateWaterTrendData(
+  logs: CareLog[],
+  referenceDate: Date = new Date()
+) {
+  const now = normalizeReferenceDate(referenceDate);
   const labels: string[] = [];
   const data: number[] = [];
+  const countsByDay = new Map<string, number>();
+
+  for (const log of logs) {
+    if (log.activityType !== 'water') continue;
+    const logDate = parseCalendarDate(log.date);
+    if (!logDate) continue;
+
+    const dayKey = calendarDayKey(logDate);
+    countsByDay.set(dayKey, (countsByDay.get(dayKey) ?? 0) + 1);
+  }
 
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const shortLabel = `${d.getMonth() + 1}/${d.getDate()}`;
+    const d = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - i
+      )
+    );
+    const dateStr = calendarDayKey(d);
+    const shortLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
     labels.push(shortLabel);
-    const count = logs.filter(
-      (l) => l.activityType === 'water' && l.date === dateStr
-    ).length;
-    data.push(count);
+    data.push(countsByDay.get(dateStr) ?? 0);
   }
 
   return {
@@ -127,23 +134,33 @@ export function waterTrendOptions() {
   };
 }
 
-export function generateFertilizeBarData(logs: CareLog[]) {
-  const now = new Date();
+export function generateFertilizeBarData(
+  logs: CareLog[],
+  referenceDate: Date = new Date()
+) {
+  const now = normalizeReferenceDate(referenceDate);
   const labels: string[] = [];
   const data: number[] = [];
+  const countsByMonth = new Map<string, number>();
+
+  for (const log of logs) {
+    if (log.activityType !== 'fertilize') continue;
+    const logDate = parseCalendarDate(log.date);
+    if (!logDate) continue;
+
+    const monthKey = calendarMonthKey(logDate);
+    countsByMonth.set(
+      monthKey,
+      (countsByMonth.get(monthKey) ?? 0) + 1
+    );
+  }
 
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - i);
-    const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const shortLabel = `${d.getMonth() + 1}月`;
+    const d = addCalendarMonths(now, -i);
+    const monthStr = calendarMonthKey(d);
+    const shortLabel = `${d.getUTCMonth() + 1}月`;
     labels.push(shortLabel);
-    const count = logs.filter(
-      (l) =>
-        l.activityType === 'fertilize' &&
-        l.date.startsWith(monthStr)
-    ).length;
-    data.push(count);
+    data.push(countsByMonth.get(monthStr) ?? 0);
   }
 
   return {
