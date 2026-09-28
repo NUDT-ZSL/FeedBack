@@ -98,13 +98,16 @@ export class GradientEngine {
     if (sorted.length === 0) return '#000000';
     if (sorted.length === 1) return sorted[0].color;
     if (position <= sorted[0].position) return sorted[0].color;
-    if (position >= sorted[sorted.length - 1].position)
+    if (position > sorted[sorted.length - 1].position)
       return sorted[sorted.length - 1].color;
 
     for (let i = 0; i < sorted.length - 1; i++) {
       const left = sorted[i];
       const right = sorted[i + 1];
       if (position >= left.position && position <= right.position) {
+        if (left.position === right.position) {
+          return left.color;
+        }
         const ratio =
           (position - left.position) / (right.position - left.position);
         const c1 = tinycolor(left.color);
