@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>四季日照采光模拟</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene-canvas"></canvas>
+    
+    <div class="season-controls">
+      <button class="season-btn" data-season="spring">春分</button>
+      <button class="season-btn" data-season="summer">夏至</button>
+      <button class="season-btn active" data-season="autumn">秋分</button>
+      <button class="season-btn" data-season="winter">冬至</button>
+    </div>
+
+    <div class="analysis-panel">
+      <h3>光照分析</h3>
+      <div class="analysis-item">
+        <span class="label">窗户入射光</span>
+        <div class="progress-bar">
+          <div class="progress-fill" id="window-illumination"></div>
+        </div>
+        <span class="value" id="window-illumination-value">0%</span>
+      </div>
+      <div class="analysis-item">
+        <span class="label">室内平均照度</span>
+        <span class="value lux" id="avg-illuminance">0 lx</span>
+      </div>
+      <div class="analysis-item">
+        <span class="label">阴影遮挡占比</span>
+        <span class="value" id="shadow-ratio">0%</span>
+      </div>
+    </div>
+
+    <div class="sun-path-container">
+      <canvas id="sun-path-canvas" width="200" height="200"></canvas>
+      <div class="sun-path-legend">
+        <span class="legend-item"><span class="dot spring"></span>春分</span>
+        <span class="legend-item"><span class="dot summer"></span>夏至</span>
+        <span class="legend-item"><span class="dot autumn"></span>秋分</span>
+        <span class="legend-item"><span class="dot winter"></span>冬至</span>
+      </div>
+    </div>
+
+    <div class="time-control">
+      <div class="time-display">
+        <span id="current-time">12:00</span>
+        <span class="angle-info" id="sun-angles">仰角: 45° | 方位角: 180°</span>
+      </div>
+      <input type="range" id="time-slider" min="6" max="18" step="0.1" value="12">
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
