@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-forest: #1a2f23;
+  --color-copper: #c47d4e;
+  --color-ivory: #f5f0e8;
+  --color-charcoal: #2d2d2d;
+  --color-gold: #d4a855;
+}
+
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background-color: #f5f0e8;
+  color: #2d2d2d;
+}
+
+.font-display {
+  font-family: 'Playfair Display', serif;
+}
+
+.bg-forest {
+  background-color: #1a2f23;
+}
+
+.text-copper {
+  color: #c47d4e;
+}
+
+.border-copper {
+  border-color: #c47d4e;
+}
+
+.btn-copper {
+  background-color: #c47d4e;
+  color: #f5f0e8;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  transition: box-shadow 0.3s, background-color 0.3s;
+}
+
+.btn-copper:hover {
+  background-color: #b06d42;
+  box-shadow: 0 0 12px rgba(196, 125, 78, 0.5);
+}
+
+.heat-bar {
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(to right, #c47d4e, #d4a855);
+}
+
+.masonry-grid {
+  column-count: 1;
+  column-gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .masonry-grid {
+    column-count: 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .masonry-grid {
+    column-count: 3;
+  }
+}
+
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+  border-left: 2px solid #c47d4e;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -2.5rem;
+  top: 0.25rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background-color: #c47d4e;
+  border: 2px solid #f5f0e8;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f0e8;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #c47d4e;
+  border-radius: 3px;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: page-enter 0.3s ease-out;
+}
+
+.card-hover {
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card-hover:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}

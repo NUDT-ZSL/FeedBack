@@ -1,0 +1,1 @@
+{"root":["./src/client/app.tsx","./src/client/main.tsx","./src/client/types.ts","./src/client/components/portfolioviewer.tsx","./src/client/pages/artistworkshop.tsx","./src/client/pages/creatework.tsx","./src/client/pages/exhibitiondetail.tsx","./src/client/pages/home.tsx","./src/server/server.ts"],"errors":true,"version":"5.8.3"}
