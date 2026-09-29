@@ -1,6 +1,20 @@
-import type { Movie, AnnualReportData, RatingDistributionItem } from '@/types';
+import type { AnnualReportData } from '@/types';
 import { movieManager } from '@/modules/movies/MovieManager';
+import {
+  computeAnnualReportData,
+  computeAverageRating,
+  dedupeEntriesByMovieId,
+  filterEntriesByYear,
+  isRated,
+  type UserMovieEntry,
+} from '@/modules/stats/ratingStats';
 
+/**
+ * 年度报告生成器。统计口径与 ReviewManager 共用 ratingStats 模块：
+ * - 收藏总数：当年全部收藏条目（含未评分，状态不影响计入），同年同片去重；
+ * - 平均分 / 高分影片：仅已评分（rating > 0）条目参与；
+ * - 评分分布：覆盖 0~10 全部取值，区间计数之和等于收藏总数。
+ */
 class ReportGenerator {
   private static instance: ReportGenerator;
 
@@ -13,133 +27,37 @@ class ReportGenerator {
     return ReportGenerator.instance;
   }
 
-  public getAvailableYears(): number[] {
-    const userMovies = movieManager.getAllUserMovies();
+  public getAvailableYears(source?: UserMovieEntry[]): number[] {
+    const entries = source ?? movieManager.getAllUserMovies();
     const years = new Set<number>();
 
-    userMovies.forEach(({ userMovie }) => {
-      const year = new Date(userMovie.addedAt).getFullYear();
-      years.add(year);
+    entries.forEach(({ userMovie }) => {
+      years.add(new Date(userMovie.addedAt).getFullYear());
     });
 
     return Array.from(years).sort((a, b) => b - a);
   }
 
-  public generateAnnualReport(year: number): AnnualReportData {
-    const userMovies = movieManager.getAllUserMovies();
-
-    const yearMovies = userMovies.filter(({ userMovie }) => {
-      const addedYear = new Date(userMovie.addedAt).getFullYear();
-      return addedYear === year && userMovie.rating > 0;
-    });
-
-    const totalMovies = yearMovies.length;
-
-    const averageRating =
-      totalMovies > 0
-        ? yearMovies.reduce((sum, { userMovie }) => sum + userMovie.rating, 0) / totalMovies
-        : 0;
-
-    const favoriteGenre = this.calculateFavoriteGenre(yearMovies);
-
-    const topMovies = this.getTopRatedMovies(yearMovies, 3);
-
-    const ratingDistribution = this.calculateRatingDistribution(yearMovies);
-
-    return {
-      year,
-      totalMovies,
-      averageRating: Math.round(averageRating * 10) / 10,
-      favoriteGenre,
-      topMovies,
-      ratingDistribution,
-    };
+  /**
+   * 生成年度报告。可注入数据源（默认取 MovieManager 全量收藏），
+   * 便于离线构造数据验证。
+   */
+  public generateAnnualReport(year: number, source?: UserMovieEntry[]): AnnualReportData {
+    const entries = source ?? movieManager.getAllUserMovies();
+    const yearEntries = filterEntriesByYear(entries, year);
+    return computeAnnualReportData(year, yearEntries);
   }
 
-  private calculateFavoriteGenre(
-    yearMovies: { movie: Movie; userMovie: { rating: number } }[]
-  ): string {
-    if (yearMovies.length === 0) {
-      return '-';
-    }
-
-    const genreCount: Record<string, number> = {};
-
-    yearMovies.forEach(({ movie }) => {
-      movie.genres.forEach((genre) => {
-        genreCount[genre] = (genreCount[genre] || 0) + 1;
-      });
-    });
-
-    let favoriteGenre = '-';
-    let maxCount = 0;
-
-    Object.entries(genreCount).forEach(([genre, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        favoriteGenre = genre;
-      }
-    });
-
-    return favoriteGenre;
+  /** 已评分影片总数（按 movieId 去重，未评分不计入） */
+  public getTotalWatchedMovies(source?: UserMovieEntry[]): number {
+    const entries = dedupeEntriesByMovieId(source ?? movieManager.getAllUserMovies());
+    return entries.filter(({ userMovie }) => isRated(userMovie.rating)).length;
   }
 
-  private getTopRatedMovies(
-    yearMovies: { movie: Movie; userMovie: { rating: number } }[],
-    topN: number
-  ): Movie[] {
-    return [...yearMovies]
-      .sort((a, b) => b.userMovie.rating - a.userMovie.rating)
-      .slice(0, topN)
-      .map((item) => item.movie);
-  }
-
-  private calculateRatingDistribution(
-    yearMovies: { userMovie: { rating: number } }[]
-  ): RatingDistributionItem[] {
-    const distribution: RatingDistributionItem[] = [
-      { range: '1-2分', count: 0 },
-      { range: '3-4分', count: 0 },
-      { range: '5-6分', count: 0 },
-      { range: '7-8分', count: 0 },
-      { range: '9-10分', count: 0 },
-    ];
-
-    yearMovies.forEach(({ userMovie }) => {
-      const rating = userMovie.rating;
-      if (rating >= 1 && rating <= 2) {
-        distribution[0].count++;
-      } else if (rating >= 3 && rating <= 4) {
-        distribution[1].count++;
-      } else if (rating >= 5 && rating <= 6) {
-        distribution[2].count++;
-      } else if (rating >= 7 && rating <= 8) {
-        distribution[3].count++;
-      } else if (rating >= 9 && rating <= 10) {
-        distribution[4].count++;
-      }
-    });
-
-    return distribution;
-  }
-
-  public getTotalWatchedMovies(): number {
-    return movieManager
-      .getAllUserMovies()
-      .filter(({ userMovie }) => userMovie.rating > 0).length;
-  }
-
-  public getOverallAverageRating(): number {
-    const ratedMovies = movieManager
-      .getAllUserMovies()
-      .filter(({ userMovie }) => userMovie.rating > 0);
-
-    if (ratedMovies.length === 0) {
-      return 0;
-    }
-
-    const sum = ratedMovies.reduce((acc, { userMovie }) => acc + userMovie.rating, 0);
-    return Math.round((sum / ratedMovies.length) * 10) / 10;
+  /** 全量收藏中已评分条目的平均分（未评分不参与） */
+  public getOverallAverageRating(source?: UserMovieEntry[]): number {
+    const entries = dedupeEntriesByMovieId(source ?? movieManager.getAllUserMovies());
+    return computeAverageRating(entries);
   }
 }
 

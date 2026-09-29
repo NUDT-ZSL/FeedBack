@@ -1,5 +1,10 @@
 import type { Review, RatingDistributionItem } from '@/types';
 import { movieManager } from '@/modules/movies/MovieManager';
+import {
+  computeRatingDistribution,
+  dedupeEntriesByMovieId,
+  type UserMovieEntry,
+} from '@/modules/stats/ratingStats';
 
 const STORAGE_KEY = 'cinecollect_reviews';
 const MIN_CONTENT_LENGTH = 50;
@@ -134,33 +139,13 @@ class ReviewManager {
     );
   }
 
-  public getRatingDistribution(): RatingDistributionItem[] {
-    const distribution: RatingDistributionItem[] = [
-      { range: '1-2分', count: 0 },
-      { range: '3-4分', count: 0 },
-      { range: '5-6分', count: 0 },
-      { range: '7-8分', count: 0 },
-      { range: '9-10分', count: 0 },
-    ];
-
-    const allUserMovies = movieManager.getAllUserMovies();
-
-    allUserMovies.forEach(({ userMovie }) => {
-      const rating = userMovie.rating;
-      if (rating >= 1 && rating <= 2) {
-        distribution[0].count++;
-      } else if (rating >= 3 && rating <= 4) {
-        distribution[1].count++;
-      } else if (rating >= 5 && rating <= 6) {
-        distribution[2].count++;
-      } else if (rating >= 7 && rating <= 8) {
-        distribution[3].count++;
-      } else if (rating >= 9 && rating <= 10) {
-        distribution[4].count++;
-      }
-    });
-
-    return distribution;
+  /**
+   * 评分分布：与年度报告共用 ratingStats 的统一口径。
+   * 可注入数据源（默认取 MovieManager 全量收藏），便于离线构造数据验证。
+   */
+  public getRatingDistribution(source?: UserMovieEntry[]): RatingDistributionItem[] {
+    const entries = dedupeEntriesByMovieId(source ?? movieManager.getAllUserMovies());
+    return computeRatingDistribution(entries.map(({ userMovie }) => userMovie.rating));
   }
 
   public getReviewCountByMovieId(movieId: string): number {
