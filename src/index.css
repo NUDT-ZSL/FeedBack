@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-brown: #8B6914;
+  --brand-cream: #F5F0E8;
+  --brand-dark: #4A3525;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Noto Serif SC', serif;
+  background-color: var(--brand-cream);
+  color: var(--brand-dark);
+  -webkit-font-smoothing: 0%;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.leather-bg {
+  background-color: #F5F0E8;
+  background-image:
+    radial-gradient(
+      ellipse at 20% 30%,
+      rgba(139, 105, 20, 0.08) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 70% 60%,
+      rgba(74, 53, 37, 0.05) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 30% 80%,
+      rgba(139, 105, 20, 0.04) 0%,
+      transparent 40%
+    ),
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(74, 53, 37, 0.015) 0px,
+      rgba(74, 53, 37, 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  background-attachment: fixed;
+}
+
+.sidebar-leather {
+  background: linear-gradient(165deg,
+    #4A3525 0%,
+    #5A4230 50%,
+    #4A3525 100%
+  );
+  background-image:
+    linear-gradient(165deg,
+      rgba(139, 105, 20, 0.15) 0%,
+      rgba(139, 105, 20, 0.05) 100%
+    ),
+    repeating-radial-gradient(
+      circle at 20% 30%,
+      rgba(0, 0, 0, 0.08) 0px,
+      rgba(0, 0, 0, 0.08) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+.card-leather {
+  background-color: #FAF6EF;
+  background-image:
+    radial-gradient(
+      circle at 10% 20%,
+      rgba(139, 105, 20, 0.06) 0%,
+      transparent 50%
+    ),
+    repeating-radial-gradient(
+      circle at 80% 90%,
+      rgba(74, 53, 37, 0.04) 0%,
+      transparent 50%
+    );
+}
+
+.font-display {
+  font-family: 'Playfair Display', serif;
+}
+
+.font-serif-cn {
+  font-family: 'Noto Serif SC', serif;
+}
+
+.font-mono-num {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.interactive-btn {
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.interactive-btn:hover {
+  transform: translateY(-4px);
+}
+
+.interactive-btn:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+.card-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease,
+    background 0.3s ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(139, 105, 20, 0.1);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(139, 105, 20, 0.3);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 105, 20, 0.5);
+}
+
+.swipe-container {
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.swipe-content {
+  transition: transform 0.15s ease-out;
+  will-change: transform;
+}
+
+.swipe-released {
+  transition: transform 0.3s ease-out;
+}
+
+.stage-panel {
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+}
+
+input[type='range'] {
+  accent-color: #8B6914;
+}
+
+::selection {
+  background: rgba(139, 105, 20, 0.2);
+}
