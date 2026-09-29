@@ -1,0 +1,113 @@
+:root {
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 0.2s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.4s;
+  --shadow-card: 0px 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0px 12px 32px rgba(0, 0, 0, 0.12);
+  --radius-card: 16px;
+  --padding-card: 24px;
+
+  --bg-primary: #FDF5E6;
+  --text-title: #3E2723;
+  --text-body: #424242;
+  --text-muted: #757575;
+
+  --category-ceramic: #D2B48C;
+  --category-woodwork: #DEB887;
+  --category-weaving: #8FBC8F;
+  --category-leather: #8B4513;
+  --category-paper: #F5F5DC;
+
+  --stats-blue: #E3F2FD;
+  --stats-green: #E8F5E9;
+  --stats-yellow: #FFF8E1;
+  --stats-pink: #FCE4EC;
+
+  --gold-star: #FFD700;
+  --connector-color: #D2B48C;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-body);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-title);
+  font-weight: 600;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple 0.4s var(--easing-standard);
+  pointer-events: none;
+}
