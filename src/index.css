@@ -1,0 +1,111 @@
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --color-primary: #F5E6CC;
+  --color-secondary: #D4A574;
+  --color-accent: #2E8B57;
+  --color-garden: #A8E6CF;
+  --color-fitness: #FFD3B6;
+  --color-reading: #D4A5A5;
+  --color-vacant: #B0B0B0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.5;
+  font-weight: 400;
+  color: #333;
+  background: #FAF5EE;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background: #FAF5EE;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  font-family: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4A574;
+  border-radius: 3px;
+}
+
+@keyframes statFlash {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes slideInFromBottom {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes starFlyIn {
+  0% { opacity: 0; transform: translateX(-40px); }
+  60% { opacity: 1; transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes starFlash {
+  0% { color: #ccc; }
+  50% { color: #FFD700; transform: scale(1.3); }
+  100% { color: #FFD700; transform: scale(1); }
+}
+
+@keyframes barRise {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes pieExpand {
+  from { stroke-dashoffset: var(--circ); }
+  to { stroke-dashoffset: var(--offset); }
+}
+
+@keyframes toastSlideShake {
+  0% { transform: translateY(20px); opacity: 0; }
+  60% { transform: translateY(-2px); opacity: 1; }
+  80% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
