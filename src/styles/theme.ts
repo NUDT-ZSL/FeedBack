@@ -1,0 +1,58 @@
+export const theme = {
+  colors: {
+    primary: '#8B5E3C',
+    secondary: '#D2A679',
+    background: '#FAF3E0',
+    cardBg: '#FFFFFF',
+    textPrimary: '#2D1810',
+    textSecondary: '#6B4C3B',
+    textLight: '#9B8577',
+    border: '#E8D5C4',
+    error: '#D32F2F',
+    success: '#388E3C',
+    checkedInBg: '#E8F5E9',
+    reportBg: '#1E1E2E',
+    reportText: '#FFFFFF',
+    eventType: {
+      '读书会': '#E8D5B7',
+      '新书签售': '#C9E4C5',
+      '作者对谈': '#B5D3E7',
+      '手工工作坊': '#F4C2C2',
+    },
+  },
+  fonts: {
+    family: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    size: {
+      xs: '0.75rem',
+      sm: '0.875rem',
+      base: '1rem',
+      lg: '1.125rem',
+      xl: '1.25rem',
+      xxl: '1.5rem',
+      title: '2rem',
+    },
+  },
+  spacing: {
+    xs: '0.25rem',
+    sm: '0.5rem',
+    md: '1rem',
+    lg: '1.5rem',
+    xl: '2rem',
+    xxl: '3rem',
+  },
+  borderRadius: {
+    sm: '6px',
+    md: '12px',
+    lg: '16px',
+  },
+  shadow: {
+    card: '0 2px 8px rgba(0,0,0,0.1)',
+    cardHover: '0 8px 24px rgba(0,0,0,0.18)',
+    button: '0 2px 4px rgba(0,0,0,0.1)',
+  },
+  transition: {
+    fast: '0.2s ease',
+    normal: '0.3s ease-out',
+    slow: '0.4s ease',
+  },
+};
