@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BIM 三维建筑可视化工具</title>
+  <link rel="stylesheet" href="/src/ui/styles.css" />
+</head>
+<body>
+  <div id="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-title">BIM Viewer</div>
+      <div class="loading-subtitle">正在初始化三维场景...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+        <span class="progress-text" id="progress-text">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="app-root">
+    <canvas id="scene-canvas"></canvas>
+
+    <header id="toolbar" class="toolbar glass-panel">
+      <button class="tool-btn" data-action="rotate" data-tip="自由旋转">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+        </svg>
+      </button>
+      <button class="tool-btn" data-action="pan" data-tip="平移视图">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 9l-3 3 3 3"></path><path d="M9 5l3-3 3 3"></path>
+          <path d="M15 19l-3 3-3-3"></path><path d="M19 9l3 3-3 3"></path>
+          <line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line>
+        </svg>
+      </button>
+      <button class="tool-btn" data-action="zoom" data-tip="缩放视图">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </button>
+      <button class="tool-btn" data-action="reset" data-tip="重置视角">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+          <path d="M3 3v5h5"></path>
+        </svg>
+      </button>
+      <div class="toolbar-divider"></div>
+      <button class="tool-btn primary" data-action="generate" data-tip="参数生成模型">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20M2 12h20"></path>
+        </svg>
+      </button>
+      <button class="tool-btn warn" data-action="collision" data-tip="碰撞检测模式">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </button>
+    </header>
+
+    <aside id="left-panel" class="side-panel left glass-panel">
+      <div class="panel-header">
+        <span class="panel-title">构件列表</span>
+        <span class="panel-count" id="total-count">0</span>
+      </div>
+      <div class="panel-body" id="component-list"></div>
+    </aside>
+
+    <aside id="right-panel" class="side-panel right glass-panel">
+      <div class="tab-header">
+        <button class="tab-btn active" data-tab="detail">构件详情</button>
+        <button class="tab-btn" data-tab="collision">碰撞结果</button>
+        <span class="tab-indicator"></span>
+      </div>
+      <div class="tab-body">
+        <div class="tab-pane active" data-pane="detail">
+          <div class="empty-hint" id="detail-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>点击场景中的构件以查看详情</span>
+          </div>
+          <div class="detail-content" id="detail-content"></div>
+        </div>
+        <div class="tab-pane" data-pane="collision">
+          <div class="empty-hint" id="collision-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span>开启碰撞检测模式后框选两个构件</span>
+          </div>
+          <div class="collision-list" id="collision-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="info-popup" class="info-popup">
+      <button class="popup-close" id="popup-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      <div class="popup-header">
+        <span class="popup-type" id="popup-type">构件</span>
+        <span class="popup-id" id="popup-id">-</span>
+      </div>
+      <div class="popup-body">
+        <div class="info-row"><span class="info-label">类型</span><span class="info-value" id="info-type">-</span></div>
+        <div class="info-row"><span class="info-label">尺寸 (宽×高×长)</span><span class="info-value mono" id="info-size">-</span></div>
+        <div class="info-row"><span class="info-label">材料</span><span class="info-value" id="info-material">-</span></div>
+        <div class="info-row"><span class="info-label">位置坐标</span><span class="info-value mono" id="info-pos">-</span></div>
+      </div>
+    </div>
+
+    <div id="selection-box" class="selection-box"></div>
+
+    <div id="mode-banner" class="mode-banner hidden">
+      <span class="banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        </svg>
+      </span>
+      <span>碰撞检测模式：框选第一个构件</span>
+      <button class="banner-close" id="banner-close">退出</button>
+    </div>
+
+    <div id="params-modal" class="modal-overlay hidden">
+      <div class="modal-box glass-panel">
+        <div class="modal-title">
+          <span>建筑参数设置</span>
+          <button class="modal-close" id="params-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <label>楼层数</label>
+            <input type="number" id="param-floors" min="1" max="50" value="6" />
+          </div>
+          <div class="form-row">
+            <label>层高 (米)</label>
+            <input type="number" id="param-floorHeight" min="2" max="10" step="0.1" value="3.6" />
+          </div>
+          <div class="form-row">
+            <label>X向柱数</label>
+            <input type="number" id="param-columnsX" min="2" max="20" value="5" />
+          </div>
+          <div class="form-row">
+            <label>Z向柱数</label>
+            <input type="number" id="param-columnsZ" min="2" max="20" value="4" />
+          </div>
+          <div class="form-row">
+            <label>X向柱间距 (米)</label>
+            <input type="number" id="param-spacingX" min="2" max="20" step="0.1" value="6" />
+          </div>
+          <div class="form-row">
+            <label>Z向柱间距 (米)</label>
+            <input type="number" id="param-spacingZ" min="2" max="20" step="0.1" value="6" />
+          </div>
+          <div class="form-row">
+            <label>外墙材料</label>
+            <select id="param-wallMaterial">
+              <option value="混凝土空心砖">混凝土空心砖</option>
+              <option value="加气混凝土砌块">加气混凝土砌块</option>
+              <option value="玻璃幕墙">玻璃幕墙</option>
+              <option value="预制混凝土挂板">预制混凝土挂板</option>
+              <option value="轻钢龙骨石膏板">轻钢龙骨石膏板</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="params-cancel">取消</button>
+          <button class="btn-primary" id="params-confirm">生成模型</button>
+        </div>
+      </div>
+    </div>
+
+    <footer id="status-bar" class="status-bar">
+      <span id="fps-info">FPS: --</span>
+      <span class="divider">|</span>
+      <span id="cursor-info">坐标: -, -, -</span>
+      <span class="divider">|</span>
+      <span id="components-info">构件数: 0</span>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
