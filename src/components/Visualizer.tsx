@@ -1,21 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
-import { AudioAnalyzer } from '../utils/audioAnalyzer'
+import type { AudioEngine } from '../core/audioEngine'
+import type { VizMode } from '../core/draw'
+import { VisualizerController } from '../core/visualizerController'
 import { Activity, BarChart3 } from 'lucide-react'
 
 interface VisualizerProps {
-  analyzer: AudioAnalyzer | null
-  isPlaying: boolean
-  isSeeking: boolean
+  engine: AudioEngine
 }
 
-type VizMode = 'waveform' | 'spectrum'
-
-export default function Visualizer({ analyzer, isPlaying, isSeeking }: VisualizerProps) {
+export default function Visualizer({ engine }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const animationRef = useRef<number>(0)
   const [mode, setMode] = useState<VizMode>('waveform')
+  const modeRef = useRef<VizMode>(mode)
   const [fadeState, setFadeState] = useState<'in' | 'out'>('in')
   const [pendingMode, setPendingMode] = useState<VizMode | null>(null)
+  const [hasFile, setHasFile] = useState(() => Boolean(engine.getSnapshot().fileName))
+
+  // The controller owns the render loop, canvas sizing and per-frame draw.
+  // It is created once and never rebuilt; mode is read through a ref so
+  // switching modes never restarts the loop.
+  const controllerRef = useRef<VisualizerController | null>(null)
+  if (!controllerRef.current) {
+    controllerRef.current = new VisualizerController(engine, () => modeRef.current)
+  }
+
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
+
+  useEffect(
+    () => engine.subscribe(() => setHasFile(Boolean(engine.getSnapshot().fileName))),
+    [engine],
+  )
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const controller = controllerRef.current!
+    controller.attach(canvas)
+    return () => controller.detach()
+  }, [])
 
   const handleModeChange = (newMode: VizMode) => {
     if (newMode === mode) return
@@ -27,97 +51,6 @@ export default function Visualizer({ analyzer, isPlaying, isSeeking }: Visualize
       setFadeState('in')
     }, 300)
   }
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const draw = () => {
-      const width = canvas.width
-      const height = canvas.height
-
-      ctx.fillStyle = '#0f0f23'
-      ctx.fillRect(0, 0, width, height)
-
-      if (analyzer && isPlaying && !isSeeking) {
-        if (mode === 'waveform') {
-          drawWaveform(ctx, analyzer, width, height)
-        } else {
-          drawSpectrum(ctx, analyzer, width, height)
-        }
-      } else {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(0, height / 2)
-        ctx.lineTo(width, height / 2)
-        ctx.stroke()
-      }
-
-      animationRef.current = requestAnimationFrame(draw)
-    }
-
-    animationRef.current = requestAnimationFrame(draw)
-
-    return () => {
-      cancelAnimationFrame(animationRef.current)
-    }
-  }, [analyzer, isPlaying, isSeeking, mode])
-
-  const drawWaveform = (ctx: CanvasRenderingContext2D, analyzer: AudioAnalyzer, width: number, height: number) => {
-    const data = analyzer.getTimeDomainData()
-    const sliceWidth = width / data.length
-
-    ctx.lineWidth = 2
-    ctx.strokeStyle = '#22c55e'
-    ctx.beginPath()
-
-    let x = 0
-    for (let i = 0; i < data.length; i++) {
-      const v = data[i] / 128.0
-      const y = (v * height) / 2
-      if (i === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
-      }
-      x += sliceWidth
-    }
-
-    ctx.lineTo(width, height / 2)
-    ctx.stroke()
-  }
-
-  const drawSpectrum = (ctx: CanvasRenderingContext2D, analyzer: AudioAnalyzer, width: number, height: number) => {
-    const data = analyzer.getFrequencyData()
-    const usableBins = Math.floor(data.length * 0.6)
-    const barCount = Math.min(64, usableBins)
-    const barWidth = width / barCount
-    const gap = Math.max(1, barWidth * 0.15)
-    const actualBarWidth = barWidth - gap
-
-    for (let i = 0; i < barCount; i++) {
-      const dataIndex = Math.floor((i / barCount) * usableBins)
-      const value = data[dataIndex] / 255
-      const barHeight = value * height
-
-      const x = i * barWidth + gap / 2
-      const y = height - barHeight
-
-      const gradient = ctx.createLinearGradient(0, height, 0, y)
-      gradient.addColorStop(0, '#3b82f6')
-      gradient.addColorStop(0.5, '#ef4444')
-      gradient.addColorStop(1, '#f97316')
-
-      ctx.fillStyle = gradient
-      ctx.fillRect(x, y, actualBarWidth, barHeight)
-    }
-  }
-
-  const hasFile = analyzer !== null
 
   return (
     <div className="relative w-full">

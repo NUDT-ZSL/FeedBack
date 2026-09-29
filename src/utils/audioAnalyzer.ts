@@ -1,3 +1,9 @@
+export type AudioContextFactory = () => AudioContext
+
+const defaultContextFactory: AudioContextFactory = () =>
+  new (window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
 export class AudioAnalyzer {
   audioContext: AudioContext | null = null
   analyser: AnalyserNode | null = null
@@ -9,8 +15,11 @@ export class AudioAnalyzer {
   timeDomainData: Uint8Array
   leftChannelData: Uint8Array
   rightChannelData: Uint8Array
+  private disposed = false
+  private contextFactory: AudioContextFactory
 
-  constructor() {
+  constructor(contextFactory: AudioContextFactory = defaultContextFactory) {
+    this.contextFactory = contextFactory
     this.frequencyData = new Uint8Array(0)
     this.timeDomainData = new Uint8Array(0)
     this.leftChannelData = new Uint8Array(0)
@@ -18,13 +27,16 @@ export class AudioAnalyzer {
   }
 
   connect(audioElement: HTMLAudioElement): void {
+    if (this.disposed) {
+      throw new Error('AudioAnalyzer has been disposed')
+    }
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      this.audioContext = this.contextFactory()
     }
 
-    if (this.source) {
-      this.disconnect()
-    }
+    // Always tear down any previously created nodes before wiring a new
+    // graph, so reconnecting never leaves orphaned nodes behind.
+    this.releaseNodes()
 
     const ctx = this.audioContext
     this.source = ctx.createMediaElementSource(audioElement)
@@ -51,7 +63,7 @@ export class AudioAnalyzer {
     this.splitter.connect(this.rightAnalyser, 1)
   }
 
-  disconnect(): void {
+  private releaseNodes(): void {
     if (this.source) {
       this.source.disconnect()
       this.source = null
@@ -72,6 +84,27 @@ export class AudioAnalyzer {
       this.rightAnalyser.disconnect()
       this.rightAnalyser = null
     }
+  }
+
+  disconnect(): void {
+    this.releaseNodes()
+  }
+
+  get isDisposed(): boolean {
+    return this.disposed
+  }
+
+  dispose(): void {
+    if (this.disposed) return
+    this.releaseNodes()
+    if (this.audioContext) {
+      const ctx = this.audioContext
+      this.audioContext = null
+      if (ctx.state !== 'closed') {
+        void ctx.close().catch(() => undefined)
+      }
+    }
+    this.disposed = true
   }
 
   async resume(): Promise<void> {

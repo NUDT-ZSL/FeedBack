@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { AudioAnalyzer } from '../utils/audioAnalyzer'
+import { useEffect, useRef, useState } from 'react'
+import type { AudioEngine, EngineSnapshot } from '../core/audioEngine'
+import type { VULevels } from '../core/vuMeter'
 import { Upload, Play, Pause, Square, Volume2 } from 'lucide-react'
 
 interface AudioPlayerProps {
-  onAudioContextReady: (analyzer: AudioAnalyzer | null) => void
-  onPlayingChange: (isPlaying: boolean) => void
-  onSeekingChange: (isSeeking: boolean) => void
+  engine: AudioEngine
 }
 
 const formatTime = (seconds: number): string => {
@@ -21,29 +20,41 @@ const getVUColor = (level: number): string => {
   return '#ef4444'
 }
 
-export default function AudioPlayer({ onAudioContextReady, onPlayingChange, onSeekingChange }: AudioPlayerProps) {
+export default function AudioPlayer({ engine }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const analyzerRef = useRef<AudioAnalyzer | null>(null)
-  const vuTimerRef = useRef<number>(0)
+  const [snap, setSnap] = useState<EngineSnapshot>(() => engine.getSnapshot())
+  const [vuLevels, setVuLevels] = useState<VULevels>({ left: 0, right: 0 })
 
-  const [fileName, setFileName] = useState<string>('')
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(0.8)
-  const [isSeeking, setIsSeeking] = useState(false)
-  const [vuLevels, setVuLevels] = useState({ left: 0, right: 0 })
+  useEffect(() => engine.subscribe(() => setSnap(engine.getSnapshot())), [engine])
 
-  const updateIsPlaying = useCallback((playing: boolean) => {
-    setIsPlaying(playing)
-    onPlayingChange(playing)
-  }, [onPlayingChange])
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    engine.attachElement(audio)
+    return () => engine.detachElement()
+  }, [engine])
 
-  const updateIsSeeking = useCallback((seeking: boolean) => {
-    setIsSeeking(seeking)
-    onSeekingChange(seeking)
-  }, [onSeekingChange])
+  // One interval for the component's whole lifetime. The zeroing policy
+  // (paused / seeking / no analyzer) lives in the engine, so play, pause
+  // and seek drags never restart this timer.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setVuLevels(engine.getVULevels())
+    }, 1000 / 30)
+    return () => window.clearInterval(id)
+  }, [engine])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && engine.getSnapshot().fileName) {
+        e.preventDefault()
+        void engine.togglePlay()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [engine])
 
   const handleUploadClick = () => {
     fileInputRef.current?.click()
@@ -51,130 +62,46 @@ export default function AudioPlayer({ onAudioContextReady, onPlayingChange, onSe
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // Allow re-selecting the same file later.
+    e.target.value = ''
     if (!file) return
-    if (!audioRef.current) return
-
-    const url = URL.createObjectURL(file)
-    audioRef.current.src = url
-    setFileName(file.name)
-    setCurrentTime(0)
-    setDuration(0)
-
-    if (!analyzerRef.current) {
-      analyzerRef.current = new AudioAnalyzer()
-    }
-
     try {
-      analyzerRef.current.connect(audioRef.current)
-      onAudioContextReady(analyzerRef.current)
-      await analyzerRef.current.resume()
-      await audioRef.current.play()
+      await engine.loadFile(file)
     } catch (err) {
       console.error('Playback failed:', err)
     }
   }
 
-  const handlePlayPause = useCallback(async () => {
-    if (!audioRef.current || !fileName) return
+  const handlePlayPause = () => {
+    void engine.togglePlay()
+  }
 
-    try {
-      await analyzerRef.current?.resume()
-      if (audioRef.current.paused) {
-        await audioRef.current.play()
-      } else {
-        audioRef.current.pause()
-      }
-    } catch (err) {
-      console.error('Playback toggle failed:', err)
-    }
-  }, [fileName])
-
-  const handleStop = useCallback(() => {
-    if (!audioRef.current) return
-    audioRef.current.pause()
-    audioRef.current.currentTime = 0
-  }, [])
+  const handleStop = () => {
+    engine.stop()
+  }
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const vol = parseFloat(e.target.value)
-    setVolume(vol)
-    if (audioRef.current) {
-      audioRef.current.volume = vol
-    }
+    engine.setVolume(parseFloat(e.target.value))
   }
 
   const handleSeekStart = () => {
-    updateIsSeeking(true)
+    engine.beginSeek()
   }
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    setCurrentTime(time)
+    engine.previewSeek(parseFloat(e.target.value))
   }
 
-  const handleSeekEnd = (e: React.ChangeEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
-    if (!audioRef.current) return
-    const target = e.target as HTMLInputElement
-    const time = parseFloat(target.value)
-    audioRef.current.currentTime = time
-    setCurrentTime(time)
-    updateIsSeeking(false)
+  const handleSeekEnd = (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.MouseEvent<HTMLInputElement>
+      | React.TouchEvent<HTMLInputElement>,
+  ) => {
+    engine.endSeek(parseFloat((e.target as HTMLInputElement).value))
   }
 
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const onLoadedMetadata = () => setDuration(audio.duration)
-    const onTimeUpdate = () => {
-      if (!isSeeking) {
-        setCurrentTime(audio.currentTime)
-      }
-    }
-    const onPlay = () => updateIsPlaying(true)
-    const onPause = () => updateIsPlaying(false)
-    const onEnded = () => updateIsPlaying(false)
-
-    audio.addEventListener('loadedmetadata', onLoadedMetadata)
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('pause', onPause)
-    audio.addEventListener('ended', onEnded)
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', onLoadedMetadata)
-      audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('pause', onPause)
-      audio.removeEventListener('ended', onEnded)
-    }
-  }, [isSeeking, updateIsPlaying])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && fileName) {
-        e.preventDefault()
-        handlePlayPause()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [fileName, handlePlayPause])
-
-  useEffect(() => {
-    vuTimerRef.current = window.setInterval(() => {
-      if (analyzerRef.current && isPlaying && !isSeeking) {
-        setVuLevels(analyzerRef.current.getChannelPeaks())
-      } else {
-        setVuLevels({ left: 0, right: 0 })
-      }
-    }, 1000 / 30)
-
-    return () => {
-      clearInterval(vuTimerRef.current)
-    }
-  }, [isPlaying, isSeeking])
-
+  const { fileName, isPlaying, isSeeking, currentTime, duration, volume } = snap
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
@@ -230,7 +157,6 @@ export default function AudioPlayer({ onAudioContextReady, onPlayingChange, onSe
           <span className="text-white/70 text-xs sm:text-sm w-8">{Math.round(volume * 100)}%</span>
         </div>
       </div>
-
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-3">
           <div>

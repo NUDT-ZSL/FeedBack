@@ -1,12 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import AudioPlayer from './components/AudioPlayer'
 import Visualizer from './components/Visualizer'
-import { AudioAnalyzer } from './utils/audioAnalyzer'
+import { AudioEngine } from './core/audioEngine'
 
 export default function App() {
-  const [analyzer, setAnalyzer] = useState<AudioAnalyzer | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isSeeking, setIsSeeking] = useState(false)
+  // The engine lives outside React state: analyzer lifecycle, playback and
+  // seek state, and render-loop control never trigger re-renders or effect
+  // rebuilds. Components only subscribe to snapshots.
+  const engineRef = useRef<AudioEngine | null>(null)
+  if (!engineRef.current) {
+    engineRef.current = new AudioEngine()
+  }
+  const engine = engineRef.current
+
+  useEffect(() => {
+    return () => engine.dispose()
+  }, [engine])
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6">
@@ -22,17 +31,8 @@ export default function App() {
         </h1>
 
         <div className="space-y-5 sm:space-y-6">
-          <AudioPlayer
-            onAudioContextReady={setAnalyzer}
-            onPlayingChange={setIsPlaying}
-            onSeekingChange={setIsSeeking}
-          />
-
-          <Visualizer
-            analyzer={analyzer}
-            isPlaying={isPlaying}
-            isSeeking={isSeeking}
-          />
+          <AudioPlayer engine={engine} />
+          <Visualizer engine={engine} />
         </div>
 
         <p className="text-center text-white/30 text-xs mt-6">
