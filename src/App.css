@@ -1,0 +1,177 @@
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  background: #0a0a1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: rgba(10, 10, 30, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  z-index: 20;
+}
+
+.header-left,
+.header-right {
+  width: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  justify-content: flex-end;
+}
+
+.mobile-menu-placeholder {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 2px;
+  margin: 0;
+  text-align: center;
+}
+
+.reset-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.reset-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(45deg);
+}
+
+.reset-button:active {
+  transform: rotate(45deg) scale(0.95);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.left-panel {
+  width: 280px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.right-panel {
+  width: 320px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.instructions {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.instructions p {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 16px;
+    height: 52px;
+  }
+
+  .app-title {
+    font-size: 16px;
+    letter-spacing: 1.5px;
+  }
+
+  .left-panel {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    bottom: 0;
+    padding: 0;
+    width: auto;
+    pointer-events: none;
+  }
+
+  .left-panel > * {
+    pointer-events: auto;
+  }
+
+  .right-panel {
+    position: fixed;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    padding: 0;
+    width: auto;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .right-panel > * {
+    pointer-events: auto;
+  }
+
+  .instructions {
+    bottom: 12px;
+    font-size: 11px;
+  }
+}
