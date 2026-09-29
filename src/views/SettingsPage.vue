@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import {
-  getReminders,
   addReminder,
   updateReminder,
   deleteReminder,
   markAllAsRead,
-  getUnreadCount
+  reminderState
 } from '@/modules/notification/ReminderService'
-import type { Reminder, EmotionType } from '@/types'
+import type { EmotionType } from '@/types'
 import { EMOTION_LABELS } from '@/types'
 
-const reminders = ref<Reminder[]>([])
-const unreadCount = ref(0)
+const reminders = computed(() => reminderState.reminders)
+const unreadCount = computed(() => reminderState.unreadQueue.length)
 
 const showAddForm = ref(false)
 const newHour = ref(9)
@@ -48,20 +47,13 @@ const pad = (n: number) => n.toString().padStart(2, '0')
 
 const formatTime = (hour: number, minute: number) => `${pad(hour)}:${pad(minute)}`
 
-const loadData = () => {
-  reminders.value = getReminders()
-  unreadCount.value = getUnreadCount()
-}
-
 const handleToggle = (id: string, enabled: boolean) => {
   updateReminder(id, { enabled })
-  loadData()
 }
 
 const handleDelete = (id: string) => {
   if (confirm('确定删除这个提醒吗？')) {
     deleteReminder(id)
-    loadData()
   }
 }
 
@@ -81,12 +73,10 @@ const handleAdd = () => {
   newTargetEmotion.value = ''
   newMessage.value = defaultMessages['']
   showAddForm.value = false
-  loadData()
 }
 
 const handleMarkAllRead = () => {
   markAllAsRead()
-  unreadCount.value = 0
 }
 
 const updateDefaultMessage = () => {
@@ -94,7 +84,6 @@ const updateDefaultMessage = () => {
 }
 
 onMounted(() => {
-  loadData()
   newMessage.value = defaultMessages['']
 })
 </script>

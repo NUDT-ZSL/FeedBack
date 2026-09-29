@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDiaryStore } from '@/modules/diary/diaryStore'
-import { startReminderService, getUnreadCount, markAllAsRead } from '@/modules/notification/ReminderService'
+import { startReminderService, markAllAsRead, reminderState } from '@/modules/notification/ReminderService'
 
 const router = useRouter()
 const route = useRoute()
 const store = useDiaryStore()
 
-const unreadCount = ref(0)
+const unreadCount = computed(() => reminderState.unreadQueue.length)
 
 const navItems = [
   { path: '/', name: '写日记', icon: '📝' },
@@ -21,11 +21,6 @@ const currentPath = computed(() => route.path)
 onMounted(() => {
   store.loadFromStorage()
   startReminderService()
-  unreadCount.value = getUnreadCount()
-
-  setInterval(() => {
-    unreadCount.value = getUnreadCount()
-  }, 5000)
 })
 
 const isActive = (path: string) => currentPath.value === path
@@ -33,7 +28,6 @@ const isActive = (path: string) => currentPath.value === path
 const handleNavClick = (path: string) => {
   if (path === '/settings') {
     markAllAsRead()
-    unreadCount.value = 0
   }
   router.push(path)
 }

@@ -1,45 +1,46 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useDiaryStore } from '@/modules/diary/diaryStore'
 import { EMOTION_LABELS, EMOTION_COLORS, type DiaryEntry } from '@/types'
+import { useDynamicVirtualList } from '@/modules/diary/useDynamicVirtualList'
 
 const store = useDiaryStore()
 
 const scrollerRef = ref<HTMLDivElement | null>(null)
 const containerHeight = ref(600)
 
-const VISIBLE_COUNT = 30
-const ITEM_ESTIMATED_HEIGHT = 200
+const ITEM_GAP = 16
 
-const scrollTop = ref(0)
+const filteredEntries = computed(() => store.filteredEntries)
 
-const displayStart = computed(() => {
-  const start = Math.floor(scrollTop.value / ITEM_ESTIMATED_HEIGHT) - 5
-  return Math.max(0, start)
+const {
+  visibleItems,
+  totalHeight,
+  offsetY,
+  handleScroll,
+  observeItem,
+  unobserveItem
+} = useDynamicVirtualList(filteredEntries, (entry: DiaryEntry) => entry.id, {
+  estimatedHeight: 200,
+  gap: ITEM_GAP,
+  overscan: 5,
+  containerHeight,
+  scrollerRef
 })
 
-const displayEnd = computed(() => {
-  return Math.min(
-    displayStart.value + VISIBLE_COUNT,
-    store.filteredEntries.length
-  )
-})
+const itemEls = new Map<string, Element>()
 
-const visibleEntries = computed(() => {
-  return store.filteredEntries.slice(displayStart.value, displayEnd.value)
-})
-
-const totalHeight = computed(() => {
-  return store.filteredEntries.length * ITEM_ESTIMATED_HEIGHT
-})
-
-const offsetY = computed(() => {
-  return displayStart.value * ITEM_ESTIMATED_HEIGHT
-})
-
-const handleScroll = (e: Event) => {
-  const target = e.target as HTMLDivElement
-  scrollTop.value = target.scrollTop
+const setItemRef = (el: Element | null, key: string) => {
+  if (el) {
+    itemEls.set(key, el)
+    observeItem(el, key)
+  } else {
+    const prev = itemEls.get(key)
+    if (prev) {
+      unobserveItem(prev)
+      itemEls.delete(key)
+    }
+  }
 }
 
 const formatDate = (timestamp: number) => {
@@ -73,9 +74,6 @@ const getTagColor = (tagName: string) => store.getTagColor(tagName)
 
 const handleTagClick = (tagName: string) => {
   store.setSelectedTag(store.selectedTag === tagName ? null : tagName)
-  if (scrollerRef.value) {
-    scrollerRef.value.scrollTop = 0
-  }
 }
 
 const deleteEntry = (id: string) => {
@@ -89,13 +87,6 @@ const getPlainText = (html: string) => {
   tmp.innerHTML = html
   return (tmp.textContent || tmp.innerText || '').slice(0, 150)
 }
-
-watch(() => store.filteredEntries.length, async () => {
-  await nextTick()
-  if (scrollerRef.value) {
-    scrollTop.value = scrollerRef.value.scrollTop
-  }
-})
 
 onMounted(async () => {
   await nextTick()
@@ -165,52 +156,53 @@ onMounted(async () => {
           :style="{ transform: `translateY(${offsetY}px)` }"
         >
           <div
-            v-for="entry in visibleEntries"
-            :key="entry.id"
-            class="diary-card card"
-            :style="{ height: ITEM_ESTIMATED_HEIGHT + 'px' }"
+            v-for="visible in visibleItems"
+            :key="visible.key"
+            :ref="(el: Element | null) => setItemRef(el, visible.key)"
           >
-            <div class="card-header">
-              <span class="card-date">{{ formatDateShort(entry.createdAt) }}</span>
-              <span
-                class="emotion-badge"
-                :style="{
-                  backgroundColor: EMOTION_COLORS[entry.emotion] + '22',
-                  color: EMOTION_COLORS[entry.emotion]
-                }"
-              >
+            <div class="diary-card card">
+              <div class="card-header">
+                <span class="card-date">{{ formatDateShort(visible.item.createdAt) }}</span>
                 <span
-                  class="emotion-dot"
-                  :style="{ backgroundColor: EMOTION_COLORS[entry.emotion] }"
-                ></span>
-                {{ EMOTION_LABELS[entry.emotion] }}
-              </span>
-            </div>
-
-            <div
-              class="card-content"
-              v-html="entry.content"
-            ></div>
-
-            <div class="card-footer">
-              <div class="card-tags">
-                <span
-                  v-for="tag in entry.tags"
-                  :key="tag"
-                  class="tag"
-                  :style="{ backgroundColor: getTagColor(tag) }"
-                  @click.stop="handleTagClick(tag)"
+                  class="emotion-badge"
+                  :style="{
+                    backgroundColor: EMOTION_COLORS[visible.item.emotion] + '22',
+                    color: EMOTION_COLORS[visible.item.emotion]
+                  }"
                 >
-                  #{{ tag }}
+                  <span
+                    class="emotion-dot"
+                    :style="{ backgroundColor: EMOTION_COLORS[visible.item.emotion] }"
+                  ></span>
+                  {{ EMOTION_LABELS[visible.item.emotion] }}
                 </span>
               </div>
-              <button
-                type="button"
-                class="btn-danger"
-                @click.stop="deleteEntry(entry.id)"
-              >
-                删除
-              </button>
+
+              <div
+                class="card-content"
+                v-html="visible.item.content"
+              ></div>
+
+              <div class="card-footer">
+                <div class="card-tags">
+                  <span
+                    v-for="tag in visible.item.tags"
+                    :key="tag"
+                    class="tag"
+                    :style="{ backgroundColor: getTagColor(tag) }"
+                    @click.stop="handleTagClick(tag)"
+                  >
+                    #{{ tag }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="btn-danger"
+                  @click.stop="deleteEntry(visible.item.id)"
+                >
+                  删除
+                </button>
+              </div>
             </div>
           </div>
         </div>

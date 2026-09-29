@@ -1,88 +1,21 @@
-import type { Reminder, EmotionType } from '@/types'
+import { reactive } from 'vue'
+import type { Reminder } from '@/types'
 import { EMOTION_LABELS } from '@/types'
+import {
+  createReminderCore,
+  type ReminderState,
+  type QueuedReminder
+} from './reminderCore'
 
-const REMINDERS_KEY = 'mindjournal_reminders'
-const UNREAD_KEY = 'mindjournal_unread_reminders'
-
-interface QueuedReminder {
-  id: string
-  message: string
-  timestamp: number
-}
-
-const DEFAULT_REMINDERS: Reminder[] = [
-  {
-    id: 'default-morning',
-    enabled: true,
-    hour: 9,
-    minute: 0,
-    targetEmotion: 'happy',
-    message: '早上好！今天有什么让你开心的小事呢？快来记录一下吧～'
-  },
-  {
-    id: 'default-evening',
-    enabled: true,
-    hour: 21,
-    minute: 0,
-    targetEmotion: null,
-    message: '夜深了，今天过得怎么样？花几分钟记录一下心情吧 💭'
-  }
-]
-
-let reminders: Reminder[] = []
-let unreadQueue: QueuedReminder[] = []
-let checkInterval: number | null = null
-let lastCheckedDate = ''
-
-function padZero(n: number): string {
-  return n.toString().padStart(2, '0')
-}
-
-function loadReminders() {
-  try {
-    const saved = localStorage.getItem(REMINDERS_KEY)
-    if (saved) {
-      reminders = JSON.parse(saved)
-    } else {
-      reminders = [...DEFAULT_REMINDERS]
-      saveReminders()
-    }
-  } catch (e) {
-    console.error('Failed to load reminders:', e)
-    reminders = [...DEFAULT_REMINDERS]
-  }
-}
-
-function saveReminders() {
-  try {
-    localStorage.setItem(REMINDERS_KEY, JSON.stringify(reminders))
-  } catch (e) {
-    console.error('Failed to save reminders:', e)
-  }
-}
-
-function loadUnreadQueue() {
-  try {
-    const saved = localStorage.getItem(UNREAD_KEY)
-    if (saved) {
-      unreadQueue = JSON.parse(saved)
-    }
-  } catch (e) {
-    console.error('Failed to load unread queue:', e)
-  }
-}
-
-function saveUnreadQueue() {
-  try {
-    localStorage.setItem(UNREAD_KEY, JSON.stringify(unreadQueue))
-  } catch (e) {
-    console.error('Failed to save unread queue:', e)
-  }
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
-}
+/**
+ * 提醒服务的唯一状态来源。
+ * 所有入口（导航角标、设置页等）都读取这份响应式状态，
+ * 保证未读数和提醒列表在任何地方都一致。
+ */
+const state = reactive<ReminderState>({
+  reminders: [],
+  unreadQueue: []
+})
 
 function requestNotificationPermission(): Promise<boolean> {
   if (!('Notification' in window)) {
@@ -114,47 +47,23 @@ function showNotification(message: string) {
   }
 }
 
-function checkAndTriggerReminders() {
-  const now = new Date()
-  const currentKey = `${now.getFullYear()}-${padZero(now.getMonth() + 1)}-${padZero(now.getDate())}`
-  const currentHour = now.getHours()
-  const currentMinute = now.getMinutes()
+const core = createReminderCore({
+  storage: localStorage,
+  state,
+  onNotify: showNotification
+})
 
-  reminders.forEach(reminder => {
-    if (!reminder.enabled) return
-
-    const triggeredKey = `${currentKey}-${reminder.id}`
-    const alreadyTriggered = unreadQueue.some(
-      q => q.id === reminder.id && new Date(q.timestamp).toDateString() === now.toDateString()
-    )
-
-    if (alreadyTriggered) return
-
-    if (reminder.hour === currentHour && reminder.minute === currentMinute) {
-      showNotification(reminder.message)
-      unreadQueue.push({
-        id: reminder.id,
-        message: reminder.message,
-        timestamp: now.getTime()
-      })
-      saveUnreadQueue()
-    }
-  })
-
-  lastCheckedDate = currentKey
-}
+let checkInterval: number | null = null
 
 export function startReminderService() {
   if (checkInterval !== null) return
 
-  loadReminders()
-  loadUnreadQueue()
+  core.load()
   requestNotificationPermission()
-
-  checkAndTriggerReminders()
+  core.checkAndTrigger()
 
   checkInterval = window.setInterval(() => {
-    checkAndTriggerReminders()
+    core.checkAndTrigger()
   }, 30000)
 }
 
@@ -165,52 +74,46 @@ export function stopReminderService() {
   }
 }
 
+/** 重置为默认提醒并清空未读 */
+export function resetReminderService() {
+  core.reset()
+}
+
+/** 重新从存储加载提醒与未读队列 */
+export function reloadReminderService() {
+  core.reload()
+}
+
 export function getReminders(): Reminder[] {
-  return [...reminders]
+  return core.getReminders()
 }
 
 export function addReminder(reminder: Omit<Reminder, 'id'>): Reminder {
-  const newReminder: Reminder = {
-    ...reminder,
-    id: generateId()
-  }
-  reminders.push(newReminder)
-  saveReminders()
-  return newReminder
+  return core.addReminder(reminder)
 }
 
 export function updateReminder(id: string, updates: Partial<Omit<Reminder, 'id'>>): boolean {
-  const index = reminders.findIndex(r => r.id === id)
-  if (index === -1) return false
-  reminders[index] = { ...reminders[index], ...updates }
-  saveReminders()
-  return true
+  return core.updateReminder(id, updates)
 }
 
 export function deleteReminder(id: string): boolean {
-  const index = reminders.findIndex(r => r.id === id)
-  if (index === -1) return false
-  reminders.splice(index, 1)
-  saveReminders()
-  return true
+  return core.deleteReminder(id)
 }
 
 export function getUnreadCount(): number {
-  loadUnreadQueue()
-  return unreadQueue.length
+  return core.getUnreadCount()
 }
 
 export function markAllAsRead() {
-  unreadQueue = []
-  saveUnreadQueue()
+  core.markAllAsRead()
 }
 
 export function markAsRead(id: string) {
-  const index = unreadQueue.findIndex(q => q.id === id)
-  if (index !== -1) {
-    unreadQueue.splice(index, 1)
-    saveUnreadQueue()
-  }
+  core.markAsRead(id)
 }
 
+/** 响应式状态，供组件直接 computed 订阅 */
+export const reminderState = state
+
+export type { QueuedReminder }
 export { EMOTION_LABELS }
