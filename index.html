@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5x5 井字棋对战</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <div id="app">
+    <nav class="navbar">
+      <button id="newGameBtn" class="nav-btn">新游戏</button>
+      <button id="historyBtn" class="nav-btn">历史记录</button>
+      <div class="player-indicator">
+        <span id="currentPlayerText">当前玩家</span>
+        <div id="currentPlayerDot" class="player-dot red"></div>
+      </div>
+    </nav>
+
+    <div class="stats-panel" id="statsPanel">
+      <div class="stat-item">
+        <div class="stat-icon">📊</div>
+        <div class="stat-info">
+          <div class="stat-label">总步数</div>
+          <div class="stat-value" id="totalMoves">0</div>
+        </div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-icon">🔴</div>
+        <div class="stat-info">
+          <div class="stat-label">红方棋子</div>
+          <div class="stat-value" id="redCount">0</div>
+        </div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-icon">🔵</div>
+        <div class="stat-info">
+          <div class="stat-label">蓝方棋子</div>
+          <div class="stat-value" id="blueCount">0</div>
+        </div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-icon">🔥</div>
+        <div class="stat-info">
+          <div class="stat-label">红方最大连子</div>
+          <div class="stat-value" id="redMaxStreak">0</div>
+        </div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-icon">💙</div>
+        <div class="stat-info">
+          <div class="stat-label">蓝方最大连子</div>
+          <div class="stat-value" id="blueMaxStreak">0</div>
+        </div>
+      </div>
+    </div>
+
+    <main class="game-container">
+      <div class="victory-banner" id="victoryBanner"></div>
+      <div class="board-wrapper">
+        <div id="board" class="board"></div>
+      </div>
+    </main>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>历史记录</h2>
+        <button id="closeSidebarBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="sidebar-content" id="historyList"></div>
+    </aside>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
