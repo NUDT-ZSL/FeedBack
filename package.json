@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "verify": "tsx scripts/verify-store.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -15,6 +17,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.4.1",
+    "tsx": "^4.23.15",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }

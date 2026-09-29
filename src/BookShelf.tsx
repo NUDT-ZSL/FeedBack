@@ -14,6 +14,7 @@ const BookShelf: FC<BookShelfProps> = ({ searchKeyword, onSearchChange }) => {
   const {
     userBooks,
     allBooks,
+    reviews,
     updateBookStatus,
     updateBookProgress,
     addToShelf,
@@ -22,13 +23,13 @@ const BookShelf: FC<BookShelfProps> = ({ searchKeyword, onSearchChange }) => {
     getBookById,
     getReviewsByBookId,
     likeReview,
+    isReviewLiked,
   } = useBookStore();
 
   const [showResults, setShowResults] = useState(false);
   const [reviewModal, setReviewModal] = useState<{ bookId: string } | null>(null);
   const [reviewContent, setReviewContent] = useState('');
   const [reviewRating, setReviewRating] = useState(0);
-  const [likedReviews, setLikedReviews] = useState<Set<string>>(new Set());
   const [scalingLike, setScalingLike] = useState<string | null>(null);
 
   const searchResults = useMemo(() => {
@@ -67,14 +68,13 @@ const BookShelf: FC<BookShelfProps> = ({ searchKeyword, onSearchChange }) => {
 
   const handleLikeReview = useCallback(
     (reviewId: string) => {
-      if (!likedReviews.has(reviewId)) {
+      if (!isReviewLiked(reviewId)) {
         likeReview(reviewId);
-        setLikedReviews((prev) => new Set(prev).add(reviewId));
         setScalingLike(reviewId);
         setTimeout(() => setScalingLike(null), 300);
       }
     },
-    [likedReviews, likeReview]
+    [isReviewLiked, likeReview]
   );
 
   const filteredUserBooks = useMemo(() => {
@@ -119,7 +119,7 @@ const BookShelf: FC<BookShelfProps> = ({ searchKeyword, onSearchChange }) => {
       const reviews = getReviewsByBookId(ub.bookId);
       return reviews.length > 0;
     });
-  }, [booksByStatus.finished, getReviewsByBookId]);
+  }, [booksByStatus.finished, getReviewsByBookId, reviews]);
 
   return (
     <div className="shelf-page">
@@ -232,7 +232,7 @@ const BookShelf: FC<BookShelfProps> = ({ searchKeyword, onSearchChange }) => {
                 <div className="review-footer">
                   <span>{new Date(latestReview.createdAt).toLocaleDateString('zh-CN')}</span>
                   <button
-                    className={`like-btn ${likedReviews.has(latestReview.id) ? 'liked' : ''} ${
+                    className={`like-btn ${isReviewLiked(latestReview.id) ? 'liked' : ''} ${
                       scalingLike === latestReview.id ? 'scaling' : ''
                     }`}
                     onClick={() => handleLikeReview(latestReview.id)}
