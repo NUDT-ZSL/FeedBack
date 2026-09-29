@@ -3,9 +3,8 @@ import type { FC } from 'react';
 import { useBookStore } from './store/useBookStore';
 
 const CommunityFeed: FC = () => {
-  const { getTopReviews, getBookById, likeReview } = useBookStore();
+  const { reviews, getTopReviews, getBookById, likeReview, isReviewLiked } = useBookStore();
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
-  const [likedReviews, setLikedReviews] = useState<Set<string>>(new Set());
   const [scalingLike, setScalingLike] = useState<string | null>(null);
 
   const topReviews = useMemo(() => {
@@ -13,7 +12,7 @@ const CommunityFeed: FC = () => {
       ...review,
       book: getBookById(review.bookId),
     }));
-  }, [getTopReviews, getBookById]);
+  }, [reviews, getTopReviews, getBookById]);
 
   const toggleExpand = useCallback((reviewId: string) => {
     setExpandedReviews((prev) => {
@@ -29,14 +28,11 @@ const CommunityFeed: FC = () => {
 
   const handleLike = useCallback(
     (reviewId: string) => {
-      if (!likedReviews.has(reviewId)) {
-        likeReview(reviewId);
-        setLikedReviews((prev) => new Set(prev).add(reviewId));
-        setScalingLike(reviewId);
-        setTimeout(() => setScalingLike(null), 300);
-      }
+      likeReview(reviewId);
+      setScalingLike(reviewId);
+      setTimeout(() => setScalingLike(null), 300);
     },
-    [likedReviews, likeReview]
+    [likeReview]
   );
 
   const truncateContent = (content: string, maxLength: number = 40) => {
@@ -65,7 +61,7 @@ const CommunityFeed: FC = () => {
         {topReviews.map((item, index) => {
           if (!item.book) return null;
           const isExpanded = expandedReviews.has(item.id);
-          const isLiked = likedReviews.has(item.id);
+          const isLiked = isReviewLiked(item.id);
           const isScaling = scalingLike === item.id;
 
           return (

@@ -3,6 +3,45 @@ import type { Book, UserBook, Review, BookStatus } from '../types';
 import { books } from '../data/books';
 import { mockReviews } from '../data/mockReviews';
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const clampProgress = (progress: number) => Math.max(0, Math.min(100, Math.round(progress)));
+
+function compareByCreatedAtDesc(a: Review, b: Review) {
+  if (b.createdAt !== a.createdAt) return b.createdAt - a.createdAt;
+  return b.id.localeCompare(a.id);
+}
+
+function compareTopReviews(a: Review, b: Review) {
+  if (b.likes !== a.likes) return b.likes - a.likes;
+  if (b.createdAt !== a.createdAt) return b.createdAt - a.createdAt;
+  return b.id.localeCompare(a.id);
+}
+
+const likedReviewIds = new Set<string>();
+const progressBeforeFinished = new Map<string, number>();
+
+interface ReviewCache<T> {
+  reviews: Review[] | null;
+  value: T;
+}
+
+interface TopReviewsCache extends ReviewCache<Review[]> {
+  cutoff: number;
+}
+
+const reviewsByBookCache = new Map<string, ReviewCache<Review[]>>();
+const topReviewsCache: TopReviewsCache = {
+  reviews: null,
+  value: [],
+  cutoff: Date.now() - SEVEN_DAYS_MS,
+};
+
+function invalidateReviewCaches() {
+  reviewsByBookCache.clear();
+  topReviewsCache.reviews = null;
+}
+
 interface BookStore {
   allBooks: Book[];
   userBooks: UserBook[];
@@ -17,6 +56,7 @@ interface BookStore {
   updateBookProgress: (userBookId: string, progress: number) => void;
   addReview: (bookId: string, content: string, rating: number) => void;
   likeReview: (reviewId: string) => void;
+  isReviewLiked: (reviewId: string) => boolean;
   getBookById: (bookId: string) => Book | undefined;
   getReviewsByBookId: (bookId: string) => Review[];
   getTopReviews: () => Review[];
@@ -81,17 +121,68 @@ export const useBookStore = create<BookStore>((set, get) => ({
   updateBookStatus: (userBookId: string, status: BookStatus) => {
     set(state => ({
       userBooks: state.userBooks.map(ub =>
-        ub.id === userBookId
-          ? { ...ub, status, progress: status === 'finished' ? 100 : ub.progress }
-          : ub
+        ub.id !== userBookId || ub.status === status
+          ? ub
+          : (() => {
+              if (status === 'finished') {
+                progressBeforeFinished.set(
+                  userBookId,
+                  ub.status === 'reading' ? ub.progress : 0
+                );
+                return { ...ub, status, progress: 100 };
+              }
+
+              if (status === 'reading') {
+                const previousProgress = progressBeforeFinished.get(userBookId);
+                progressBeforeFinished.delete(userBookId);
+                return {
+                  ...ub,
+                  status,
+                  progress:
+                    ub.status === 'finished'
+                      ? Math.min(previousProgress ?? 99, 99)
+                      : Math.max(ub.progress, 0),
+                };
+              }
+
+              progressBeforeFinished.delete(userBookId);
+              return { ...ub, status, progress: 0 };
+            })()
       ),
     }));
   },
 
   updateBookProgress: (userBookId: string, progress: number) => {
+    const nextProgress = clampProgress(progress);
+
     set(state => ({
       userBooks: state.userBooks.map(ub =>
-        ub.id === userBookId ? { ...ub, progress: Math.max(0, Math.min(100, progress)) } : ub
+        ub.id !== userBookId
+          ? ub
+          : (() => {
+              if (ub.status === 'finished') {
+                if (nextProgress < 100) {
+                  progressBeforeFinished.delete(userBookId);
+                  return { ...ub, status: 'reading', progress: nextProgress };
+                }
+                return ub;
+              }
+
+              if (ub.status === 'unread' && nextProgress > 0) {
+                return { ...ub, status: 'reading', progress: nextProgress };
+              }
+
+              if (ub.status === 'reading' && nextProgress === 100) {
+                progressBeforeFinished.set(userBookId, 100);
+                return { ...ub, status: 'finished', progress: 100 };
+              }
+
+              if (ub.status === 'reading') {
+                progressBeforeFinished.delete(userBookId);
+              }
+
+              return { ...ub, progress: nextProgress };
+            })()
       ),
     }));
   },
@@ -110,14 +201,23 @@ export const useBookStore = create<BookStore>((set, get) => ({
         ...state.reviews,
       ],
     }));
+    invalidateReviewCaches();
   },
 
   likeReview: (reviewId: string) => {
+    if (likedReviewIds.has(reviewId)) return;
+    likedReviewIds.add(reviewId);
+
     set(state => ({
       reviews: state.reviews.map(r =>
         r.id === reviewId ? { ...r, likes: r.likes + 1 } : r
       ),
     }));
+    invalidateReviewCaches();
+  },
+
+  isReviewLiked: (reviewId: string) => {
+    return likedReviewIds.has(reviewId);
   },
 
   getBookById: (bookId: string) => {
@@ -125,15 +225,28 @@ export const useBookStore = create<BookStore>((set, get) => ({
   },
 
   getReviewsByBookId: (bookId: string) => {
-    return get().reviews.filter(r => r.bookId === bookId).sort((a, b) => b.createdAt - a.createdAt);
+    const reviews = get().reviews;
+    const cached = reviewsByBookCache.get(bookId);
+    if (cached?.reviews === reviews) return cached.value;
+
+    const value = reviews
+      .filter(r => r.bookId === bookId)
+      .sort(compareByCreatedAtDesc);
+    reviewsByBookCache.set(bookId, { reviews, value });
+    return value;
   },
 
   getTopReviews: () => {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return get().reviews
-      .filter(r => r.createdAt >= sevenDaysAgo)
-      .sort((a, b) => b.likes - a.likes)
+    const reviews = get().reviews;
+    if (topReviewsCache.reviews === reviews) return topReviewsCache.value;
+
+    const value = reviews
+      .filter(r => r.createdAt >= topReviewsCache.cutoff)
+      .sort(compareTopReviews)
       .slice(0, 10);
+    topReviewsCache.reviews = reviews;
+    topReviewsCache.value = value;
+    return value;
   },
 
   setCurrentPage: (page: 'shelf' | 'community') => {
