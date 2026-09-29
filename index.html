@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>地质断层与地震波传播可视化</title>
+  <style>
+    :root {
+      --bg-deep: #0a0e27;
+      --accent-cyan: #00d4ff;
+      --accent-magenta: #ff00aa;
+      --track-gray: #2a2a4a;
+      --panel-bg: rgba(10, 14, 39, 0.85);
+      --fault-normal: #ff3355;
+      --fault-reverse: #3366ff;
+      --fault-strike: #33dd66;
+      --radius-panel: 12px;
+      --blur-panel: 12px;
+      --transition-fast: 0.2s;
+      --transition-mid: 0.3s;
+      --transition-slow: 0.5s;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-deep);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+        'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      color: #e0e6ff;
+      user-select: none;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #scene-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: calc(100% - 312px);
+      height: 100%;
+    }
+
+    #scene-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #ui-panel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      bottom: 16px;
+      width: 280px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(var(--blur-panel));
+      -webkit-backdrop-filter: blur(var(--blur-panel));
+      border-radius: var(--radius-panel);
+      padding: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid rgba(0, 212, 255, 0.15);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      transition: all var(--transition-mid) ease;
+      z-index: 10;
+    }
+
+    #ui-panel::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #ui-panel::-webkit-scrollbar-track {
+      background: rgba(42, 42, 74, 0.3);
+      border-radius: 3px;
+    }
+
+    #ui-panel::-webkit-scrollbar-thumb {
+      background: var(--accent-cyan);
+      border-radius: 3px;
+      opacity: 0.6;
+    }
+
+    .panel-title {
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+    }
+
+    .fault-type-group {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+
+    .fault-btn {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #c0c8e0;
+      background: rgba(42, 42, 74, 0.6);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: all var(--transition-fast) ease;
+    }
+
+    .fault-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: translateY(-1px);
+    }
+
+    .fault-btn.active {
+      background: linear-gradient(135deg, var(--accent-magenta), #aa0077);
+      color: #fff;
+      border-color: var(--accent-magenta);
+      box-shadow: 0 0 16px rgba(255, 0, 170, 0.4);
+    }
+
+    .fault-btn .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(0, 212, 255, 0.5);
+      transform: scale(0);
+      animation: ripple-anim 0.4s ease-out;
+      pointer-events: none;
+    }
+
+    @keyframes ripple-anim {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+
+    .card {
+      background: rgba(42, 42, 74, 0.25);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(0, 212, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: background var(--transition-fast) ease;
+    }
+
+    .card-header:hover {
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      letter-spacing: 0.3px;
+    }
+
+    .card-arrow {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform var(--transition-mid) ease;
+      color: #8090b0;
+    }
+
+    .card.collapsed .card-arrow {
+      transform: rotate(-90deg);
+    }
+
+    .card-body {
+      max-height: 500px;
+      padding: 4px 12px 12px 12px;
+      overflow: hidden;
+      transition: max-height var(--transition-mid) ease, padding var(--transition-mid) ease;
+    }
+
+    .card.collapsed .card-body {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .slider-group {
+      margin-top: 10px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    .slider-label span:first-child {
+      font-size: 11px;
+      color: #a0aec0;
+    }
+
+    .slider-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      font-family: 'SF Mono', Consolas, monospace;
+      min-width: 40px;
+      text-align: right;
+      transition: color var(--transition-fast) ease;
+    }
+
+    input[type='range'] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--track-gray);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type='range']::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent-cyan);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+      transition: transform var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
+    }
+
+    input[type='range']::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 14px rgba(0, 212, 255, 0.9);
+    }
+
+    input[type='range']::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--accent-cyan);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+      transition: transform var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
+    }
+
+    input[type='range']::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 14px rgba(0, 212, 255, 0.9);
+    }
+
+    .action-btn {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #fff;
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.8), rgba(0, 212, 255, 0.4));
+      border: 1px solid rgba(0, 212, 255, 0.5);
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      position: relative;
+      overflow: hidden;
+      transition: all var(--transition-fast) ease;
+      letter-spacing: 0.3px;
+    }
+
+    .action-btn:hover {
+      background: linear-gradient(135deg, var(--accent-cyan), rgba(0, 212, 255, 0.6));
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, var(--accent-magenta), #aa0077);
+      border-color: var(--accent-magenta);
+    }
+
+    .action-btn.primary:hover {
+      box-shadow: 0 0 16px rgba(255, 0, 170, 0.5);
+    }
+
+    .axis-toggle {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .axis-btn {
+      flex: 1;
+      padding: 6px;
+      font-size: 11px;
+      background: rgba(42, 42, 74, 0.6);
+      color: #a0aec0;
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all var(--transition-fast) ease;
+    }
+
+    .axis-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .axis-btn.active {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .mobile-bar {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      #scene-container {
+        width: 100%;
+        height: calc(100% - 60px);
+      }
+
+      #ui-panel {
+        display: none;
+      }
+
+      .mobile-bar {
+        display: flex;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(var(--blur-panel));
+        -webkit-backdrop-filter: blur(var(--blur-panel));
+        border-top: 1px solid rgba(0, 212, 255, 0.15);
+        padding: 8px 12px;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        z-index: 10;
+        transition: all var(--transition-mid) ease;
+      }
+
+      .mobile-bar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .mobile-item {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(42, 42, 74, 0.6);
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        border-radius: 10px;
+        cursor: pointer;
+        color: var(--accent-cyan);
+        font-size: 18px;
+        transition: all var(--transition-fast) ease;
+      }
+
+      .mobile-item:hover,
+      .mobile-item.active {
+        background: linear-gradient(135deg, var(--accent-magenta), #aa0077);
+        border-color: var(--accent-magenta);
+        color: #fff;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="scene-container"></div>
+    <div id="ui-panel">
+      <div class="panel-title">地质断层 & 地震波可视化</div>
+      <div class="fault-type-group" id="fault-type-group">
+        <button class="fault-btn active" data-type="normal">正断层</button>
+        <button class="fault-btn" data-type="reverse">逆断层</button>
+        <button class="fault-btn" data-type="strike-slip">平移断层</button>
+      </div>
+    </div>
+    <div class="mobile-bar" id="mobile-bar"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
