@@ -36,4 +36,5 @@ export interface Stats {
   successRate: number;
   mostPlayedTheme: ThemeType | null;
   themeCounts: Record<ThemeType, number>;
+  maxThemeCount: number;
 }

@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
-import { EscapeRecord, FilterState, ThemeType } from './types';
-import { initialRecords, getFilteredRecords, getStats } from './data';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { FilterState, Stats, ThemeType } from './types';
+import { initialRecords, getRecordView } from './data';
+import { createDeleteQueue } from './lib/deleteQueue';
 import RoomCard from './components/RoomCard';
 import FilterBar from './components/FilterBar';
+
+type ViewMode = 'list' | 'group';
 
 const themeColors: Record<ThemeType, string> = {
   恐怖: '#DC143C',
@@ -13,24 +16,34 @@ const themeColors: Record<ThemeType, string> = {
 };
 
 function App() {
-  const [records, setRecords] = useState<EscapeRecord[]>(initialRecords);
+  const [records, setRecords] = useState(initialRecords);
   const [filter, setFilter] = useState<FilterState>({
     themes: [],
     escapeStatus: 'all',
     searchText: '',
   });
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
-  const filteredRecords = useMemo(() => {
-    return getFilteredRecords(records, filter);
-  }, [records, filter]);
+  const deleteQueueRef = useRef<ReturnType<typeof createDeleteQueue> | null>(null);
+  if (deleteQueueRef.current === null) {
+    deleteQueueRef.current = createDeleteQueue({
+      onDelete: (id) => {
+        setRecords((prev) => prev.filter((record) => record.id !== id));
+      },
+    });
+  }
+  const deleteQueue = deleteQueueRef.current;
 
-  const stats = useMemo(() => {
-    return getStats(records);
-  }, [records]);
+  const pendingVersion = useSyncExternalStore(
+    deleteQueue.subscribe,
+    deleteQueue.getVersion,
+  );
+  const pendingDeleteIds = useMemo(
+    () => new Set(deleteQueue.getPendingIds()),
+    [deleteQueue, pendingVersion],
+  );
 
-  const handleDelete = (id: string) => {
-    setRecords((prev) => prev.filter((r) => r.id !== id));
-  };
+  const view = useMemo(() => getRecordView(records, filter), [records, filter]);
 
   return (
     <div
@@ -111,12 +124,110 @@ function App() {
         <div style={{ flex: '0 0 60%', minWidth: 0 }}>
           <FilterBar filter={filter} onFilterChange={setFilter} />
 
-          {filteredRecords.length > 0 ? (
-            <div>
-              {filteredRecords.map((record) => (
-                <RoomCard key={record.id} record={record} onDelete={handleDelete} />
-              ))}
-            </div>
+          <div
+            style={{
+              backgroundColor: '#16213E',
+              borderRadius: '12px',
+              padding: '8px',
+              marginBottom: '20px',
+              display: 'flex',
+              gap: '8px',
+            }}
+          >
+            {([
+              ['list', '列表查看'],
+              ['group', '按主题分组'],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: viewMode === mode ? '#E94560' : 'transparent',
+                  color: viewMode === mode ? '#fff' : 'rgba(224,224,224,0.7)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '14px',
+              color: 'rgba(224,224,224,0.6)',
+              fontSize: '13px',
+            }}
+          >
+            <span>当前筛选结果</span>
+            <span>{view.records.length} 条</span>
+          </div>
+
+          {view.records.length > 0 ? (
+            viewMode === 'list' ? (
+              <div>
+                {view.records.map((record) => (
+                  <RoomCard
+                    key={record.id}
+                    record={record}
+                    isDeleting={pendingDeleteIds.has(record.id)}
+                    onRequestDelete={deleteQueue.requestDelete}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div>
+                {view.groups.map((group) => (
+                  <section key={group.theme} style={{ marginBottom: '24px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '12px',
+                        padding: '0 4px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: themeColors[group.theme],
+                          }}
+                        />
+                        <span style={{ fontSize: '16px', fontWeight: 700 }}>
+                          {group.theme}
+                        </span>
+                      </div>
+                      <span style={{ color: 'rgba(224,224,224,0.5)', fontSize: '13px' }}>
+                        {group.records.length} 条
+                      </span>
+                    </div>
+                    {group.records.map((record) => (
+                      <RoomCard
+                        key={record.id}
+                        record={record}
+                        isDeleting={pendingDeleteIds.has(record.id)}
+                        onRequestDelete={deleteQueue.requestDelete}
+                      />
+                    ))}
+                  </section>
+                ))}
+              </div>
+            )
           ) : (
             <div
               style={{
@@ -147,7 +258,7 @@ function App() {
             alignSelf: 'flex-start',
           }}
         >
-          <StatsPanel stats={stats} />
+          <StatsPanel stats={view.stats} />
         </div>
       </div>
 
@@ -162,7 +273,7 @@ function App() {
 }
 
 interface StatsPanelProps {
-  stats: ReturnType<typeof getStats>;
+  stats: Stats;
 }
 
 function StatsPanel({ stats }: StatsPanelProps) {
@@ -188,7 +299,7 @@ function StatsPanel({ stats }: StatsPanelProps) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <StatCard
-          label="总记录数"
+          label="当前记录数"
           value={stats.totalRecords.toString()}
           icon="📝"
           color="#E94560"
@@ -226,37 +337,60 @@ function StatsPanel({ stats }: StatsPanelProps) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {(Object.keys(stats.themeCounts) as ThemeType[]).map((theme) => {
-            const count = stats.themeCounts[theme];
-            const maxCount = Math.max(...Object.values(stats.themeCounts), 1);
-            const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
-            return (
-              <div key={theme}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '12px', color: 'rgba(224,224,224,0.6)' }}>{theme}</span>
-                  <span style={{ fontSize: '12px', color: 'rgba(224,224,224,0.6)' }}>{count}次</span>
-                </div>
-                <div
-                  style={{
-                    height: '6px',
-                    borderRadius: '3px',
-                    backgroundColor: 'rgba(255,255,255,0.08)',
-                    overflow: 'hidden',
-                  }}
-                >
+          {(Object.keys(stats.themeCounts) as ThemeType[])
+            .filter((theme) => stats.themeCounts[theme] > 0)
+            .map((theme) => {
+              const count = stats.themeCounts[theme];
+              const percentage = stats.maxThemeCount > 0
+                ? (count / stats.maxThemeCount) * 100
+                : 0;
+              return (
+                <div key={theme}>
                   <div
                     style={{
-                      height: '100%',
-                      width: `${percentage}%`,
-                      backgroundColor: themeColors[theme],
-                      borderRadius: '3px',
-                      transition: 'width 0.5s ease',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '4px',
                     }}
-                  />
+                  >
+                    <span style={{ fontSize: '12px', color: 'rgba(224,224,224,0.6)' }}>{theme}</span>
+                    <span style={{ fontSize: '12px', color: 'rgba(224,224,224,0.6)' }}>{count}次</span>
+                  </div>
+                  <div
+                    style={{
+                      height: '6px',
+                      borderRadius: '3px',
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${percentage}%`,
+                        backgroundColor: themeColors[theme],
+                        borderRadius: '3px',
+                        transition: 'width 0.5s ease',
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          {stats.totalRecords === 0 && (
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                color: 'rgba(224,224,224,0.45)',
+                fontSize: '13px',
+                textAlign: 'center',
+              }}
+            >
+              当前筛选结果暂无主题数据
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -3,7 +3,8 @@ import { EscapeRecord, ThemeType, RoleType, Teammate } from '../types';
 
 interface RoomCardProps {
   record: EscapeRecord;
-  onDelete: (id: string) => void;
+  isDeleting?: boolean;
+  onRequestDelete: (id: string) => void;
 }
 
 const themeGradients: Record<ThemeType, string> = {
@@ -30,16 +31,18 @@ const roleIcons: Record<RoleType, string> = {
   搞笑: '😄',
 };
 
-export default function RoomCard({ record, onDelete }: RoomCardProps) {
+export default function RoomCard({
+  record,
+  isDeleting = false,
+  onRequestDelete,
+}: RoomCardProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [expandedTeammate, setExpandedTeammate] = useState<string | null>(null);
   const [showTeammates, setShowTeammates] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
-  const currentXRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -49,16 +52,15 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (isDeleting) return;
     setIsDragging(true);
     startXRef.current = e.clientX;
-    currentXRef.current = 0;
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return;
     const diff = e.clientX - startXRef.current;
     const newTranslate = Math.min(0, Math.max(-window.innerWidth * 0.5, diff));
-    currentXRef.current = newTranslate;
     setTranslateX(newTranslate);
   };
 
@@ -83,16 +85,15 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isDeleting) return;
     setIsDragging(true);
     startXRef.current = e.touches[0].clientX;
-    currentXRef.current = 0;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
     const diff = e.touches[0].clientX - startXRef.current;
     const newTranslate = Math.min(0, Math.max(-window.innerWidth * 0.5, diff));
-    currentXRef.current = newTranslate;
     setTranslateX(newTranslate);
   };
 
@@ -101,11 +102,8 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
   };
 
   const confirmDelete = () => {
-    setIsDeleting(true);
     setShowConfirm(false);
-    setTimeout(() => {
-      onDelete(record.id);
-    }, 300);
+    onRequestDelete(record.id);
   };
 
   const cancelDelete = () => {
@@ -118,7 +116,13 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
   };
 
   return (
-    <div style={{ position: 'relative', marginBottom: '16px' }}>
+    <div
+      style={{
+        position: 'relative',
+        marginBottom: '16px',
+        pointerEvents: isDeleting ? 'none' : 'auto',
+      }}
+    >
       <div
         ref={cardRef}
         style={{
@@ -128,7 +132,7 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
           boxShadow: '0 4px 15px rgba(233,69,96,0.15)',
           position: 'relative',
           overflow: 'hidden',
-          cursor: isDragging ? 'grabbing' : 'grab',
+          cursor: isDeleting ? 'default' : isDragging ? 'grabbing' : 'grab',
           transform: isDeleting
             ? `translateX(-120%)`
             : `translateX(${translateX}px)`,
@@ -232,7 +236,7 @@ export default function RoomCard({ record, onDelete }: RoomCardProps) {
         </div>
       )}
 
-      {showConfirm && (
+      {showConfirm && !isDeleting && (
         <div
           style={{
             position: 'fixed',

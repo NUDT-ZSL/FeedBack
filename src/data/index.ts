@@ -1,4 +1,13 @@
-import { EscapeRecord, FilterState, Stats, ThemeType } from '../types';
+import type { EscapeRecord } from '../types';
+export {
+  THEME_ORDER,
+  getFilteredRecords,
+  getStats,
+  getRecordGroups,
+  getRecordView,
+  matchesFilter,
+} from '../lib/recordView';
+export type { RecordGroup, RecordView } from '../lib/recordView';
 
 const initialRecords: EscapeRecord[] = [
   {
@@ -122,67 +131,5 @@ const initialRecords: EscapeRecord[] = [
     createdAt: Date.now() - 86400000 * 20,
   },
 ];
-
-export function getFilteredRecords(records: EscapeRecord[], filter: FilterState): EscapeRecord[] {
-  return records.filter((record) => {
-    if (filter.themes.length > 0 && !filter.themes.includes(record.theme)) {
-      return false;
-    }
-    if (filter.escapeStatus === 'success' && !record.escaped) {
-      return false;
-    }
-    if (filter.escapeStatus === 'failed' && record.escaped) {
-      return false;
-    }
-    if (filter.searchText) {
-      const lower = filter.searchText.toLowerCase();
-      if (
-        !record.name.toLowerCase().includes(lower) &&
-        !record.storeName.toLowerCase().includes(lower)
-      ) {
-        return false;
-      }
-    }
-    return true;
-  });
-}
-
-export function getStats(records: EscapeRecord[]): Stats {
-  const totalRecords = records.length;
-  const escapedRecords = records.filter((r) => r.escaped);
-  const successRate = totalRecords > 0 ? (escapedRecords.length / totalRecords) * 100 : 0;
-
-  const totalTime = escapedRecords.reduce((sum, r) => sum + (r.actualTime || 0), 0);
-  const averageEscapeTime = escapedRecords.length > 0 ? totalTime / escapedRecords.length : 0;
-
-  const themeCounts: Record<ThemeType, number> = {
-    恐怖: 0,
-    悬疑: 0,
-    科幻: 0,
-    古风: 0,
-    搞笑: 0,
-  };
-
-  records.forEach((r) => {
-    themeCounts[r.theme]++;
-  });
-
-  let mostPlayedTheme: ThemeType | null = null;
-  let maxCount = 0;
-  (Object.keys(themeCounts) as ThemeType[]).forEach((theme) => {
-    if (themeCounts[theme] > maxCount) {
-      maxCount = themeCounts[theme];
-      mostPlayedTheme = theme;
-    }
-  });
-
-  return {
-    totalRecords,
-    averageEscapeTime,
-    successRate,
-    mostPlayedTheme,
-    themeCounts,
-  };
-}
 
 export { initialRecords };
