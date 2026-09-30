@@ -141,10 +141,12 @@ export default function App() {
         return;
       }
       const newRecord: BorrowRecord = {
+        id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: data.name,
         phone: data.phone,
         returnDate: data.returnDate,
         borrowDate: new Date().toISOString().split('T')[0],
+        status: 'borrowing',
       };
       setBooks((prev) =>
         prev.map((b) =>
@@ -162,6 +164,40 @@ export default function App() {
       handleCloseDrawer();
     },
     [selectedBook, books, handleCloseDrawer]
+  );
+
+  const handleReturnRecord = useCallback(
+    (recordId: string) => {
+      const book = books.find((b) => b.borrowRecords.some((r) => r.id === recordId));
+      const record = book?.borrowRecords.find((r) => r.id === recordId);
+      if (!book || !record) return;
+      if (record.status === 'returned') {
+        toast.error('该记录已归还，请勿重复操作', { duration: 2500 });
+        return;
+      }
+      const bookId = book.id;
+      const returnedAt = new Date().toISOString().split('T')[0];
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id !== bookId
+            ? b
+            : {
+                ...b,
+                // 仅当记录仍处于借阅中才回收库存，保证重复触发不会重复加库存
+                stock: b.borrowRecords.some((r) => r.id === recordId && r.status === 'borrowing')
+                  ? Math.min(b.stock + 1, b.totalStock)
+                  : b.stock,
+                borrowRecords: b.borrowRecords.map((r) =>
+                  r.id === recordId && r.status === 'borrowing'
+                    ? { ...r, status: 'returned' as const, returnedAt }
+                    : r
+                ),
+              }
+        )
+      );
+      toast.success('归还成功，库存已更新', { duration: 2500 });
+    },
+    [books]
   );
 
   const handleBorrowFromCard = useCallback(
@@ -268,7 +304,11 @@ export default function App() {
         <div className={`detail-area ${mobileDetailOpen ? 'mobile-open' : ''}`}>
           {syncedSelectedBook ? (
             <>
-              <BookDetail book={syncedSelectedBook} onBorrow={handleOpenBorrow} />
+              <BookDetail
+                book={syncedSelectedBook}
+                onBorrow={handleOpenBorrow}
+                onReturnRecord={handleReturnRecord}
+              />
               <button
                 className="mobile-detail-toggle"
                 style={{ display: mobileDetailOpen ? 'flex' : 'none' }}

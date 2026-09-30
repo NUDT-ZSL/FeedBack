@@ -11,8 +11,8 @@ export const books: Book[] = [
     totalStock: 5,
     description: '魔幻现实主义文学的代表作，描写了布恩迪亚家族七代人的传奇故事，以及加勒比海沿岸小镇马孔多的百年兴衰，反映了拉丁美洲一个世纪以来风云变幻的历史。',
     borrowRecords: [
-      { name: '王小明', phone: '13800001111', returnDate: '2026-07-01', borrowDate: '2026-06-10' },
-      { name: '李小红', phone: '13900002222', returnDate: '2026-07-05', borrowDate: '2026-06-12' },
+      { id: 'seed-r01', status: 'borrowing', name: '王小明', phone: '13800001111', returnDate: '2026-07-01', borrowDate: '2026-06-10' },
+      { id: 'seed-r02', status: 'borrowing', name: '李小红', phone: '13900002222', returnDate: '2026-07-05', borrowDate: '2026-06-12' },
     ],
   },
   {
@@ -25,9 +25,9 @@ export const books: Book[] = [
     totalStock: 4,
     description: '讲述了农村人福贵悲惨的人生遭遇。福贵本是个阔少爷，因嗜赌成性输光家产，父亲被气死。在此后的岁月里，他的亲人相继离世，最终只剩老牛相伴。',
     borrowRecords: [
-      { name: '张伟', phone: '13700003333', returnDate: '2026-06-30', borrowDate: '2026-06-08' },
-      { name: '陈丽', phone: '13600004444', returnDate: '2026-07-03', borrowDate: '2026-06-11' },
-      { name: '刘洋', phone: '13500005555', returnDate: '2026-07-08', borrowDate: '2026-06-15' },
+      { id: 'seed-r03', status: 'borrowing', name: '张伟', phone: '13700003333', returnDate: '2026-06-30', borrowDate: '2026-06-08' },
+      { id: 'seed-r04', status: 'borrowing', name: '陈丽', phone: '13600004444', returnDate: '2026-07-03', borrowDate: '2026-06-11' },
+      { id: 'seed-r05', status: 'borrowing', name: '刘洋', phone: '13500005555', returnDate: '2026-07-08', borrowDate: '2026-06-15' },
     ],
   },
   {
@@ -40,7 +40,7 @@ export const books: Book[] = [
     totalStock: 3,
     description: '以1587年为切入点，通过对万历皇帝、张居正、申时行等人的描述，剖析了明朝中后期的政治体制和社会结构，揭示了中国传统社会管理体制的深层问题。',
     borrowRecords: [
-      { name: '赵敏', phone: '13400006666', returnDate: '2026-07-02', borrowDate: '2026-06-13' },
+      { id: 'seed-r06', status: 'borrowing', name: '赵敏', phone: '13400006666', returnDate: '2026-07-02', borrowDate: '2026-06-13' },
     ],
   },
   {
@@ -53,9 +53,9 @@ export const books: Book[] = [
     totalStock: 3,
     description: '从认知革命、农业革命到科学革命，作者以宏大的视角审视人类历史，探讨了智人如何从一种普通动物成为地球的主宰，以及这一过程中创造的虚构故事如何塑造了我们的社会。',
     borrowRecords: [
-      { name: '孙强', phone: '13300007777', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
-      { name: '周婷', phone: '13200008888', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
-      { name: '吴刚', phone: '13100009999', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
+      { id: 'seed-r07', status: 'borrowing', name: '孙强', phone: '13300007777', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
+      { id: 'seed-r08', status: 'borrowing', name: '周婷', phone: '13200008888', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
+      { id: 'seed-r09', status: 'borrowing', name: '吴刚', phone: '13100009999', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
     ],
   },
   {
@@ -68,7 +68,7 @@ export const books: Book[] = [
     totalStock: 5,
     description: '以小说的形式，通过一名哲学导师向一个叫苏菲的女孩传授哲学知识的经过，揭示了西方哲学史发展的历程。从苏格拉底到萨特，带你走进哲学的殿堂。',
     borrowRecords: [
-      { name: '郑华', phone: '13000001010', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
+      { id: 'seed-r10', status: 'borrowing', name: '郑华', phone: '13000001010', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
     ],
   },
   {
@@ -81,8 +81,8 @@ export const books: Book[] = [
     totalStock: 4,
     description: '海德格尔的代表作，通过对"此在"的分析，探讨了存在的意义问题。书中提出的"向死而生"等概念深刻影响了20世纪的哲学、文学和神学思想。',
     borrowRecords: [
-      { name: '钱进', phone: '15900001111', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
-      { name: '冯雪', phone: '15800002222', returnDate: '2026-07-05', borrowDate: '2026-06-13' },
+      { id: 'seed-r11', status: 'borrowing', name: '钱进', phone: '15900001111', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
+      { id: 'seed-r12', status: 'borrowing', name: '冯雪', phone: '15800002222', returnDate: '2026-07-05', borrowDate: '2026-06-13' },
     ],
   },
   {
@@ -95,8 +95,8 @@ export const books: Book[] = [
     totalStock: 5,
     description: '霍金用通俗易懂的语言解释了宇宙的起源、黑洞、时间旅行等深奥的物理学概念，让普通读者也能领略宇宙的壮美与神秘。',
     borrowRecords: [
-      { name: '韩磊', phone: '15700003333', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
-      { name: '蒋芳', phone: '15600004444', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
+      { id: 'seed-r13', status: 'borrowing', name: '韩磊', phone: '15700003333', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
+      { id: 'seed-r14', status: 'borrowing', name: '蒋芳', phone: '15600004444', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
     ],
   },
   {
@@ -109,8 +109,8 @@ export const books: Book[] = [
     totalStock: 3,
     description: '道金斯以基因为中心，重新审视了进化论，提出了"自私的基因"这一革命性概念，认为基因才是进化的基本单位，生物体只是基因的生存机器。',
     borrowRecords: [
-      { name: '杨帆', phone: '15500005555', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
-      { name: '朱明', phone: '15400006666', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
+      { id: 'seed-r15', status: 'borrowing', name: '杨帆', phone: '15500005555', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
+      { id: 'seed-r16', status: 'borrowing', name: '朱明', phone: '15400006666', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
     ],
   },
   {
@@ -123,8 +123,8 @@ export const books: Book[] = [
     totalStock: 4,
     description: '被誉为西方艺术史入门的经典之作。从最早的洞穴绘画到当代实验艺术，贡布里希以独特的视角和生动的叙述，展现了人类艺术发展的恢宏画卷。',
     borrowRecords: [
-      { name: '沈静', phone: '15300007777', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
-      { name: '何力', phone: '15200008888', returnDate: '2026-07-05', borrowDate: '2026-06-13' },
+      { id: 'seed-r17', status: 'borrowing', name: '沈静', phone: '15300007777', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
+      { id: 'seed-r18', status: 'borrowing', name: '何力', phone: '15200008888', returnDate: '2026-07-05', borrowDate: '2026-06-13' },
     ],
   },
   {
@@ -137,8 +137,8 @@ export const books: Book[] = [
     totalStock: 5,
     description: '从远古陶器上的纹饰到明清文艺，李泽厚以深邃的哲学思辨和优美的文学笔触，梳理了中国美学的脉络，揭示了中华民族审美意识的演变历程。',
     borrowRecords: [
-      { name: '曹丹', phone: '15100009999', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
-      { name: '谢勇', phone: '15000001010', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
+      { id: 'seed-r19', status: 'borrowing', name: '曹丹', phone: '15100009999', returnDate: '2026-07-01', borrowDate: '2026-06-09' },
+      { id: 'seed-r20', status: 'borrowing', name: '谢勇', phone: '15000001010', returnDate: '2026-07-04', borrowDate: '2026-06-11' },
     ],
   },
   {
@@ -151,7 +151,7 @@ export const books: Book[] = [
     totalStock: 6,
     description: '中国古典四大名著之首，以贾宝玉、林黛玉、薛宝钗的爱情婚姻悲剧为主线，展现了贾、史、王、薛四大家族的兴衰史，揭示了封建社会走向崩溃的历史趋势。',
     borrowRecords: [
-      { name: '许文', phone: '18300001111', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
+      { id: 'seed-r21', status: 'borrowing', name: '许文', phone: '18300001111', returnDate: '2026-07-02', borrowDate: '2026-06-10' },
     ],
   },
   {
@@ -164,8 +164,8 @@ export const books: Book[] = [
     totalStock: 4,
     description: '从生物地理学的角度解释了人类社会的不同命运。为什么是欧亚大陆的民族征服了其他大陆，而不是相反？作者从环境差异入手，提供了一个全新的历史解释框架。',
     borrowRecords: [
-      { name: '宋磊', phone: '18200002222', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
-      { name: '范丹', phone: '18100003333', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
+      { id: 'seed-r22', status: 'borrowing', name: '宋磊', phone: '18200002222', returnDate: '2026-07-03', borrowDate: '2026-06-12' },
+      { id: 'seed-r23', status: 'borrowing', name: '范丹', phone: '18100003333', returnDate: '2026-07-06', borrowDate: '2026-06-14' },
     ],
   },
 ];

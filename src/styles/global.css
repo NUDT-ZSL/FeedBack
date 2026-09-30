@@ -528,6 +528,28 @@ input, select {
   color: var(--success);
 }
 
+.btn-return {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: transparent;
+  color: var(--success);
+  border: 1.5px solid var(--success);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.btn-return:hover {
+  background-color: var(--success);
+  color: var(--white);
+}
+
 .drawer-overlay {
   position: fixed;
   top: 0;

@@ -1,9 +1,10 @@
 import type { Book } from '@/types';
-import { FiBook, FiUser, FiCalendar } from 'react-icons/fi';
+import { FiBook, FiUser, FiCalendar, FiCornerUpLeft } from 'react-icons/fi';
 
 interface BookDetailProps {
   book: Book;
   onBorrow: () => void;
+  onReturnRecord: (recordId: string) => void;
 }
 
 function getStockBarClass(stock: number, totalStock: number): string {
@@ -13,15 +14,11 @@ function getStockBarClass(stock: number, totalStock: number): string {
   return 'high';
 }
 
-export default function BookDetail({ book, onBorrow }: BookDetailProps) {
+export default function BookDetail({ book, onBorrow, onReturnRecord }: BookDetailProps) {
   const barClass = getStockBarClass(book.stock, book.totalStock);
   const fillPercent = (book.stock / book.totalStock) * 100;
   const recentRecords = book.borrowRecords.slice(-3).reverse();
-
-  const today = new Date();
-  const isRecordReturned = (returnDate: string) => {
-    return new Date(returnDate) < today;
-  };
+  const activeRecords = book.borrowRecords.filter((r) => r.status === 'borrowing');
 
   return (
     <div className="detail-panel">
@@ -57,20 +54,45 @@ export default function BookDetail({ book, onBorrow }: BookDetailProps) {
         {book.stock > 0 ? '申请借阅' : '暂无库存'}
       </button>
 
+      {activeRecords.length > 0 && (
+        <div className="borrow-records-section">
+          <div className="borrow-records-title">待归还记录（{activeRecords.length}）</div>
+          {activeRecords.map((record) => (
+            <div className="borrow-record-item" key={record.id}>
+              <span className="borrow-record-name">
+                <FiUser style={{ marginRight: '4px', fontSize: '0.75rem' }} />
+                {record.name}
+              </span>
+              <span className="borrow-record-date">
+                <FiCalendar style={{ marginRight: '4px', fontSize: '0.75rem' }} />
+                {record.borrowDate}
+              </span>
+              <button
+                className="btn-return"
+                onClick={() => onReturnRecord(record.id)}
+              >
+                <FiCornerUpLeft style={{ marginRight: '3px', fontSize: '0.7rem' }} />
+                标记归还
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {recentRecords.length > 0 && (
         <div className="borrow-records-section">
           <div className="borrow-records-title">最近借阅记录</div>
-          {recentRecords.map((record, idx) => {
-            const returned = isRecordReturned(record.returnDate);
+          {recentRecords.map((record) => {
+            const returned = record.status === 'returned';
             return (
-              <div className="borrow-record-item" key={idx}>
+              <div className="borrow-record-item" key={record.id}>
                 <span className="borrow-record-name">
                   <FiUser style={{ marginRight: '4px', fontSize: '0.75rem' }} />
                   {record.name}
                 </span>
                 <span className="borrow-record-date">
                   <FiCalendar style={{ marginRight: '4px', fontSize: '0.75rem' }} />
-                  {record.borrowDate}
+                  {returned && record.returnedAt ? record.returnedAt : record.borrowDate}
                 </span>
                 <span className={`borrow-record-status ${returned ? 'returned' : 'borrowing'}`}>
                   <FiBook style={{ marginRight: '3px', fontSize: '0.65rem' }} />
