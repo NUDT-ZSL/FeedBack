@@ -93,13 +93,17 @@ export const updateMastery = (words: Word[], id: string, mastery: number): Word[
   return words.map((w) => (w.id === id ? { ...w, mastery: clamped } : w));
 };
 
-export const recordAnswer = (words: Word[], id: string, correct: boolean): Word[] => {
-  const now = Date.now();
+export const recordAnswer = (
+  words: Word[],
+  id: string,
+  correct: boolean,
+  answeredAt: number = Date.now(),
+): Word[] => {
   return words.map((w) => {
     if (w.id !== id) return w;
     return {
       ...w,
-      lastAttemptAt: now,
+      lastAttemptAt: answeredAt,
       wrongCount: correct ? w.wrongCount : w.wrongCount + 1,
     };
   });
@@ -116,24 +120,16 @@ export const sortAlphabetically = (words: Word[], order: SortOrder): Word[] => {
   return order === 'desc' ? sorted.reverse() : sorted;
 };
 
-export const getUrgencyScore = (word: Word): number => {
-  const now = Date.now();
-  const daysSince = (now - word.lastAttemptAt) / 86400000;
-  const recencyFactor = Math.min(daysSince / 30, 1) * 45;
-  const masteryFactor = Math.max(0, (5 - word.mastery) / 4) * 30;
-  const wrongFactor = Math.min(word.wrongCount / 8, 1) * 25;
-  return Math.round(recencyFactor + masteryFactor + wrongFactor);
-};
-
-export const getMostUrgentWords = (words: Word[], n: number): Word[] => {
-  return [...words].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a)).slice(0, n);
-};
-
-export const getUrgencyColor = (score: number): string => {
-  if (score >= 70) return '#E74C3C';
-  if (score >= 40) return '#F5A623';
-  return '#50B86C';
-};
+export {
+  getUrgencyScore,
+  getMostUrgentWords,
+  getUrgencyColor,
+  rankWordsByUrgency,
+  selectMostUrgentWords,
+  filterWordsNeedingReview,
+  countWordsNeedingReview,
+  URGENCY_REVIEW_THRESHOLD,
+} from '../utils/urgency';
 
 export const shuffleArray = <T>(arr: T[]): T[] => {
   const result = [...arr];

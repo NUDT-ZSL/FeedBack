@@ -10,9 +10,13 @@ import {
   recordAnswer,
   filterByParts,
   sortAlphabetically,
-  getMostUrgentWords,
   AddWordPayload,
 } from './data/words';
+import {
+  getUrgencyScore,
+  selectMostUrgentWords,
+  countWordsNeedingReview,
+} from './utils/urgency';
 import { useQuiz } from './hooks/useQuiz';
 import { WordCard } from './components/WordCard';
 import { QuizPanel } from './components/QuizPanel';
@@ -28,6 +32,7 @@ function App() {
   const [newChinese, setNewChinese] = useState('');
   const [newPos, setNewPos] = useState<PartOfSpeech>('noun');
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const quiz = useQuiz();
 
@@ -39,10 +44,28 @@ function App() {
     if (words.length > 0) saveWords(words);
   }, [words]);
 
-  const displayWords = useMemo(() => {
+  useEffect(() => {
+    const synchronizeNow = () => setNow(Date.now());
+    const timer = window.setInterval(synchronizeNow, 60_000);
+    document.addEventListener('visibilitychange', synchronizeNow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', synchronizeNow);
+    };
+  }, []);
+
+  const urgentReviewWords = useMemo(
+    () => selectMostUrgentWords(words, 10, now),
+    [words, now],
+  );
+
+  const displayCards = useMemo(() => {
     const filtered = filterByParts(words, filterParts);
-    return sortAlphabetically(filtered, sortOrder);
-  }, [words, filterParts, sortOrder]);
+    return sortAlphabetically(filtered, sortOrder).map((word) => ({
+      word,
+      urgency: getUrgencyScore(word, now),
+    }));
+  }, [words, filterParts, sortOrder, now]);
 
   const toggleFilterPart = (p: PartOfSpeech) => {
     setFilterParts((prev) =>
@@ -55,13 +78,15 @@ function App() {
   }, []);
 
   const handleAnswerRecord = useCallback((wordId: string, correct: boolean) => {
-    setWords((prev) => recordAnswer(prev, wordId, correct));
+    const answeredAt = Date.now();
+    setNow(answeredAt);
+    setWords((prev) => recordAnswer(prev, wordId, correct, answeredAt));
   }, []);
 
   const handleQuickReview = useCallback(
     (word: Word) => {
-      const urgentWords = getMostUrgentWords(words, 10);
-      const targetWords = urgentWords.length > 0 ? urgentWords : words.slice(0, 10);
+      const targetWords = urgentReviewWords;
+      if (targetWords.length === 0) return;
       const config = {
         selectedParts: [] as PartOfSpeech[],
         questionCount: Math.min(10, targetWords.length),
@@ -72,7 +97,7 @@ function App() {
         duration: 2200,
       });
     },
-    [words, quiz],
+    [urgentReviewWords, quiz],
   );
 
   const handleQuickReviewFromResult = useCallback(
@@ -114,15 +139,7 @@ function App() {
   };
 
   const totalCount = words.length;
-  const urgentCount = getMostUrgentWords(words, 999).filter(
-    (w) => {
-      const s = Math.min(100, Math.max(0,
-        ((1 - Math.min(1, (Date.now() - w.lastAttemptAt) / (30 * 86400000))) * 0 +
-          Math.max(0, (5 - w.mastery) / 4) * 30 +
-          Math.min(w.wrongCount / 8, 1) * 25) * 100));
-      return s >= 40;
-    },
-  ).length;
+  const urgentCount = countWordsNeedingReview(words, now);
 
   return (
     <div className="app-root">
@@ -259,7 +276,7 @@ function App() {
           )}
 
           <div className="word-list">
-            {displayWords.length === 0 ? (
+            {displayCards.length === 0 ? (
               <div className="empty-state">
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#C8BFAE" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -269,11 +286,12 @@ function App() {
                 <div className="empty-state__desc">点击右上角「添加新单词」开始你的第一个单词</div>
               </div>
             ) : (
-              displayWords.map((w) => (
+              displayCards.map(({ word, urgency }) => (
                 <WordCard
-                  key={w.id}
-                  word={w}
-                  highlight={highlightId === w.id || quiz.highlightId === w.id}
+                  key={word.id}
+                  word={word}
+                  urgency={urgency}
+                  highlight={highlightId === word.id || quiz.highlightId === word.id}
                   onUpdateMastery={handleUpdateMastery}
                   onQuickReview={handleQuickReview}
                 />

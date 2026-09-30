@@ -1,10 +1,11 @@
 import { memo, useState, useCallback } from 'react';
 import type { Word } from '../types';
 import { PART_OF_SPEECH_LABELS, PART_OF_SPEECH_COLORS } from '../types';
-import { getUrgencyScore, getUrgencyColor } from '../data/words';
+import { getUrgencyColor } from '../utils/urgency';
 
 interface WordCardProps {
   word: Word;
+  urgency: number;
   highlight: boolean;
   onUpdateMastery: (id: string, mastery: number) => void;
   onQuickReview: (word: Word) => void;
@@ -36,9 +37,10 @@ const Star = memo(function Star({
   );
 });
 
-function WordCardComponent({ word, highlight, onUpdateMastery, onQuickReview }: WordCardProps) {
+function WordCardComponent(
+  { word, urgency, highlight, onUpdateMastery, onQuickReview }: WordCardProps,
+) {
   const [pulsingIndex, setPulsingIndex] = useState<number | null>(null);
-  const urgency = getUrgencyScore(word);
   const urgencyColor = getUrgencyColor(urgency);
 
   const handleStarClick = useCallback(
