@@ -6,12 +6,14 @@ import { Earth } from './Earth';
 import { WeatherParticles } from './WeatherParticles';
 import { TimeArc } from './TimeArc';
 import { WeatherDataPoint, WeatherFilters } from '@/data/weatherData';
+import { weatherSystem } from '@/engine/useWeatherSystem';
 
 interface SceneProps {
   data: WeatherDataPoint[];
   filters: WeatherFilters;
   currentHour: number;
   isRotating: boolean;
+  earthRadius: number;
   onParticleHover: (point: WeatherDataPoint | null, x: number, y: number) => void;
 }
 
@@ -34,15 +36,21 @@ const CameraController: React.FC = () => {
   return null;
 };
 
+const WeatherSystemTicker: React.FC = () => {
+  useFrame((_, delta) => {
+    weatherSystem.update(delta);
+  });
+  return null;
+};
+
 const SceneContent: React.FC<SceneProps> = ({
   data,
   filters,
   currentHour,
   isRotating,
+  earthRadius,
   onParticleHover,
 }) => {
-  const earthRadius = 2;
-
   return (
     <>
       <ambientLight intensity={0.4} />
@@ -50,14 +58,13 @@ const SceneContent: React.FC<SceneProps> = ({
       <pointLight position={[-5, -3, -5]} intensity={0.3} color="#4A90D9" />
 
       <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade speed={0.5} />
+      <WeatherSystemTicker />
 
       <group position={[0, -0.3, 0]}>
         <Earth isRotating={isRotating} radius={earthRadius} />
         <WeatherParticles
           data={data}
           filters={filters}
-          earthRadius={earthRadius}
-          currentHour={currentHour}
           onParticleHover={onParticleHover}
         />
         <TimeArc currentHour={currentHour} radius={earthRadius} />

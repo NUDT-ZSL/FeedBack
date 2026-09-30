@@ -1,53 +1,35 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Scene } from './components/Scene';
 import { WeatherPanel } from './components/WeatherPanel';
 import { InfoPopup } from './components/InfoPopup';
-import { WeatherSystem } from './engine/WeatherSystem';
+import { weatherSystem, useWeatherSystem } from './engine/useWeatherSystem';
 import { WeatherDataPoint, WeatherFilters } from './data/weatherData';
 
 const App: React.FC = () => {
-  const weatherSystemRef = useRef<WeatherSystem>(new WeatherSystem());
-  const [weatherData, setWeatherData] = useState<WeatherDataPoint[]>([]);
-  const [currentHour, setCurrentHour] = useState(0);
-  const [filters, setFilters] = useState<WeatherFilters>({
-    showTemperature: true,
-    showPressure: true,
-    showHumidity: true,
-  });
-  const [isRotating, setIsRotating] = useState(false);
-  const [hoveredPoint, setHoveredPoint] = useState<WeatherDataPoint | null>(null);
+  const weatherState = useWeatherSystem();
+  const [hoveredPointId, setHoveredPointId] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    const system = weatherSystemRef.current;
-    setWeatherData(system.getData());
-    setFilters(system.getFilters());
-    setIsRotating(system.getIsRotating());
-  }, []);
+  const hoveredPoint = useMemo<WeatherDataPoint | null>(() => {
+    if (hoveredPointId === null) return null;
+    return weatherSystem.getPointById(hoveredPointId) ?? null;
+  }, [hoveredPointId, weatherState.data]);
 
   const handleHourChange = useCallback((hour: number) => {
-    setCurrentHour(hour);
-    const system = weatherSystemRef.current;
-    system.setHour(hour);
-    setWeatherData(system.getData());
+    weatherSystem.setHour(hour);
   }, []);
 
   const handleFiltersChange = useCallback((newFilters: Partial<WeatherFilters>) => {
-    setFilters((prev) => {
-      const updated = { ...prev, ...newFilters };
-      weatherSystemRef.current.updateFilters(updated);
-      return updated;
-    });
+    weatherSystem.updateFilters(newFilters);
   }, []);
 
   const handleRotationToggle = useCallback((enabled: boolean) => {
-    setIsRotating(enabled);
-    weatherSystemRef.current.toggleRotation(enabled);
+    weatherSystem.toggleRotation(enabled);
   }, []);
 
   const handleParticleHover = useCallback(
     (point: WeatherDataPoint | null, x: number, y: number) => {
-      setHoveredPoint(point);
+      setHoveredPointId(point?.id ?? null);
       setMousePos({ x, y });
     },
     []
@@ -59,20 +41,21 @@ const App: React.FC = () => {
 
       <div className="canvas-container">
         <Scene
-          data={weatherData}
-          filters={filters}
-          currentHour={currentHour}
-          isRotating={isRotating}
+          data={weatherState.data}
+          filters={weatherState.filters}
+          currentHour={weatherState.currentHour}
+          isRotating={weatherState.isRotating}
+          earthRadius={weatherState.earthRadius}
           onParticleHover={handleParticleHover}
         />
       </div>
 
       <WeatherPanel
-        currentHour={currentHour}
+        currentHour={weatherState.currentHour}
         onHourChange={handleHourChange}
-        filters={filters}
+        filters={weatherState.filters}
         onFiltersChange={handleFiltersChange}
-        isRotating={isRotating}
+        isRotating={weatherState.isRotating}
         onRotationToggle={handleRotationToggle}
       />
 
