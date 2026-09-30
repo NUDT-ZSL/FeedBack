@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2020"],
+    "types": [],
+    "noEmit": false,
+    "outDir": ".validation-build",
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/modules/reactor/ReactorEngine.ts",
+    "src/modules/services/EmotionAnalyzer.ts",
+    "tests/engine-validation.ts"
+  ],
+  "references": []
+}

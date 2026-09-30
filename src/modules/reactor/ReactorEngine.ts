@@ -1,4 +1,4 @@
-import { EmotionType, emotionAnalyzer } from '../services/EmotionAnalyzer';
+import { EmotionType } from '../services/EmotionAnalyzer';
 
 export interface Message {
   id: string;
@@ -19,38 +19,39 @@ export interface ReactorMatchResult {
 }
 
 const TIME_WINDOW_MS = 60 * 1000;
-const SEMANTIC_THRESHOLD = 0.2;
+
+export const ECHO_TIME_WINDOW_MS = TIME_WINDOW_MS;
+
+export interface OverallEmotionIndexOptions {
+  referenceTime?: number;
+}
 
 export class ReactorEngine {
-  private analyzer = emotionAnalyzer;
-
   analyzeAndMatch(newMessage: Message, messageList: Message[]): ReactorMatchResult {
-    const updatedMessages = [...messageList];
-    const matchedIds: string[] = [];
+    const matches = messageList
+      .filter(msg =>
+        msg.id !== newMessage.id &&
+        msg.emotionType === newMessage.emotionType &&
+        Math.abs(newMessage.timestamp - msg.timestamp) < TIME_WINDOW_MS
+      )
+      .sort((a, b) =>
+        a.timestamp - b.timestamp ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      );
 
-    for (let i = updatedMessages.length - 1; i >= 0; i--) {
-      const msg = updatedMessages[i];
-      
-      const timeDiff = Math.abs(newMessage.timestamp - msg.timestamp);
-      if (timeDiff > TIME_WINDOW_MS) {
-        break;
+    const matchedIds = matches.map(msg => msg.id);
+    const matchedIdSet = new Set(matchedIds);
+    const updatedMessages = messageList.map(msg => {
+      if (!matchedIdSet.has(msg.id)) {
+        return msg;
       }
 
-      if (msg.emotionType !== newMessage.emotionType) {
-        continue;
-      }
-
-      const similarity = this.calculateSemanticSimilarity(newMessage.content, msg.content);
-      
-      if (similarity >= SEMANTIC_THRESHOLD || msg.emotionType === newMessage.emotionType) {
-        matchedIds.push(msg.id);
-        updatedMessages[i] = {
-          ...msg,
-          echoCount: msg.echoCount + 1,
-          echoIds: [...msg.echoIds, newMessage.id]
-        };
-      }
-    }
+      return {
+        ...msg,
+        echoCount: msg.echoCount + 1,
+        echoIds: [...msg.echoIds, newMessage.id]
+      };
+    });
 
     const updatedNewMessage = {
       ...newMessage,
@@ -66,59 +67,28 @@ export class ReactorEngine {
     };
   }
 
-  private calculateSemanticSimilarity(text1: string, text2: string): number {
-    const words1 = this.tokenize(text1);
-    const words2 = this.tokenize(text2);
-
-    if (words1.length === 0 || words2.length === 0) {
-      return 0;
-    }
-
-    const set1 = new Set(words1);
-    const set2 = new Set(words2);
-
-    const intersection = new Set([...set1].filter(x => set2.has(x)));
-    const union = new Set([...set1, ...set2]);
-
-    return intersection.size / union.size;
-  }
-
-  private tokenize(text: string): string[] {
-    const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
-    
-    const tokens: string[] = [];
-    
-    for (let i = 0; i < cleanText.length; i++) {
-      tokens.push(cleanText[i]);
-    }
-
-    for (let i = 0; i < cleanText.length - 1; i++) {
-      tokens.push(cleanText.substring(i, i + 2));
-    }
-
-    return tokens.filter(t => t.trim().length > 0);
-  }
-
-  calculateOverallEmotionIndex(messages: Message[]): number {
+  calculateOverallEmotionIndex(
+    messages: Message[],
+    options: OverallEmotionIndexOptions = {}
+  ): number {
     if (messages.length === 0) {
       return 50;
     }
 
+    const referenceTime = options.referenceTime ?? Math.max(...messages.map(msg => msg.timestamp));
     let totalScore = 0;
     let totalWeight = 0;
-
-    const now = Date.now();
     const decayHalfLife = 10 * 60 * 1000;
 
     for (const msg of messages) {
-      const age = now - msg.timestamp;
+      const age = referenceTime - msg.timestamp;
       const decay = Math.exp(-age / decayHalfLife);
 
       let emotionValue = 50;
       if (msg.emotionType === 'positive') {
-        emotionValue = 50 + (msg.intensity * 10);
+        emotionValue = 50 + msg.intensity * 10;
       } else if (msg.emotionType === 'negative') {
-        emotionValue = 50 - (msg.intensity * 10);
+        emotionValue = 50 - msg.intensity * 10;
       }
 
       const weight = decay * msg.intensity;
@@ -138,22 +108,35 @@ export class ReactorEngine {
       return { positive: 33, negative: 33, neutral: 34 };
     }
 
-    let positive = 0;
-    let negative = 0;
-    let neutral = 0;
-
-    for (const msg of messages) {
-      if (msg.emotionType === 'positive') positive++;
-      else if (msg.emotionType === 'negative') negative++;
-      else neutral++;
-    }
+    const counts = {
+      positive: messages.filter(msg => msg.emotionType === 'positive').length,
+      negative: messages.filter(msg => msg.emotionType === 'negative').length,
+      neutral: messages.filter(msg => msg.emotionType === 'neutral').length
+    };
 
     const total = messages.length;
-    return {
-      positive: Math.round((positive / total) * 100),
-      negative: Math.round((negative / total) * 100),
-      neutral: Math.round((neutral / total) * 100)
+    const raw = {
+      positive: (counts.positive / total) * 100,
+      negative: (counts.negative / total) * 100,
+      neutral: (counts.neutral / total) * 100
     };
+
+    const result = {
+      positive: Math.floor(raw.positive),
+      negative: Math.floor(raw.negative),
+      neutral: Math.floor(raw.neutral)
+    };
+
+    const missing = 100 - result.positive - result.negative - result.neutral;
+    const remainderOrder: Array<keyof typeof raw> = ['negative', 'neutral', 'positive'];
+    remainderOrder
+      .sort((a, b) => (raw[b] - result[b]) - (raw[a] - result[a]));
+
+    for (let i = 0; i < missing; i++) {
+      result[remainderOrder[i % remainderOrder.length]] += 1;
+    }
+
+    return result;
   }
 }
 

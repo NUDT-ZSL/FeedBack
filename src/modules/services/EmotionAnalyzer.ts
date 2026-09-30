@@ -20,75 +20,54 @@ const negativeKeywords = [
   '不安', '压力', '痛苦', '难受', '疼', '痛', '哭', '流泪', '黑暗', '阴天'
 ];
 
-const positiveEmojis = [
+const positiveEmojis = new Set([
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃',
   '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
-  '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫',
-  '🤔', '🫡', '🤔', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒',
-  '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠',
-  '🥳', '🥸', '😎', '🤓', '🧐', '😕', '😟', '🙁', '😮', '😯',
-  '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭',
-  '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡',
-  '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺',
-  '👻', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼',
-  '😽', '🙀', '😿', '😾', '❤️', '🧡', '💛', '💚', '💙', '💜',
-  '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖',
-  '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯',
-  '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌',
-  '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🆔', '⚛️', '🉑',
-  '☢️', '☣️', '📴', '📳', '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️',
-  '🆚', '💮', '🉐', '㊙️', '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️',
-  '🅱️', '🆎', '🆑', '🅾️', '🆘', '❌', '⭕', '🛑', '⛔',
-  '📛', '🚫', '💯', '💢', '♨️', '🚷', '🚯', '🚳', '🚱', '🔞',
-  '📵', '🔕', '☎️', '📞', '📟', '📠', '💬', '💭', '🗯️', '💤',
-  '💈', '💢', '💥', '💫', '💦', '💨', '🕳️', '💣', '💬', '👁️‍🗨️',
-  '🗨️', '🗣️', '👤', '👥', '👶', '👧', '🧒', '👦', '👩', '🧑',
-  '👨', '👱', '👴', '👵', '🙍', '🙎', '🙅', '🙆', '💁', '🙋',
-  '🙌', '🙏', '✍️', '🦵', '🦶', '👂', '👃', '🧠', '🦷', '🦴',
-  '👀', '👁️', '👅', '💋', '💄', '💍', '💎', '🔇', '🔈', '🔉',
-  '🔊', '🔔', '🔕', '📯', '🎙️', '🎚️', '🎛️', '📻', '🎷', '🎸',
-  '🎹', '🎺', '🎻', '🪕', '🥁', '🎵', '🎶', '🎼', '🎤', '🎧',
-  '🎬', '🎞️', '🎥', '📺', '📷', '📸', '📹', '📼', '🔍', '🔎',
-  '🔬', '🔭', '📡', '💻', '📱', '☎️', '⌨️', '🖥️', '🖨️', '🖱️'
-];
+  '😋', '🤗', '🥳', '😎', '🤠', '😌', '❤️', '🧡', '💛', '💚', '💙',
+  '💜', '🤍', '🤎', '❣️', '💕', '💞', '💓', '💗', '💖', '💘',
+  '💝', '🌸', '✨', '🎉', '🌞', '🌈', '☀️', '🌟', '⭐', '🎵'
+]);
 
-const negativeEmojis = [
+const negativeEmojis = new Set([
   '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺',
-  '😢', '😭', '😤', '😠', '😡', '🤬', '😈', '👿', '💀', '☠️',
-  '💔', '💢', '💣', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '🥶', '😰',
-  '😨', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '😟', '😕'
-];
+  '😢', '😭', '😤', '😠', '😡', '🤬', '💔', '💢', '💣', '🌧️',
+  '⛈️', '🌩️', '🌨️', '😰', '😨', '😱', '😓', '😿', '🙀', '☠️'
+]);
+
+const EMOJI_PATTERN = /(?:[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}])(?:\u{FE0F})?/gu;
 
 export class EmotionAnalyzer {
   analyze(text: string): EmotionAnalysisResult {
+    const normalizedText = String(text ?? '');
     let positiveScore = 0;
     let negativeScore = 0;
-    const foundKeywords: string[] = [];
+    const positiveSignals = new Set<string>();
+    const negativeSignals = new Set<string>();
 
     for (const keyword of positiveKeywords) {
-      if (text.includes(keyword)) {
+      if (normalizedText.includes(keyword)) {
         positiveScore += 1;
-        foundKeywords.push(keyword);
+        positiveSignals.add(keyword);
       }
     }
 
     for (const keyword of negativeKeywords) {
-      if (text.includes(keyword)) {
+      if (normalizedText.includes(keyword)) {
         negativeScore += 1;
-        foundKeywords.push(keyword);
+        negativeSignals.add(keyword);
       }
     }
 
-    const emojiMatches = text.match(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{1F004}\u{1F0CF}\u{1F170}\u{1F171}\u{1F17E}\u{1F17F}\u{1F18E}\u{3030}\u{2B50}\u{2B55}\u{2B06}\u{2194}\u{2195}\u{2196}\u{2197}\u{2198}\u{2199}\u{23F3}\u{231B}\u{23F0}\u{231A}\u{25AA}\u{25AB}\u{25FE}\u{25FD}\u{25FB}\u{25FC}]/gu);
-    
+    const emojiMatches = normalizedText.match(EMOJI_PATTERN);
+
     if (emojiMatches) {
-      for (const emoji of emojiMatches) {
-        if (positiveEmojis.includes(emoji)) {
+      for (const emoji of new Set(emojiMatches)) {
+        if (positiveEmojis.has(emoji)) {
           positiveScore += 2;
-          foundKeywords.push(emoji);
-        } else if (negativeEmojis.includes(emoji)) {
+          positiveSignals.add(emoji);
+        } else if (negativeEmojis.has(emoji)) {
           negativeScore += 2;
-          foundKeywords.push(emoji);
+          negativeSignals.add(emoji);
         }
       }
     }
@@ -98,10 +77,10 @@ export class EmotionAnalyzer {
 
     if (positiveScore > negativeScore && positiveScore > 0) {
       emotionType = 'positive';
-      intensity = Math.min(5, Math.max(1, Math.ceil(positiveScore / 2)));
+      intensity = this.scoreToIntensity(positiveScore);
     } else if (negativeScore > positiveScore && negativeScore > 0) {
       emotionType = 'negative';
-      intensity = Math.min(5, Math.max(1, Math.ceil(negativeScore / 2)));
+      intensity = this.scoreToIntensity(negativeScore);
     } else {
       emotionType = 'neutral';
       intensity = 1;
@@ -110,8 +89,16 @@ export class EmotionAnalyzer {
     return {
       emotionType,
       intensity,
-      keywords: foundKeywords.slice(0, 5)
+      keywords: emotionType === 'positive'
+        ? [...positiveSignals].slice(0, 5)
+        : emotionType === 'negative'
+          ? [...negativeSignals].slice(0, 5)
+          : []
     };
+  }
+
+  private scoreToIntensity(score: number): number {
+    return Math.min(5, Math.max(1, Math.ceil(score / 2)));
   }
 
   getEmotionColor(type: EmotionType): { start: string; end: string } {

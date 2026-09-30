@@ -78,7 +78,7 @@ const EmotionCorridor: React.FC<EmotionCorridorProps> = ({
     const current = messages[index];
     const next = messages[index + 1];
     const timeDiff = Math.abs(next.timestamp - current.timestamp);
-    return timeDiff <= TIME_WINDOW_MS && current.emotionType === next.emotionType;
+    return timeDiff < TIME_WINDOW_MS && current.emotionType === next.emotionType;
   }, [messages]);
 
   const getLineWidth = useCallback((index: number): number => {
