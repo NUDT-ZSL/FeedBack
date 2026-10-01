@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 晶体结构查看器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(135deg, #121212 0%, #1e1e1e 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: #cccccc;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .panel {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 240px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      z-index: 10;
+      transition: filter 0.2s ease;
+    }
+
+    .panel:hover {
+      filter: brightness(1.15);
+    }
+
+    #left-panel {
+      left: 20px;
+    }
+
+    #right-panel {
+      right: 20px;
+    }
+
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #00bcd4;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .crystal-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .crystal-btn {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.03);
+      color: #cccccc;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .crystal-btn:hover {
+      border-color: rgba(0, 188, 212, 0.5);
+      background: rgba(0, 188, 212, 0.1);
+      filter: brightness(1.2);
+    }
+
+    .crystal-btn.active {
+      border-color: #00bcd4;
+      box-shadow: 0 0 4px #00bcd4, 0 0 8px rgba(0, 188, 212, 0.5);
+      background: rgba(0, 188, 212, 0.15);
+    }
+
+    .crystal-btn .abbr {
+      font-size: 14px;
+      font-weight: 700;
+      color: #00bcd4;
+    }
+
+    .crystal-btn .full {
+      font-size: 9px;
+      margin-top: 2px;
+      opacity: 0.8;
+    }
+
+    .info-bar {
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .info-bar .crystal-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .info-bar .space-group {
+      font-size: 11px;
+      color: #888;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #cccccc;
+      margin-bottom: 8px;
+    }
+
+    .control-value {
+      color: #00bcd4;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      transition: filter 0.2s ease;
+    }
+
+    input[type="range"]:hover {
+      filter: brightness(1.2);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #00bcd4;
+      cursor: pointer;
+      transition: box-shadow 0.2s ease;
+      border: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 8px rgba(0, 188, 212, 0.8);
+    }
+
+    input[type="range"]:active::-webkit-slider-thumb {
+      box-shadow: 0 0 12px rgba(0, 188, 212, 1), 0 0 20px rgba(0, 188, 212, 0.5);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #00bcd4;
+      cursor: pointer;
+      border: none;
+    }
+
+    .toggle-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toggle-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .toggle-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      filter: brightness(1.1);
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 18px;
+      background: #333;
+      border-radius: 9px;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-switch.on {
+      background: #00bcd4;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s ease;
+    }
+
+    .toggle-switch.on::after {
+      transform: translateX(18px);
+    }
+
+    .btn-action {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(0, 188, 212, 0.2) 0%, rgba(0, 188, 212, 0.05) 100%);
+      border: 1px solid rgba(0, 188, 212, 0.4);
+      border-radius: 8px;
+      color: #00bcd4;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 1px;
+    }
+
+    .btn-action:hover {
+      background: linear-gradient(135deg, rgba(0, 188, 212, 0.35) 0%, rgba(0, 188, 212, 0.1) 100%);
+      border-color: #00bcd4;
+      filter: brightness(1.15);
+      box-shadow: 0 0 12px rgba(0, 188, 212, 0.3);
+    }
+
+    .btn-action.active {
+      background: linear-gradient(135deg, rgba(0, 188, 212, 0.5) 0%, rgba(0, 188, 212, 0.2) 100%);
+      box-shadow: 0 0 8px rgba(0, 188, 212, 0.5);
+    }
+
+    #atom-label {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(0, 188, 212, 0.9);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 100;
+      display: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    #atom-label::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: rgba(0, 188, 212, 0.9);
+    }
+
+    #atom-label .label-name {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+
+    #atom-label .label-pos {
+      font-size: 10px;
+      opacity: 0.9;
+      font-family: 'Courier New', monospace;
+    }
+
+    #menu-toggle {
+      display: none;
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 50;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    #menu-toggle:hover {
+      background: rgba(0, 188, 212, 0.15);
+      filter: brightness(1.2);
+    }
+
+    #menu-toggle span {
+      display: block;
+      width: 20px;
+      height: 2px;
+      background: #00bcd4;
+      position: relative;
+    }
+
+    #menu-toggle span::before,
+    #menu-toggle span::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      width: 20px;
+      height: 2px;
+      background: #00bcd4;
+    }
+
+    #menu-toggle span::before { top: -6px; }
+    #menu-toggle span::after { top: 6px; }
+
+    .panel-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 40;
+    }
+
+    @media (max-width: 768px) {
+      #menu-toggle {
+        display: flex;
+      }
+
+      .panel {
+        position: fixed;
+        top: 0;
+        transform: none;
+        width: 260px;
+        height: 100vh;
+        border-radius: 0;
+        transition: transform 0.3s ease;
+        overflow-y: auto;
+      }
+
+      #left-panel {
+        left: 0;
+        transform: translateX(-100%);
+      }
+
+      #right-panel {
+        right: 0;
+        transform: translateX(100%);
+      }
+
+      #left-panel.open {
+        transform: translateX(0);
+      }
+
+      #right-panel.open {
+        transform: translateX(0);
+      }
+
+      .panel-overlay.show {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+
+    <button id="menu-toggle">
+      <span></span>
+    </button>
+    <div class="panel-overlay" id="panel-overlay"></div>
+
+    <div id="left-panel" class="panel">
+      <div class="panel-title">晶体结构</div>
+      <div class="crystal-buttons" id="crystal-buttons"></div>
+      <div class="info-bar">
+        <div class="crystal-name" id="crystal-name">简单立方</div>
+        <div class="space-group" id="space-group">空间群: Pm-3m</div>
+      </div>
+    </div>
+
+    <div id="right-panel" class="panel">
+      <div class="panel-title">参数控制</div>
+      <div class="control-group">
+        <div class="control-label">
+          <span>晶格常数 (Å)</span>
+          <span class="control-value" id="lattice-value">2.50</span>
+        </div>
+        <input type="range" id="lattice-slider" min="1" max="5" step="0.1" value="2.5" />
+      </div>
+      <div class="control-group">
+        <div class="control-label">
+          <span>原子半径比例</span>
+          <span class="control-value" id="radius-value">0.50</span>
+        </div>
+        <input type="range" id="radius-slider" min="0.3" max="1.0" step="0.05" value="0.5" />
+      </div>
+      <div class="control-group">
+        <div class="toggle-group">
+          <div class="toggle-item" id="toggle-axes">
+            <span>显示坐标轴</span>
+            <div class="toggle-switch" id="switch-axes"></div>
+          </div>
+          <div class="toggle-item" id="toggle-grid">
+            <span>显示网格线</span>
+            <div class="toggle-switch" id="switch-grid"></div>
+          </div>
+        </div>
+      </div>
+      <div class="control-group">
+        <button class="btn-action" id="btn-explode">爆炸视图</button>
+      </div>
+    </div>
+
+    <div id="atom-label">
+      <div class="label-name" id="label-name"></div>
+      <div class="label-pos" id="label-pos"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/ui.ts"></script>
+</body>
+</html>
