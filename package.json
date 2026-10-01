@@ -1,0 +1,17 @@
+{
+  "name": "hex-card-battle",
+  "version": "1.0.0",
+  "description": "回合制卡牌与棋子混战的六边形棋盘游戏",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.80.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}
