@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D 植物生长模拟器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(180deg, #e0f7fa 0%, #c8e6c9 100%);
+      color: #333;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #dataPanel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 20px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      min-width: 240px;
+      font-size: 14px;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #dataPanel h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #2e7d32;
+      font-weight: 600;
+    }
+
+    .data-row {
+      margin-bottom: 10px;
+    }
+
+    .data-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .progress-light { background: linear-gradient(90deg, #ffd54f, #ffb300); }
+    .progress-water { background: linear-gradient(90deg, #4fc3f7, #0288d1); }
+    .progress-temp { background: linear-gradient(90deg, #81d4fa, #ef5350); }
+
+    .stage-info {
+      padding: 10px;
+      background: rgba(46, 125, 50, 0.1);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .stage-name {
+      font-weight: 600;
+      color: #2e7d32;
+      font-size: 15px;
+    }
+
+    .countdown {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .countdown-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #f06292;
+    }
+
+    #infoLabel {
+      position: absolute;
+      pointer-events: none;
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 100;
+    }
+
+    #infoLabel.visible {
+      opacity: 1;
+    }
+
+    #resetBtn {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 28px;
+      border: none;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #66bb6a, #43a047);
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(67, 160, 71, 0.4);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 10;
+    }
+
+    #resetBtn:hover {
+      transform: translateX(-50%) translateY(-2px);
+      box-shadow: 0 6px 16px rgba(67, 160, 71, 0.5);
+    }
+
+    #resetBtn:active {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .lil-gui {
+      --width: 320px;
+      border-radius: 16px !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+      overflow: hidden;
+    }
+
+    .lil-gui .children {
+      padding: 8px 12px !important;
+    }
+
+    @media (max-width: 768px) {
+      #dataPanel {
+        top: 10px;
+        right: 10px;
+        padding: 12px;
+        min-width: 180px;
+        font-size: 12px;
+      }
+
+      #dataPanel h3 {
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+
+      .data-label {
+        font-size: 11px;
+      }
+
+      .stage-name {
+        font-size: 12px;
+      }
+
+      .countdown-value {
+        font-size: 14px;
+      }
+
+      .lil-gui {
+        --width: 100% !important;
+        position: fixed !important;
+        bottom: 60px !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        border-radius: 16px 16px 0 0 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="dataPanel">
+      <h3>🌱 植物状态</h3>
+      <div class="stage-info">
+        <div class="stage-name" id="stageName">种子阶段</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">
+          <span>☀️ 光照</span>
+          <span id="lightValue">50%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-light" id="lightBar" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">
+          <span>💧 水分</span>
+          <span id="waterValue">50%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-water" id="waterBar" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">
+          <span>🌡️ 温度</span>
+          <span id="tempValue">20°C</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill progress-temp" id="tempBar" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="countdown">
+        <div style="font-size: 12px; margin-bottom: 4px; opacity: 0.7;">预计开花</div>
+        <div class="countdown-value" id="countdown">-- 秒</div>
+      </div>
+    </div>
+
+    <div id="infoLabel"></div>
+    <button id="resetBtn">🔄 重新种植</button>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
