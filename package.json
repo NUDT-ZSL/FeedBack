@@ -1,0 +1,17 @@
+{
+  "name": "synthesizer-sequencer",
+  "version": "1.0.0",
+  "description": "交互式合成器音序器与可视化节拍生成应用",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "typescript": "^5.3.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
