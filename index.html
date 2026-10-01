@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>太阳系3D交互可视化</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Noto Sans SC', sans-serif;
+      background: radial-gradient(ellipse at center, #0a0a2e 0%, #050510 50%, #000000 100%);
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .planet-label {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: #ffffff;
+      font-size: 12px;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      margin-top: -10px;
+      min-width: 120px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .planet-label.visible {
+      opacity: 1;
+    }
+
+    .planet-label .label-name {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #ffcc33;
+    }
+
+    .planet-label .label-info {
+      font-size: 11px;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .planet-label .label-info span {
+      color: rgba(255, 255, 255, 0.6);
+      margin-right: 4px;
+    }
+
+    .control-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 280px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 20px;
+      pointer-events: auto;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .control-panel.collapsed {
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .panel-toggle {
+      display: none;
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      pointer-events: auto;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      z-index: 20;
+    }
+
+    .panel-toggle:hover {
+      background: rgba(100, 180, 255, 0.3);
+      transform: scale(1.05);
+    }
+
+    .panel-title {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      color: #ffcc33;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-label {
+      display: block;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .slider-container {
+      position: relative;
+    }
+
+    .speed-slider {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffcc33, #ff9900);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(255, 204, 51, 0.5);
+      transition: transform 0.2s ease;
+    }
+
+    .speed-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .speed-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ffcc33, #ff9900);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 8px rgba(255, 204, 51, 0.5);
+    }
+
+    .speed-value {
+      position: absolute;
+      right: 0;
+      top: -20px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      color: #ffcc33;
+    }
+
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .toggle-switch.active {
+      background: rgba(100, 180, 255, 0.4);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+    }
+
+    .toggle-switch.active::after {
+      transform: translateX(24px);
+      background: #64b4ff;
+    }
+
+    .planet-select {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s ease;
+      font-family: 'Noto Sans SC', sans-serif;
+    }
+
+    .planet-select:hover {
+      border-color: rgba(100, 180, 255, 0.5);
+    }
+
+    .planet-select option {
+      background: #1a1a3e;
+      color: #fff;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: 'Noto Sans SC', sans-serif;
+    }
+
+    .btn:hover {
+      background: rgba(100, 180, 255, 0.25);
+      border-color: rgba(100, 180, 255, 0.5);
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(100, 180, 255, 0.3), rgba(100, 180, 255, 0.1));
+      border-color: rgba(100, 180, 255, 0.4);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, rgba(100, 180, 255, 0.5), rgba(100, 180, 255, 0.3));
+    }
+
+    .fps-counter {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      pointer-events: none;
+    }
+
+    @media (max-width: 768px) {
+      .control-panel {
+        display: none;
+        top: 80px;
+        right: 20px;
+        width: calc(100% - 40px);
+        max-width: 320px;
+      }
+
+      .control-panel.mobile-open {
+        display: block;
+      }
+
+      .panel-toggle {
+        display: flex;
+      }
+
+      .planet-label {
+        font-size: 11px;
+        min-width: 100px;
+        padding: 6px 10px;
+      }
+
+      .planet-label .label-name {
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+    <div id="ui-container"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
