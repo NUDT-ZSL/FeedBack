@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T08:29:27.336Z",
+  "task_name": "auto15",
+  "task_type": "0-1代码生成",
+  "business_domain": "3D/交互可视化",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够在浏览器中模拟古代水师战船在海上进行编队阵型变换与炮击演练的3D交互可视化应用，主要解决水师将领难以直观模拟不同阵型（如雁行阵、鱼鳞阵、偃月阵）的优缺点和炮击覆盖范围的问题。\n\n它应当具备以下能力：\n1) 用户在水师指挥台上，通过点击左侧阵型卡片（雁行阵V型、鱼鳞阵菱形、偃月阵弧形）切换编队，战船阵型切换时触发0.5秒的平滑移动动画，每艘船沿预定路径移动至新位置，移动轨迹以半透明虚线显示。\n2) 每艘战船（木制帆船模型，长3单位、高1.5单位，船体颜色#8b5a2b）上方显示编号和血量条（绿色到红色渐变），用户可点击选中单艘船，拖动船体微调其在阵型中的位置，选中时船体周围出现金色光环#ffd700（脉冲动画周期1.2秒）。\n3) 炮击演练模式下，用户选定阵型后点击发射按钮，各船炮口（每艘船左右各3门）朝随机目标区域发射炮弹（球形，半径0.2单位，深灰色#444444，飞行轨迹为抛物线并带有半透明尾烟粒子），炮弹落在海面上时激起水柱粒子（高度2-4单位，白色半透明#ffffff，持续1秒消失）。\n4) 海面持续波动（使用正弦波动画，波长8单位、振幅0.2单位），风向从场景右上向左下吹拂，风力强度显示在右下角（0-10级，用半透明微型罗盘图标指示方向）。用户可按空格键暂停/恢复所有动画。\n\n界面方面要求：整体采用暗蓝色调海战风格，背景天空为渐变#1a2a3a到#3a5a7a，海面为#0a2a4a带白色的波浪反光线条。左侧阵型卡片为半透明毛玻璃面板（模糊度10px，底色#ffffff30），卡片选中时边框变为金色并放大1.05倍（过渡0.3s）。右侧信息面板显示当前阵型名称、总火力值和被击中概率预估（百分比条）。右下角有暂停/恢复按钮，布局自适应屏幕（最小宽度1024px，左侧卡片栏占25%、中间场景占60%、右侧信息栏占15%）。性能上需要保持60FPS的流畅帧率，在同时渲染20艘战船和50颗炮弹时帧率不低于30FPS。\n\n实现采用TypeScript和React，配合Three.js和React Three Fiber进行3D渲染。按以下文件组织代码：\n - package.json（含依赖：react, react-dom, three, @react-three/fiber, @react-three/drei, typescript, vite, @vitejs/plugin-react, framer-motion；启动脚本：npm run dev）\n - index.html（入口页面，背景色#0a1a2a，含根div）\n - tsconfig.json（严格模式，target ES2020，moduleResolution bundler）\n - vite.config.js（基本React配置，启用HMR）\n - src/App.tsx（主组件，渲染Canvas、布局UI，管理全局状态：currentFormation/isPaused）\n - src/scene/SeaBattle.tsx（3D场景核心：海面、战船阵型切换、炮击动画、风向与粒子系统，使用React Three Fiber）\n - src/ui/Panel.tsx（左侧阵型卡片、右侧信息面板、右下角控制按钮，使用framer-motion制作切换动画）\n\n运行方式：npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:923d8a7b17fdfa2db929d4116c80e72a_6a27ce1cb3ced261b8caddbd.6a27cedcb3ced261b8cade5a.6a27cedcab313a6d11a0bcbd:Trae CN.T(2026/6/9 16:29:16)",
+    "user_id": "98336997115224",
+    "trace_id": "923d8a7b17fdfa2db929d4116c80e72a",
+    "session_id": "6a27ce1cb3ced261b8caddbd",
+    "task_id": "6a27cedcb3ced261b8cade5a",
+    "message_id": "6a27cedcab313a6d11a0bcbd",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 16:29:16",
+    "format": "full"
+  },
+  "trace": "null"
+}
