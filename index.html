@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Cosmic Bubble Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000011;
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #hint {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: rgba(255, 255, 255, 0.8);
+      font-weight: 100;
+      font-size: 14px;
+      line-height: 1.8;
+      pointer-events: none;
+      z-index: 10;
+      letter-spacing: 1px;
+    }
+    #hint h1 {
+      font-weight: 100;
+      font-size: 22px;
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="hint">
+    <h1>3D COSMIC BUBBLE VIEWER</h1>
+    <div>鼠标拖拽旋转视角 · 滚轮缩放</div>
+    <div>悬停气泡查看星系团数据</div>
+    <div>点击气泡锁定当前焦点</div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
