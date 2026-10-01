@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>动态波形编辑器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #1a1a2e;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 16px;
+    }
+
+    .upload-area {
+      width: 100%;
+      min-height: 100px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      background-color: #16213e;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .upload-area.dragover {
+      border-color: #4fc3f7;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 20px 10px rgba(79, 195, 247, 0.2);
+      }
+    }
+
+    .upload-area button {
+      padding: 10px 24px;
+      background-color: #0f3460;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: filter 0.2s ease;
+    }
+
+    .upload-area button:hover {
+      filter: brightness(1.15);
+    }
+
+    .upload-area p {
+      font-size: 14px;
+      color: #aaa;
+    }
+
+    .main-content {
+      flex: 1;
+      display: flex;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .wave-section {
+      flex: 0 0 70%;
+      background-color: #16213e;
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .spectrum-section {
+      flex: 0 0 calc(30% - 16px);
+      background-color: #16213e;
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .mobile-tabs {
+      display: none;
+      background-color: #16213e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .mobile-tabs button {
+      flex: 1;
+      padding: 12px;
+      background-color: #0f3460;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      transition: filter 0.2s ease, background-color 0.2s ease;
+    }
+
+    .mobile-tabs button.active {
+      background-color: #e94560;
+    }
+
+    .mobile-tabs button:hover {
+      filter: brightness(1.15);
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .play-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background-color: #0f3460;
+      color: white;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: filter 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .play-btn:hover {
+      filter: brightness(1.15);
+    }
+
+    .play-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .progress-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-bar {
+      flex: 1;
+      height: 6px;
+      background-color: #0f3460;
+      border-radius: 3px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: #e94560;
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.05s linear;
+    }
+
+    .progress-thumb {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      width: 16px;
+      height: 16px;
+      background-color: #e94560;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      cursor: grab;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .progress-thumb:active {
+      cursor: grabbing;
+    }
+
+    .time-display {
+      font-size: 13px;
+      color: #aaa;
+      font-variant-numeric: tabular-nums;
+      min-width: 100px;
+      text-align: center;
+    }
+
+    .style-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding-top: 8px;
+      border-top: 1px solid #0f3460;
+    }
+
+    .slider-control {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-control label {
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .slider-control input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background-color: #0f3460;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .slider-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background-color: #e94560;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: filter 0.2s ease;
+    }
+
+    .slider-control input[type="range"]::-webkit-slider-thumb:hover {
+      filter: brightness(1.15);
+    }
+
+    .slider-control input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background-color: #e94560;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .empty-state {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+      #app {
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .main-content {
+        flex-direction: column;
+      }
+
+      .wave-section,
+      .spectrum-section {
+        flex: 1;
+        display: none;
+      }
+
+      .wave-section.active,
+      .spectrum-section.active {
+        display: flex;
+      }
+
+      .mobile-tabs {
+        display: flex;
+      }
+
+      .style-controls {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="upload-area" id="uploadArea">
+      <button id="uploadBtn">选择音频文件</button>
+      <p>或拖拽 MP3/WAV 文件到此处</p>
+      <input type="file" id="fileInput" accept=".mp3,.wav,audio/mpeg,audio/wav" style="display:none">
+    </div>
+
+    <div class="mobile-tabs">
+      <button class="active" data-tab="wave">波形</button>
+      <button data-tab="spectrum">频谱</button>
+    </div>
+
+    <div class="main-content">
+      <div class="wave-section active" id="waveSection">
+        <div class="section-title">波形可视化</div>
+        <div class="canvas-container">
+          <canvas id="waveCanvas"></canvas>
+          <div class="empty-state" id="waveEmpty">上传音频文件以显示波形</div>
+        </div>
+        <div class="controls">
+          <button class="play-btn" id="playBtn" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </button>
+          <div class="progress-container">
+            <div class="progress-bar" id="progressBar">
+              <div class="progress-fill" id="progressFill"></div>
+              <div class="progress-thumb" id="progressThumb"></div>
+            </div>
+            <div class="time-display" id="timeDisplay">00:00 / 00:00</div>
+          </div>
+        </div>
+        <div class="style-controls">
+          <div class="slider-control">
+            <label>波形粗细: <span id="thicknessValue">3</span>px</label>
+            <input type="range" id="thicknessSlider" min="1" max="5" value="3" step="1">
+          </div>
+          <div class="slider-control">
+            <label>颜色偏移: <span id="colorValue">50</span>%</label>
+            <input type="range" id="colorSlider" min="0" max="100" value="50" step="1">
+          </div>
+          <div class="slider-control">
+            <label>背景亮度: <span id="brightnessValue">50</span>%</label>
+            <input type="range" id="brightnessSlider" min="10" max="90" value="50" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div class="spectrum-section" id="spectrumSection">
+        <div class="section-title">频谱分析</div>
+        <div class="canvas-container">
+          <canvas id="spectrumCanvas"></canvas>
+          <div class="empty-state" id="spectrumEmpty">上传音频文件以显示频谱</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
