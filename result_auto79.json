@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T10:34:06.304Z",
+  "task_name": "auto79",
+  "task_type": "0-1代码生成",
+  "business_domain": "全栈web应用",
+  "modification_scope": "模块内多文件",
+  "prompt": "我想做一个古代茶肆中斗茶（点茶、击拂、分茶）比赛的全栈Web应用，想法是让用户像一位宋代建安的斗茶高手一样，在虚拟的茶肆中，亲手操作建盏、茶筅、汤瓶来点茶，与AI对手比拼茶汤的沫饽（泡沫）色泽、持久度和咬盏程度，并实时看到茶汤表面的分茶图案（如花鸟、山水）随机浮现。希望它能做到：第一，主场景用CSS绘制一座宋代茶肆——竹帘半卷、木格窗棂透入暖光，四面有文人挂轴，中央摆一张黑漆茶案（#2a1a0e），案上陈列一只兔毫建盏（盏口敞阔，内壁用径向渐变模拟兔毫纹，从深褐#3a2010到金褐#c49a3c），一只汤瓶（长流细嘴，青瓷色#7b9a6b，瓶身有冰裂纹），一把茶筅（小竹帚状，竹黄色#d4a76a，帚丝用CSS线条逐根画出，共12根）。用户通过鼠标拖拽汤瓶注水（水瓶倾斜角度控制水流大小，水线半透明蓝白渐变，落盏时溅起细小水花粒子，持续300ms消失），然后用茶筅击拂（鼠标在盏内画圈，速度越快沫饽越厚，同时观看到茶汤表面出现乳白色细腻泡沫，泡沫用大量微小的圆形径向渐变叠加模拟，颜色从#f0d4a0到#f5f0e0渐变）；第二，AI对手自动进行一轮点茶（约5秒动画，每轮用户先手，AI后手），双方完成后由系统根据三个维度评分——沫饽色泽（高白为佳，#faf5e8满分）、持久度（用计时器记录沫饽消退至50%面积所需秒数）、咬盏程度（沫饽紧贴盏壁无明显水线为满分），评分以动态分数条形式在茶案两侧显示（动画时长1秒，从0滚动至最终分数，配色金色#c49a3c到红色#c0392b渐变）；第三，每轮比赛结束后，系统随机生成一幅分茶图案（在沫饽表面上用canvas绘制，图案库包含：松鹤、双蝶、山水、兰竹，图案以白色线条渐变浮现，动画持续2秒，线条粗2px，透明度从0到0.7），用户可点击图案将其保存到个人图鉴库（存在zustand store中，最多保存20幅），图鉴以缩略图网格展示在右侧侧边栏（5列网格，每幅缩略图80x80px，点击放大至320x320px并显示对应诗词题跋，楷体，墨色#2a1a0e）。界面方面，整体色调以暖黄#f5e6d3为主，茶案和建筑用深色形成对比，建盏、汤瓶、茶筅都需要精细的CSS绘制（不能使用图片资源），主比赛区和右侧图鉴区采用flex响应式布局，当屏幕宽度小于768px时，图鉴区折叠为底部抽屉式（点击图标展开）。所有交互元素（注水、击拂、保存图案）在鼠标悬停时加亮10%，点击时播放轻微弹性缩放动画（transform: scale(0.95)过渡到1.0，持续200ms）。性能上，确保点茶动画（粒子系统及canvas绘制）在60fps下流畅运行，分值条动画和图案生成不应导致明显延迟，页面初始加载总耗时需低于2秒。实现采用TypeScript和React，并搭配Node.js（Express）作为后端，把代码拆成以下文件：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、framer-motion、zustand、react-router-dom、axios、canvas-confetti，后端依赖：express、cors、uuid，启动脚本：npm run dev）\n - vite.config.js（基础构建配置，代理/api到后端3001端口）\n - tsconfig.json（严格模式，moduleResolution为bundler）\n - index.html（入口）\n - src/main.tsx（ReactDOM挂载，引入全局样式和路由）\n - src/App.tsx（主页面组件，包含茶肆场景布局、状态管理逻辑）\n - src/components/TeaSet.tsx（建盏、汤瓶、茶筅的CSS绘制与交互逻辑，导出pointTea和whisk函数供App调用）\n - src/components/FoamCanvas.tsx（沫饽动画粒子系统和分茶图案canvas绘制，性能优化使用requestAnimationFrame）\n - src/components/ScorePanel.tsx（评分条动画与结果显示）\n - src/components/Gallery.tsx（图鉴库缩略图网格与放大预览）\n - src/hooks/useAI.ts（AI对手点茶逻辑，随机生成回合延迟和表现参数）\n - src/store/gameStore.ts（zustand状态管理：分数、回合、图鉴、用户动作）\n - server/index.ts（Express后端，提供分茶图案API和图鉴保存接口，使用uuid生成唯一ID，内存存储）\n跑 npm install && npm run dev 就能直接看到效果，后端和前端同时启动。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:d9c28a12063016b4af39edb4463cc441_6a27eb325bb001067e650461.6a27ec135bb001067e650564.6a27ec13705cf444168992a6:Trae CN.T(2026/6/9 18:33:55)",
+    "user_id": "98336997115224",
+    "trace_id": "d9c28a12063016b4af39edb4463cc441",
+    "session_id": "6a27eb325bb001067e650461",
+    "task_id": "6a27ec135bb001067e650564",
+    "message_id": "6a27ec13705cf444168992a6",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 18:33:55",
+    "format": "full"
+  },
+  "trace": "null"
+}
