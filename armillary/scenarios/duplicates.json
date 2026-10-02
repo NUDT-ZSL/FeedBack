@@ -1,0 +1,23 @@
+{
+  "name": "重复拆下与重复装回",
+  "parts": [
+    { "id": "sight_tube", "label": "窥管", "deps": ["inner_ring"] },
+    { "id": "inner_ring", "label": "四游仪环", "deps": ["middle_ring"] },
+    { "id": "middle_ring", "label": "三辰仪环", "deps": ["outer_ring"] },
+    { "id": "outer_ring", "label": "六合仪环", "deps": [] }
+  ],
+  "ops": [
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "reassemble", "part": "sight_tube" },
+    { "op": "reassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "inner_ring" }
+  ],
+  "expect": [
+    { "step": 1, "kind": "invalid", "messageIncludes": "重复拆下无效", "removed": 1 },
+    { "step": 2, "kind": "invalid", "removed": 1 },
+    { "step": 4, "kind": "invalid", "messageIncludes": "重复装回无效", "removed": 0 },
+    { "step": 5, "kind": "blocked", "messageIncludes": "需先拆下" }
+  ]
+}

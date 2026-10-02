@@ -1,0 +1,82 @@
+{
+  "name": "依赖成环识别",
+  "parts": [
+    {
+      "id": "ring_a",
+      "label": "环甲",
+      "deps": [
+        "ring_c",
+        "ring_d"
+      ]
+    },
+    {
+      "id": "ring_b",
+      "label": "环乙",
+      "deps": [
+        "ring_a"
+      ]
+    },
+    {
+      "id": "ring_c",
+      "label": "环丙",
+      "deps": [
+        "ring_b"
+      ]
+    },
+    {
+      "id": "ring_d",
+      "label": "环丁",
+      "deps": [
+        "ring_c"
+      ]
+    },
+    {
+      "id": "ring_e",
+      "label": "环戊",
+      "deps": []
+    }
+  ],
+  "ops": [
+    {
+      "op": "disassemble",
+      "part": "ring_a"
+    },
+    {
+      "op": "disassemble",
+      "part": "ring_d"
+    },
+    {
+      "op": "disassemble",
+      "part": "ring_e"
+    },
+    {
+      "op": "disassemble",
+      "part": "ring_c"
+    }
+  ],
+  "expect": [
+    {
+      "step": 0,
+      "kind": "blocked",
+      "messageIncludes": "依赖环",
+      "stepStatus": {
+        "ring_a": "blocked/done"
+      }
+    },
+    {
+      "step": 1,
+      "kind": "blocked",
+      "messageIncludes": "不可达"
+    },
+    {
+      "step": 2,
+      "kind": "applied",
+      "removed": 1
+    },
+    {
+      "step": 3,
+      "kind": "blocked",
+      "messageIncludes": "依赖环"
+    }
+  ]
+}

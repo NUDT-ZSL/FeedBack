@@ -1,0 +1,24 @@
+{
+  "name": "标准拆装序列",
+  "parts": [
+    { "id": "sight_tube", "label": "窥管", "deps": ["inner_ring"] },
+    { "id": "inner_ring", "label": "四游仪环", "deps": ["middle_ring"] },
+    { "id": "middle_ring", "label": "三辰仪环", "deps": ["outer_ring"] },
+    { "id": "outer_ring", "label": "六合仪环", "deps": [] }
+  ],
+  "ops": [
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "inner_ring" },
+    { "op": "disassemble", "part": "middle_ring" },
+    { "op": "disassemble", "part": "outer_ring" },
+    { "op": "reassemble", "part": "outer_ring" },
+    { "op": "reassemble", "part": "middle_ring" },
+    { "op": "reassemble", "part": "inner_ring" },
+    { "op": "reassemble", "part": "sight_tube" }
+  ],
+  "expect": [
+    { "step": 0, "kind": "applied", "removed": 1, "conclusion": "拆装进行中（已拆下 1/4）", "stepStatus": { "inner_ring": "ready/done" } },
+    { "step": 3, "kind": "applied", "removed": 4, "conclusion": "全部部件已拆下，拆装完成", "stepStatus": { "outer_ring": "done/ready" } },
+    { "step": 7, "kind": "applied", "removed": 0, "conclusion": "尚未开始拆装", "stepStatus": { "sight_tube": "ready/done" } }
+  ]
+}

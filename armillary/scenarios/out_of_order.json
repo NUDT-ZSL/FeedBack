@@ -1,0 +1,30 @@
+{
+  "name": "乱序操作与等价序列",
+  "parts": [
+    { "id": "sight_tube", "label": "窥管", "deps": ["inner_ring"] },
+    { "id": "inner_ring", "label": "四游仪环", "deps": ["middle_ring"] },
+    { "id": "middle_ring", "label": "三辰仪环", "deps": ["outer_ring"] },
+    { "id": "outer_ring", "label": "六合仪环", "deps": [] }
+  ],
+  "ops": [
+    { "op": "disassemble", "part": "outer_ring" },
+    { "op": "disassemble", "part": "middle_ring" },
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "inner_ring" },
+    { "op": "reassemble", "part": "inner_ring" },
+    { "op": "disassemble", "part": "inner_ring" },
+    { "op": "disassemble", "part": "middle_ring" },
+    { "op": "disassemble", "part": "outer_ring" }
+  ],
+  "altOps": [
+    { "op": "disassemble", "part": "sight_tube" },
+    { "op": "disassemble", "part": "inner_ring" },
+    { "op": "disassemble", "part": "middle_ring" },
+    { "op": "disassemble", "part": "outer_ring" }
+  ],
+  "expect": [
+    { "step": 0, "kind": "blocked", "messageIncludes": "需先拆下", "removed": 0 },
+    { "step": 1, "kind": "blocked", "messageIncludes": "需先拆下", "removed": 0 },
+    { "step": 7, "kind": "applied", "removed": 4, "conclusion": "全部部件已拆下，拆装完成" }
+  ]
+}

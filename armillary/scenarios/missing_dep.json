@@ -1,0 +1,20 @@
+{
+  "name": "依赖指向缺失部件",
+  "parts": [
+    { "id": "ring_x", "label": "环玄", "deps": ["ghost_ring"] },
+    { "id": "ring_y", "label": "环黄", "deps": ["ring_x"] },
+    { "id": "ring_z", "label": "环宇", "deps": [] }
+  ],
+  "ops": [
+    { "op": "disassemble", "part": "ring_y" },
+    { "op": "disassemble", "part": "ring_x" },
+    { "op": "reassemble", "part": "ring_x" },
+    { "op": "reassemble", "part": "ring_y" },
+    { "op": "disassemble", "part": "ring_z" }
+  ],
+  "expect": [
+    { "step": 2, "kind": "blocked", "messageIncludes": "不存在", "stepStatus": { "ring_x": "done/blocked" } },
+    { "step": 3, "kind": "blocked", "messageIncludes": "需先装回" },
+    { "step": 4, "kind": "applied", "removed": 3 }
+  ]
+}

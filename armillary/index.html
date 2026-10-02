@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>浑仪拆装研习</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #10131c;
+      color: #e8e6df;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .subtitle { color: #8a8f9e; font-size: 13px; margin-bottom: 20px; }
+    .panel {
+      background: #1a1e2b;
+      border: 1px solid #2a3042;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+    }
+    .progress-bar {
+      height: 10px;
+      background: #2a3042;
+      border-radius: 5px;
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #c9a227, #e8c95a);
+      transition: width 0.25s ease;
+    }
+    .conclusion { font-size: 14px; color: #e8c95a; }
+    .hint { font-size: 14px; }
+    .hint.applied { color: #7dd87d; }
+    .hint.blocked { color: #e8a13a; }
+    .hint.invalid { color: #e06c6c; }
+    .hint.info { color: #8a8f9e; }
+    .parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .part {
+      background: #1a1e2b;
+      border: 1px solid #2a3042;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .part-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .part-name { font-size: 16px; font-weight: 600; }
+    .badge { font-size: 12px; padding: 2px 10px; border-radius: 10px; }
+    .badge.installed { background: #23402a; color: #7dd87d; }
+    .badge.removed { background: #3a2a20; color: #e8a13a; }
+    .step { font-size: 12px; margin: 3px 0; color: #9aa0b0; }
+    .step .status-ready { color: #7dd87d; }
+    .step .status-done { color: #8a8f9e; }
+    .step .status-blocked { color: #e8a13a; }
+    .reason { color: #c98a4a; font-size: 12px; margin-left: 8px; }
+    .part button {
+      margin-top: 10px;
+      width: 100%;
+      padding: 7px 0;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #c9a227;
+      color: #10131c;
+      font-weight: 600;
+    }
+    .part button:disabled { background: #3a4054; color: #8a8f9e; cursor: not-allowed; }
+    .diag { font-size: 12px; color: #e06c6c; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>浑仪拆装研习</h1>
+  <div class="subtitle">每一步操作均由部件状态与依赖关系推导，提示与进度结论实时重算</div>
+
+  <div class="panel">
+    <div class="conclusion" id="conclusion"></div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="hint info" id="hint"></div>
+    <div class="diag" id="diag"></div>
+  </div>
+
+  <div class="parts" id="parts"></div>
+
+  <script type="module" src="./ui.js"></script>
+</body>
+</html>

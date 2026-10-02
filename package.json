@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:armillary": "node armillary/runner.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
