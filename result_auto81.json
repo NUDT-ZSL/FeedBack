@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T10:45:17.203Z",
+  "task_name": "auto81",
+  "task_type": "0-1代码生成",
+  "business_domain": "Web前端",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够在浏览器中模拟古代错金银（一种金属装饰工艺）器物表面纹饰设计与着色的交互应用，主要解决传统工艺中不同金属材料（金、银、铜）的镶嵌效果难以在匠人动手前直观预览和反复调整对比的问题。\n\n它应当具备以下能力：\n1) 用户在主场景（一座虚拟的战国青铜器作坊，青石地面#7a8a7a，背景为土墙#d4a76a，中央摆一方宽大的木案#7a5a3a，案上放置一件待装饰的青铜器：一个圆形铜壶，高240px，用CSS径向渐变模拟铜器表面锈蚀质感，从深铜色#4a2e1b到亮铜色#b87333渐变）中，从左侧的金属材料库（金条#ffd700、银条#c0c0c0、红铜条#b87333，每种用CSS立体绘制，长条状，高度150px，表面有金属光泽线性渐变）拖拽金属丝到铜壶表面的纹饰槽（纹饰为预刻的蟠螭纹与云雷纹，用CSS clip-path勾勒，凹槽内为深色#2a1a0e，宽度2px）中，拖拽时金属丝沿槽路径自动弯曲贴合（动画持续0.8秒，伴有轻微金属摩擦的沙沙声），金属嵌入后凹槽内填充对应颜色并自动带出高光渐变效果；\n2) 用户可点击铜壶表面的任意纹样区块（共6个区块：盖顶蟠螭纹、肩部窃曲纹、腹部云雷纹、圈足垂鳞纹、双耳兽面纹、提梁弦纹），选中后区块以金色虚线描边高亮，然后从右侧的打磨工具面板拖拽不同目数的磨石（粗磨100目为灰白色#d0d0d0，中磨400目为浅灰色#b0b0b0，精磨1000目为白色#ffffff）到该区块上，打磨时区块内的金属色会从初始的哑光逐渐变为高亮镜面效果（打磨进度用CSS亮度滤镜控制，从brightness(0.6)到brightness(1.3)渐变，同时表面反射的CSS线性渐变方向随鼠标在区块上的移动角度改变，模拟光照反射）；\n3) 用户完成所有区块的错金银工序后，点击铜壶右上角的“烧制”按钮（一个半透明圆形火苗图标#ff6b35，悬停时放大至1.2倍并脉冲闪烁），铜壶整体进入烧制动画——铜壶从内向外发出红光（box-shadow从rgba(255, 107, 53, 0.3)逐步增强到rgba(255, 200, 50, 0.8)），持续3秒后冷却回正常颜色，此时所有错金银纹饰的金属感增强（对比度提高20%，饱和度提高15%，同时纹饰边缘出现一条极细的黑色氧化线#1a1a1a，表示金属与青铜结合处的热熔扩散效果），用户可鼠标拖拽铜壶（绕Y轴旋转，角度范围0-360度）和滚轮缩放（放大1-3倍），从任意角度观察最终成品的光泽与纹理细节；\n4) 用户可随时将当前的错金银设计方案保存为JSON文件（点击面板下方的“存档”按钮，存档内容包含每个区块使用的金属材料、打磨目数和最终亮度参数），也可点击“读档”按钮从本地加载JSON文件恢复场景状态；\n5) 应用提供自动演示模式（点击右上角“演示”按钮#e67e22，圆角矩形），系统按预设的5个经典错金银器物（如战国错金云纹豆、汉代错银铜牛灯等）依次自动完成金属丝嵌入和打磨的完整工序动画，每个器物演示持续12秒，用户可随时点击“停止”按钮中断演示并进入手动操作模式。\n\n界面方面要求：主场景采用暖色调木案与冷调青铜器形成对比，背景墙用土黄色黏土质感，金属材料库和打磨工具面板分别固定在左右两侧（各占屏幕15%宽度），铜壶居中占50%宽度，所有面板可折叠隐藏（点击侧边的小三角按钮）；操作反馈要求：拖拽金属丝和磨石时有吸附对齐辅助线（半透明虚线，颜色#ffffff，宽度1px），工具有效拖入区域时显示绿色#27ae60高亮边框，无效区域显示红色#e74c3c闪烁警告；金属从嵌入到打磨完成的全过程需播放相应的音效（使用Web Audio API合成：嵌入时金属摩擦音为500ms的噪声+低频正弦波，打磨时磨石声为周期100ms的短促脉冲，烧制时火焰声为带滤波器的白噪声）。性能上需要保证任意操作步骤的界面刷新率不低于55fps，动画帧间隔控制在16ms以内，拖拽吸附计算延迟不超过50ms。\n\n实现采用TypeScript和React，结合framer-motion处理复杂拖拽动画链，按以下文件组织代码：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、framer-motion、zustand、uuid，启动脚本：npm run dev）\n - vite.config.js（基础构建配置，启用TypeScript和React插件）\n - tsconfig.json（严格模式，target esnext）\n - index.html（入口，title为“古代错金银纹饰设计工坊”）\n - src/types.ts（定义所有数据类型：MetalType枚举、BurnishGrade枚举、BlockConfig接口、ProjectState接口等，并导出常量COMBINE_COLORS和BLOCK_NAMES）\n - src/store.ts（用zustand创建全局状态：currentBlocks数组、metalTray、selectedBlockId、isBurning、isAutoDemo、projectHistory，定义actions：setBlockMetal、setBlockBurnish、saveProject、loadProject、startBurning、startAutoDemo等，数据流向：用户交互→store actions→组件重新渲染→Canvas更新）\n - src/App.tsx（主布局组件，包含Header标题栏、CenterCanvas容器、LeftPanel和RightPanel，用framer-motion包裹实现面板折叠/展开动画）\n - src/components/CenterCanvas.tsx（核心交互区域，用CSS 3D变换绘制可旋转放缩的铜壶，内部包含6个可点击的纹饰区块，使用framer-motion的useDragControls处理金属丝和磨石的拖拽放置逻辑，包含触摸设备支持）\n - src/hooks/useSoundEngine.ts（自定义Hook，封装Web Audio API：提供playMetalScrape、playStoneGrind、playFireBurn三个音效函数，带音量调节和停用选项，使用AudioContext和OscillatorNode、GainNode等API合成音频）\n\n运行方式：npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:5bbe29978954823e8a8e9cc5c066f4f5_6a27ee7d1196519076e93fb7.6a27eea21196519076e93fc7.6a27eea2e798bf1d140479c5:Trae CN.T(2026/6/9 18:44:50)",
+    "user_id": "98336997115224",
+    "trace_id": "5bbe29978954823e8a8e9cc5c066f4f5",
+    "session_id": "6a27ee7d1196519076e93fb7",
+    "task_id": "6a27eea21196519076e93fc7",
+    "message_id": "6a27eea2e798bf1d140479c5",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 18:44:50",
+    "format": "full"
+  },
+  "trace": "null"
+}
