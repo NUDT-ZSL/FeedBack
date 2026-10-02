@@ -1,0 +1,245 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-wood: #6b4e3a;
+  --color-cream: #f5e6d3;
+  --color-gray: #9a8a7a;
+  --color-gold: #e8c76a;
+  --color-gold-dark: #d4a017;
+  --color-bamboo: #a67c52;
+  --color-cinnabar: #c0392b;
+  --color-azurite: #3a6b8a;
+  --color-malachite: #4a7c59;
+  --color-gamboge: #d4a017;
+  --color-ochre: #8b6f47;
+  --color-ink: #1a1a1a;
+}
+
+* {
+  font-family: 'SimSun', 'STSong', 'Songti SC', 'Noto Serif SC', serif;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  min-height: 100vh;
+}
+
+.paper-texture {
+  background-color: var(--color-cream);
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(154, 138, 122, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 70% 60%, rgba(107, 78, 58, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 40% 80%, rgba(154, 138, 122, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px, 30px 30px, 25px 25px;
+}
+
+.wood-texture {
+  background: linear-gradient(135deg, var(--color-wood) 0%, #7a5a45 50%, var(--color-wood) 100%);
+  background-size: 100% 100%;
+}
+
+.brick-texture {
+  background-color: var(--color-gray);
+  background-image: 
+    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px),
+    linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px);
+  background-size: 60px 30px;
+}
+
+.silk-texture {
+  background-color: var(--color-cream);
+  background-image: 
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(107, 78, 58, 0.03) 2px, rgba(107, 78, 58, 0.03) 4px),
+    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(107, 78, 58, 0.02) 2px, rgba(107, 78, 58, 0.02) 4px);
+}
+
+@keyframes inkSpread {
+  0% {
+    filter: blur(0px);
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    filter: blur(3px);
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+  100% {
+    filter: blur(0px);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ink-spread {
+  animation: inkSpread 0.5s ease-out forwards;
+}
+
+@keyframes fanOpen {
+  0% { transform: rotate(0deg) scaleY(1); }
+  50% { transform: rotate(-5deg) scaleY(0.8); }
+  100% { transform: rotate(0deg) scaleY(1); }
+}
+
+@keyframes fanClose {
+  0% { transform: rotate(0deg) scaleY(1); }
+  50% { transform: rotate(5deg) scaleY(0.3); }
+  100% { transform: rotate(0deg) scaleY(1); }
+}
+
+.fan-open-animation {
+  animation: fanOpen 1s ease-in-out;
+}
+
+.fan-close-animation {
+  animation: fanClose 1s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px var(--color-gold); }
+  50% { box-shadow: 0 0 20px var(--color-gold), 0 0 30px var(--color-gold-dark); }
+}
+
+.glow {
+  animation: glow 1s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.page-enter {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.page-exit {
+  animation: fadeOut 0.3s ease-in;
+}
+
+.btn-wood {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  background: linear-gradient(135deg, var(--color-wood) 0%, #7a5a45 100%);
+  color: var(--color-cream);
+  border: 2px solid #5a3e2a;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.btn-wood:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.btn-wood:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.btn-gold {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-dark) 100%);
+  color: var(--color-ink);
+  border: 2px solid #b8960f;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.btn-gold:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(212, 160, 23, 0.4);
+}
+
+.tool-btn {
+  @apply w-12 h-12 flex items-center justify-center rounded-lg transition-all duration-200;
+  background: linear-gradient(135deg, var(--color-cream) 0%, #e8d5b8 100%);
+  border: 2px solid var(--color-wood);
+  color: var(--color-wood);
+}
+
+.tool-btn:hover {
+  background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-dark) 100%);
+  color: var(--color-ink);
+}
+
+.tool-btn.active {
+  background: linear-gradient(135deg, var(--color-wood) 0%, #5a3e2a 100%);
+  color: var(--color-cream);
+  border-color: var(--color-gold-dark);
+}
+
+.color-swatch {
+  @apply w-10 h-10 rounded-full cursor-pointer transition-all duration-200 border-2;
+  border-color: var(--color-wood);
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+  border-color: var(--color-gold-dark);
+}
+
+.color-swatch.active {
+  transform: scale(1.15);
+  border-color: var(--color-gold-dark);
+  box-shadow: 0 0 10px var(--color-gold);
+}
+
+.order-row {
+  transition: all 0.2s ease;
+}
+
+.order-row:hover {
+  background-color: var(--color-gold);
+}
+
+.order-row.selected {
+  background-color: var(--color-gold-dark);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(107, 78, 58, 0.1);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--color-wood);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold-dark);
+}
+
+@media (max-width: 768px) {
+  .mobile-toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--color-wood);
+    padding: 8px;
+    border-top: 2px solid var(--color-gold-dark);
+  }
+}
