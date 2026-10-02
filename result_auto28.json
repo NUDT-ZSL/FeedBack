@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T08:55:45.163Z",
+  "task_name": "auto28",
+  "task_type": "0-1代码生成",
+  "business_domain": "Web前端",
+  "modification_scope": "模块内多文件",
+  "prompt": "场景：在虚拟的宋代书坊中，一位书坊老板需要根据当日书籍销售数据，动态调整书架上书籍的摆放布局和折扣策略，并生成一张实时更新的销售热力图，以便快速决策是否需要补货或降价促销。\n\n构建一个基于浏览器的古代书坊书籍陈列与销售优化互动应用，让用户像一位宋代临安府的书坊掌柜一样，在书坊中查看当日各类书籍（经、史、子、集）的销售数据，通过拖拽调整书架上的书籍排面，实时观察销售额和库存变化，并利用热力图直观展示各区域的热销程度。使用TypeScript和React实现。文件结构按职责模块化，并注明各文件间的调用关系和数据流向：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、framer-motion、zustand、recharts，启动脚本：npm run dev）\n - vite.config.js（构建配置，指定base为'./'）\n - tsconfig.json（严格模式，target ES2020）\n - index.html（入口页面，背景色#f0e6d3，引用思源宋体字体）\n - src/App.tsx（根组件，使用React Router管理三个Tab页：书架陈列、销售仪表盘、库存预警。数据流：接收zustand store中的全局状态，分发到子组件）\n - src/components/BookShelf.tsx（书架陈列组件，渲染一个6行5列的网格书架，每格显示一本书的封面（随机颜色块）和书名，用户可拖拽交换两本书的位置，拖拽时触发framer-motion的0.3秒平滑过渡动画。数据流：从store读取books数组，调用store.updateBookPosition()更新）\n - src/components/SalesDashboard.tsx（销售仪表盘组件，展示当日销售额折线图（每半小时一个数据点，使用recharts LineChart）、各分类销售额饼图、以及一个实时热力图表格（5行5列，每格代表书架的一个区域，热度从浅蓝#e0f7fa到深红#ff5252渐变）。数据流：从store读取salesHistory数组，渲染图表，每隔10秒模拟新数据点并调用store.addSalesData()）\n - src/components/AlertPanel.tsx（库存预警面板组件，当某本书库存低于5本时，在右侧弹出一道深红色警告卡片（#d32f2f背景，白色#fff文字），并伴有0.5秒的缩放弹入动画。卡片内显示书名和当前库存，用户点击“补货”按钮后调用store.restockBook()，卡片以0.3秒淡出消失。数据流：订阅store中的books数组，监听库存变化）\n - src/store/useBookStore.ts（zustand状态管理库，管理books数组（每本书含id、title、category、price、stock、sales、position等字段）、salesHistory数组（每小时销售数据）、以及updateBookPosition、addSalesData、restockBook等方法。数据流向：组件调用方法→store更新状态→触发订阅者重新渲染）\n\n功能需求：\n1) 书架陈列：以6行5列网格展示30本书，每本书显示随机生成的颜色块封面和书名，用户可通过拖拽交换任意两本书的位置，交换触发平滑动画。\n2) 销售仪表盘：展示当日销售额折线图（每半小时一个数据点）和各分类（经、史、子、集）销售额饼图，折线图通过recharts的LineChart实现，饼图通过PieChart实现。\n3) 热力图：基于5行5列网格，每个格子对应4本书的区域，热度根据该区域书籍总销售额计算，颜色从浅蓝到深红渐变。\n4) 库存预警：当某本书库存降至5本以下时，在右侧弹出警告卡片，显示书名和库存，用户可点击“补货”将库存恢复至10本。\n5) 数据模拟：初始加载时生成30本书的随机数据（书名随机从50个宋代真实书名单中选取，如《东京梦华录》《梦溪笔谈》《资治通鉴》等），并按每10秒在salesHistory中新增一个模拟数据点。\n\n界面要求：页面整体采用仿古书卷风格，主背景色为米黄色#f5e6c8，书架网格使用深棕色#5d4037边框，每本书的封面颜色随机从八种宋代流行色（天青#51a8b8、海棠红#db5a6b、秋香黄#c8a951、石绿#6b8e23、檀色#b36d61、宝蓝#1e90ff、豆绿#a0c4a8、象牙白#fffff0）中选取。书架网格每格有轻微阴影（0 2px 4px rgba(0,0,0,0.1)），在用户拖拽交换时，目标格子高亮为浅金色#ffd54f，交换完成后高亮淡出。销售仪表盘的折线图线条颜色为海棠红#db5a6b，饼图的色块对应经书（天青）、史书（海棠红）、子书（秋香黄）、集书（石绿）。热力图的每个格子自带3px圆角，颜色过渡使用CSS渐变。整体响应式设计，在屏幕宽度低于768px时书架改为4列，网格和图表自适应缩放。\n\n性能约束：页面初始加载时间不超过2秒（使用代码分割和lazy loading），热力图每10秒更新一次时的FPS不低于50帧，拖拽交换操作的响应延迟不超过100毫秒（使用framer-motion的drag功能时保持60fps）。运行方式：npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:26e8b960dd2b397550a0ce38362447ce_6a27d473cef6671b103d83f7.6a27d506cef6671b103d847f.6a27d506996272e7bdd3058f:Trae CN.T(2026/6/9 16:55:34)",
+    "user_id": "98336997115224",
+    "trace_id": "26e8b960dd2b397550a0ce38362447ce",
+    "session_id": "6a27d473cef6671b103d83f7",
+    "task_id": "6a27d506cef6671b103d847f",
+    "message_id": "6a27d506996272e7bdd3058f",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 16:55:34",
+    "format": "full"
+  },
+  "trace": "null"
+}
