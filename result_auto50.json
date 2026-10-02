@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-09T09:33:54.315Z",
+  "task_name": "auto50",
+  "task_type": "0-1代码生成",
+  "business_domain": "全栈web应用",
+  "modification_scope": "模块内多文件",
+  "prompt": "我需要一个能够在浏览器中模拟古代盐铁官营体系中盐引与铁券流转监管的全栈Web应用，主要解决传统盐铁专卖管理中盐引核发、铁券铸造和转运司稽查之间难以实时对账和防止伪造的问题。\n\n它应当具备以下能力：\n1) 用户在主场景（一座虚拟的宋代转运司衙门，青砖灰瓦建筑风格，背景色#8b9a8b，屏风绘有《盐铁论》山水画）中，每日从左侧的盐引库拖拽定额盐引（每引标注盐斤数、签发日期、行盐地域）到中央稽查案上，自动调用防伪校验（盐引上的钤印与暗记比对，匹配时钤印转为金色#ffd700并播放清脆的盖章音效，不匹配时钤印转为暗红色#8b0000并发出低沉警示音），比对结果以红色印章“验讫”或黑色印章“驳”盖在盐引上；\n2) 右侧铁券架上陈列三种不同品级的铁券（免死、减罪、免役），每券用SVG绘制券面刻字（楷体，金文字#d4a017），用户点击铁券可展开详情页（显示持券人姓名、官职、颁发日期、有效期限），持券人图像用CSS clip-path剪出圆形头像；\n3) 下方转运司面板实时显示当日盐引核发量（柱状图，每日一组，用recharts绘制，柱体颜色从浅绿#a8d08a到深绿#6b8e23表示合规率）、铁券变更记录（表格，含操作时间、操作人、处理结果三列，每行用framer-motion淡入动画）以及最新的稽查报告（文本卡片，背景#f5f0e1，左边框用#8b4513木色线装饰）；\n4) 用户点击“月终结算”按钮时，系统自动汇总本月所有盐引与铁券的变动，生成一份对账报表（PDF风格预览），并检查是否存在核发数量与回收数量不符的异常（异常条目用红色字体#e74c3c闪烁警告，正常条目用绿色字体#27ae60）；\n5) 所有盐引和铁券的每一笔状态变更都写入本地模拟的账册（localStorage模拟），用户可通过右上角的搜索框（模糊匹配，输入盐引编号或铁券持有人姓名）快速定位历史记录，搜索结果列表支持按时间排序（升序/降序）。\n\n界面方面要求：整体采用暖色调木色系为主（主色#5d3a1a、辅色#8b5e3c、强调色#b8860b），页面布局为三列纵向结构（左列盐引库300px、中列稽查区flex-grow、右列铁券库250px），适应不同屏幕宽度（左右列在窄屏时折叠为顶部导航栏）；所有拖拽操作附带弹性缩放动画（framer-motion的drag系列API），盐引验讫时有1s的金色光晕脉冲动画，铁券详情页弹出时背景有半透明遮罩（rgba(0,0,0,0.5)）且卡片从底部上滑进入（y轴从100%到0%）。性能上需要所有动画帧率不低于45fps，单次校验响应时间小于200ms。\n\n实现采用TypeScript、React和Node.js（Express），按以下文件组织代码：\n - package.json（含依赖：react、react-dom、typescript、vite、@vitejs/plugin-react、framer-motion、zustand、recharts、react-router-dom、axios、express、cors、uuid，启动脚本：npm run dev）\n - index.html（入口页面，背景色#8b9a8b，引用思源宋体字体）\n - vite.config.js（构建配置，指定base为'./'，proxy配置将/api请求转发到后端端口3001）\n - tsconfig.json（严格模式，target ES2020，jsx react-jsx）\n - src/main.tsx（React根组件，包裹Router和Provider，导入全局样式）\n - src/App.tsx（主应用组件，三列布局，左侧<TitleStore>组件、中间<InspectionDesk>组件、右侧<IronCertStore>组件，通过zustand状态管理共享盐引和铁券数据，状态更新使用framer-motion布局动画）\n - server/index.ts（Express后端，提供/api/salt-certificates和/api/iron-certificates的GET/POST/PUT接口，数据用内存数组模拟，支持模糊搜索和排序）\n - src/types.ts（TypeScript类型定义：SaltCertificate、IronCertificate、InspectionLog等接口）\n - src/store.ts（zustand store，管理盐引列表、铁券列表、当日日志、搜索结果等状态，提供addSaltCert、inspectSaltCert、toggleIronCertDetail、searchRecords等action）\n - src/components/TitleStore.tsx（盐引库组件，左侧列，展示盐引列表（每项包含编号、盐斤数、签发日期），支持拖拽到中间稽查区域，拖拽时盐引缩略图跟随光标，施放时调用store的inspectSaltCert触发校验动画）\n - src/components/InspectionDesk.tsx（稽查案组件，中央区域，显示当前正在校验的盐引详情（含防伪比对动画）、验讫结果、统计图表（recharts柱状图展示每日核发量）和日志列表（framer-motion逐行动画））\n - src/components/IronCertStore.tsx（铁券架组件，右侧列，展示三级铁券缩略图（SVG绘制券面纹路），点击展开详情页（framer-motion展开/收起动画），点击“月终结算”按钮调用后端/api/report生成对账数据）\n - src/styles.css（全局样式，暖色调木色系，响应式布局，窄屏时左右列折叠为顶部导航）\n\n运行方式：npm install && npm run dev。",
+  "session_id": {
+    "valid": true,
+    "full_id": ".98336997115224:5e85dfcc42ed9caaab02969761889135_6a27ddad7b88a5c3359155b6.6a27ddf77b88a5c33591560a.6a27ddf77aed41c4a47ae7a9:Trae CN.T(2026/6/9 17:33:43)",
+    "user_id": "98336997115224",
+    "trace_id": "5e85dfcc42ed9caaab02969761889135",
+    "session_id": "6a27ddad7b88a5c3359155b6",
+    "task_id": "6a27ddf77b88a5c33591560a",
+    "message_id": "6a27ddf77aed41c4a47ae7a9",
+    "app_name": "Trae CN",
+    "timestamp": "2026/6/9 17:33:43",
+    "format": "full"
+  },
+  "trace": "null"
+}
