@@ -1,0 +1,33 @@
+{
+  "name": "tang-west-market-trader",
+  "version": "1.0.0",
+  "description": "唐代长安西市胡商货摊管理系统",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "tsx server/index.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "framer-motion": "^11.0.0",
+    "zustand": "^4.5.0",
+    "react-router-dom": "^6.22.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "lucide-react": "^0.344.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.56",
+    "@types/react-dom": "^18.2.19",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.11.20",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.4",
+    "tsx": "^4.7.1"
+  }
+}
