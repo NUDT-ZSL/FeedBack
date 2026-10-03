@@ -19,6 +19,57 @@ export interface OptimalEnvironment {
   lightMax: number;
 }
 
+export interface EnvironmentSnapshot {
+  temperature: number;
+  humidity: number;
+  light: number;
+}
+
+export interface DriftEvent {
+  startTime: number;
+  endTime: number;
+  duration: number;
+  env: EnvironmentSnapshot;
+  traitDelta: PlantTraits;
+  envDelta: OptimalEnvironment;
+}
+
+export interface EnvRangeSource {
+  parentId: string;
+  parentName: string;
+  env: OptimalEnvironment;
+  weight: number;
+}
+
+export type EnvDimension = 'temperature' | 'humidity' | 'light';
+
+export interface EnvConflict {
+  dimension: EnvDimension;
+  parentA: { id: string; min: number; max: number };
+  parentB: { id: string; min: number; max: number };
+  resolution: string;
+}
+
+export interface EnvOrigin {
+  sources: EnvRangeSource[];
+  strategy: string;
+  conflicts: EnvConflict[];
+}
+
+export interface CumulativeDrift {
+  stressTime: number;
+  traits: PlantTraits;
+  optimalEnv: OptimalEnvironment;
+  traitMagnitude: number;
+}
+
+export type EnvAdjudicationStrategy =
+  | 'weighted'
+  | 'union'
+  | 'intersection'
+  | 'parentA'
+  | 'parentB';
+
 export interface PlantJSON {
   id: string;
   name: string;
@@ -30,6 +81,10 @@ export interface PlantJSON {
   isMature: boolean;
   position: PlantPosition | null;
   optimalEnv: OptimalEnvironment;
+  driftHistory?: DriftEvent[];
+  activeDrift?: DriftEvent | null;
+  totalStressTime?: number;
+  envOrigin?: EnvOrigin | null;
 }
 
 export interface BasePlantConfig {
@@ -139,6 +194,87 @@ function clamp(value: number, min: number = 0, max: number = 255): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+const ENV_DIMENSION_BOUNDS: Record<EnvDimension, { minKey: keyof OptimalEnvironment; maxKey: keyof OptimalEnvironment; physicalMin: number; physicalMax: number }> = {
+  temperature: { minKey: 'tempMin', maxKey: 'tempMax', physicalMin: 10, physicalMax: 40 },
+  humidity: { minKey: 'humidityMin', maxKey: 'humidityMax', physicalMin: 0, physicalMax: 100 },
+  light: { minKey: 'lightMin', maxKey: 'lightMax', physicalMin: 0, physicalMax: 100 },
+};
+
+function getDimensionRange(env: OptimalEnvironment, dimension: EnvDimension): { min: number; max: number } {
+  const keys = ENV_DIMENSION_BOUNDS[dimension];
+  return { min: env[keys.minKey], max: env[keys.maxKey] };
+}
+
+export function detectEnvConflicts(
+  idA: string,
+  envA: OptimalEnvironment,
+  idB: string,
+  envB: OptimalEnvironment
+): EnvConflict[] {
+  const conflicts: EnvConflict[] = [];
+  for (const dimension of ['temperature', 'humidity', 'light'] as EnvDimension[]) {
+    const a = getDimensionRange(envA, dimension);
+    const b = getDimensionRange(envB, dimension);
+    const disjoint = a.max < b.min || b.max < a.min;
+    if (disjoint) {
+      conflicts.push({
+        dimension,
+        parentA: { id: idA, min: a.min, max: a.max },
+        parentB: { id: idB, min: b.min, max: b.max },
+        resolution: '双方区间互不相交，默认按加权平均裁决，原始来源已保留，可重新裁决',
+      });
+    }
+  }
+  return conflicts;
+}
+
+export function adjudicateEnvs(
+  sources: EnvRangeSource[],
+  strategy: EnvAdjudicationStrategy
+): OptimalEnvironment {
+  const resolved: OptimalEnvironment = {
+    tempMin: 0,
+    tempMax: 0,
+    humidityMin: 0,
+    humidityMax: 0,
+    lightMin: 0,
+    lightMax: 0,
+  };
+
+  const totalWeight = sources.reduce((sum, s) => sum + s.weight, 0) || 1;
+  const dims: { dimension: EnvDimension; minKey: keyof OptimalEnvironment; maxKey: keyof OptimalEnvironment }[] = [
+    { dimension: 'temperature', minKey: 'tempMin', maxKey: 'tempMax' },
+    { dimension: 'humidity', minKey: 'humidityMin', maxKey: 'humidityMax' },
+    { dimension: 'light', minKey: 'lightMin', maxKey: 'lightMax' },
+  ];
+
+  for (const { dimension, minKey, maxKey } of dims) {
+    const bounds = ENV_DIMENSION_BOUNDS[dimension];
+    if (strategy === 'weighted') {
+      resolved[minKey] = Math.round(sources.reduce((sum, s) => sum + s.env[minKey] * s.weight, 0) / totalWeight);
+      resolved[maxKey] = Math.round(sources.reduce((sum, s) => sum + s.env[maxKey] * s.weight, 0) / totalWeight);
+    } else if (strategy === 'union') {
+      resolved[minKey] = Math.min(...sources.map(s => s.env[minKey]));
+      resolved[maxKey] = Math.max(...sources.map(s => s.env[maxKey]));
+    } else if (strategy === 'intersection') {
+      resolved[minKey] = Math.max(...sources.map(s => s.env[minKey]));
+      resolved[maxKey] = Math.min(...sources.map(s => s.env[maxKey]));
+      if (resolved[minKey] > resolved[maxKey]) {
+        resolved[minKey] = Math.round((resolved[minKey] + resolved[maxKey]) / 2);
+        resolved[maxKey] = resolved[minKey];
+      }
+    } else {
+      const chosen = strategy === 'parentA' ? sources[0] : sources[sources.length - 1];
+      resolved[minKey] = chosen.env[minKey];
+      resolved[maxKey] = chosen.env[maxKey];
+    }
+    resolved[minKey] = Math.max(bounds.physicalMin, Math.min(bounds.physicalMax, resolved[minKey]));
+    resolved[maxKey] = Math.max(bounds.physicalMin, Math.min(bounds.physicalMax, resolved[maxKey]));
+  }
+
+  return resolved;
+}
+
 export class Plant {
   public id: string;
   public name: string;
@@ -150,13 +286,18 @@ export class Plant {
   public isMature: boolean;
   public position: PlantPosition | null;
   public optimalEnv: OptimalEnvironment;
+  public driftHistory: DriftEvent[];
+  public activeDrift: DriftEvent | null;
+  public totalStressTime: number;
+  public envOrigin: EnvOrigin | null;
 
   constructor(
     traits: PlantTraits,
     generation: number = 0,
     parentIds: string[] = [],
     lineage: string[] = [],
-    optimalEnv?: OptimalEnvironment
+    optimalEnv?: OptimalEnvironment,
+    envOrigin: EnvOrigin | null = null
   ) {
     this.id = generateId();
     this.name = generateName();
@@ -172,14 +313,20 @@ export class Plant {
     this.growthProgress = 0;
     this.isMature = false;
     this.position = null;
-    this.optimalEnv = optimalEnv || {
-      tempMin: 15,
-      tempMax: 30,
-      humidityMin: 30,
-      humidityMax: 80,
-      lightMin: 30,
-      lightMax: 80,
-    };
+    this.optimalEnv = optimalEnv
+      ? { ...optimalEnv }
+      : {
+          tempMin: 15,
+          tempMax: 30,
+          humidityMin: 30,
+          humidityMax: 80,
+          lightMin: 30,
+          lightMax: 80,
+        };
+    this.driftHistory = [];
+    this.activeDrift = null;
+    this.totalStressTime = 0;
+    this.envOrigin = envOrigin;
   }
 
   static hybridize(parent1: Plant, parent2: Plant): Plant {
@@ -207,18 +354,19 @@ export class Plant {
       newTraits[key] = source.traits[key];
     }
 
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round((parent1.optimalEnv.tempMin + parent2.optimalEnv.tempMin) / 2),
-      tempMax: Math.round((parent1.optimalEnv.tempMax + parent2.optimalEnv.tempMax) / 2),
-      humidityMin: Math.round((parent1.optimalEnv.humidityMin + parent2.optimalEnv.humidityMin) / 2),
-      humidityMax: Math.round((parent1.optimalEnv.humidityMax + parent2.optimalEnv.humidityMax) / 2),
-      lightMin: Math.round((parent1.optimalEnv.lightMin + parent2.optimalEnv.lightMin) / 2),
-      lightMax: Math.round((parent1.optimalEnv.lightMax + parent2.optimalEnv.lightMax) / 2),
+    const envOrigin: EnvOrigin = {
+      sources: [
+        { parentId: parent1.id, parentName: parent1.name, env: { ...parent1.optimalEnv }, weight: 0.5 },
+        { parentId: parent2.id, parentName: parent2.name, env: { ...parent2.optimalEnv }, weight: 0.5 },
+      ],
+      strategy: 'weighted',
+      conflicts: detectEnvConflicts(parent1.id, parent1.optimalEnv, parent2.id, parent2.optimalEnv),
     };
+    const newOptimalEnv = adjudicateEnvs(envOrigin.sources, 'weighted');
 
     const newGeneration = Math.max(parent1.generation, parent2.generation) + 1;
     const newLineage = Array.from(new Set([...parent1.lineage, ...parent2.lineage]));
-    const child = new Plant(newTraits, newGeneration, [parent1.id, parent2.id], newLineage, newOptimalEnv);
+    const child = new Plant(newTraits, newGeneration, [parent1.id, parent2.id], newLineage, newOptimalEnv, envOrigin);
     child.lineage.push(child.id);
     return child;
   }
@@ -240,7 +388,14 @@ export class Plant {
     }
 
     const newGeneration = plant.generation + 1;
-    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], { ...plant.optimalEnv });
+    const envOrigin: EnvOrigin = {
+      sources: [
+        { parentId: plant.id, parentName: plant.name, env: { ...plant.optimalEnv }, weight: 1 },
+      ],
+      strategy: 'weighted',
+      conflicts: [],
+    };
+    const child = new Plant(newTraits, newGeneration, [plant.id], [...plant.lineage], { ...plant.optimalEnv }, envOrigin);
     child.lineage.push(child.id);
     return child;
   }
@@ -262,18 +417,19 @@ export class Plant {
       }
     }
 
-    const newOptimalEnv: OptimalEnvironment = {
-      tempMin: Math.round(plant.optimalEnv.tempMin * 0.4 + parent.optimalEnv.tempMin * 0.6),
-      tempMax: Math.round(plant.optimalEnv.tempMax * 0.4 + parent.optimalEnv.tempMax * 0.6),
-      humidityMin: Math.round(plant.optimalEnv.humidityMin * 0.4 + parent.optimalEnv.humidityMin * 0.6),
-      humidityMax: Math.round(plant.optimalEnv.humidityMax * 0.4 + parent.optimalEnv.humidityMax * 0.6),
-      lightMin: Math.round(plant.optimalEnv.lightMin * 0.4 + parent.optimalEnv.lightMin * 0.6),
-      lightMax: Math.round(plant.optimalEnv.lightMax * 0.4 + parent.optimalEnv.lightMax * 0.6),
+    const envOrigin: EnvOrigin = {
+      sources: [
+        { parentId: plant.id, parentName: plant.name, env: { ...plant.optimalEnv }, weight: 0.4 },
+        { parentId: parent.id, parentName: parent.name, env: { ...parent.optimalEnv }, weight: 0.6 },
+      ],
+      strategy: 'weighted',
+      conflicts: detectEnvConflicts(plant.id, plant.optimalEnv, parent.id, parent.optimalEnv),
     };
+    const newOptimalEnv = adjudicateEnvs(envOrigin.sources, 'weighted');
 
     const newGeneration = Math.max(plant.generation, parent.generation) + 1;
     const newLineage = Array.from(new Set([...plant.lineage, ...parent.lineage]));
-    const child = new Plant(newTraits, newGeneration, [plant.id, parent.id], newLineage, newOptimalEnv);
+    const child = new Plant(newTraits, newGeneration, [plant.id, parent.id], newLineage, newOptimalEnv, envOrigin);
     child.lineage.push(child.id);
     return child;
   }
@@ -284,6 +440,43 @@ export class Plant {
       .map(v => v.toString(16).padStart(2, '0'))
       .join('');
     return hash.toUpperCase();
+  }
+
+  hasEnvironmentalDrift(): boolean {
+    return this.driftHistory.length > 0 || this.activeDrift !== null;
+  }
+
+  getCumulativeDrift(): CumulativeDrift {
+    const traits: PlantTraits = { color: 0, shape: 0, height: 0, droughtResistance: 0 };
+    const optimalEnv: OptimalEnvironment = {
+      tempMin: 0, tempMax: 0,
+      humidityMin: 0, humidityMax: 0,
+      lightMin: 0, lightMax: 0,
+    };
+    const episodes = this.activeDrift ? [...this.driftHistory, this.activeDrift] : this.driftHistory;
+    for (const episode of episodes) {
+      traits.color += episode.traitDelta.color;
+      traits.shape += episode.traitDelta.shape;
+      traits.height += episode.traitDelta.height;
+      traits.droughtResistance += episode.traitDelta.droughtResistance;
+      optimalEnv.tempMin += episode.envDelta.tempMin;
+      optimalEnv.tempMax += episode.envDelta.tempMax;
+      optimalEnv.humidityMin += episode.envDelta.humidityMin;
+      optimalEnv.humidityMax += episode.envDelta.humidityMax;
+      optimalEnv.lightMin += episode.envDelta.lightMin;
+      optimalEnv.lightMax += episode.envDelta.lightMax;
+    }
+    const traitMagnitude =
+      Math.abs(traits.color) + Math.abs(traits.shape) +
+      Math.abs(traits.height) + Math.abs(traits.droughtResistance);
+    return { stressTime: this.totalStressTime, traits, optimalEnv, traitMagnitude };
+  }
+
+  adjudicateEnv(strategy: EnvAdjudicationStrategy): OptimalEnvironment {
+    if (!this.envOrigin || this.envOrigin.sources.length === 0) {
+      return { ...this.optimalEnv };
+    }
+    return adjudicateEnvs(this.envOrigin.sources, strategy);
   }
 
   toJSON(): PlantJSON {
@@ -298,6 +491,32 @@ export class Plant {
       isMature: this.isMature,
       position: this.position ? { ...this.position } : null,
       optimalEnv: { ...this.optimalEnv },
+      driftHistory: this.driftHistory.map(e => ({
+        ...e,
+        env: { ...e.env },
+        traitDelta: { ...e.traitDelta },
+        envDelta: { ...e.envDelta },
+      })),
+      activeDrift: this.activeDrift
+        ? {
+            ...this.activeDrift,
+            env: { ...this.activeDrift.env },
+            traitDelta: { ...this.activeDrift.traitDelta },
+            envDelta: { ...this.activeDrift.envDelta },
+          }
+        : null,
+      totalStressTime: this.totalStressTime,
+      envOrigin: this.envOrigin
+        ? {
+            strategy: this.envOrigin.strategy,
+            sources: this.envOrigin.sources.map(s => ({ ...s, env: { ...s.env } })),
+            conflicts: this.envOrigin.conflicts.map(c => ({
+              ...c,
+              parentA: { ...c.parentA },
+              parentB: { ...c.parentB },
+            })),
+          }
+        : null,
     };
   }
 
@@ -307,13 +526,29 @@ export class Plant {
       data.generation,
       data.parentIds,
       data.lineage,
-      data.optimalEnv
+      data.optimalEnv,
+      data.envOrigin ?? null
     );
     plant.id = data.id;
     plant.name = data.name;
     plant.growthProgress = data.growthProgress;
     plant.isMature = data.isMature;
     plant.position = data.position ? { ...data.position } : null;
+    plant.driftHistory = (data.driftHistory ?? []).map(e => ({
+      ...e,
+      env: { ...e.env },
+      traitDelta: { ...e.traitDelta },
+      envDelta: { ...e.envDelta },
+    }));
+    plant.activeDrift = data.activeDrift
+      ? {
+          ...data.activeDrift,
+          env: { ...data.activeDrift.env },
+          traitDelta: { ...data.activeDrift.traitDelta },
+          envDelta: { ...data.activeDrift.envDelta },
+        }
+      : null;
+    plant.totalStressTime = data.totalStressTime ?? 0;
     return plant;
   }
 }
