@@ -6,6 +6,26 @@ export interface WaterParams {
   turbidity: number;
 }
 
+export const DEFAULT_WATER_PARAMS: WaterParams = {
+  temperature: 25,
+  lightIntensity: 80,
+  turbidity: 10,
+};
+
+export const WATER_PARAM_RANGES = {
+  temperature: { min: 15, max: 35 },
+  lightIntensity: { min: 0, max: 100 },
+  turbidity: { min: 0, max: 100 },
+} as const;
+
+function clampParam(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function particleOpacityForTurbidity(turbidity: number): number {
+  return Math.max(0.2, 0.4 - (turbidity / 100) * 0.3);
+}
+
 export class EnvironmentManager {
   public scene: THREE.Scene;
   public params: WaterParams;
@@ -23,11 +43,7 @@ export class EnvironmentManager {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.params = {
-      temperature: 25,
-      lightIntensity: 80,
-      turbidity: 10,
-    };
+    this.params = { ...DEFAULT_WATER_PARAMS };
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
@@ -106,7 +122,7 @@ export class EnvironmentManager {
       color: 0x88ddff,
       size: 0.1,
       transparent: true,
-      opacity: 0.4,
+      opacity: particleOpacityForTurbidity(this.params.turbidity),
       sizeAttenuation: true,
     });
 
@@ -203,23 +219,46 @@ export class EnvironmentManager {
   }
 
   public setTemperature(value: number): void {
-    this.params.temperature = value;
+    if (!Number.isFinite(value)) return;
+    this.params.temperature = clampParam(
+      value,
+      WATER_PARAM_RANGES.temperature.min,
+      WATER_PARAM_RANGES.temperature.max
+    );
   }
 
   public setLightIntensity(value: number): void {
-    this.params.lightIntensity = value;
-    this.ambientLight.intensity = 0.5 * (value / 100);
-    this.directionalLight.intensity = 1.0 * (value / 100);
+    if (!Number.isFinite(value)) return;
+    const clamped = clampParam(
+      value,
+      WATER_PARAM_RANGES.lightIntensity.min,
+      WATER_PARAM_RANGES.lightIntensity.max
+    );
+    this.params.lightIntensity = clamped;
+    this.ambientLight.intensity = 0.5 * (clamped / 100);
+    this.directionalLight.intensity = 1.0 * (clamped / 100);
   }
 
   public setTurbidity(value: number): void {
-    this.params.turbidity = value;
+    if (!Number.isFinite(value)) return;
+    const clamped = clampParam(
+      value,
+      WATER_PARAM_RANGES.turbidity.min,
+      WATER_PARAM_RANGES.turbidity.max
+    );
+    this.params.turbidity = clamped;
     if (this.scene.fog instanceof THREE.FogExp2) {
-      const fogDensity = 0.01 + (value / 100) * 0.05;
+      const fogDensity = 0.01 + (clamped / 100) * 0.05;
       this.scene.fog.density = fogDensity;
     }
-    const opacity = Math.max(0.2, 0.4 - (value / 100) * 0.3);
+    const opacity = particleOpacityForTurbidity(clamped);
     (this.waterParticles.material as THREE.PointsMaterial).opacity = opacity;
+  }
+
+  public reset(): void {
+    this.setTemperature(DEFAULT_WATER_PARAMS.temperature);
+    this.setLightIntensity(DEFAULT_WATER_PARAMS.lightIntensity);
+    this.setTurbidity(DEFAULT_WATER_PARAMS.turbidity);
   }
 
   public checkJellyfishHover(camera: THREE.Camera): void {

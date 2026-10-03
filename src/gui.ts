@@ -113,9 +113,7 @@ export class GUIManager {
     this.params.temperature = 25;
     this.params.lightIntensity = 80;
     this.params.turbidity = 10;
-    this.environment.setTemperature(25);
-    this.environment.setLightIntensity(80);
-    this.environment.setTurbidity(10);
+    this.environment.reset();
     this.updateHUDField('water-temp', '25.0');
     this.gui.controllersRecursive().forEach(c => c.updateDisplay());
   }
