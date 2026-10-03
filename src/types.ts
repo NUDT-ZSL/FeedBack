@@ -17,9 +17,18 @@ export interface TimerState {
   initialTime: number;
 }
 
+export interface PersistedConfig {
+  time: number;
+  tasks: Task[];
+  isPaused: boolean;
+  timeLeft: number;
+  timestamp: number;
+}
+
 export type TimerControl = {
   start: () => void;
   pause: () => void;
   reset: () => void;
   setTime: (minutes: number) => void;
+  restore: (config: PersistedConfig) => void;
 };

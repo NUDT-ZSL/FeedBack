@@ -1,30 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { TimerState, TimerControl } from '../types';
-
-const STORAGE_KEY = 'classroom-timer-config';
+import type { Task, TimerState, TimerControl, PersistedConfig } from '../types';
+import {
+  createInitialState,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  tickTimer,
+  setDuration,
+  restoreTimerState,
+  configFromState,
+} from '../timerLogic';
+import { createConfigStore, type ConfigStore } from '../persistence';
 
 export function useTimer(initialMinutes: number): {
   state: TimerState;
   control: TimerControl;
-  saveConfig: (tasks: any[]) => void;
-  loadConfig: () => { time: number; tasks: any[] } | null;
+  saveConfig: (tasks: Task[]) => void;
+  loadConfig: () => PersistedConfig | null;
 } {
-  const [state, setState] = useState<TimerState>({
-    isRunning: false,
-    isPaused: false,
-    timeLeft: initialMinutes * 60,
-    initialTime: initialMinutes * 60,
-  });
+  const [state, setState] = useState<TimerState>(() => createInitialState(initialMinutes));
 
-  const intervalRef = useRef<number | null>(null);
-  const onEndRef = useRef<(() => void) | null>(null);
+  const storeRef = useRef<ConfigStore | null>(null);
+  if (storeRef.current === null) {
+    storeRef.current = createConfigStore(window.localStorage);
+  }
+  const store = storeRef.current;
 
-  const clearTimer = useCallback(() => {
-    if (intervalRef.current !== null) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const playBeep = useCallback(() => {
     try {
@@ -49,94 +54,64 @@ export function useTimer(initialMinutes: number): {
   }, []);
 
   const start = useCallback(() => {
-    setState(prev => {
-      if (prev.timeLeft <= 0) {
-        return prev;
-      }
-      return { ...prev, isRunning: true, isPaused: false };
-    });
+    setState(prev => startTimer(prev));
   }, []);
 
   const pause = useCallback(() => {
-    setState(prev => ({ ...prev, isRunning: false, isPaused: true }));
-    clearTimer();
-  }, [clearTimer]);
+    setState(prev => pauseTimer(prev));
+  }, []);
 
   const reset = useCallback(() => {
-    clearTimer();
-    setState(prev => ({
-      isRunning: false,
-      isPaused: false,
-      timeLeft: prev.initialTime,
-      initialTime: prev.initialTime,
-    }));
-  }, [clearTimer]);
+    setState(prev => resetTimer(prev));
+  }, []);
 
   const setTime = useCallback((minutes: number) => {
-    const seconds = minutes * 60;
-    clearTimer();
-    setState({
-      isRunning: false,
-      isPaused: false,
-      timeLeft: seconds,
-      initialTime: seconds,
-    });
-  }, [clearTimer]);
+    setState(prev => setDuration(prev, minutes));
+  }, []);
 
-  const saveConfig = useCallback((tasks: any[]) => {
-    try {
-      const config = {
-        time: state.initialTime / 60,
-        tasks,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    } catch (e) {
-      console.log('Failed to save config');
-    }
-  }, [state.initialTime]);
-
-  const loadConfig = useCallback(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const config = JSON.parse(saved);
-        return {
-          time: config.time || initialMinutes,
-          tasks: config.tasks || [],
-        };
-      }
-    } catch (e) {
-      console.log('Failed to load config');
-    }
-    return null;
+  const restore = useCallback((config: PersistedConfig) => {
+    setState(restoreTimerState(config, initialMinutes));
   }, [initialMinutes]);
 
   useEffect(() => {
-    if (state.isRunning && !state.isPaused) {
-      intervalRef.current = window.setInterval(() => {
-        setState(prev => {
-          if (prev.timeLeft <= 1) {
-            clearTimer();
-            onEndRef.current?.();
-            playBeep();
-            return { ...prev, timeLeft: 0, isRunning: false };
-          }
-          return { ...prev, timeLeft: prev.timeLeft - 1 };
-        });
-      }, 1000);
+    if (!state.isRunning || state.isPaused) {
+      return;
     }
+    const intervalId = window.setInterval(() => {
+      setState(prev => tickTimer(prev).state);
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [state.isRunning, state.isPaused]);
 
-    return () => clearTimer();
-  }, [state.isRunning, state.isPaused, clearTimer, playBeep]);
+  const prevStateRef = useRef(state);
+  useEffect(() => {
+    const prev = prevStateRef.current;
+    if (prev.isRunning && !state.isRunning && state.timeLeft === 0) {
+      playBeep();
+    }
+    prevStateRef.current = state;
+  }, [state, playBeep]);
+
+  const saveConfig = useCallback((tasks: Task[]) => {
+    store.save(configFromState(stateRef.current, tasks));
+  }, [store]);
+
+  const loadConfig = useCallback((): PersistedConfig | null => {
+    return store.load();
+  }, [store]);
 
   useEffect(() => {
-    return () => clearTimer();
-  }, [clearTimer]);
+    const handleBeforeUnload = () => store.flush();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      store.flush();
+    };
+  }, [store]);
 
   return {
     state,
-    control: { start, pause, reset, setTime },
+    control: { start, pause, reset, setTime, restore },
     saveConfig,
     loadConfig,
   };

@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import type { Task, TaskWithProgress } from './types';
 
 interface TaskTimelineProps {
-  tasks: Task[];
-  timeLeft: number;
-  initialTime: number;
+  tasksWithProgress: TaskWithProgress[];
   onAddTask: (task: Task) => void;
   onRemoveTask: (id: string) => void;
   isRunning: boolean;
@@ -13,9 +11,7 @@ interface TaskTimelineProps {
 }
 
 const TaskTimeline: React.FC<TaskTimelineProps> = ({
-  tasks,
-  timeLeft,
-  initialTime,
+  tasksWithProgress,
   onAddTask,
   onRemoveTask,
   isRunning,
@@ -37,42 +33,8 @@ const TaskTimeline: React.FC<TaskTimelineProps> = ({
   const [newTaskDuration, setNewTaskDuration] = useState(5);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const calculateTaskProgress = (task: Task, index: number): TaskWithProgress => {
-    let cumulativeTime = 0;
-    for (let i = 0; i < index; i++) {
-      cumulativeTime += tasks[i].duration * 60;
-    }
-
-    const taskTotalSeconds = task.duration * 60;
-    const taskEndTime = initialTime - cumulativeTime;
-    const taskStartTime = taskEndTime - taskTotalSeconds;
-    const elapsedInTask = Math.max(0, Math.min(taskTotalSeconds, taskEndTime - timeLeft));
-    const progress = (elapsedInTask / taskTotalSeconds) * 100;
-    const remainingInTask = Math.max(0, taskTotalSeconds - elapsedInTask);
-
-    let status: 'pending' | 'active' | 'completed';
-    if (timeLeft > taskEndTime) {
-      status = 'pending';
-    } else if (timeLeft > taskStartTime) {
-      status = 'active';
-    } else {
-      status = 'completed';
-    }
-
-    return {
-      ...task,
-      status,
-      remainingTime: remainingInTask,
-      progress: Math.min(100, Math.max(0, progress)),
-    };
-  };
-
-  const tasksWithProgress = tasks.map((task, index) =>
-    calculateTaskProgress(task, index)
-  );
-
   const handleAddTask = () => {
-    if (newTaskName.trim() && tasks.length < 5) {
+    if (newTaskName.trim() && tasksWithProgress.length < 5) {
       onAddTask({
         id: Date.now().toString(),
         name: newTaskName.trim(),
@@ -135,7 +97,7 @@ const TaskTimeline: React.FC<TaskTimelineProps> = ({
         marginBottom: '20px',
       }}>
         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>任务时间线</h2>
-        {tasks.length < 5 && !isRunning && (
+        {tasksWithProgress.length < 5 && !isRunning && (
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             style={{
@@ -375,7 +337,7 @@ const TaskTimeline: React.FC<TaskTimelineProps> = ({
           </div>
         ))}
 
-        {tasks.length === 0 && (
+        {tasksWithProgress.length === 0 && (
           <div style={{
             textAlign: 'center',
             padding: '40px 20px',

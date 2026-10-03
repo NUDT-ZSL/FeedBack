@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import TimerPanel from './TimerPanel';
 import TaskTimeline from './TaskTimeline';
 import { useTimer } from './hooks/useTimer';
+import { deriveTasksWithProgress } from './timerLogic';
 import type { Task } from './types';
 
 const App: React.FC = () => {
@@ -16,19 +17,25 @@ const App: React.FC = () => {
   useEffect(() => {
     const savedConfig = loadConfig();
     if (savedConfig) {
-      control.setTime(savedConfig.time);
+      control.restore(savedConfig);
       setTasks(savedConfig.tasks);
       setShowRestoreToast(true);
       setTimeout(() => setShowRestoreToast(false), 2000);
     }
     setIsInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (isInitialized) {
       saveConfig(tasks);
     }
-  }, [state.initialTime, tasks, isInitialized, saveConfig]);
+  }, [state.initialTime, state.isPaused, tasks, isInitialized, saveConfig]);
+
+  const tasksWithProgress = useMemo(
+    () => deriveTasksWithProgress(tasks, state.timeLeft, state.initialTime),
+    [tasks, state.timeLeft, state.initialTime]
+  );
 
   const handleDurationChange = useCallback((minutes: number) => {
     control.setTime(minutes);
@@ -219,9 +226,7 @@ const App: React.FC = () => {
       />
 
       <TaskTimeline
-        tasks={tasks}
-        timeLeft={state.timeLeft}
-        initialTime={state.initialTime}
+        tasksWithProgress={tasksWithProgress}
         onAddTask={handleAddTask}
         onRemoveTask={handleRemoveTask}
         isRunning={state.isRunning || state.isPaused}
