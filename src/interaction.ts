@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TerrainData } from './terrain';
 import { getHeightAt } from './terrain';
+import { RoamController } from './route';
 
 export interface InteractionHandlers {
   onTerrainClick?: (point: THREE.Vector3, event: MouseEvent) => void;
@@ -29,10 +30,7 @@ export class InteractionManager {
   private maxPolarAngle: number = Math.PI * 0.48;
 
   private isRoaming: boolean = false;
-  private roamPath: THREE.Vector3[] = [];
-  private roamIndex: number = 0;
-  private roamProgress: number = 0;
-  private roamSpeed: number = 0.3;
+  private roamController: RoamController = new RoamController();
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -90,15 +88,23 @@ export class InteractionManager {
 
   public setMode(mode: 'roam' | 'edit', path?: THREE.Vector3[]): void {
     this.isRoaming = mode === 'roam';
-    if (this.isRoaming && path && path.length > 1) {
-      this.roamPath = path;
-      this.roamIndex = 0;
-      this.roamProgress = 0;
+    if (this.isRoaming) {
+      if (path) {
+        this.roamController.setPath(path, false);
+      } else {
+        this.roamController.reset();
+      }
+    } else {
+      this.updateCameraPosition();
     }
   }
 
+  public updateRoamPath(path: THREE.Vector3[]): void {
+    this.roamController.setPath(path, true);
+  }
+
   public setRoamSpeed(speed: number): void {
-    this.roamSpeed = Math.max(0.05, Math.min(2, speed));
+    this.roamController.setSpeed(speed);
   }
 
   private updateMouseNDC(event: MouseEvent): void {
@@ -202,50 +208,12 @@ export class InteractionManager {
   }
 
   public update(deltaTime: number): void {
-    if (this.isRoaming && this.roamPath.length > 1) {
-      this.updateRoamCamera(deltaTime);
+    if (!this.isRoaming) return;
+    this.roamController.update(deltaTime);
+    const frame = this.roamController.getFrame();
+    if (frame) {
+      this.camera.position.copy(frame.position);
+      this.camera.lookAt(frame.lookTarget);
     }
-  }
-
-  private updateRoamCamera(deltaTime: number): void {
-    const path = this.roamPath;
-    if (this.roamIndex >= path.length - 1) {
-      this.roamIndex = 0;
-      this.roamProgress = 0;
-    }
-
-    this.roamProgress += this.roamSpeed * deltaTime * 60;
-
-    while (this.roamProgress >= 1 && this.roamIndex < path.length - 1) {
-      this.roamProgress -= 1;
-      this.roamIndex++;
-    }
-
-    if (this.roamIndex >= path.length - 1) {
-      this.roamIndex = path.length - 2;
-      this.roamProgress = 1;
-    }
-
-    const current = path[this.roamIndex];
-    const next = path[Math.min(this.roamIndex + 1, path.length - 1)];
-    const t = this.roamProgress;
-
-    const position = new THREE.Vector3(
-      current.x + (next.x - current.x) * t,
-      current.y + (next.y - current.y) * t,
-      current.z + (next.z - current.z) * t
-    );
-
-    const lookAheadIndex = Math.min(this.roamIndex + 3, path.length - 1);
-    const lookTarget = path[lookAheadIndex].clone();
-    lookTarget.y += 10;
-
-    const cameraOffset = new THREE.Vector3(0, 25, -10);
-    const direction = new THREE.Vector3().subVectors(next, current).normalize();
-    cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(direction.x, direction.z));
-
-    this.camera.position.copy(position).add(cameraOffset);
-    this.camera.position.y += 15;
-    this.camera.lookAt(lookTarget);
   }
 }

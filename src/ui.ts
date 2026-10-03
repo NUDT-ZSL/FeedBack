@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TerrainData } from './terrain';
-import { getHeightAt, calculatePathMetrics } from './terrain';
+import { getHeightAt } from './terrain';
+import type { RouteSnapshot } from './route';
 
 export interface UIState {
   mode: 'roam' | 'edit';
@@ -37,8 +38,7 @@ export class UIManager {
   private elevationMarker!: HTMLDivElement;
   private elevationPopup!: HTMLDivElement;
 
-  private pathPoints: THREE.Vector3[] = [];
-  private smoothedPath: THREE.Vector3[] = [];
+  private snapshot: RouteSnapshot | null = null;
   private chartWidth: number = 400;
   private chartHeight: number = 180;
   private padding: { top: number; right: number; bottom: number; left: number } = {
@@ -49,12 +49,18 @@ export class UIManager {
   private frameCount: number = 0;
   private lastFpsTime: number = performance.now();
 
+  private onSpeedChange?: (speed: number) => void;
+  private speedSlider!: HTMLInputElement;
+  private speedValueLabel!: HTMLSpanElement;
+
   constructor(
     appElement: HTMLElement,
     terrainData: TerrainData,
     onModeChange: ModeChangeCallback,
-    onChartHover?: ChartHoverCallback
+    onChartHover?: ChartHoverCallback,
+    onSpeedChange?: (speed: number) => void
   ) {
+    this.onSpeedChange = onSpeedChange;
     this.appElement = appElement;
     this.container = document.createElement('div');
     this.container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;';
@@ -133,8 +139,47 @@ export class UIManager {
     this.controlPanel.appendChild(title);
 
     this.createModeButton();
+    this.createSpeedControl();
     this.createElevationDisplay();
     this.createStatsDisplay();
+  }
+
+  private createSpeedControl(): void {
+    const speedContainer = document.createElement('div');
+    speedContainer.style.cssText = 'margin-bottom:16px;';
+
+    const labelRow = document.createElement('div');
+    labelRow.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;';
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;';
+    label.textContent = '漫游速度';
+    this.speedValueLabel = document.createElement('span');
+    this.speedValueLabel.style.cssText = 'font-size:11px;color:#ff6f00;font-variant-numeric:tabular-nums;';
+    this.speedValueLabel.textContent = '30 m/s';
+    labelRow.appendChild(label);
+    labelRow.appendChild(this.speedValueLabel);
+
+    this.speedSlider = document.createElement('input');
+    this.speedSlider.type = 'range';
+    this.speedSlider.min = '2';
+    this.speedSlider.max = '100';
+    this.speedSlider.step = '1';
+    this.speedSlider.value = '30';
+    this.speedSlider.style.cssText = 'width:100%;pointer-events:auto;accent-color:#ff6f00;cursor:pointer;';
+    this.speedSlider.addEventListener('input', () => {
+      const speed = Number(this.speedSlider.value);
+      this.speedValueLabel.textContent = `${speed} m/s`;
+      this.onSpeedChange?.(speed);
+    });
+
+    speedContainer.appendChild(labelRow);
+    speedContainer.appendChild(this.speedSlider);
+    this.controlPanel.appendChild(speedContainer);
+  }
+
+  public setRoamSpeed(speed: number): void {
+    this.speedSlider.value = String(Math.round(speed));
+    this.speedValueLabel.textContent = `${Math.round(speed)} m/s`;
   }
 
   private createModeButton(): void {
@@ -375,35 +420,37 @@ export class UIManager {
     }
   }
 
-  public updatePathData(pathPoints: THREE.Vector3[], smoothedPath: THREE.Vector3[]): void {
-    this.pathPoints = pathPoints;
-    this.smoothedPath = smoothedPath;
-    this.state.pointCount = pathPoints.length;
-    this.pointCountValue.textContent = pathPoints.length.toString();
+  public updatePathData(snapshot: RouteSnapshot): void {
+    this.snapshot = snapshot;
+    const { smoothedPath, metrics } = snapshot;
+
+    this.state.pointCount = snapshot.controlPoints.length;
+    this.pointCountValue.textContent = snapshot.controlPoints.length.toString();
 
     if (smoothedPath.length >= 2) {
-      const metrics = calculatePathMetrics(smoothedPath);
       this.state.totalDistance = metrics.totalDistance;
       this.state.avgSlope = metrics.avgSlope;
       this.distanceValue.textContent = Math.round(metrics.totalDistance).toString();
       this.slopeValue.textContent = metrics.avgSlope.toFixed(1);
       this.drawSlopeChart(metrics);
     } else {
+      this.state.totalDistance = 0;
+      this.state.avgSlope = 0;
       this.distanceValue.textContent = '0';
-      this.slopeValue.textContent = '0';
+      this.slopeValue.textContent = '0.0';
       this.drawEmptyChart();
     }
   }
 
   private onChartMouseMove = (e: MouseEvent): void => {
-    if (this.smoothedPath.length < 2) return;
+    if (!this.snapshot || this.snapshot.smoothedPath.length < 2) return;
     const rect = this.chartCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const chartInnerWidth = this.chartWidth - this.padding.left - this.padding.right;
     const ratio = (x - this.padding.left) / chartInnerWidth;
 
     if (ratio >= 0 && ratio <= 1) {
-      const index = Math.floor(ratio * (this.smoothedPath.length - 1));
+      const index = Math.floor(ratio * (this.snapshot.smoothedPath.length - 1));
       this.hoveredChartIndex = index;
       if (this.onChartHover) {
         this.onChartHover(index);
@@ -431,7 +478,7 @@ export class UIManager {
     ctx.fillText('添加路径点后显示坡度分析', this.chartWidth / 2, this.chartHeight / 2);
   }
 
-  private drawSlopeChart(metrics: ReturnType<typeof calculatePathMetrics>): void {
+  private drawSlopeChart(metrics: RouteSnapshot['metrics']): void {
     const ctx = this.chartCtx;
     const { distances, slopes, maxSlopeIndex } = metrics;
 
@@ -531,11 +578,10 @@ export class UIManager {
   }
 
   private highlightChartPoint(): void {
-    if (this.hoveredChartIndex < 0 || this.smoothedPath.length < 2) return;
+    if (!this.snapshot || this.hoveredChartIndex < 0 || this.snapshot.smoothedPath.length < 2) return;
 
     const ctx = this.chartCtx;
-    const metrics = calculatePathMetrics(this.smoothedPath);
-    const { distances, slopes } = metrics;
+    const { distances, slopes } = this.snapshot.metrics;
     const maxDist = distances[distances.length - 1] || 1;
     const innerW = this.chartWidth - this.padding.left - this.padding.right;
     const innerH = this.chartHeight - this.padding.top - this.padding.bottom;

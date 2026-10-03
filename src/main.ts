@@ -2,10 +2,9 @@ import * as THREE from 'three';
 import {
   generateTerrain,
   getHeightAt,
-  generateSmoothPath,
-  calculatePathMetrics,
   type TerrainData
 } from './terrain';
+import { RouteStore, type RouteSnapshot } from './route';
 import { InteractionManager } from './interaction';
 import { UIManager } from './ui';
 
@@ -17,13 +16,13 @@ class HikingSimulator {
 
   private terrainData!: TerrainData;
   private terrainMesh!: THREE.Mesh;
-  private pathPoints: THREE.Vector3[] = [];
+  private routeStore!: RouteStore;
   private pathPointMeshes: THREE.Mesh[] = [];
-  private smoothedPath: THREE.Vector3[] = [];
-  private pathLineMesh!: THREE.Line | null;
+  private pathLineMesh: THREE.Line | null = null;
   private highlightedPointMesh: THREE.Mesh | null = null;
   private clickedPoint: THREE.Vector3 | null = null;
   private clickedPointInfo: { distance?: number; slope?: number } | null = null;
+  private mode: 'roam' | 'edit' = 'edit';
 
   private interactionManager!: InteractionManager;
   private uiManager!: UIManager;
@@ -134,6 +133,8 @@ class HikingSimulator {
   }
 
   private setupManagers(): void {
+    this.routeStore = new RouteStore(this.terrainData, 15);
+
     this.interactionManager = new InteractionManager(
       this.camera,
       this.renderer,
@@ -150,8 +151,15 @@ class HikingSimulator {
       this.appElement,
       this.terrainData,
       this.onModeChange.bind(this),
-      this.onChartHover.bind(this)
+      this.onChartHover.bind(this),
+      this.onSpeedChange.bind(this)
     );
+
+    this.routeStore.subscribe(this.onRouteSnapshot.bind(this));
+  }
+
+  private onSpeedChange(speed: number): void {
+    this.interactionManager.setRoamSpeed(speed);
   }
 
   private addSamplePath(): void {
@@ -174,9 +182,8 @@ class HikingSimulator {
       point.y = getHeightAt(point.x, point.z, this.terrainData);
     }
 
-    this.pathPoints = samplePoints;
+    this.routeStore.setPoints(samplePoints);
     this.createPathPointMeshes();
-    this.updatePath();
   }
 
   private bindWindowEvents(): void {
@@ -190,39 +197,42 @@ class HikingSimulator {
   }
 
   private onTerrainClick(point: THREE.Vector3): void {
-    if (this.uiManager['state'].mode !== 'edit') return;
+    if (this.mode !== 'edit') return;
 
-    const existingIndex = this.findNearbyPathPoint(point);
+    const existingIndex = this.routeStore.findNearbyControlPoint(point);
     if (existingIndex >= 0) {
-      this.removePathPoint(existingIndex);
+      this.routeStore.removePoint(existingIndex);
+      this.createPathPointMeshes();
       return;
     }
 
-    this.pathPoints.push(point.clone());
+    this.routeStore.addPoint(point);
     this.createPathPointMeshes();
-    this.updatePath();
-
     this.clickedPoint = point.clone();
-    this.clickedPointInfo = null;
+    this.refreshClickedPointInfo();
   }
 
-  private onPathPointClick(index: number, point: THREE.Vector3): void {
-    if (this.smoothedPath.length < 2) {
-      this.clickedPoint = point.clone();
+  private onPathPointClick(_index: number, point: THREE.Vector3): void {
+    this.clickedPoint = point.clone();
+    this.refreshClickedPointInfo();
+  }
+
+  private refreshClickedPointInfo(): void {
+    const snapshot = this.routeStore.getSnapshot();
+    if (!this.clickedPoint || snapshot.smoothedPath.length < 2) {
       this.clickedPointInfo = null;
       return;
     }
 
-    const metrics = calculatePathMetrics(this.smoothedPath);
-    const controlPointIndex = Math.min(
-      Math.floor((index / Math.max(1, this.pathPointMeshes.length - 1)) * (this.smoothedPath.length - 1)),
-      this.smoothedPath.length - 1
-    );
+    const nearest = this.routeStore.nearestSmoothedIndex(this.clickedPoint);
+    if (nearest < 0) {
+      this.clickedPointInfo = null;
+      return;
+    }
 
-    this.clickedPoint = point.clone();
     this.clickedPointInfo = {
-      distance: metrics.distances[controlPointIndex],
-      slope: metrics.slopes[controlPointIndex]
+      distance: snapshot.metrics.distances[nearest],
+      slope: snapshot.metrics.slopes[nearest]
     };
   }
 
@@ -231,9 +241,11 @@ class HikingSimulator {
   }
 
   private onModeChange(mode: 'roam' | 'edit'): void {
+    this.mode = mode;
     this.uiManager.setMode(mode);
-    if (mode === 'roam' && this.smoothedPath.length > 1) {
-      this.interactionManager.setMode('roam', this.smoothedPath);
+    const snapshot = this.routeStore.getSnapshot();
+    if (mode === 'roam' && snapshot.smoothedPath.length >= 2) {
+      this.interactionManager.setMode('roam', snapshot.smoothedPath);
     } else {
       this.interactionManager.setMode('edit');
     }
@@ -245,8 +257,9 @@ class HikingSimulator {
       this.highlightedPointMesh = null;
     }
 
-    if (pathIndex >= 0 && this.smoothedPath[pathIndex]) {
-      const point = this.smoothedPath[pathIndex];
+    const smoothedPath = this.routeStore.getSnapshot().smoothedPath;
+    if (pathIndex >= 0 && smoothedPath[pathIndex]) {
+      const point = smoothedPath[pathIndex];
       const geometry = new THREE.SphereGeometry(6, 16, 16);
       const material = new THREE.MeshBasicMaterial({
         color: 0xff6f00,
@@ -260,23 +273,6 @@ class HikingSimulator {
     }
   }
 
-  private findNearbyPathPoint(point: THREE.Vector3, threshold: number = 15): number {
-    for (let i = 0; i < this.pathPoints.length; i++) {
-      const dx = point.x - this.pathPoints[i].x;
-      const dz = point.z - this.pathPoints[i].z;
-      if (Math.sqrt(dx * dx + dz * dz) < threshold) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  private removePathPoint(index: number): void {
-    this.pathPoints.splice(index, 1);
-    this.createPathPointMeshes();
-    this.updatePath();
-  }
-
   private createPathPointMeshes(): void {
     for (const mesh of this.pathPointMeshes) {
       this.scene.remove(mesh);
@@ -285,9 +281,10 @@ class HikingSimulator {
     }
     this.pathPointMeshes = [];
 
-    for (let i = 0; i < this.pathPoints.length; i++) {
+    const pathPoints = this.routeStore.getSnapshot().controlPoints;
+    for (let i = 0; i < pathPoints.length; i++) {
       const isStart = i === 0;
-      const isEnd = i === this.pathPoints.length - 1;
+      const isEnd = i === pathPoints.length - 1;
       const geometry = new THREE.SphereGeometry(isStart || isEnd ? 7 : 5, 16, 16);
       const material = new THREE.MeshStandardMaterial({
         color: isStart ? 0x4caf50 : isEnd ? 0xff3333 : 0xff6f00,
@@ -297,7 +294,7 @@ class HikingSimulator {
         metalness: 0.1
       });
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.copy(this.pathPoints[i]);
+      mesh.position.copy(pathPoints[i]);
       mesh.position.y += 5;
       mesh.castShadow = true;
       this.scene.add(mesh);
@@ -307,7 +304,16 @@ class HikingSimulator {
     this.interactionManager.setPathPointMeshes(this.pathPointMeshes);
   }
 
-  private updatePath(): void {
+  private onRouteSnapshot(snapshot: RouteSnapshot): void {
+    this.rebuildPathLine(snapshot.smoothedPath);
+    this.uiManager.updatePathData(snapshot);
+    if (this.mode === 'roam') {
+      this.interactionManager.updateRoamPath(snapshot.smoothedPath);
+    }
+    this.refreshClickedPointInfo();
+  }
+
+  private rebuildPathLine(smoothedPath: THREE.Vector3[]): void {
     if (this.pathLineMesh) {
       this.scene.remove(this.pathLineMesh);
       this.pathLineMesh.geometry.dispose();
@@ -315,29 +321,23 @@ class HikingSimulator {
       this.pathLineMesh = null;
     }
 
-    if (this.pathPoints.length < 2) {
-      this.smoothedPath = [];
-      this.uiManager.updatePathData(this.pathPoints, this.smoothedPath);
-      return;
-    }
+    if (smoothedPath.length < 2) return;
 
-    this.smoothedPath = generateSmoothPath(this.pathPoints, this.terrainData, 15);
-
-    const positions = new Float32Array(this.smoothedPath.length * 3);
-    const colors = new Float32Array(this.smoothedPath.length * 3);
+    const positions = new Float32Array(smoothedPath.length * 3);
+    const colors = new Float32Array(smoothedPath.length * 3);
     const baseColor = new THREE.Color('#ff6f00');
     const highColor = new THREE.Color('#ffcc00');
 
     let minY = Infinity;
     let maxY = -Infinity;
-    for (const p of this.smoothedPath) {
+    for (const p of smoothedPath) {
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
     const yRange = maxY - minY || 1;
 
-    for (let i = 0; i < this.smoothedPath.length; i++) {
-      const point = this.smoothedPath[i];
+    for (let i = 0; i < smoothedPath.length; i++) {
+      const point = smoothedPath[i];
       positions[i * 3] = point.x;
       positions[i * 3 + 1] = point.y + 1.5;
       positions[i * 3 + 2] = point.z;
@@ -355,15 +355,12 @@ class HikingSimulator {
 
     const material = new THREE.LineBasicMaterial({
       vertexColors: true,
-      linewidth: 3,
       transparent: true,
       opacity: 0.95
     });
 
     this.pathLineMesh = new THREE.Line(geometry, material);
     this.scene.add(this.pathLineMesh);
-
-    this.uiManager.updatePathData(this.pathPoints, this.smoothedPath);
   }
 
   private updateClickedMarker(): void {

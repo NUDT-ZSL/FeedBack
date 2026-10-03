@@ -194,12 +194,8 @@ export function getHeightAt(
   const { size, segments, heightMap } = terrainData;
   const halfSize = size / 2;
 
-  const gridX = ((worldX + halfSize) / size) * segments;
-  const gridZ = ((worldZ + halfSize) / size) * segments;
-
-  if (gridX < 0 || gridX >= segments || gridZ < 0 || gridZ >= segments) {
-    return 0;
-  }
+  const gridX = Math.max(0, Math.min(segments, ((worldX + halfSize) / size) * segments));
+  const gridZ = Math.max(0, Math.min(segments, ((worldZ + halfSize) / size) * segments));
 
   const x0 = Math.floor(gridX);
   const z0 = Math.floor(gridZ);
@@ -230,23 +226,45 @@ export function projectPointsToTerrain(
   });
 }
 
+const COINCIDENT_EPSILON = 1e-4;
+
+function deduplicateControlPoints(points: THREE.Vector3[]): THREE.Vector3[] {
+  const result: THREE.Vector3[] = [];
+  for (const p of points) {
+    const last = result[result.length - 1];
+    if (!last || last.distanceToSquared(p) > COINCIDENT_EPSILON * COINCIDENT_EPSILON) {
+      result.push(p);
+    }
+  }
+  return result;
+}
+
 export function generateSmoothPath(
   controlPoints: THREE.Vector3[],
   terrainData: TerrainData,
   segmentsPerCurve: number = 20
 ): THREE.Vector3[] {
-  if (controlPoints.length < 2) return controlPoints.map(p => p.clone());
+  if (controlPoints.length === 0) return [];
 
-  const points: THREE.Vector3[] = [];
+  const points = deduplicateControlPoints(controlPoints);
+  if (points.length === 1) {
+    const only = points[0];
+    return [new THREE.Vector3(only.x, getHeightAt(only.x, only.z, terrainData), only.z)];
+  }
 
-  for (let i = 0; i < controlPoints.length - 1; i++) {
-    const p0 = controlPoints[Math.max(0, i - 1)];
-    const p1 = controlPoints[i];
-    const p2 = controlPoints[i + 1];
-    const p3 = controlPoints[Math.min(controlPoints.length - 1, i + 2)];
+  const segmentCount = Math.max(1, Math.floor(segmentsPerCurve));
+  const halfSize = terrainData.size / 2;
+  const bound = halfSize;
+  const sampled: THREE.Vector3[] = [];
 
-    for (let j = 0; j < segmentsPerCurve; j++) {
-      const t = j / segmentsPerCurve;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    for (let j = 0; j < segmentCount; j++) {
+      const t = j / segmentCount;
       const t2 = t * t;
       const t3 = t2 * t;
 
@@ -264,40 +282,68 @@ export function generateSmoothPath(
         (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3
       );
 
-      const y = getHeightAt(x, z, terrainData);
-      points.push(new THREE.Vector3(x, y, z));
+      const clampedX = Math.max(-bound, Math.min(bound, x));
+      const clampedZ = Math.max(-bound, Math.min(bound, z));
+      const y = getHeightAt(clampedX, clampedZ, terrainData);
+      sampled.push(new THREE.Vector3(clampedX, y, clampedZ));
     }
   }
 
-  const lastPoint = controlPoints[controlPoints.length - 1];
-  points.push(new THREE.Vector3(lastPoint.x, getHeightAt(lastPoint.x, lastPoint.z, terrainData), lastPoint.z));
+  const lastPoint = points[points.length - 1];
+  sampled.push(new THREE.Vector3(
+    lastPoint.x,
+    getHeightAt(lastPoint.x, lastPoint.z, terrainData),
+    lastPoint.z
+  ));
 
-  return points;
+  return sampled;
 }
 
-export function calculatePathMetrics(
-  pathPoints: THREE.Vector3[]
-): { distances: number[]; slopes: number[]; totalDistance: number; avgSlope: number; maxSlope: number; maxSlopeIndex: number } {
+export interface PathMetrics {
+  distances: number[];
+  slopes: number[];
+  totalDistance: number;
+  avgSlope: number;
+  maxSlope: number;
+  maxSlopeIndex: number;
+}
+
+export function calculatePathMetrics(pathPoints: THREE.Vector3[]): PathMetrics {
+  if (pathPoints.length === 0) {
+    return {
+      distances: [],
+      slopes: [],
+      totalDistance: 0,
+      avgSlope: 0,
+      maxSlope: 0,
+      maxSlopeIndex: -1
+    };
+  }
+
   const distances: number[] = [0];
   const slopes: number[] = [0];
   let totalDistance = 0;
+  let weightedSlopeSum = 0;
   let maxSlope = 0;
-  let maxSlopeIndex = 0;
+  let maxSlopeIndex = -1;
 
   for (let i = 1; i < pathPoints.length; i++) {
     const prev = pathPoints[i - 1];
     const curr = pathPoints[i];
 
-    const horizontalDist = Math.sqrt(
-      Math.pow(curr.x - prev.x, 2) + Math.pow(curr.z - prev.z, 2)
-    );
+    const dx = curr.x - prev.x;
+    const dz = curr.z - prev.z;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
     const verticalDist = curr.y - prev.y;
 
     totalDistance += horizontalDist;
     distances.push(totalDistance);
 
-    const slope = horizontalDist > 0 ? Math.abs(verticalDist / horizontalDist) * 100 : 0;
+    const slope = horizontalDist > COINCIDENT_EPSILON
+      ? Math.abs(verticalDist / horizontalDist) * 100
+      : 0;
     slopes.push(slope);
+    weightedSlopeSum += slope * horizontalDist;
 
     if (slope > maxSlope) {
       maxSlope = slope;
@@ -305,7 +351,9 @@ export function calculatePathMetrics(
     }
   }
 
-  const avgSlope = slopes.length > 0 ? slopes.reduce((a, b) => a + b, 0) / slopes.length : 0;
+  const avgSlope = totalDistance > COINCIDENT_EPSILON
+    ? weightedSlopeSum / totalDistance
+    : 0;
 
   return { distances, slopes, totalDistance, avgSlope, maxSlope, maxSlopeIndex };
 }
