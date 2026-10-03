@@ -8,43 +8,47 @@ import type {
   PackingItem,
   TravelData,
 } from '../types';
+import {
+  STORAGE_KEY,
+  createEmptyTravelData,
+  loadTravelData,
+  saveTravelData,
+  insertProject,
+  updateProject,
+  removeProject,
+  insertMember,
+  updateMember,
+  removeMember,
+  insertItineraryItem,
+  updateItineraryItem,
+  removeItineraryItem,
+  insertBudgetSplit,
+  updateBudgetSplit,
+  removeBudgetSplit,
+  insertPackingItem,
+  updatePackingItem,
+  removePackingItem,
+} from '../lib/travelData';
 
-const STORAGE_KEY = 'travel_planner_data';
 const DEBOUNCE_DELAY = 300;
 
-const initialData: TravelData = {
-  projects: [],
-  members: [],
-  itineraryItems: [],
-  budgetSplits: [],
-  packingItems: [],
-};
-
 export function useTravelData() {
-  const [data, setData] = useState<TravelData>(initialData);
+  const [data, setData] = useState<TravelData>(createEmptyTravelData);
   const [isLoading, setIsLoading] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveToStorage = useCallback((newData: TravelData) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+      saveTravelData(localStorage, newData, STORAGE_KEY);
     }, DEBOUNCE_DELAY);
   }, []);
 
   const loadFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored) as TravelData;
-      }
-    } catch (error) {
-      console.error('Failed to load data from localStorage:', error);
-    }
-    return initialData;
+    return loadTravelData(localStorage, STORAGE_KEY);
   }, []);
 
   useEffect(() => {
@@ -57,8 +61,8 @@ export function useTravelData() {
       });
     };
 
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(loadData);
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(loadData);
     } else {
       setTimeout(loadData, 0);
     }
@@ -84,31 +88,16 @@ export function useTravelData() {
       id: uuidv4(),
       createdAt: new Date().toISOString(),
     };
-    updateData((prev) => ({
-      ...prev,
-      projects: [...prev.projects, newProject],
-    }));
+    updateData((prev) => insertProject(prev, newProject));
     return newProject;
   }, [updateData]);
 
-  const updateProject = useCallback((id: string, updates: Partial<TravelProject>) => {
-    updateData((prev) => ({
-      ...prev,
-      projects: prev.projects.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
-      ),
-    }));
+  const updateProjectHandler = useCallback((id: string, updates: Partial<TravelProject>) => {
+    updateData((prev) => updateProject(prev, id, updates));
   }, [updateData]);
 
   const deleteProject = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      projects: prev.projects.filter((p) => p.id !== id),
-      members: prev.members.filter((m) => m.projectId !== id),
-      itineraryItems: prev.itineraryItems.filter((i) => i.projectId !== id),
-      budgetSplits: prev.budgetSplits.filter((b) => b.projectId !== id),
-      packingItems: prev.packingItems.filter((p) => p.projectId !== id),
-    }));
+    updateData((prev) => removeProject(prev, id));
   }, [updateData]);
 
   const addMember = useCallback((member: Omit<Member, 'id'>) => {
@@ -116,27 +105,16 @@ export function useTravelData() {
       ...member,
       id: uuidv4(),
     };
-    updateData((prev) => ({
-      ...prev,
-      members: [...prev.members, newMember],
-    }));
+    updateData((prev) => insertMember(prev, newMember));
     return newMember;
   }, [updateData]);
 
-  const updateMember = useCallback((id: string, updates: Partial<Member>) => {
-    updateData((prev) => ({
-      ...prev,
-      members: prev.members.map((m) =>
-        m.id === id ? { ...m, ...updates } : m
-      ),
-    }));
+  const updateMemberHandler = useCallback((id: string, updates: Partial<Member>) => {
+    updateData((prev) => updateMember(prev, id, updates));
   }, [updateData]);
 
   const deleteMember = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      members: prev.members.filter((m) => m.id !== id),
-    }));
+    updateData((prev) => removeMember(prev, id));
   }, [updateData]);
 
   const addItineraryItem = useCallback((item: Omit<ItineraryItem, 'id'>) => {
@@ -144,27 +122,19 @@ export function useTravelData() {
       ...item,
       id: uuidv4(),
     };
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: [...prev.itineraryItems, newItem].sort((a, b) => a.order - b.order),
-    }));
+    updateData((prev) => insertItineraryItem(prev, newItem));
     return newItem;
   }, [updateData]);
 
-  const updateItineraryItem = useCallback((id: string, updates: Partial<ItineraryItem>) => {
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: prev.itineraryItems
-        .map((i) => (i.id === id ? { ...i, ...updates } : i))
-        .sort((a, b) => a.order - b.order),
-    }));
-  }, [updateData]);
+  const updateItineraryItemHandler = useCallback(
+    (id: string, updates: Partial<ItineraryItem>) => {
+      updateData((prev) => updateItineraryItem(prev, id, updates));
+    },
+    [updateData]
+  );
 
   const deleteItineraryItem = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: prev.itineraryItems.filter((i) => i.id !== id),
-    }));
+    updateData((prev) => removeItineraryItem(prev, id));
   }, [updateData]);
 
   const addBudgetSplit = useCallback((split: Omit<BudgetSplit, 'id' | 'createdAt'>) => {
@@ -173,27 +143,19 @@ export function useTravelData() {
       id: uuidv4(),
       createdAt: new Date().toISOString(),
     };
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: [...prev.budgetSplits, newSplit],
-    }));
+    updateData((prev) => insertBudgetSplit(prev, newSplit));
     return newSplit;
   }, [updateData]);
 
-  const updateBudgetSplit = useCallback((id: string, updates: Partial<BudgetSplit>) => {
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: prev.budgetSplits.map((b) =>
-        b.id === id ? { ...b, ...updates } : b
-      ),
-    }));
-  }, [updateData]);
+  const updateBudgetSplitHandler = useCallback(
+    (id: string, updates: Partial<BudgetSplit>) => {
+      updateData((prev) => updateBudgetSplit(prev, id, updates));
+    },
+    [updateData]
+  );
 
   const deleteBudgetSplit = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: prev.budgetSplits.filter((b) => b.id !== id),
-    }));
+    updateData((prev) => removeBudgetSplit(prev, id));
   }, [updateData]);
 
   const addPackingItem = useCallback((item: Omit<PackingItem, 'id'>) => {
@@ -201,27 +163,19 @@ export function useTravelData() {
       ...item,
       id: uuidv4(),
     };
-    updateData((prev) => ({
-      ...prev,
-      packingItems: [...prev.packingItems, newItem].sort((a, b) => a.order - b.order),
-    }));
+    updateData((prev) => insertPackingItem(prev, newItem));
     return newItem;
   }, [updateData]);
 
-  const updatePackingItem = useCallback((id: string, updates: Partial<PackingItem>) => {
-    updateData((prev) => ({
-      ...prev,
-      packingItems: prev.packingItems
-        .map((p) => (p.id === id ? { ...p, ...updates } : p))
-        .sort((a, b) => a.order - b.order),
-    }));
-  }, [updateData]);
+  const updatePackingItemHandler = useCallback(
+    (id: string, updates: Partial<PackingItem>) => {
+      updateData((prev) => updatePackingItem(prev, id, updates));
+    },
+    [updateData]
+  );
 
   const deletePackingItem = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      packingItems: prev.packingItems.filter((p) => p.id !== id),
-    }));
+    updateData((prev) => removePackingItem(prev, id));
   }, [updateData]);
 
   return {
@@ -229,19 +183,19 @@ export function useTravelData() {
     isLoading,
     isVisible,
     addProject,
-    updateProject,
+    updateProject: updateProjectHandler,
     deleteProject,
     addMember,
-    updateMember,
+    updateMember: updateMemberHandler,
     deleteMember,
     addItineraryItem,
-    updateItineraryItem,
+    updateItineraryItem: updateItineraryItemHandler,
     deleteItineraryItem,
     addBudgetSplit,
-    updateBudgetSplit,
+    updateBudgetSplit: updateBudgetSplitHandler,
     deleteBudgetSplit,
     addPackingItem,
-    updatePackingItem,
+    updatePackingItem: updatePackingItemHandler,
     deletePackingItem,
   };
 }

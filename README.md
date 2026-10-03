@@ -55,3 +55,15 @@ export default tseslint.config({
   },
 })
 ```
+
+## Data layer verification
+
+The travel data layer lives in `src/lib/travelData.ts` as pure, framework-free
+functions (cascade deletes, order-field sorting, constrained-field validation,
+storage load/save). `src/hooks/useTravelData.ts` is a thin React wrapper over it.
+
+Run the offline test suite (no browser, no network; storage is faked in memory):
+
+```sh
+npm test
+```
