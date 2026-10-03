@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import TimerPanel from './TimerPanel';
 import TaskTimeline from './TaskTimeline';
 import { useTimer } from './hooks/useTimer';
+import { createConfigStore } from './core/configStore';
 import type { Task } from './types';
+
+const DEFAULT_MINUTES = 25;
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -11,24 +14,25 @@ const App: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [showAddTaskForm, setShowAddTaskForm] = useState(false);
 
-  const { state, control, saveConfig, loadConfig } = useTimer(25);
+  const { state, control, restore } = useTimer(DEFAULT_MINUTES);
+  const [configStore] = useState(() => createConfigStore(window.localStorage));
 
   useEffect(() => {
-    const savedConfig = loadConfig();
-    if (savedConfig) {
-      control.setTime(savedConfig.time);
-      setTasks(savedConfig.tasks);
+    const snapshot = configStore.load(DEFAULT_MINUTES);
+    if (snapshot) {
+      restore(snapshot.state);
+      setTasks(snapshot.tasks);
       setShowRestoreToast(true);
       setTimeout(() => setShowRestoreToast(false), 2000);
     }
     setIsInitialized(true);
-  }, []);
+  }, [configStore, restore]);
 
   useEffect(() => {
     if (isInitialized) {
-      saveConfig(tasks);
+      configStore.save({ state, tasks });
     }
-  }, [state.initialTime, tasks, isInitialized, saveConfig]);
+  }, [state, tasks, isInitialized, configStore]);
 
   const handleDurationChange = useCallback((minutes: number) => {
     control.setTime(minutes);
