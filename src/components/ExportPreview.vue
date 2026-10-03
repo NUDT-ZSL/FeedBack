@@ -69,8 +69,8 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import L from 'leaflet'
 import html2canvas from 'html2canvas'
+import { storeToRefs } from 'pinia'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
 import type { City } from '../types'
 
 const props = defineProps<{
@@ -82,6 +82,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useTravelStore()
+const { sortedCities, routePoints, cityNumbers } = storeToRefs(store)
 const exportContainerRef = ref<HTMLDivElement | null>(null)
 const exportMapRef = ref<HTMLDivElement | null>(null)
 const isExporting = ref(false)
@@ -89,7 +90,6 @@ const isExporting = ref(false)
 let exportMap: L.Map | null = null
 const exportMarkers: L.Marker[] = []
 
-const sortedCities = computed(() => store.sortedCities)
 const displayCities = computed(() => sortedCities.value.slice(0, 6))
 
 function formatDate(dateStr: string): string {
@@ -102,7 +102,16 @@ function formatDate(dateStr: string): string {
 }
 
 function initExportMap() {
-  if (!exportMapRef.value || sortedCities.value.length === 0) return
+  if (!exportMapRef.value) return
+
+  if (sortedCities.value.length === 0) {
+    if (exportMap) {
+      exportMap.remove()
+      exportMap = null
+    }
+    exportMarkers.length = 0
+    return
+  }
 
   if (exportMap) {
     exportMap.remove()
@@ -120,30 +129,31 @@ function initExportMap() {
     zoomControl: false,
     attributionControl: false
   })
+  const map = exportMap
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap',
     maxZoom: 19
-  }).addTo(exportMap)
+  }).addTo(map)
 
   sortedCities.value.forEach((city, index) => {
     const icon = L.divIcon({
       className: 'export-marker',
       html: `
         <div class="export-marker-circle">
-          <span>${index + 1}</span>
+          <span>${cityNumbers.value.get(city.id) ?? index + 1}</span>
         </div>
       `,
       iconSize: [28, 28],
       iconAnchor: [14, 14]
     })
 
-    const marker = L.marker([city.lat, city.lng], { icon }).addTo(exportMap)
+    const marker = L.marker([city.lat, city.lng], { icon }).addTo(map)
     exportMarkers.push(marker)
   })
 
   if (sortedCities.value.length >= 2) {
-    const points: L.LatLngExpression[] = sortedCities.value.map(city => [city.lat, city.lng])
+    const points: L.LatLngExpression[] = routePoints.value
 
     L.polyline(points, {
       weight: 4,
@@ -151,10 +161,10 @@ function initExportMap() {
       lineJoin: 'round',
       lineCap: 'round',
       color: '#ff6b6b'
-    }).addTo(exportMap)
+    }).addTo(map)
   }
 
-  exportMap.fitBounds(bounds, { padding: [40, 40] })
+  map.fitBounds(bounds, { padding: [40, 40] })
 }
 
 async function handleExport() {
@@ -209,6 +219,13 @@ watch(() => props.visible, (newVal) => {
     }
     exportMarkers.length = 0
   }
+})
+
+watch(sortedCities, () => {
+  if (!props.visible) return
+  nextTick(() => {
+    initExportMap()
+  })
 })
 </script>
 

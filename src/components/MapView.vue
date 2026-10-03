@@ -28,8 +28,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
+import { storeToRefs } from 'pinia'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
+import { diffCityLists } from '../utils/cityDerivations'
 import type { City } from '../types'
 
 const emit = defineEmits<{
@@ -37,6 +38,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useTravelStore()
+const { sortedCities, routePoints } = storeToRefs(store)
 const mapContainerRef = ref<HTMLDivElement | null>(null)
 const mapRef = ref<HTMLDivElement | null>(null)
 const isMobile = ref(false)
@@ -45,8 +47,7 @@ let map: L.Map | null = null
 const markers: Map<string, L.Marker> = new Map()
 let polyline: L.Polyline | null = null
 let animationFrame: number | null = null
-
-const sortedCities = store.sortedCities
+const segmentAnimations = new Set<L.Polyline>()
 
 function createCustomIcon(letter: string, isNew: boolean = false): L.DivIcon {
   const animationClass = isNew ? 'marker-animate' : ''
@@ -92,7 +93,7 @@ function initMap() {
 function renderExistingCities() {
   if (!map) return
 
-  sortedCities.forEach((city, index) => {
+  sortedCities.value.forEach((city) => {
     addMarker(city, false)
   })
 }
@@ -125,7 +126,7 @@ function removeMarker(cityId: string) {
 }
 
 function drawRoute() {
-  if (!map || sortedCities.length < 2) {
+  if (!map || routePoints.value.length < 2) {
     if (polyline) {
       polyline.remove()
       polyline = null
@@ -137,7 +138,7 @@ function drawRoute() {
     polyline.remove()
   }
 
-  const points: L.LatLngExpression[] = sortedCities.map(city => [city.lat, city.lng])
+  const points: L.LatLngExpression[] = routePoints.value
 
   polyline = L.polyline(points, {
     weight: 4,
@@ -153,12 +154,13 @@ function drawRoute() {
 function animateRouteDrawing() {
   if (!polyline || animationFrame) return
 
-  const path = polyline.getElement()
-  if (!path) return
+  const element = polyline.getElement() as SVGPathElement | undefined
+  if (!element) return
+  const path = element
 
-  const length = (path as SVGPathElement).getTotalLength()
+  const length = path.getTotalLength()
   let progress = 0
-  const duration = 2000 * Math.max(1, sortedCities.length - 1)
+  const duration = 2000 * Math.max(1, routePoints.value.length - 1)
   const startTime = performance.now()
 
   path.style.strokeDasharray = `${length}`
@@ -240,6 +242,86 @@ function invalidateSize() {
   }
 }
 
+function updateRoute() {
+  if (!map) return
+
+  const points: L.LatLngExpression[] = routePoints.value
+
+  if (points.length < 2) {
+    if (polyline) {
+      polyline.remove()
+      polyline = null
+    }
+    return
+  }
+
+  if (!polyline) {
+    polyline = L.polyline(points, {
+      weight: 4,
+      opacity: 0.9,
+      lineJoin: 'round',
+      lineCap: 'round',
+      className: 'route-polyline'
+    }).addTo(map)
+    applyGradientColors()
+    return
+  }
+
+  polyline.setLatLngs(points)
+  applyGradientColors()
+}
+
+function animateNewSegments(added: City[]) {
+  if (!map || added.length === 0) return
+
+  const addedIds = new Set(added.map(city => city.id))
+
+  sortedCities.value.forEach((city, index) => {
+    if (!addedIds.has(city.id) || index === 0) return
+    const prev = sortedCities.value[index - 1]
+    const segment = L.polyline(
+      [[prev.lat, prev.lng], [city.lat, city.lng]],
+      {
+        weight: 4,
+        opacity: 0.9,
+        lineJoin: 'round',
+        lineCap: 'round',
+        color: '#ff6b6b',
+        className: 'route-polyline'
+      }
+    ).addTo(map!)
+    segmentAnimations.add(segment)
+    animateSegment(segment)
+  })
+}
+
+function animateSegment(segment: L.Polyline) {
+  const element = segment.getElement() as SVGPathElement | undefined
+  if (!element) return
+  const path = element
+
+  const length = path.getTotalLength()
+  const duration = 2000
+  const startTime = performance.now()
+
+  path.style.strokeDasharray = `${length}`
+  path.style.strokeDashoffset = `${length}`
+
+  function frame(currentTime: number) {
+    const progress = Math.min((currentTime - startTime) / duration, 1)
+    path.style.strokeDashoffset = `${length * (1 - progress)}`
+
+    if (progress < 1) {
+      requestAnimationFrame(frame)
+    } else {
+      segment.remove()
+      segmentAnimations.delete(segment)
+    }
+  }
+
+  requestAnimationFrame(frame)
+}
+
 watch(() => store.activeCity, (newCity) => {
   if (newCity) {
     nextTick(() => {
@@ -248,28 +330,24 @@ watch(() => store.activeCity, (newCity) => {
   }
 })
 
-let previousLength = 0
-
 watch(
-  () => sortedCities.length,
-  (newLength) => {
-    if (newLength > previousLength && sortedCities.length > 0) {
-      const newCity = sortedCities[sortedCities.length - 1]
-      nextTick(() => {
-        addMarker(newCity, true)
-        drawRoute()
-        flyToCity(newCity)
-      })
-    } else if (newLength < previousLength) {
-      const currentIds = new Set(sortedCities.map(c => c.id))
-      markers.forEach((_, id) => {
-        if (!currentIds.has(id)) {
-          removeMarker(id)
-        }
-      })
-      drawRoute()
-    }
-    previousLength = newLength
+  sortedCities,
+  (nextCities, prevCities) => {
+    if (!map) return
+
+    const { added, removed } = diffCityLists(prevCities ?? [], nextCities)
+
+    if (removed.length === 0 && added.length === 0) return
+
+    nextTick(() => {
+      removed.forEach(id => removeMarker(id))
+      added.forEach(city => addMarker(city, true))
+      updateRoute()
+      animateNewSegments(added)
+      if (added.length > 0) {
+        flyToCity(added[added.length - 1])
+      }
+    })
   },
   { immediate: false }
 )
@@ -280,7 +358,6 @@ function checkMobile() {
 
 onMounted(() => {
   checkMobile()
-  previousLength = sortedCities.length
   nextTick(() => {
     initMap()
     window.addEventListener('resize', () => {
@@ -294,6 +371,8 @@ onBeforeUnmount(() => {
   if (animationFrame) {
     cancelAnimationFrame(animationFrame)
   }
+  segmentAnimations.forEach(segment => segment.remove())
+  segmentAnimations.clear()
   if (map) {
     map.remove()
     map = null

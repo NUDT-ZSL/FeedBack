@@ -92,7 +92,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { storeToRefs } from 'pinia'
 import CityCard from './CityCard.vue'
 import { useTravelStore } from '../store/travelStore'
 import { searchCities, debounce } from '../utils/mapUtils'
@@ -104,14 +105,11 @@ const emit = defineEmits<{
 }>()
 
 const store = useTravelStore()
+const { sortedCities, cityCount, isSidebarOpen: isOpen } = storeToRefs(store)
 const searchQuery = ref('')
 const searchResults = ref<SearchResult[]>([])
 const showResults = ref(false)
 const isMobile = ref(false)
-
-const sortedCities = computed(() => store.sortedCities)
-const cityCount = computed(() => store.cities.length)
-const isOpen = computed(() => store.isSidebarOpen)
 
 const debouncedSearch = debounce((query: string) => {
   searchResults.value = searchCities(query)

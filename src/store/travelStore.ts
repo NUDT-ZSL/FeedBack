@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { City, MapConfig } from '../types'
 import { generateId } from '../utils/mapUtils'
+import { sortCities, deriveRoutePoints, deriveCityNumbers } from '../utils/cityDerivations'
 
 export const useTravelStore = defineStore('travel', () => {
   const cities = ref<City[]>([])
@@ -16,12 +17,18 @@ export const useTravelStore = defineStore('travel', () => {
   })
 
   const sortedCities = computed(() => {
-    return [...cities.value].sort((a, b) => a.createdAt - b.createdAt)
+    return sortCities(cities.value)
   })
+
+  const cityCount = computed(() => sortedCities.value.length)
+
+  const routePoints = computed(() => deriveRoutePoints(sortedCities.value))
+
+  const cityNumbers = computed(() => deriveCityNumbers(sortedCities.value))
 
   const activeCity = computed(() => {
     if (!activeCityId.value) return null
-    return cities.value.find(c => c.id === activeCityId.value) || null
+    return sortedCities.value.find(c => c.id === activeCityId.value) || null
   })
 
   function addCity(data: Omit<City, 'id' | 'createdAt'>) {
@@ -82,6 +89,9 @@ export const useTravelStore = defineStore('travel', () => {
   return {
     cities,
     sortedCities,
+    cityCount,
+    routePoints,
+    cityNumbers,
     activeCityId,
     activeCity,
     isExportMode,
