@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import { type RandomSource, systemRandom, floatBetween, intBetween, clamp } from './random.ts';
 
 export interface Mineral {
   id: string;
@@ -42,8 +42,10 @@ export class TradeManager {
   private totalTradeCount: number = 0;
   private totalValue: number = 0;
   private totalMined: number = 0;
+  private random: RandomSource;
 
-  constructor() {
+  constructor(random: RandomSource = systemRandom) {
+    this.random = random;
     MINERALS.forEach(m => {
       this.playerInventory[m.id] = 0;
     });
@@ -53,25 +55,25 @@ export class TradeManager {
     const inventory: StationInventory = {};
     const prices: StationPrices = {};
     MINERALS.forEach(m => {
-      inventory[m.id] = Phaser.Math.Between(10, 100);
+      inventory[m.id] = intBetween(this.random, 10, 100);
       prices[m.id] = this.generatePrice(m.basePrice);
     });
     this.stations.set(id, { inventory, prices, name });
   }
 
   private generatePrice(basePrice: number): number {
-    const variance = Phaser.Math.FloatBetween(0.7, 1.4);
+    const variance = floatBetween(this.random, 0.7, 1.4);
     return Math.round(basePrice * variance);
   }
 
   fluctuatePrices(): void {
     this.stations.forEach(station => {
       MINERALS.forEach(m => {
-        const change = Phaser.Math.FloatBetween(0.9, 1.1);
+        const change = floatBetween(this.random, 0.9, 1.1);
         const newPrice = Math.round(station.prices[m.id] * change);
         const minPrice = Math.round(m.basePrice * 0.5);
         const maxPrice = Math.round(m.basePrice * 2);
-        station.prices[m.id] = Phaser.Math.Clamp(newPrice, minPrice, maxPrice);
+        station.prices[m.id] = clamp(newPrice, minPrice, maxPrice);
       });
     });
   }
@@ -240,7 +242,7 @@ export class TradeManager {
     this.totalMined = 0;
     this.stations.forEach(station => {
       MINERALS.forEach(m => {
-        station.inventory[m.id] = Phaser.Math.Between(10, 100);
+        station.inventory[m.id] = intBetween(this.random, 10, 100);
         station.prices[m.id] = this.generatePrice(m.basePrice);
       });
     });

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/run.ts",
+    "verify": "node tests/run.ts"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
