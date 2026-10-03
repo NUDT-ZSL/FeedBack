@@ -44,25 +44,29 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    audioEngineRef.current = new AudioEngine();
-    
-    audioEngineRef.current.setAnalysisCallback((data: AudioAnalysisData) => {
+    const engine = new AudioEngine();
+    audioEngineRef.current = engine;
+
+    engine.setAnalysisCallback((data: AudioAnalysisData) => {
       setCurrentTime(data.currentTime);
       setFrequencyData(data.frequencyData);
     });
 
-    audioEngineRef.current.setStateChangeCallback((playing: boolean) => {
+    engine.setStateChangeCallback((playing: boolean) => {
       setIsPlaying(playing);
+      setCurrentTime(engine.getCurrentTime());
     });
 
-    audioEngineRef.current.setEndedCallback(() => {
-      if (!audioEngineRef.current?.isLoopingEnabled()) {
-        setCurrentTime(0);
-      }
+    engine.setSelectionChangeCallback((newSelection: Selection | null) => {
+      setSelection(newSelection);
+    });
+
+    engine.setEndedCallback(() => {
+      setCurrentTime(engine.getCurrentTime());
     });
 
     return () => {
-      audioEngineRef.current?.dispose();
+      engine.dispose();
     };
   }, []);
 
@@ -84,7 +88,6 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
-    setSelection(null);
     
     try {
       if (!audioEngineRef.current) {
@@ -96,7 +99,6 @@ const App: React.FC = () => {
       
       setAudioBuffer(buffer);
       setMetadata(meta);
-      setCurrentTime(0);
       triggerRolling('time');
       triggerRolling('sampleRate');
       triggerRolling('fileSize');
@@ -148,24 +150,18 @@ const App: React.FC = () => {
   }, []);
 
   const handlePlayPause = useCallback(() => {
-    if (!audioEngineRef.current) return;
-    
-    if (isPlaying) {
-      audioEngineRef.current.pause();
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+
+    if (engine.getIsPlaying()) {
+      engine.pause();
     } else {
-      if (selection && selection.end > selection.start) {
-        audioEngineRef.current.play(selection);
-      } else {
-        audioEngineRef.current.play();
-      }
+      engine.play();
     }
-  }, [isPlaying, selection]);
+  }, []);
 
   const handleStop = useCallback(() => {
-    if (!audioEngineRef.current) return;
-    audioEngineRef.current.stop();
-    setSelection(null);
-    setCurrentTime(0);
+    audioEngineRef.current?.stop();
     triggerRolling('time');
   }, [triggerRolling]);
 
@@ -176,8 +172,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleSeek = useCallback((time: number) => {
-    if (!audioEngineRef.current) return;
-    audioEngineRef.current.seek(time);
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+    engine.seek(time);
+    setCurrentTime(engine.getCurrentTime());
     triggerRolling('time');
   }, [triggerRolling]);
 
@@ -216,7 +214,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectionChange = useCallback((newSelection: Selection | null) => {
-    setSelection(newSelection);
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+    engine.setSelection(newSelection);
+    setCurrentTime(engine.getCurrentTime());
   }, []);
 
   const getWaveformData = useCallback((samples: number): Float32Array => {

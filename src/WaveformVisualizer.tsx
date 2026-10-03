@@ -44,7 +44,6 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     isSelecting: false
   });
   const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [hoverX, setHoverX] = useState<number>(0);
 
   const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -75,15 +74,6 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
     const rect = canvas.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
     return ratio * duration;
-  }, [duration]);
-
-  const getXFromTime = useCallback((time: number): number => {
-    const canvas = canvasRef.current;
-    if (!canvas || duration === 0) return 0;
-    
-    const rect = canvas.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, time / duration));
-    return rect.left + ratio * rect.width;
   }, [duration]);
 
   const draw = useCallback(() => {
@@ -215,7 +205,6 @@ const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const time = getTimeFromX(e.clientX);
     setHoverTime(time);
-    setHoverX(e.clientX);
 
     if (!dragStateRef.current.isDragging || duration === 0) return;
 
