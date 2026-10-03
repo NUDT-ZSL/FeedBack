@@ -10,7 +10,11 @@ function delay<T>(value: T, ms: number = Math.random() * 50): Promise<T> {
 function readJSON<T>(key: string): T[] {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : [];
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
   }
