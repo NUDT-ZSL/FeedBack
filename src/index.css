@@ -282,6 +282,24 @@ body {
   background: #f3f4f6;
 }
 
+.history-group {
+  display: flex;
+  gap: 8px;
+}
+
+.history-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.history-btn:disabled:hover {
+  background: #f3f4f6;
+  transform: none;
+  box-shadow: none;
+}
+
 .contrast-preview {
   display: flex;
   flex-direction: column;

@@ -1,19 +1,29 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ColorCard from './components/ColorCard';
 import {
-  ColorInfo,
   PresetName,
   calculateContrast,
   generateHarmoniousPalette,
   getPresetPalette,
   presetNames,
-  adjustColorBrightness,
 } from './utils/colorUtils';
+import {
+  HistoryState,
+  canRedo as historyCanRedo,
+  canUndo as historyCanUndo,
+  commitHistory,
+  createInitialHistory,
+  editColorHistory,
+  redoHistory,
+  undoHistory,
+} from './utils/paletteHistory';
 
 type SlideDirection = 'in' | 'out' | 'none';
 
 function App() {
-  const [palette, setPalette] = useState<ColorInfo[]>([]);
+  const [historyState, setHistoryState] = useState<HistoryState>(() =>
+    createInitialHistory(generateHarmoniousPalette())
+  );
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [animationKey, setAnimationKey] = useState<number>(0);
@@ -26,12 +36,29 @@ function App() {
   ]);
   const [displayedContrastBlack, setDisplayedContrastBlack] = useState<number>(0);
   const [displayedContrastWhite, setDisplayedContrastWhite] = useState<number>(0);
-  const isAnimatingRef = useRef(false);
+  const presetTimersRef = useRef<number[]>([]);
+  const lastColorEditRef = useRef<{ index: number; time: number } | null>(null);
+  const selectedIndexRef = useRef(0);
+  selectedIndexRef.current = selectedIndex;
+
+  const currentSnapshot = historyState.snapshots[historyState.index];
+  const palette = currentSnapshot.palette;
+  const canUndo = historyCanUndo(historyState);
+  const canRedo = historyCanRedo(historyState);
+
+  const clearPresetTimers = useCallback(() => {
+    presetTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    presetTimersRef.current = [];
+  }, []);
 
   useEffect(() => {
-    const initialPalette = generateHarmoniousPalette();
-    setPalette(initialPalette);
-  }, []);
+    return () => clearPresetTimers();
+  }, [clearPresetTimers]);
+
+  // 撤销/重做后同步快照里保存的选中态
+  useEffect(() => {
+    setSelectedIndex(currentSnapshot.selectedIndex);
+  }, [currentSnapshot]);
 
   const mainColor = palette[selectedIndex]?.hex || '#000000';
 
@@ -75,41 +102,64 @@ function App() {
     return () => cancelAnimationFrame(animationFrame);
   }, [contrastWithBlack.ratio, contrastWithWhite.ratio]);
 
+  // 提交一条新历史：截断重做分支后入栈，并触发色块动画
+  const commitSnapshot = useCallback(
+    (
+      palette: Parameters<typeof commitHistory>[1],
+      nextSelectedIndex: number,
+      kind: 'refresh' | 'preset'
+    ) => {
+      clearPresetTimers();
+      lastColorEditRef.current = null;
+      setHistoryState((prev) =>
+        commitHistory(prev, palette, nextSelectedIndex, kind)
+      );
+      setSelectedIndex(nextSelectedIndex);
+      setAnimationKey((prev) => prev + 1);
+    },
+    [clearPresetTimers]
+  );
+
   const handleRefresh = useCallback(() => {
-    if (isAnimatingRef.current) return;
-    isAnimatingRef.current = true;
-
-    const newPalette = generateHarmoniousPalette();
-    setPalette(newPalette);
-    setAnimationKey((prev) => prev + 1);
-    setSelectedIndex(0);
-
-    setTimeout(() => {
-      isAnimatingRef.current = false;
-    }, 800);
-  }, []);
+    commitSnapshot(generateHarmoniousPalette(), 0, 'refresh');
+    setSlideDirections(['none', 'none', 'none', 'none', 'none']);
+  }, [commitSnapshot]);
 
   const handlePresetClick = useCallback(
     (presetName: PresetName) => {
-      if (isAnimatingRef.current) return;
-      isAnimatingRef.current = true;
+      const newPalette = getPresetPalette(presetName);
+      commitSnapshot(newPalette, 0, 'preset');
 
       setSlideDirections(['out', 'out', 'out', 'out', 'out']);
-
-      setTimeout(() => {
-        const newPalette = getPresetPalette(presetName);
-        setPalette(newPalette);
-        setSelectedIndex(0);
+      const inTimer = window.setTimeout(() => {
         setSlideDirections(['in', 'in', 'in', 'in', 'in']);
-
-        setTimeout(() => {
+        const resetTimer = window.setTimeout(() => {
           setSlideDirections(['none', 'none', 'none', 'none', 'none']);
-          isAnimatingRef.current = false;
         }, 400);
+        presetTimersRef.current.push(resetTimer);
       }, 400);
+      presetTimersRef.current.push(inTimer);
     },
-    []
+    [commitSnapshot]
   );
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    setHistoryState((prev) => undoHistory(prev));
+    clearPresetTimers();
+    lastColorEditRef.current = null;
+    setSlideDirections(['none', 'none', 'none', 'none', 'none']);
+    setAnimationKey((prev) => prev + 1);
+  }, [canUndo, clearPresetTimers]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    setHistoryState((prev) => redoHistory(prev));
+    clearPresetTimers();
+    lastColorEditRef.current = null;
+    setSlideDirections(['none', 'none', 'none', 'none', 'none']);
+    setAnimationKey((prev) => prev + 1);
+  }, [canRedo, clearPresetTimers]);
 
   const handleSelect = useCallback((index: number) => {
     setSelectedIndex(index);
@@ -136,12 +186,38 @@ function App() {
   }, [palette]);
 
   const handleColorChange = useCallback((index: number, newColor: string) => {
-    setPalette((prev) => {
-      const newPalette = [...prev];
-      newPalette[index] = { ...newPalette[index], hex: newColor };
-      return newPalette;
+    const now = Date.now();
+    setHistoryState((prev) => {
+      const result = editColorHistory(
+        prev,
+        index,
+        newColor,
+        selectedIndexRef.current,
+        lastColorEditRef.current,
+        now
+      );
+      if (result.changed) {
+        lastColorEditRef.current = { index, time: now };
+      }
+      return result.state;
     });
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') {
+        return;
+      }
+      event.preventDefault();
+      if (event.shiftKey) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -154,14 +230,6 @@ function App() {
     }
   };
 
-  if (palette.length === 0) {
-    return (
-      <div className="app-container">
-        <div className="loading">加载中...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="app-container">
       <h1 className="app-title">配色探索面板</h1>
@@ -170,7 +238,7 @@ function App() {
       <div className="palette-container">
         {palette.map((colorInfo, index) => (
           <ColorCard
-            key={index}
+            key={`${index}-${animationKey}`}
             color={colorInfo.hex}
             index={index}
             isSelected={index === selectedIndex}
@@ -202,6 +270,35 @@ function App() {
               {presetNames[preset]}
             </button>
           ))}
+        </div>
+
+        <div className="history-group">
+          <button
+            className="btn history-btn"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            aria-label="撤销"
+            title="撤销 (Ctrl+Z)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 0 0-15-6.7L3 13" />
+            </svg>
+            撤销
+          </button>
+          <button
+            className="btn history-btn"
+            onClick={handleRedo}
+            disabled={!canRedo}
+            aria-label="重做"
+            title="重做 (Ctrl+Shift+Z)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 7v6h-6" />
+              <path d="M3 17a9 9 0 0 1 15-6.7L21 13" />
+            </svg>
+            重做
+          </button>
         </div>
 
         <div className="contrast-preview">
@@ -242,7 +339,7 @@ function App() {
       </div>
 
       <div className="tips">
-        <span>提示：点击色块设为主色，双击修改颜色，悬停复制代码</span>
+        <span>提示：点击色块设为主色，双击修改颜色，悬停复制代码，Ctrl+Z 撤销 / Ctrl+Shift+Z 重做</span>
       </div>
     </div>
   );
