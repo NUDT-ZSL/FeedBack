@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { Exhibition, ExhibitionComponent, ImageComponent } from './types';
 import ArtworkCard from './ArtworkCard';
+import { exhibitionSaver } from './exhibitionSaver.ts';
 
 const ExhibitionView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,9 @@ const ExhibitionView: React.FC = () => {
 
   const fetchExhibition = async () => {
     try {
+      if (id) {
+        await exhibitionSaver.flush(id);
+      }
       const res = await axios.get(`/api/exhibitions/${id}`);
       setExhibition(res.data);
     } catch (err) {

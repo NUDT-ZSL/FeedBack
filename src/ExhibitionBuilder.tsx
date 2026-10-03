@@ -12,6 +12,8 @@ import type {
   BannerComponent
 } from './types';
 import ArtworkCard from './ArtworkCard';
+import { exhibitionSaver, onSaveStatus } from './exhibitionSaver.ts';
+import type { SaveStatus } from './saveQueue.ts';
 
 interface DragItem {
   type: ComponentType;
@@ -39,6 +41,7 @@ const ExhibitionBuilder: React.FC = () => {
   const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
   const [newlyAdded, setNewlyAdded] = useState<Set<string>>(new Set());
   const [isPublishing, setIsPublishing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const lastPos = useRef({ x: 0, y: 0 });
@@ -49,6 +52,14 @@ const ExhibitionBuilder: React.FC = () => {
     if (id) {
       fetchExhibition();
     }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setSaveStatus(exhibitionSaver.getStatus(id));
+    return onSaveStatus((changedId, status) => {
+      if (changedId === id) setSaveStatus(status);
+    });
   }, [id]);
 
   useEffect(() => {
@@ -71,18 +82,22 @@ const ExhibitionBuilder: React.FC = () => {
       const res = await axios.get(`/api/exhibitions/${id}`);
       setExhibition(res.data);
       setComponents(res.data.components || []);
+      if (typeof res.data.version === 'number') {
+        exhibitionSaver.setServerVersion(id as string, res.data.version);
+      }
     } catch (err) {
       console.error('Failed to fetch exhibition:', err);
     }
   };
 
-  const saveExhibition = async (comps: ExhibitionComponent[]) => {
+  const saveExhibition = (comps: ExhibitionComponent[]) => {
     if (!id) return;
-    try {
-      await axios.put(`/api/exhibitions/${id}`, { components: comps });
-    } catch (err) {
-      console.error('Failed to save:', err);
-    }
+    exhibitionSaver.save(id, { components: comps });
+  };
+
+  const handleRetrySave = () => {
+    if (!id) return;
+    exhibitionSaver.retry(id);
   };
 
   const themeColor = exhibition?.themeColor;
@@ -430,12 +445,41 @@ const ExhibitionBuilder: React.FC = () => {
     if (!id) return;
     setIsPublishing(true);
     try {
+      await exhibitionSaver.flush(id);
       await axios.post(`/api/exhibitions/${id}/publish`);
       navigate(`/exhibition/${id}`);
     } catch (err) {
       console.error('Publish failed:', err);
       setIsPublishing(false);
     }
+  };
+
+  const renderSaveStatus = () => {
+    if (saveStatus === 'saving') {
+      return <span style={{ fontSize: '12px', color: '#888' }}>保存中...</span>;
+    }
+    if (saveStatus === 'error') {
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '12px', color: '#d32f2f' }}>保存失败</span>
+          <button
+            onClick={handleRetrySave}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: '1px solid #d32f2f',
+              backgroundColor: '#fff',
+              color: '#d32f2f',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            重试
+          </button>
+        </span>
+      );
+    }
+    return <span style={{ fontSize: '12px', color: '#4caf50' }}>已保存</span>;
   };
 
   const selectedComponent = components.find((c) => c.id === selectedId);
@@ -626,6 +670,8 @@ const ExhibitionBuilder: React.FC = () => {
               重置
             </button>
           </div>
+
+          {renderSaveStatus()}
 
           <button
             onClick={handlePublish}

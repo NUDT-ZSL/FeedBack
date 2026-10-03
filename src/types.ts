@@ -65,6 +65,7 @@ export interface Exhibition {
   thumbnail: string | null;
   createdAt: string;
   published: boolean;
+  version: number;
 }
 
 export const THEME_COLORS: ThemeColor[] = [
