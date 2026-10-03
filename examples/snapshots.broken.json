@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "snapshots": [
+    {
+      "name": "合法快照",
+      "ballCount": 3,
+      "masses": [1, 2, 1.5],
+      "damping": 0.01
+    },
+    {
+      "name": "缺 damping 字段",
+      "ballCount": 4,
+      "masses": [1, 1, 1, 1]
+    },
+    {
+      "name": "质量数量与球数不符（会被截断/补齐并提示）",
+      "ballCount": 5,
+      "masses": [1, 2],
+      "damping": 0.03
+    },
+    {
+      "ballCount": 5,
+      "masses": [1, 1, 1, 1, 1],
+      "damping": 0.005
+    }
+  ]
+}

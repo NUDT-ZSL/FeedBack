@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "exportedAt": "2026-10-03T08:00:00.000Z",
+  "snapshots": [
+    {
+      "name": "等质量五球·低阻",
+      "ballCount": 5,
+      "masses": [1, 1, 1, 1, 1],
+      "damping": 0.005
+    },
+    {
+      "name": "重球撞击·高阻",
+      "ballCount": 4,
+      "masses": [3.5, 1, 1, 0.8],
+      "damping": 0.02
+    },
+    {
+      "name": "质量递增七球",
+      "ballCount": 7,
+      "masses": [0.5, 1, 1.5, 2, 2.5, 3, 3.5],
+      "damping": 0.01
+    }
+  ]
+}

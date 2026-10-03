@@ -1,10 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SimulationCanvas from './SimulationCanvas';
 import ControlPanel from './ControlPanel';
-
-const DEFAULT_BALL_COUNT = 5;
-const DEFAULT_MASS = 1;
-const DEFAULT_DAMPING = 0.005;
+import SnapshotPanel, { SnapshotNotice } from './SnapshotPanel';
+import {
+  Snapshot,
+  SnapshotParams,
+  BASELINE_SNAPSHOT_ID,
+  DEFAULT_BALL_COUNT,
+  DEFAULT_MASS,
+  DEFAULT_DAMPING,
+  buildSnapshot,
+  clampBallCount,
+  clampDamping,
+  createDefaultParams,
+  loadSnapshots,
+  normalizeMasses,
+  paramsEqual,
+  parseSnapshotFile,
+  saveSnapshots,
+  serializeSnapshots,
+} from './SnapshotManager';
 
 function createDefaultMasses(count: number): number[] {
   return Array(count).fill(DEFAULT_MASS);
@@ -29,6 +44,21 @@ const App: React.FC = () => {
   const [, setPhysicsData] = useState({ momentum: 0, energy: 0 });
   const [isNarrow, setIsNarrow] = useState<boolean>(false);
   const [rippleIdCounter, setRippleIdCounter] = useState<number>(0);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>(loadSnapshots);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(
+    BASELINE_SNAPSHOT_ID
+  );
+  const [snapshotNotice, setSnapshotNotice] = useState<SnapshotNotice | null>(null);
+
+  useEffect(() => {
+    saveSnapshots(snapshots);
+  }, [snapshots]);
+
+  useEffect(() => {
+    if (!snapshotNotice) return;
+    const timer = window.setTimeout(() => setSnapshotNotice(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [snapshotNotice]);
 
   useEffect(() => {
     const checkWidth = () => {
@@ -74,6 +104,136 @@ const App: React.FC = () => {
   const handleReset = useCallback(() => {
     setResetTrigger((t) => t + 1);
     setPaused(false);
+  }, []);
+
+  const currentParams: SnapshotParams = { ballCount, masses, damping };
+  const selectedSnapshot =
+    snapshots.find((s) => s.id === selectedSnapshotId) ?? null;
+  const deviated = selectedSnapshot
+    ? !paramsEqual(selectedSnapshot, currentParams)
+    : false;
+
+  const applyParams = useCallback((params: SnapshotParams) => {
+    const count = clampBallCount(params.ballCount);
+    setBallCount(count);
+    setMasses(normalizeMasses(params.masses, count));
+    setDamping(clampDamping(params.damping));
+    setResetTrigger((t) => t + 1);
+    setPaused(false);
+  }, []);
+
+  const handleSaveSnapshot = useCallback(
+    (rawName: string) => {
+      const snapshot = buildSnapshot(rawName, { ballCount, masses, damping });
+      setSnapshots((prev) => [
+        prev.find((s) => s.isBaseline)!,
+        snapshot,
+        ...prev.filter((s) => !s.isBaseline),
+      ]);
+      setSelectedSnapshotId(snapshot.id);
+      setSnapshotNotice({
+        type: 'success',
+        text: `已保存快照「${snapshot.name}」，参数（${snapshot.ballCount} 球 / 阻力 ${snapshot.damping.toFixed(3)}）。`,
+      });
+    },
+    [ballCount, masses, damping]
+  );
+
+  const handleSelectSnapshot = useCallback(
+    (id: string) => {
+      const target = snapshots.find((s) => s.id === id);
+      if (!target) return;
+      setSelectedSnapshotId(target.id);
+      applyParams(target);
+    },
+    [snapshots, applyParams]
+  );
+
+  const handleDeleteSnapshot = useCallback(
+    (id: string) => {
+      const target = snapshots.find((s) => s.id === id);
+      if (!target || target.isBaseline) return;
+      setSnapshots((prev) => prev.filter((s) => s.id !== id));
+      if (id === selectedSnapshotId) {
+        applyParams(createDefaultParams());
+        setSelectedSnapshotId(BASELINE_SNAPSHOT_ID);
+      }
+      setSnapshotNotice({
+        type: 'success',
+        text:
+          id === selectedSnapshotId
+            ? `已删除快照「${target.name}」，参数已恢复为基准默认值。`
+            : `已删除快照「${target.name}」。`,
+      });
+    },
+    [snapshots, selectedSnapshotId, applyParams]
+  );
+
+  const handleExportSnapshots = useCallback(() => {
+    const userSnapshots = snapshots.filter((s) => !s.isBaseline);
+    if (userSnapshots.length === 0) {
+      setSnapshotNotice({
+        type: 'error',
+        text: '当前没有可导出的自定义快照（基准快照不导出）。',
+      });
+      return;
+    }
+    const text = serializeSnapshots(snapshots);
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `牛顿摆参数快照_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSnapshotNotice({
+      type: 'success',
+      text: `已导出 ${userSnapshots.length} 个快照到 JSON 文件，可离线保存。`,
+    });
+  }, [snapshots]);
+
+  const handleImportSnapshotFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      const result = parseSnapshotFile(text);
+      if (result.snapshots.length === 0) {
+        setSnapshotNotice({
+          type: 'error',
+          text: ['导入失败，已有快照保持不变：', ...result.errors].join('\n'),
+        });
+        return;
+      }
+      setSnapshots((prev) => [
+        prev.find((s) => s.isBaseline)!,
+        ...result.snapshots,
+        ...prev.filter((s) => !s.isBaseline),
+      ]);
+      const lines = [
+        `成功导入 ${result.snapshots.length} 个快照，已有快照保持不变。`,
+      ];
+      if (result.warnings.length > 0) lines.push(...result.warnings);
+      if (result.errors.length > 0) {
+        lines.push(
+          `跳过 ${result.errors.length} 条无效记录：`,
+          ...result.errors
+        );
+      }
+      setSnapshotNotice({
+        type: result.errors.length > 0 ? 'error' : 'success',
+        text: lines.join('\n'),
+      });
+    };
+    reader.onerror = () => {
+      setSnapshotNotice({
+        type: 'error',
+        text: '读取文件失败，已有快照保持不变。',
+      });
+    };
+    reader.readAsText(file);
   }, []);
 
   const handlePhysicsUpdate = useCallback((momentum: number, energy: number) => {
@@ -228,7 +388,9 @@ const App: React.FC = () => {
   const panelWrapperStyle: React.CSSProperties = {
     width: isNarrow ? '100%' : 'auto',
     display: 'flex',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    gap: '16px',
+    alignItems: 'center',
     flexShrink: 0,
   };
 
@@ -261,6 +423,17 @@ const App: React.FC = () => {
           exporting={exporting}
           exportProgress={exportProgress}
           onExport={handleExport}
+        />
+        <SnapshotPanel
+          snapshots={snapshots}
+          selectedSnapshotId={selectedSnapshotId}
+          deviated={deviated}
+          notice={snapshotNotice}
+          onSave={handleSaveSnapshot}
+          onSelect={handleSelectSnapshot}
+          onDelete={handleDeleteSnapshot}
+          onExport={handleExportSnapshots}
+          onImportFile={handleImportSnapshotFile}
         />
       </div>
     </div>
