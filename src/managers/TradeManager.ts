@@ -153,10 +153,12 @@ export class TradeManager {
   buyMineral(stationId: string, mineralId: string, amount: number): number {
     const station = this.stations.get(stationId);
     if (!station) return 0;
-    if ((station.inventory[mineralId] || 0) < amount) return 0;
+    const mineral = MINERALS.find(m => m.id === mineralId);
+    if (!mineral) return 0;
 
+    const stock = station.inventory[mineralId] || 0;
     const space = this.cargoCapacity - this.getTotalCargo();
-    const canBuy = Math.min(amount, space);
+    const canBuy = Math.min(amount, space, stock);
     if (canBuy <= 0) return 0;
 
     const price = station.prices[mineralId];
@@ -165,7 +167,6 @@ export class TradeManager {
     this.playerInventory[mineralId] = (this.playerInventory[mineralId] || 0) + canBuy;
     this.totalTradeCount++;
 
-    const mineral = MINERALS.find(m => m.id === mineralId)!;
     this.tradeHistory.unshift({
       type: 'buy',
       mineralId,
