@@ -151,7 +151,8 @@ export class InteractionManager {
     this.sphericalTheta = Math.PI * 0.3
     this.sphericalPhi = Math.PI * 0.4
     this.autoRotate = true
-    this.bubbleSystem.lockBubble(null)
+    this.currentHovered = null
+    this.bubbleSystem.resetInteraction()
     this.updateCameraPosition()
   }
 
