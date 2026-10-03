@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "snapshots": [
+    {
+      "name": "缺少 damping 字段（应报错并被跳过）",
+      "ballCount": 5,
+      "masses": [1, 1, 1, 1, 1]
+    },
+    {
+      "name": "合法条目（应正常导入）",
+      "ballCount": 4,
+      "masses": [1.1, 1.2, 1.3, 1.4],
+      "damping": 0.008
+    },
+    "这不是一个对象（应报错并被跳过）"
+  ]
+}

@@ -1,10 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SimulationCanvas from './SimulationCanvas';
 import ControlPanel from './ControlPanel';
-
-const DEFAULT_BALL_COUNT = 5;
-const DEFAULT_MASS = 1;
-const DEFAULT_DAMPING = 0.005;
+import SnapshotPanel, { ImportFeedback } from './SnapshotPanel';
+import {
+  DEFAULT_BALL_COUNT,
+  DEFAULT_MASS,
+  DEFAULT_DAMPING,
+  DEFAULT_PARAMS,
+  BASELINE_SNAPSHOT_ID,
+  Snapshot,
+  SnapshotParams,
+  createBaselineSnapshot,
+  createSnapshot,
+  dedupeName,
+  normalizeParams,
+  paramsEqual,
+  parseSnapshotFile,
+  serializeSnapshots,
+} from './snapshots';
 
 function createDefaultMasses(count: number): number[] {
   return Array(count).fill(DEFAULT_MASS);
@@ -29,6 +42,14 @@ const App: React.FC = () => {
   const [, setPhysicsData] = useState({ momentum: 0, energy: 0 });
   const [isNarrow, setIsNarrow] = useState<boolean>(false);
   const [rippleIdCounter, setRippleIdCounter] = useState<number>(0);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([createBaselineSnapshot()]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(BASELINE_SNAPSHOT_ID);
+  const [importFeedback, setImportFeedback] = useState<ImportFeedback[]>([]);
+
+  const selectedSnapshot = snapshots.find((s) => s.id === selectedSnapshotId) ?? null;
+  const snapshotDirty = selectedSnapshot
+    ? !paramsEqual({ ballCount, masses, damping }, selectedSnapshot)
+    : false;
 
   useEffect(() => {
     const checkWidth = () => {
@@ -74,6 +95,95 @@ const App: React.FC = () => {
   const handleReset = useCallback(() => {
     setResetTrigger((t) => t + 1);
     setPaused(false);
+  }, []);
+
+  // 将一组参数回填到控制面板并让模拟按该组参数重新起摆
+  const applyParams = useCallback((params: SnapshotParams) => {
+    const normalized = normalizeParams(params);
+    setBallCount(normalized.ballCount);
+    setMasses(normalized.masses);
+    setDamping(normalized.damping);
+    setResetTrigger((t) => t + 1);
+    setPaused(false);
+  }, []);
+
+  const handleSaveSnapshot = useCallback(
+    (name: string) => {
+      const uniqueName = dedupeName(name, snapshots.map((s) => s.name));
+      const snapshot = createSnapshot(uniqueName, { ballCount, masses, damping });
+      setSnapshots((prev) => [...prev, snapshot]);
+      setSelectedSnapshotId(snapshot.id);
+    },
+    [snapshots, ballCount, masses, damping]
+  );
+
+  // 选中（包括重复选中同一）快照时，以其存储的参数覆盖当前值
+  const handleSelectSnapshot = useCallback(
+    (id: string) => {
+      const snapshot = snapshots.find((s) => s.id === id);
+      if (!snapshot) return;
+      setSelectedSnapshotId(id);
+      applyParams(snapshot);
+    },
+    [snapshots, applyParams]
+  );
+
+  const handleDeleteSnapshot = useCallback(
+    (id: string) => {
+      const target = snapshots.find((s) => s.id === id);
+      if (!target || target.isBaseline) return;
+      setSnapshots((prev) => prev.filter((s) => s.id !== id));
+      if (id === selectedSnapshotId) {
+        // 删除正被选中的快照时退回确定的默认参数（基准快照），不留悬空引用
+        setSelectedSnapshotId(BASELINE_SNAPSHOT_ID);
+        applyParams(DEFAULT_PARAMS);
+      }
+    },
+    [snapshots, selectedSnapshotId, applyParams]
+  );
+
+  const handleExportSnapshots = useCallback(() => {
+    const json = serializeSnapshots(snapshots);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = `牛顿摆参数快照_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setImportFeedback([{ kind: 'success', text: `已导出 ${snapshots.length} 个快照到文件` }]);
+  }, [snapshots]);
+
+  const handleImportSnapshots = useCallback((file: File) => {
+    file
+      .text()
+      .then((text) => {
+        const result = parseSnapshotFile(text);
+        const messages: ImportFeedback[] = [];
+        if (result.imported.length > 0) {
+          setSnapshots((prev) => {
+            const names = prev.map((s) => s.name);
+            const added: Snapshot[] = result.imported.map((item) => {
+              const uniqueName = dedupeName(item.name, names);
+              names.push(uniqueName);
+              return createSnapshot(uniqueName, item.params);
+            });
+            return [...prev, ...added];
+          });
+          messages.push({ kind: 'success', text: `成功导入 ${result.imported.length} 个快照` });
+        }
+        result.errors.forEach((err) => messages.push({ kind: 'error', text: err }));
+        if (messages.length === 0) {
+          messages.push({ kind: 'error', text: '文件中没有可导入的快照' });
+        }
+        setImportFeedback(messages);
+      })
+      .catch(() => {
+        setImportFeedback([{ kind: 'error', text: '读取文件失败，未导入任何快照' }]);
+      });
   }, []);
 
   const handlePhysicsUpdate = useCallback((momentum: number, energy: number) => {
@@ -228,7 +338,9 @@ const App: React.FC = () => {
   const panelWrapperStyle: React.CSSProperties = {
     width: isNarrow ? '100%' : 'auto',
     display: 'flex',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '20px',
     flexShrink: 0,
   };
 
@@ -261,6 +373,17 @@ const App: React.FC = () => {
           exporting={exporting}
           exportProgress={exportProgress}
           onExport={handleExport}
+        />
+        <SnapshotPanel
+          snapshots={snapshots}
+          selectedId={selectedSnapshotId}
+          dirty={snapshotDirty}
+          feedback={importFeedback}
+          onSave={handleSaveSnapshot}
+          onSelect={handleSelectSnapshot}
+          onDelete={handleDeleteSnapshot}
+          onExport={handleExportSnapshots}
+          onImport={handleImportSnapshots}
         />
       </div>
     </div>

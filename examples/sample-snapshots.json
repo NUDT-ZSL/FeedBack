@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "exportedAt": "2026-10-03T00:00:00.000Z",
+  "snapshots": [
+    {
+      "id": "baseline",
+      "name": "基准快照",
+      "createdAt": 0,
+      "isBaseline": true,
+      "ballCount": 5,
+      "masses": [1, 1, 1, 1, 1],
+      "damping": 0.005
+    },
+    {
+      "name": "重锤演示",
+      "ballCount": 4,
+      "masses": [2.5, 1.5, 1.0, 0.8],
+      "damping": 0.01
+    },
+    {
+      "name": "质量项过多（导入时截断为前3项）",
+      "ballCount": 3,
+      "masses": [1.2, 2.0, 3.0, 4.0, 5.0],
+      "damping": 0.02
+    },
+    {
+      "name": "质量项不足（导入时按1kg补齐）",
+      "ballCount": 6,
+      "masses": [0.8, 1.5],
+      "damping": 0
+    }
+  ]
+}
