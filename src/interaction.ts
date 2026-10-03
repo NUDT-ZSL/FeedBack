@@ -102,12 +102,10 @@ export class InteractionManager {
 
       if (intersects.length > 0) {
         const mesh = intersects[0].object as THREE.Mesh
-        const data = this.bubbleSystem.getBubbleByMesh(mesh)
-        if (data) {
-          this.bubbleSystem.lockBubble(data)
-        }
+        const id = this.bubbleSystem.getBubbleIdByMesh(mesh)
+        if (id !== null) this.bubbleSystem.getState().setLocked(id)
       } else {
-        this.bubbleSystem.lockBubble(null)
+        this.bubbleSystem.getState().setLocked(null)
       }
     })
 
@@ -129,21 +127,21 @@ export class InteractionManager {
     this.raycaster.setFromCamera(this.mouse, this.camera)
     const intersects = this.raycaster.intersectObjects(this.bubbleSystem.getBubbleMeshes(), false)
 
-    if (intersects.length > 0) {
-      const mesh = intersects[0].object as THREE.Mesh
-      if (this.currentHovered !== mesh) {
-        this.currentHovered = mesh
-        const data = this.bubbleSystem.getBubbleByMesh(mesh)
-        this.bubbleSystem.hoverBubble(data || null)
+      if (intersects.length > 0) {
+        const mesh = intersects[0].object as THREE.Mesh
+        if (this.currentHovered !== mesh) {
+          this.currentHovered = mesh
+          const id = this.bubbleSystem.getBubbleIdByMesh(mesh)
+          this.bubbleSystem.getState().setHovered(id)
+        }
+        this.renderer.domElement.style.cursor = 'pointer'
+      } else {
+        if (this.currentHovered !== null) {
+          this.currentHovered = null
+          this.bubbleSystem.getState().setHovered(null)
+        }
+        this.renderer.domElement.style.cursor = 'default'
       }
-      this.renderer.domElement.style.cursor = 'pointer'
-    } else {
-      if (this.currentHovered !== null) {
-        this.currentHovered = null
-        this.bubbleSystem.hoverBubble(null)
-      }
-      this.renderer.domElement.style.cursor = 'default'
-    }
   }
 
   public resetView(): void {
@@ -151,7 +149,8 @@ export class InteractionManager {
     this.sphericalTheta = Math.PI * 0.3
     this.sphericalPhi = Math.PI * 0.4
     this.autoRotate = true
-    this.bubbleSystem.lockBubble(null)
+    this.currentHovered = null
+    this.bubbleSystem.getState().resetInteraction()
     this.updateCameraPosition()
   }
 

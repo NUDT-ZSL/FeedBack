@@ -1,25 +1,21 @@
 import * as THREE from 'three'
-
-export type DisplayMode = 'normal' | 'threads' | 'particles'
+import {
+  HIGHLIGHT_NONE,
+  HIGHLIGHT_PRIMARY,
+  ViewerState
+} from './state'
 
 interface BubbleData {
   mesh: THREE.Mesh
   innerParticles: THREE.Points
   baseRadius: number
-  baseScale: number
-  targetScale: number
   currentScale: number
   baseOpacity: number
   baseColor: THREE.Color
   labelSprite: THREE.Sprite
-  labelVisible: boolean
   redShift: number
   id: number
   position: THREE.Vector3
-  neighbors: number[]
-  highlightProgress: number
-  isHovered: boolean
-  isLocked: boolean
 }
 
 export class BubbleSystem {
@@ -29,14 +25,12 @@ export class BubbleSystem {
   private bubbleGroup: THREE.Group
   private particleGroup: THREE.Group
   private threadLines: THREE.Line[] = []
-  private scaleFactor: number = 1.0
-  private displayMode: DisplayMode = 'normal'
+  private state: ViewerState
   private time: number = 0
 
   private readonly BUBBLE_COUNT = 3000
   private readonly SCENE_RADIUS = 80
   private readonly NEIGHBOR_DISTANCE = 5
-  private readonly TRANSITION_DURATION = 0.3
   private readonly HOVER_SCALE = 1.3
 
   constructor(scene: THREE.Scene) {
@@ -48,8 +42,9 @@ export class BubbleSystem {
     this.scene.add(this.threadGroup)
     this.scene.add(this.particleGroup)
 
-    this.generateBubbles()
-    this.generateThreads()
+    const neighbors = this.generateBubbles()
+    this.state = new ViewerState(neighbors)
+    this.generateThreads(neighbors)
   }
 
   private createLabelSprite(id: number, redshift: number): THREE.Sprite {
@@ -84,8 +79,9 @@ export class BubbleSystem {
     return cold.clone().lerp(warm, t)
   }
 
-  private generateBubbles(): void {
+  private generateBubbles(): number[][] {
     const bubbleGeometry = new THREE.SphereGeometry(1, 24, 24)
+    const neighbors: number[][] = new Array(this.BUBBLE_COUNT)
 
     for (let i = 0; i < this.BUBBLE_COUNT; i++) {
       const phi = Math.acos(2 * Math.random() - 1)
@@ -160,36 +156,32 @@ export class BubbleSystem {
         mesh: bubble,
         innerParticles: points,
         baseRadius,
-        baseScale: baseRadius,
-        targetScale: baseRadius,
         currentScale: baseRadius,
         baseOpacity: 0.25,
         baseColor: color.clone(),
         labelSprite,
-        labelVisible: false,
         redShift,
         id: i,
-        position: new THREE.Vector3(x, y, z),
-        neighbors: [],
-        highlightProgress: 0,
-        isHovered: false,
-        isLocked: false
+        position: new THREE.Vector3(x, y, z)
       })
+      neighbors[i] = []
     }
 
     for (let i = 0; i < this.BUBBLE_COUNT; i++) {
       for (let j = i + 1; j < this.BUBBLE_COUNT; j++) {
         if (this.bubbles[i].position.distanceTo(this.bubbles[j].position) < this.NEIGHBOR_DISTANCE) {
-          this.bubbles[i].neighbors.push(j)
-          this.bubbles[j].neighbors.push(i)
+          neighbors[i].push(j)
+          neighbors[j].push(i)
         }
       }
     }
+
+    return neighbors
   }
 
-  private generateThreads(): void {
+  private generateThreads(neighbors: number[][]): void {
     for (let i = 0; i < this.BUBBLE_COUNT; i++) {
-      for (const neighborIdx of this.bubbles[i].neighbors) {
+      for (const neighborIdx of neighbors[i]) {
         if (neighborIdx > i) {
           const geometry = new THREE.BufferGeometry().setFromPoints([
             this.bubbles[i].position,
@@ -209,130 +201,47 @@ export class BubbleSystem {
     }
   }
 
+  public getState(): ViewerState {
+    return this.state
+  }
+
   public getBubbleMeshes(): THREE.Mesh[] {
     return this.bubbles.map(b => b.mesh)
   }
 
-  public getBubbleByMesh(mesh: THREE.Mesh): BubbleData | undefined {
+  public getBubbleIdByMesh(mesh: THREE.Mesh): number | null {
     const idx = mesh.userData.bubbleIndex
-    if (idx !== undefined) return this.bubbles[idx]
-    return undefined
+    return idx !== undefined ? (idx as number) : null
   }
 
-  public hoverBubble(data: BubbleData | null): void {
-    for (const bubble of this.bubbles) {
-      if (!bubble.isLocked) {
-        bubble.isHovered = false
-        bubble.highlightProgress = 0
-        bubble.targetScale = bubble.baseRadius * this.scaleFactor
-        bubble.labelVisible = false
-      }
+  private scaleMultiplier(highlightLevel: number): number {
+    if (highlightLevel <= HIGHLIGHT_NONE) return 1
+    if (highlightLevel < HIGHLIGHT_PRIMARY) {
+      return 1 + 0.1 * highlightLevel
     }
-
-    if (data) {
-      data.isHovered = true
-      data.targetScale = data.baseRadius * this.scaleFactor * this.HOVER_SCALE
-      data.labelVisible = true
-
-      const delayStep = 1000 / data.neighbors.length
-      data.neighbors.forEach((nIdx, i) => {
-        setTimeout(() => {
-          const neighbor = this.bubbles[nIdx]
-          if (!neighbor.isLocked) {
-            neighbor.highlightProgress = 1
-            neighbor.targetScale = neighbor.baseRadius * this.scaleFactor * 1.1
-          }
-        }, i * delayStep * 0.5)
-      })
-    }
+    return this.HOVER_SCALE
   }
 
-  public lockBubble(data: BubbleData | null): void {
-    for (const bubble of this.bubbles) {
-      bubble.isLocked = false
-    }
-    if (data) {
-      data.isLocked = true
-      this.hoverBubble(data)
-    }
-  }
-
-  public setScaleFactor(scale: number): void {
-    this.scaleFactor = scale
-    for (const bubble of this.bubbles) {
-      const baseTarget = bubble.baseRadius * scale
-      if (bubble.isHovered || bubble.isLocked) {
-        bubble.targetScale = baseTarget * this.HOVER_SCALE
-      } else if (bubble.highlightProgress > 0) {
-        bubble.targetScale = baseTarget * 1.1
-      } else {
-        bubble.targetScale = baseTarget
-      }
-    }
-  }
-
-  public setDisplayMode(mode: DisplayMode): void {
-    this.displayMode = mode
-    const transitionTime = this.TRANSITION_DURATION * 1000
-
-    for (const bubble of this.bubbles) {
-      const bubbleMat = bubble.mesh.material as THREE.MeshBasicMaterial
-      const particleMat = bubble.innerParticles.material as THREE.PointsMaterial
-
-      let targetBubbleOpacity: number
-      let targetParticleOpacity: number
-
-      switch (mode) {
-        case 'normal':
-          targetBubbleOpacity = bubble.baseOpacity
-          targetParticleOpacity = 0.8
-          break
-        case 'threads':
-          targetBubbleOpacity = 0
-          targetParticleOpacity = 0
-          break
-        case 'particles':
-          targetBubbleOpacity = 0
-          targetParticleOpacity = 1.0
-          break
-      }
-
-      this.animateOpacity(bubbleMat, bubbleMat.opacity, targetBubbleOpacity, transitionTime)
-      this.animateOpacity(particleMat, particleMat.opacity, targetParticleOpacity, transitionTime)
-    }
-
-    for (const line of this.threadLines) {
-      const lineMat = line.material as THREE.LineBasicMaterial
-      const targetOpacity = (mode === 'particles') ? 0.08 : 0.15
-      this.animateOpacity(lineMat, lineMat.opacity, targetOpacity, transitionTime)
-    }
-  }
-
-  private animateOpacity(
-    material: { opacity: number; transparent?: boolean },
-    from: number,
-    to: number,
-    duration: number
-  ): void {
-    const start = performance.now()
-    const animate = () => {
-      const elapsed = performance.now() - start
-      const t = Math.min(elapsed / duration, 1)
-      const ease = 1 - Math.pow(1 - t, 3)
-      material.opacity = from + (to - from) * ease
-      if (t < 1) requestAnimationFrame(animate)
-    }
-    animate()
+  private applyDisplayMode(): void {
+    const mode = this.state.displayMode
+    this.bubbleGroup.visible = mode === 'normal'
+    this.threadGroup.visible = mode !== 'particles'
+    this.particleGroup.visible = mode !== 'threads'
   }
 
   public update(delta: number, camera: THREE.Camera): void {
     this.time += delta
+    this.state.tickHighlights(delta)
+    this.applyDisplayMode()
 
     for (let i = 0; i < this.BUBBLE_COUNT; i++) {
       const bubble = this.bubbles[i]
+      const highlightLevel = this.state.getHighlightLevel(i)
+      const multiplier = this.scaleMultiplier(highlightLevel)
+      const targetScale = bubble.baseRadius * this.state.scaleFactor * multiplier
 
       const scaleSpeed = 1 / 0.5
-      bubble.currentScale += (bubble.targetScale - bubble.currentScale) * Math.min(delta * scaleSpeed, 1)
+      bubble.currentScale += (targetScale - bubble.currentScale) * Math.min(delta * scaleSpeed, 1)
       bubble.mesh.scale.setScalar(bubble.currentScale)
       bubble.innerParticles.scale.setScalar(bubble.currentScale / bubble.baseRadius)
 
@@ -362,31 +271,26 @@ export class BubbleSystem {
       }
       bubble.innerParticles.geometry.attributes.position.needsUpdate = true
 
+      const isPrimary = this.state.isPrimary(i)
+      const labelTargetOpacity =
+        isPrimary && this.state.displayMode === 'normal' ? 0.95 : 0
       const labelMat = bubble.labelSprite.material as THREE.SpriteMaterial
-      const targetOpacity = bubble.labelVisible ? 0.95 : 0
-      labelMat.opacity += (targetOpacity - labelMat.opacity) * Math.min(delta * 5, 1)
+      labelMat.opacity += (labelTargetOpacity - labelMat.opacity) * Math.min(delta * 5, 1)
 
-      const labelOffset = bubble.baseRadius * this.scaleFactor * (bubble.isHovered ? this.HOVER_SCALE : 1) + 0.8
+      const labelOffset =
+        bubble.baseRadius * this.state.scaleFactor * multiplier + 0.8
       bubble.labelSprite.position.set(
         bubble.position.x,
         bubble.position.y + labelOffset,
         bubble.position.z
       )
       bubble.labelSprite.lookAt(camera.position)
-
-      if (bubble.highlightProgress > 0 && !bubble.isHovered && !bubble.isLocked) {
-        bubble.highlightProgress -= delta * 1.5
-        if (bubble.highlightProgress <= 0) {
-          bubble.highlightProgress = 0
-          bubble.targetScale = bubble.baseRadius * this.scaleFactor
-        }
-      }
     }
 
     for (let i = 0; i < this.threadLines.length; i++) {
       const line = this.threadLines[i]
       const mat = line.material as THREE.LineBasicMaterial
-      const baseOpacity = (this.displayMode === 'particles') ? 0.08 : 0.15
+      const baseOpacity = this.state.displayMode === 'particles' ? 0.08 : 0.15
       mat.opacity = baseOpacity * (0.85 + Math.sin(this.time * 1.5 + i * 0.05) * 0.15)
     }
   }

@@ -1,5 +1,6 @@
 import GUI from 'lil-gui'
-import { BubbleSystem, DisplayMode } from './bubbleSystem'
+import { BubbleSystem } from './bubbleSystem'
+import { DisplayMode } from './state'
 import { InteractionManager } from './interaction'
 
 export class UIManager {
@@ -37,7 +38,7 @@ export class UIManager {
       .add(this.settings, 'scaleFactor', 0.5, 2.0, 0.01)
       .name('气泡缩放')
       .onChange((value: number) => {
-        this.bubbleSystem.setScaleFactor(value)
+        this.bubbleSystem.getState().setScaleFactor(value)
       })
 
     this.gui
@@ -48,7 +49,7 @@ export class UIManager {
       })
       .name('显示模式')
       .onChange((value: DisplayMode) => {
-        this.bubbleSystem.setDisplayMode(value)
+        this.bubbleSystem.getState().setDisplayMode(value)
       })
 
     this.gui
