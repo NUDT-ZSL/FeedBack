@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import type {
   TravelProject,
   Member,
@@ -8,221 +7,181 @@ import type {
   PackingItem,
   TravelData,
 } from '../types';
+import {
+  TravelDataStore,
+  createEmptyTravelData,
+  type KeyValueStorage,
+} from '../lib/travelDataStore';
 
-const STORAGE_KEY = 'travel_planner_data';
 const DEBOUNCE_DELAY = 300;
 
-const initialData: TravelData = {
-  projects: [],
-  members: [],
-  itineraryItems: [],
-  budgetSplits: [],
-  packingItems: [],
-};
+interface DebouncedStorage {
+  storage: KeyValueStorage;
+  cancelPending: () => void;
+}
+
+function createDebouncedLocalStorage(delay: number): DebouncedStorage {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const pending = new Map<string, string>();
+
+  return {
+    storage: {
+      getItem: (key) => localStorage.getItem(key),
+      setItem: (key, value) => {
+        pending.set(key, value);
+        if (timer) {
+          clearTimeout(timer);
+        }
+        timer = setTimeout(() => {
+          pending.forEach((pendingValue, pendingKey) => {
+            localStorage.setItem(pendingKey, pendingValue);
+          });
+          pending.clear();
+          timer = null;
+        }, delay);
+      },
+      removeItem: (key) => localStorage.removeItem(key),
+    },
+    cancelPending: () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
+}
 
 export function useTravelData() {
-  const [data, setData] = useState<TravelData>(initialData);
+  const [data, setData] = useState<TravelData>(createEmptyTravelData);
   const [isLoading, setIsLoading] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const storeRef = useRef<TravelDataStore | null>(null);
+  const debouncedRef = useRef<DebouncedStorage | null>(null);
 
-  const saveToStorage = useCallback((newData: TravelData) => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
-    }, DEBOUNCE_DELAY);
-  }, []);
-
-  const loadFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored) as TravelData;
-      }
-    } catch (error) {
-      console.error('Failed to load data from localStorage:', error);
-    }
-    return initialData;
-  }, []);
+  if (!storeRef.current) {
+    const debounced = createDebouncedLocalStorage(DEBOUNCE_DELAY);
+    debouncedRef.current = debounced;
+    storeRef.current = new TravelDataStore({ storage: debounced.storage });
+  }
 
   useEffect(() => {
     const loadData = () => {
-      const loadedData = loadFromStorage();
-      setData(loadedData);
+      try {
+        storeRef.current!.load();
+      } catch (error) {
+        console.error('Failed to load data from localStorage:', error);
+      }
+      setData(storeRef.current!.getData());
       setIsLoading(false);
       requestAnimationFrame(() => {
         setIsVisible(true);
       });
     };
 
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(loadData);
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void) => void;
+    };
+    if (typeof idleWindow.requestIdleCallback === 'function') {
+      idleWindow.requestIdleCallback(loadData);
     } else {
       setTimeout(loadData, 0);
     }
 
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      debouncedRef.current?.cancelPending();
     };
-  }, [loadFromStorage]);
+  }, []);
 
-  const updateData = useCallback((updater: (prev: TravelData) => TravelData) => {
-    setData((prev) => {
-      const newData = updater(prev);
-      saveToStorage(newData);
-      return newData;
-    });
-  }, [saveToStorage]);
+  const mutate = useCallback(<T,>(fn: (store: TravelDataStore) => T): T => {
+    const store = storeRef.current!;
+    const result = fn(store);
+    setData(store.getData());
+    return result;
+  }, []);
 
-  const addProject = useCallback((project: Omit<TravelProject, 'id' | 'createdAt'>) => {
-    const newProject: TravelProject = {
-      ...project,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    };
-    updateData((prev) => ({
-      ...prev,
-      projects: [...prev.projects, newProject],
-    }));
-    return newProject;
-  }, [updateData]);
+  const addProject = useCallback(
+    (project: Omit<TravelProject, 'id' | 'createdAt'>) =>
+      mutate((store) => store.addProject(project)),
+    [mutate],
+  );
 
-  const updateProject = useCallback((id: string, updates: Partial<TravelProject>) => {
-    updateData((prev) => ({
-      ...prev,
-      projects: prev.projects.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
-      ),
-    }));
-  }, [updateData]);
+  const updateProject = useCallback(
+    (id: string, updates: Partial<TravelProject>) =>
+      mutate((store) => store.updateProject(id, updates)),
+    [mutate],
+  );
 
-  const deleteProject = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      projects: prev.projects.filter((p) => p.id !== id),
-      members: prev.members.filter((m) => m.projectId !== id),
-      itineraryItems: prev.itineraryItems.filter((i) => i.projectId !== id),
-      budgetSplits: prev.budgetSplits.filter((b) => b.projectId !== id),
-      packingItems: prev.packingItems.filter((p) => p.projectId !== id),
-    }));
-  }, [updateData]);
+  const deleteProject = useCallback(
+    (id: string) => mutate((store) => store.deleteProject(id)),
+    [mutate],
+  );
 
-  const addMember = useCallback((member: Omit<Member, 'id'>) => {
-    const newMember: Member = {
-      ...member,
-      id: uuidv4(),
-    };
-    updateData((prev) => ({
-      ...prev,
-      members: [...prev.members, newMember],
-    }));
-    return newMember;
-  }, [updateData]);
+  const addMember = useCallback(
+    (member: Omit<Member, 'id'>) => mutate((store) => store.addMember(member)),
+    [mutate],
+  );
 
-  const updateMember = useCallback((id: string, updates: Partial<Member>) => {
-    updateData((prev) => ({
-      ...prev,
-      members: prev.members.map((m) =>
-        m.id === id ? { ...m, ...updates } : m
-      ),
-    }));
-  }, [updateData]);
+  const updateMember = useCallback(
+    (id: string, updates: Partial<Member>) =>
+      mutate((store) => store.updateMember(id, updates)),
+    [mutate],
+  );
 
-  const deleteMember = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      members: prev.members.filter((m) => m.id !== id),
-    }));
-  }, [updateData]);
+  const deleteMember = useCallback(
+    (id: string) => mutate((store) => store.deleteMember(id)),
+    [mutate],
+  );
 
-  const addItineraryItem = useCallback((item: Omit<ItineraryItem, 'id'>) => {
-    const newItem: ItineraryItem = {
-      ...item,
-      id: uuidv4(),
-    };
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: [...prev.itineraryItems, newItem].sort((a, b) => a.order - b.order),
-    }));
-    return newItem;
-  }, [updateData]);
+  const addItineraryItem = useCallback(
+    (item: Omit<ItineraryItem, 'id'>) =>
+      mutate((store) => store.addItineraryItem(item)),
+    [mutate],
+  );
 
-  const updateItineraryItem = useCallback((id: string, updates: Partial<ItineraryItem>) => {
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: prev.itineraryItems
-        .map((i) => (i.id === id ? { ...i, ...updates } : i))
-        .sort((a, b) => a.order - b.order),
-    }));
-  }, [updateData]);
+  const updateItineraryItem = useCallback(
+    (id: string, updates: Partial<ItineraryItem>) =>
+      mutate((store) => store.updateItineraryItem(id, updates)),
+    [mutate],
+  );
 
-  const deleteItineraryItem = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      itineraryItems: prev.itineraryItems.filter((i) => i.id !== id),
-    }));
-  }, [updateData]);
+  const deleteItineraryItem = useCallback(
+    (id: string) => mutate((store) => store.deleteItineraryItem(id)),
+    [mutate],
+  );
 
-  const addBudgetSplit = useCallback((split: Omit<BudgetSplit, 'id' | 'createdAt'>) => {
-    const newSplit: BudgetSplit = {
-      ...split,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    };
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: [...prev.budgetSplits, newSplit],
-    }));
-    return newSplit;
-  }, [updateData]);
+  const addBudgetSplit = useCallback(
+    (split: Omit<BudgetSplit, 'id' | 'createdAt'>) =>
+      mutate((store) => store.addBudgetSplit(split)),
+    [mutate],
+  );
 
-  const updateBudgetSplit = useCallback((id: string, updates: Partial<BudgetSplit>) => {
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: prev.budgetSplits.map((b) =>
-        b.id === id ? { ...b, ...updates } : b
-      ),
-    }));
-  }, [updateData]);
+  const updateBudgetSplit = useCallback(
+    (id: string, updates: Partial<BudgetSplit>) =>
+      mutate((store) => store.updateBudgetSplit(id, updates)),
+    [mutate],
+  );
 
-  const deleteBudgetSplit = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      budgetSplits: prev.budgetSplits.filter((b) => b.id !== id),
-    }));
-  }, [updateData]);
+  const deleteBudgetSplit = useCallback(
+    (id: string) => mutate((store) => store.deleteBudgetSplit(id)),
+    [mutate],
+  );
 
-  const addPackingItem = useCallback((item: Omit<PackingItem, 'id'>) => {
-    const newItem: PackingItem = {
-      ...item,
-      id: uuidv4(),
-    };
-    updateData((prev) => ({
-      ...prev,
-      packingItems: [...prev.packingItems, newItem].sort((a, b) => a.order - b.order),
-    }));
-    return newItem;
-  }, [updateData]);
+  const addPackingItem = useCallback(
+    (item: Omit<PackingItem, 'id'>) =>
+      mutate((store) => store.addPackingItem(item)),
+    [mutate],
+  );
 
-  const updatePackingItem = useCallback((id: string, updates: Partial<PackingItem>) => {
-    updateData((prev) => ({
-      ...prev,
-      packingItems: prev.packingItems
-        .map((p) => (p.id === id ? { ...p, ...updates } : p))
-        .sort((a, b) => a.order - b.order),
-    }));
-  }, [updateData]);
+  const updatePackingItem = useCallback(
+    (id: string, updates: Partial<PackingItem>) =>
+      mutate((store) => store.updatePackingItem(id, updates)),
+    [mutate],
+  );
 
-  const deletePackingItem = useCallback((id: string) => {
-    updateData((prev) => ({
-      ...prev,
-      packingItems: prev.packingItems.filter((p) => p.id !== id),
-    }));
-  }, [updateData]);
+  const deletePackingItem = useCallback(
+    (id: string) => mutate((store) => store.deletePackingItem(id)),
+    [mutate],
+  );
 
   return {
     data,

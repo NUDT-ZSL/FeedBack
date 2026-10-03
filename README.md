@@ -55,3 +55,13 @@ export default tseslint.config({
   },
 })
 ```
+
+## Data layer verification
+
+The cross-collection data rules live in `src/lib/travelDataStore.ts` (project cascade delete, ordering by `order`, member-delete reference cleanup, constrained-field validation). They are covered by an offline, dependency-free test suite:
+
+```bash
+npm test   # node:test + node:assert, no browser or network required
+```
+
+The suite uses `MemoryStorage` as a drop-in localStorage double and deterministic id/clock injectors, so repeated runs always produce the same result.
