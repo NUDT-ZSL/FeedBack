@@ -4,6 +4,7 @@ graph TD
     A["App.tsx (主布局组件)"] --> B["WaveformVisualizer.tsx (波形可视化)"]
     A --> C["SpectrumVisualizer.tsx (频谱可视化)"]
     A --> D["AudioEngine.ts (音频引擎)"]
+    D --> P["PlaybackState.ts (播放状态唯一来源)"]
     D --> E["Web Audio API"]
     E --> F["AudioBufferSourceNode"]
     E --> G["AnalyserNode"]
@@ -30,6 +31,7 @@ graph TD
     ├── main.ts (应用入口)
     ├── App.tsx (主布局组件)
     ├── AudioEngine.ts (Web Audio API封装)
+    ├── PlaybackState.ts (播放状态唯一可信来源)
     ├── WaveformVisualizer.tsx (波形可视化组件)
     └── SpectrumVisualizer.tsx (频谱可视化组件)
 ```
@@ -38,10 +40,10 @@ graph TD
 
 ### 4.1 AudioEngine.ts
 - 负责音频文件加载和解码
-- 封装播放、暂停、停止、循环控制
+- 作为 PlaybackState 的执行层：把状态变化翻译成音频图操作（启动/停止 AudioBufferSourceNode）
 - 实时提取频谱数据（ByteFrequencyData）和时域数据（ByteTimeDomainData）
-- 通过回调函数将分析数据传递给UI层
-- 支持选区播放（设置start/end时间）
+- 通过订阅快照（subscribe）将播放状态推送给UI层
+- 支持选区播放（播放范围由 PlaybackState 中的选区决定）
 
 ### 4.2 WaveformVisualizer.tsx
 - Canvas绘制完整音频波形（采样点压缩为垂直柱状）
@@ -56,8 +58,15 @@ graph TD
 - 弹性回落动画（使用速度和衰减模拟物理惯性）
 - 暂停时保持当前频谱状态
 
-### 4.4 App.tsx
-- 管理音频加载状态和播放状态
+### 4.4 PlaybackState.ts（播放状态唯一可信来源）
+- 集中维护播放状态：播放/暂停、当前位置、选区起止、循环开关、时长
+- 不依赖 Web Audio / DOM，时钟可注入，支持离线单元测试（tests/PlaybackState.test.ts）
+- 保证不变量：位置始终在有效范围内；选区存在时位置始终落在选区内；
+  停止/自然结束（非循环）/重新加载后位置归零且选区清空；切换循环不影响其它状态
+- 通过 subscribe 推送不可变快照，UI 只镜像快照，不各自维护播放状态
+
+### 4.5 App.tsx
+- 订阅 AudioEngine 的播放状态快照并渲染
 - 组合所有子组件
 - 处理文件上传（拖拽和点击）
 - 渲染播放控制按钮和音频信息

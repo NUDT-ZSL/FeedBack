@@ -1,3 +1,11 @@
+import {
+  PlaybackState,
+  type PlaybackSnapshot,
+  type Selection
+} from './PlaybackState.ts';
+
+export type { Selection, PlaybackSnapshot } from './PlaybackState.ts';
+
 export interface AudioMetadata {
   duration: number;
   sampleRate: number;
@@ -11,14 +19,10 @@ export interface AudioAnalysisData {
   currentTime: number;
 }
 
-export interface Selection {
-  start: number;
-  end: number;
-}
-
 type AnalysisCallback = (data: AudioAnalysisData) => void;
-type StateChangeCallback = (isPlaying: boolean) => void;
-type EndedCallback = () => void;
+type PlaybackListener = (snapshot: PlaybackSnapshot) => void;
+
+const END_EPSILON = 0.02;
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
@@ -27,52 +31,67 @@ export class AudioEngine {
   private sourceNode: AudioBufferSourceNode | null = null;
   private audioBuffer: AudioBuffer | null = null;
   private metadata: AudioMetadata | null = null;
-  
-  private frequencyData: Uint8Array | null = null;
-  private timeDomainData: Uint8Array | null = null;
-  
-  private isPlaying = false;
-  private isLooping = false;
-  private startTime = 0;
-  private pauseTime = 0;
-  private currentSelection: Selection | null = null;
+
+  private frequencyData: Uint8Array<ArrayBuffer> | null = null;
+  private timeDomainData: Uint8Array<ArrayBuffer> | null = null;
+
+  private readonly playbackState: PlaybackState;
+  private readonly playbackListeners = new Set<PlaybackListener>();
   private animationFrameId: number | null = null;
-  
+
   private analysisCallback: AnalysisCallback | null = null;
-  private stateChangeCallback: StateChangeCallback | null = null;
-  private endedCallback: EndedCallback | null = null;
-  
+
   private readonly FFT_SIZE = 256;
   private readonly SMOOTHING_TIME_CONSTANT = 0.8;
 
   constructor() {
+    this.playbackState = new PlaybackState(() => this.audioContext?.currentTime ?? 0);
+    this.playbackState.subscribe(() => this.emitPlaybackSnapshot());
     this.initAudioContext();
   }
 
   private initAudioContext(): void {
     if (typeof window !== 'undefined' && !this.audioContext) {
       this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      
+
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = this.FFT_SIZE;
       this.analyser.smoothingTimeConstant = this.SMOOTHING_TIME_CONSTANT;
-      
+
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.value = 1;
-      
+
       this.analyser.connect(this.gainNode);
       this.gainNode.connect(this.audioContext.destination);
-      
+
       this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
       this.timeDomainData = new Uint8Array(this.analyser.frequencyBinCount);
     }
+  }
+
+  /** 订阅播放状态快照：首次订阅立即推送一次，之后状态变更与每帧时间推进都会推送 */
+  public subscribe(listener: PlaybackListener): () => void {
+    this.playbackListeners.add(listener);
+    listener(this.playbackState.getSnapshot());
+    return () => {
+      this.playbackListeners.delete(listener);
+    };
+  }
+
+  public getSnapshot(): PlaybackSnapshot {
+    return this.playbackState.getSnapshot();
+  }
+
+  private emitPlaybackSnapshot(): void {
+    const snapshot = this.playbackState.getSnapshot();
+    this.playbackListeners.forEach(listener => listener(snapshot));
   }
 
   public async loadAudioFile(file: File): Promise<AudioBuffer> {
     if (!this.audioContext) {
       this.initAudioContext();
     }
-    
+
     if (!this.audioContext) {
       throw new Error('AudioContext not supported');
     }
@@ -85,13 +104,15 @@ export class AudioEngine {
 
     const arrayBuffer = await file.arrayBuffer();
     this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-    
+
     this.metadata = {
       duration: this.audioBuffer.duration,
       sampleRate: this.audioBuffer.sampleRate,
       fileSize: file.size,
       fileName: file.name
     };
+
+    this.playbackState.load(this.audioBuffer.duration);
 
     return this.audioBuffer;
   }
@@ -104,137 +125,79 @@ export class AudioEngine {
     return this.audioBuffer;
   }
 
-  public play(selection?: Selection): void {
-    if (!this.audioContext || !this.audioBuffer || this.isPlaying) return;
+  public play(): void {
+    if (!this.audioContext || !this.audioBuffer) return;
 
     if (this.audioContext.state === 'suspended') {
       this.audioContext.resume();
     }
 
-    this.sourceNode = this.audioContext.createBufferSource();
-    this.sourceNode.buffer = this.audioBuffer;
-    this.sourceNode.connect(this.analyser!);
-    
-    this.sourceNode.onended = () => {
-      if (this.isPlaying) {
-        if (this.isLooping) {
-          this.handleLoopEnd();
-        } else {
-          this.stop();
-          this.endedCallback?.();
-        }
-      }
-    };
+    const wasPlaying = this.playbackState.getSnapshot().isPlaying;
+    const snapshot = this.playbackState.play();
+    if (wasPlaying || !snapshot.isPlaying) return;
 
-    if (selection) {
-      this.currentSelection = selection;
-      const offset = Math.max(0, selection.start);
-      const duration = Math.min(selection.end - selection.start, this.audioBuffer.duration - offset);
-      this.sourceNode.start(0, offset, duration);
-      this.startTime = this.audioContext.currentTime - offset;
-    } else {
-      this.currentSelection = null;
-      const offset = this.pauseTime;
-      this.sourceNode.start(0, offset);
-      this.startTime = this.audioContext.currentTime - offset;
-    }
-
-    this.isPlaying = true;
-    this.stateChangeCallback?.(true);
+    this.startSource(snapshot.position);
     this.startAnalysisLoop();
   }
 
-  private handleLoopEnd(): void {
-    if (!this.currentSelection) {
-      this.pauseTime = 0;
-      this.play();
-    } else {
-      this.play(this.currentSelection);
-    }
-  }
-
   public pause(): void {
-    if (!this.isPlaying || !this.audioContext || !this.sourceNode) return;
+    const wasPlaying = this.playbackState.getSnapshot().isPlaying;
+    this.playbackState.pause();
+    if (!wasPlaying) return;
 
-    this.pauseTime = this.audioContext.currentTime - this.startTime;
-    this.sourceNode.stop();
-    this.sourceNode.disconnect();
-    this.sourceNode = null;
-    
-    this.isPlaying = false;
-    this.stateChangeCallback?.(false);
+    this.stopSource();
     this.stopAnalysisLoop();
   }
 
   public stop(): void {
-    if (this.sourceNode) {
-      try {
-        this.sourceNode.stop();
-        this.sourceNode.disconnect();
-      } catch (e) {
-        // Already stopped
-      }
-      this.sourceNode = null;
-    }
-    
-    this.isPlaying = false;
-    this.pauseTime = 0;
-    this.currentSelection = null;
-    this.stateChangeCallback?.(false);
+    this.playbackState.stop();
+    this.stopSource();
     this.stopAnalysisLoop();
-    
-    if (this.frequencyData) {
-      this.frequencyData.fill(0);
-    }
-    if (this.timeDomainData) {
-      this.timeDomainData.fill(128);
-    }
+    this.clearAnalysisData();
   }
 
   public seek(time: number): void {
-    if (!this.audioBuffer) return;
-    
-    const clampedTime = Math.max(0, Math.min(time, this.audioBuffer.duration));
-    const wasPlaying = this.isPlaying;
-    
+    const wasPlaying = this.playbackState.getSnapshot().isPlaying;
+    const snapshot = this.playbackState.seek(time);
     if (wasPlaying) {
-      this.pause();
-      this.pauseTime = clampedTime;
-      this.play();
-    } else {
-      this.pauseTime = clampedTime;
+      this.startSource(snapshot.position);
+    }
+  }
+
+  public setSelection(selection: Selection | null): void {
+    const before = this.playbackState.getSnapshot();
+    const after = this.playbackState.setSelection(selection);
+    if (!after.isPlaying) return;
+
+    const beforeEnd = before.selection ? before.selection.end : before.duration;
+    const afterEnd = after.selection ? after.selection.end : after.duration;
+    const beforeStart = before.selection ? before.selection.start : 0;
+    const afterStart = after.selection ? after.selection.start : 0;
+
+    if (beforeStart !== afterStart || beforeEnd !== afterEnd) {
+      this.startSource(after.position);
     }
   }
 
   public toggleLoop(): boolean {
-    this.isLooping = !this.isLooping;
-    return this.isLooping;
+    this.playbackState.toggleLoop();
+    return this.playbackState.getSnapshot().isLooping;
   }
 
   public isLoopingEnabled(): boolean {
-    return this.isLooping;
+    return this.playbackState.getSnapshot().isLooping;
   }
 
   public getIsPlaying(): boolean {
-    return this.isPlaying;
+    return this.playbackState.getSnapshot().isPlaying;
   }
 
   public getCurrentTime(): number {
-    if (!this.audioContext || !this.isPlaying) {
-      return this.pauseTime;
-    }
-    const currentTime = this.audioContext.currentTime - this.startTime;
-    if (this.currentSelection) {
-      return Math.min(currentTime, this.currentSelection.end);
-    }
-    if (this.audioBuffer) {
-      return Math.min(currentTime, this.audioBuffer.duration);
-    }
-    return currentTime;
+    return this.playbackState.getSnapshot().position;
   }
 
   public getDuration(): number {
-    return this.audioBuffer?.duration || 0;
+    return this.playbackState.getSnapshot().duration;
   }
 
   public getWaveformData(samples: number): Float32Array {
@@ -247,11 +210,11 @@ export class AudioEngine {
     for (let i = 0; i < samples; i++) {
       const start = i * blockSize;
       let sum = 0;
-      
+
       for (let j = 0; j < blockSize; j++) {
         sum += Math.abs(channelData[start + j] || 0);
       }
-      
+
       waveformData[i] = sum / blockSize;
     }
 
@@ -265,6 +228,65 @@ export class AudioEngine {
     return waveformData;
   }
 
+  private startSource(position: number): void {
+    if (!this.audioContext || !this.audioBuffer) return;
+
+    this.stopSource();
+
+    const snapshot = this.playbackState.getSnapshot();
+    const end = snapshot.selection ? snapshot.selection.end : snapshot.duration;
+    const offset = Math.min(Math.max(position, 0), end);
+    const remaining = Math.max(0, end - offset);
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.audioBuffer;
+    source.connect(this.analyser!);
+    source.onended = () => this.handleSourceEnded(source);
+    this.sourceNode = source;
+    source.start(0, offset, remaining);
+  }
+
+  private handleSourceEnded(source: AudioBufferSourceNode): void {
+    if (source !== this.sourceNode) return;
+    this.sourceNode = null;
+    source.disconnect();
+
+    const snapshot = this.playbackState.getSnapshot();
+    if (!snapshot.isPlaying) {
+      this.stopAnalysisLoop();
+      this.clearAnalysisData();
+      return;
+    }
+
+    const effectiveEnd = snapshot.selection ? snapshot.selection.end : snapshot.duration;
+    if (snapshot.position < effectiveEnd - END_EPSILON) {
+      this.startSource(snapshot.position);
+      return;
+    }
+
+    const next = this.playbackState.handleEnded();
+    if (next.isPlaying) {
+      this.startSource(next.position);
+    } else {
+      this.stopAnalysisLoop();
+      this.clearAnalysisData();
+    }
+  }
+
+  private stopSource(): void {
+    const source = this.sourceNode;
+    if (!source) return;
+
+    this.sourceNode = null;
+    source.onended = null;
+    try {
+      source.stop();
+      source.disconnect();
+    } catch (e) {
+      // Already stopped
+    }
+  }
+
   private startAnalysisLoop(): void {
     const analyze = () => {
       if (!this.analyser || !this.frequencyData || !this.timeDomainData) return;
@@ -272,13 +294,15 @@ export class AudioEngine {
       this.analyser.getByteFrequencyData(this.frequencyData);
       this.analyser.getByteTimeDomainData(this.timeDomainData);
 
+      const snapshot = this.playbackState.getSnapshot();
       this.analysisCallback?.({
         frequencyData: this.frequencyData,
         timeDomainData: this.timeDomainData,
-        currentTime: this.getCurrentTime()
+        currentTime: snapshot.position
       });
+      this.emitPlaybackSnapshot();
 
-      if (this.isPlaying) {
+      if (snapshot.isPlaying) {
         this.animationFrameId = requestAnimationFrame(analyze);
       }
     };
@@ -293,36 +317,34 @@ export class AudioEngine {
     }
   }
 
+  private clearAnalysisData(): void {
+    this.frequencyData?.fill(0);
+    this.timeDomainData?.fill(128);
+  }
+
   public setAnalysisCallback(callback: AnalysisCallback | null): void {
     this.analysisCallback = callback;
   }
 
-  public setStateChangeCallback(callback: StateChangeCallback | null): void {
-    this.stateChangeCallback = callback;
-  }
-
-  public setEndedCallback(callback: EndedCallback | null): void {
-    this.endedCallback = callback;
-  }
-
   public dispose(): void {
     this.stop();
-    
+    this.playbackListeners.clear();
+
     if (this.gainNode) {
       this.gainNode.disconnect();
       this.gainNode = null;
     }
-    
+
     if (this.analyser) {
       this.analyser.disconnect();
       this.analyser = null;
     }
-    
+
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;
     }
-    
+
     this.audioBuffer = null;
     this.metadata = null;
     this.frequencyData = null;

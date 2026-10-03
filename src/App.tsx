@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AudioEngine, type AudioMetadata, type AudioAnalysisData, type Selection } from './AudioEngine';
+import { AudioEngine, type AudioMetadata, type AudioAnalysisData, type PlaybackSnapshot, type Selection } from './AudioEngine';
 import WaveformVisualizer from './WaveformVisualizer';
 import SpectrumVisualizer from './SpectrumVisualizer';
 
@@ -22,17 +22,22 @@ const formatSampleRate = (rate: number): string => {
   return rate + ' Hz';
 };
 
+const INITIAL_PLAYBACK: PlaybackSnapshot = {
+  isPlaying: false,
+  isLooping: false,
+  position: 0,
+  selection: null,
+  duration: 0
+};
+
 const App: React.FC = () => {
   const audioEngineRef = useRef<AudioEngine | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [metadata, setMetadata] = useState<AudioMetadata | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [playback, setPlayback] = useState<PlaybackSnapshot>(INITIAL_PLAYBACK);
   const [frequencyData, setFrequencyData] = useState<Uint8Array | null>(null);
-  const [selection, setSelection] = useState<Selection | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -44,25 +49,21 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    audioEngineRef.current = new AudioEngine();
-    
-    audioEngineRef.current.setAnalysisCallback((data: AudioAnalysisData) => {
-      setCurrentTime(data.currentTime);
+    const engine = new AudioEngine();
+    audioEngineRef.current = engine;
+
+    engine.setAnalysisCallback((data: AudioAnalysisData) => {
       setFrequencyData(data.frequencyData);
     });
 
-    audioEngineRef.current.setStateChangeCallback((playing: boolean) => {
-      setIsPlaying(playing);
-    });
-
-    audioEngineRef.current.setEndedCallback(() => {
-      if (!audioEngineRef.current?.isLoopingEnabled()) {
-        setCurrentTime(0);
-      }
+    const unsubscribe = engine.subscribe((snapshot: PlaybackSnapshot) => {
+      setPlayback(snapshot);
     });
 
     return () => {
-      audioEngineRef.current?.dispose();
+      unsubscribe();
+      engine.dispose();
+      audioEngineRef.current = null;
     };
   }, []);
 
@@ -76,7 +77,7 @@ const App: React.FC = () => {
   const handleFileUpload = useCallback(async (file: File) => {
     const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/x-wav'];
     const validExtensions = ['.mp3', '.wav', '.ogg'];
-    
+
     const fileExt = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
     if (!validTypes.includes(file.type) && !validExtensions.includes(fileExt)) {
       alert('请上传支持的音频格式：MP3、WAV、OGG');
@@ -84,19 +85,17 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
-    setSelection(null);
-    
+
     try {
       if (!audioEngineRef.current) {
         audioEngineRef.current = new AudioEngine();
       }
-      
+
       const buffer = await audioEngineRef.current.loadAudioFile(file);
       const meta = audioEngineRef.current.getMetadata();
-      
+
       setAudioBuffer(buffer);
       setMetadata(meta);
-      setCurrentTime(0);
       triggerRolling('time');
       triggerRolling('sampleRate');
       triggerRolling('fileSize');
@@ -129,7 +128,7 @@ const App: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileUpload(files[0]);
@@ -148,46 +147,37 @@ const App: React.FC = () => {
   }, []);
 
   const handlePlayPause = useCallback(() => {
-    if (!audioEngineRef.current) return;
-    
-    if (isPlaying) {
-      audioEngineRef.current.pause();
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+
+    if (engine.getIsPlaying()) {
+      engine.pause();
     } else {
-      if (selection && selection.end > selection.start) {
-        audioEngineRef.current.play(selection);
-      } else {
-        audioEngineRef.current.play();
-      }
+      engine.play();
     }
-  }, [isPlaying, selection]);
+  }, []);
 
   const handleStop = useCallback(() => {
-    if (!audioEngineRef.current) return;
-    audioEngineRef.current.stop();
-    setSelection(null);
-    setCurrentTime(0);
+    audioEngineRef.current?.stop();
     triggerRolling('time');
   }, [triggerRolling]);
 
   const handleToggleLoop = useCallback(() => {
-    if (!audioEngineRef.current) return;
-    const looping = audioEngineRef.current.toggleLoop();
-    setIsLooping(looping);
+    audioEngineRef.current?.toggleLoop();
   }, []);
 
   const handleSeek = useCallback((time: number) => {
-    if (!audioEngineRef.current) return;
-    audioEngineRef.current.seek(time);
+    audioEngineRef.current?.seek(time);
     triggerRolling('time');
   }, [triggerRolling]);
 
   const handleProgressBarMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!metadata || metadata.duration === 0) return;
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const time = ratio * metadata.duration;
-    
+
     handleSeek(time);
     setIsDraggingProgress(true);
     setProgressTooltipTime(time);
@@ -195,13 +185,13 @@ const App: React.FC = () => {
 
   const handleProgressBarMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!metadata || metadata.duration === 0) return;
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const time = ratio * metadata.duration;
-    
+
     setProgressTooltipTime(time);
-    
+
     if (isDraggingProgress) {
       handleSeek(time);
     }
@@ -216,7 +206,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectionChange = useCallback((newSelection: Selection | null) => {
-    setSelection(newSelection);
+    audioEngineRef.current?.setSelection(newSelection);
   }, []);
 
   const getWaveformData = useCallback((samples: number): Float32Array => {
@@ -224,19 +214,20 @@ const App: React.FC = () => {
     return audioEngineRef.current.getWaveformData(samples);
   }, []);
 
-  const duration = metadata?.duration || 0;
+  const duration = playback.duration;
+  const currentTime = playback.position;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="app-container">
-      <div 
+      <div
         className={`upload-overlay ${audioBuffer ? 'hidden' : ''}`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        <div 
+        <div
           className={`upload-area ${isDragOver ? 'drag-over' : ''}`}
           onClick={handleUploadClick}
         >
@@ -278,14 +269,14 @@ const App: React.FC = () => {
               audioBuffer={audioBuffer}
               currentTime={currentTime}
               duration={duration}
-              selection={selection}
+              selection={playback.selection}
               onSelectionChange={handleSelectionChange}
               onSeek={handleSeek}
               getWaveformData={getWaveformData}
             />
             <SpectrumVisualizer
               frequencyData={frequencyData}
-              isPlaying={isPlaying}
+              isPlaying={playback.isPlaying}
             />
           </div>
 
@@ -315,22 +306,22 @@ const App: React.FC = () => {
           </div>
 
           <div className="controls-container">
-            <div 
+            <div
               className={`progress-bar-container ${isDraggingProgress ? 'dragging' : ''}`}
               onMouseDown={handleProgressBarMouseDown}
               onMouseMove={handleProgressBarMouseMove}
               onMouseUp={handleProgressBarMouseUp}
               onMouseLeave={handleProgressBarMouseLeave}
             >
-              <div 
-                className="progress-track" 
+              <div
+                className="progress-track"
                 style={{ width: `${progress}%` }}
               />
-              <div 
+              <div
                 className="progress-handle"
                 style={{ left: `${progress}%` }}
               />
-              <div 
+              <div
                 className="progress-tooltip"
                 style={{ left: `${progress}%` }}
               >
@@ -340,7 +331,7 @@ const App: React.FC = () => {
 
             <div className="buttons-container">
               <button
-                className={`control-btn ${isLooping ? 'active' : ''}`}
+                className={`control-btn ${playback.isLooping ? 'active' : ''}`}
                 onClick={handleToggleLoop}
                 title="循环播放"
               >
@@ -348,7 +339,7 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
-              
+
               <button
                 className="control-btn"
                 onClick={handleStop}
@@ -359,11 +350,11 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                 </svg>
               </button>
-              
+
               <button
-                className={`control-btn play-btn ${isPlaying ? 'playing' : ''}`}
+                className={`control-btn play-btn ${playback.isPlaying ? 'playing' : ''}`}
                 onClick={handlePlayPause}
-                title={isPlaying ? '暂停' : '播放'}
+                title={playback.isPlaying ? '暂停' : '播放'}
               >
                 <svg className="play-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
