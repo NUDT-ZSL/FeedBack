@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "lib": ["ES2020", "DOM"],
+    "skipLibCheck": true,
+    "strict": true,
+    "outDir": ".verify",
+    "noEmit": false
+  },
+  "include": ["src/cityBuilder.ts", "src/selection.ts"]
+}

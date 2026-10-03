@@ -13,6 +13,7 @@ export interface BuildingData {
   width: number;
   color: THREE.Color;
   targetColor: THREE.Color;
+  isHighlighted: boolean;
   isAnimating: boolean;
   animationProgress: number;
   animationType: 'none' | 'rise' | 'fall' | 'color';
@@ -40,6 +41,7 @@ export class CityBuilder {
   private params: CityParams;
   private animationFrame: number | null = null;
   private fog: THREE.Fog;
+  onBuildingRemoved: ((building: BuildingData) => void) | null = null;
 
   constructor(scene: THREE.Scene, initialParams: Partial<CityParams> = {}) {
     this.scene = scene;
@@ -92,6 +94,10 @@ export class CityBuilder {
 
   getBuildings(): BuildingData[] {
     return Array.from(this.buildings.values());
+  }
+
+  getBuilding(id: string): BuildingData | undefined {
+    return this.buildings.get(id);
   }
 
   generateCity(): void {
@@ -286,6 +292,7 @@ export class CityBuilder {
       width,
       color: color.clone(),
       targetColor: color.clone(),
+      isHighlighted: false,
       isAnimating: animationType === 'rise',
       animationProgress: animationType === 'rise' ? 0 : 1,
       animationType: animationType === 'rise' ? 'rise' : 'none'
@@ -332,10 +339,18 @@ export class CityBuilder {
         building.isAnimating = false;
         building.animationType = 'none';
         building.glowMesh.position.y = building.height + 0.15;
+        (building.glowMesh.material as THREE.MeshBasicMaterial).opacity =
+          building.isHighlighted ? 1 : 0.8;
       }
     };
 
     animate();
+  }
+
+  private notifyBuildingRemoved(building: BuildingData): void {
+    if (this.onBuildingRemoved) {
+      this.onBuildingRemoved(building);
+    }
   }
 
   private removeBuilding(building: BuildingData, duration: number = 0.8): void {
@@ -366,10 +381,16 @@ export class CityBuilder {
         building.glowMesh.geometry.dispose();
         (building.glowMesh.material as THREE.Material).dispose();
         this.buildings.delete(building.id);
+        this.notifyBuildingRemoved(building);
       }
     };
 
     animate();
+  }
+
+  private applyEmissive(building: BuildingData): void {
+    const material = building.mesh.material as THREE.MeshPhongMaterial;
+    material.emissive.copy(building.color).multiplyScalar(building.isHighlighted ? 0.6 : 0.1);
   }
 
   private animateColorTransition(duration: number = 1.2): void {
@@ -393,7 +414,7 @@ export class CityBuilder {
 
         const material = building.mesh.material as THREE.MeshPhongMaterial;
         material.color.copy(building.color);
-        material.emissive.copy(building.color.clone().multiplyScalar(0.1));
+        this.applyEmissive(building);
 
         const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
         glowMaterial.color.copy(building.color.clone().multiplyScalar(0.5));
@@ -411,36 +432,18 @@ export class CityBuilder {
     animate();
   }
 
-  highlightBuilding(building: BuildingData, duration: number = 0.3): void {
-    const originalEmissive = (building.mesh.material as THREE.MeshPhongMaterial).emissive.clone();
-    const originalGlowOpacity = (building.glowMesh.material as THREE.MeshBasicMaterial).opacity;
-    const targetEmissive = building.color.clone().multiplyScalar(0.6);
-
-    const startTime = performance.now();
-
-    const animate = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      const progress = Math.min(elapsed / (duration / 2), 1);
-      const pulse = Math.sin(progress * Math.PI);
-
-      const material = building.mesh.material as THREE.MeshPhongMaterial;
-      material.emissive.lerpColors(originalEmissive, targetEmissive, pulse);
-
-      const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
-      glowMaterial.opacity = originalGlowOpacity + pulse * 0.5;
-
-      if (progress < 1 || elapsed < duration) {
-        requestAnimationFrame(animate);
-      } else {
-        material.emissive.copy(originalEmissive);
-        glowMaterial.opacity = originalGlowOpacity;
-      }
-    };
-
-    animate();
+  setHighlighted(building: BuildingData, highlighted: boolean): void {
+    if (building.isHighlighted === highlighted) {
+      return;
+    }
+    building.isHighlighted = highlighted;
+    this.applyEmissive(building);
+    const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
+    glowMaterial.opacity = highlighted ? 1 : 0.8;
   }
 
   clearCity(): void {
+    const removed = this.getBuildings();
     this.buildings.forEach(building => {
       this.scene.remove(building.mesh);
       this.scene.remove(building.glowMesh);
@@ -450,6 +453,7 @@ export class CityBuilder {
       (building.glowMesh.material as THREE.Material).dispose();
     });
     this.buildings.clear();
+    removed.forEach(building => this.notifyBuildingRemoved(building));
 
     const ground = this.scene.getObjectByName('ground');
     if (ground) this.scene.remove(ground);

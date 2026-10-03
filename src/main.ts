@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CityBuilder, type BuildingData, type CityParams } from './cityBuilder';
 import { ControlPanel, type ControlPanelConfig } from './controlPanel';
+import { SelectionController } from './selection';
 
 class CityApp {
   private scene: THREE.Scene;
@@ -10,9 +11,9 @@ class CityApp {
   private controls: OrbitControls;
   private cityBuilder: CityBuilder;
   private controlPanel: ControlPanel;
+  private selection: SelectionController;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
-  private selectedBuilding: BuildingData | null = null;
   private infoPanel: HTMLElement;
   private animationFrameId: number | null = null;
   private lastTime: number = 0;
@@ -81,6 +82,13 @@ class CityApp {
 
     this.infoPanel = document.getElementById('infoPanel')!;
 
+    this.selection = new SelectionController(this.cityBuilder, {
+      showPanel: (building) => this.showInfoPanel(building),
+      hidePanel: () => this.hideInfoPanel()
+    });
+    this.cityBuilder.onBuildingRemoved = (building) =>
+      this.selection.handleBuildingRemoved(building);
+
     this.setupEventListeners();
 
     this.cityBuilder.generateCity();
@@ -121,7 +129,7 @@ class CityApp {
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.tp-dfwv') && !target.closest('canvas')) {
-        this.hideInfoPanel();
+        this.selection.clear();
       }
     });
   }
@@ -152,25 +160,11 @@ class CityApp {
       const building = this.cityBuilder.getBuildings().find(b => b.mesh === clickedMesh);
 
       if (building) {
-        if (this.selectedBuilding?.id === building.id) {
-          this.hideInfoPanel();
-        } else {
-          this.selectBuilding(building);
-        }
+        this.selection.handleBuildingClick(building);
       }
     } else {
-      this.hideInfoPanel();
+      this.selection.clear();
     }
-  }
-
-  private selectBuilding(building: BuildingData): void {
-    if (this.selectedBuilding) {
-      this.cityBuilder.highlightBuilding(this.selectedBuilding, 0.1);
-    }
-
-    this.selectedBuilding = building;
-    this.cityBuilder.highlightBuilding(building, 0.3);
-    this.showInfoPanel(building);
   }
 
   private showInfoPanel(building: BuildingData): void {
@@ -188,14 +182,12 @@ class CityApp {
   }
 
   private hideInfoPanel(): void {
-    if (this.selectedBuilding) {
-      this.selectedBuilding = null;
-    }
     this.infoPanel.classList.remove('visible');
   }
 
   private handleParamsChange(params: Partial<CityParams>): void {
     if ('buildingSpacing' in params) {
+      this.selection.clear();
       this.cityBuilder.clearCity();
       this.cityBuilder.updateParams(params);
       this.cityBuilder.generateCity();
@@ -205,8 +197,8 @@ class CityApp {
   }
 
   private handleGenerate(): void {
+    this.selection.clear();
     this.cityBuilder.generateCity();
-    this.hideInfoPanel();
   }
 
   private animate(currentTime: number = 0): void {
