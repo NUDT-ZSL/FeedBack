@@ -1,5 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import type { GridSize } from './types'
+import {
+  CANVAS_SIZE,
+  PixelBoard,
+  brushCells,
+  hexToRgba,
+  renderGrid,
+  renderHoverPreview,
+} from './pixelBoard'
 
 interface PixelCanvasProps {
   color: string
@@ -10,8 +18,6 @@ interface PixelCanvasProps {
   getCanvasDataRef: React.MutableRefObject<(() => string) | null>
   clearCanvasRef: React.MutableRefObject<(() => void) | null>
 }
-
-const CANVAS_SIZE = 400
 
 const PixelCanvas: React.FC<PixelCanvasProps> = ({
   color,
@@ -24,107 +30,87 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
+  const boardRef = useRef<PixelBoard | null>(null)
+  if (!boardRef.current) {
+    boardRef.current = new PixelBoard(gridSize)
+  }
+  const board = boardRef.current
+  const rafRef = useRef<number | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
-  const animatingCellsRef = useRef<Map<string, { startTime: number; color: string }>>(new Map())
   const lastDrawPosRef = useRef<{ x: number; y: number } | null>(null)
 
-  const getCellSize = useCallback(() => CANVAS_SIZE / gridSize, [gridSize])
+  const renderFrame = useCallback(
+    (now: number) => {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (ctx) {
+        board.renderTo(ctx, now)
+      }
+      if (board.hasActiveAnimations(now)) {
+        rafRef.current = requestAnimationFrame(renderFrame)
+      } else {
+        rafRef.current = null
+      }
+    },
+    [board]
+  )
+
+  const scheduleRender = useCallback(() => {
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(renderFrame)
+    }
+  }, [renderFrame])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+  }, [])
+
+  const redrawOverlayGrid = useCallback(() => {
+    const overlay = overlayRef.current
+    const ctx = overlay?.getContext('2d')
+    if (ctx) {
+      renderGrid(ctx, board.gridSize)
+    }
+  }, [board])
 
   const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
-    animatingCellsRef.current.clear()
-  }, [])
+    board.clear()
+    const ctx = canvasRef.current?.getContext('2d')
+    if (ctx) {
+      board.renderTo(ctx, performance.now())
+    }
+  }, [board])
 
   useEffect(() => {
     clearCanvasRef.current = clearCanvas
   }, [clearCanvas, clearCanvasRef])
 
   const exportData = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return ''
-    return canvas.toDataURL('image/png')
-  }, [])
+    const exportCanvas = document.createElement('canvas')
+    exportCanvas.width = CANVAS_SIZE
+    exportCanvas.height = CANVAS_SIZE
+    const ctx = exportCanvas.getContext('2d')
+    if (!ctx) return ''
+    board.renderSettledTo(ctx)
+    return exportCanvas.toDataURL('image/png')
+  }, [board])
 
   useEffect(() => {
     getCanvasDataRef.current = exportData
   }, [exportData, getCanvasDataRef])
 
-  const drawGrid = useCallback(() => {
-    const overlay = overlayRef.current
-    if (!overlay) return
-    const ctx = overlay.getContext('2d')
-    if (!ctx) return
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
-    const cellSize = getCellSize()
-    ctx.strokeStyle = 'rgba(212, 201, 176, 0.3)'
-    ctx.lineWidth = 0.5
-    for (let i = 0; i <= gridSize; i++) {
-      ctx.beginPath()
-      ctx.moveTo(i * cellSize, 0)
-      ctx.lineTo(i * cellSize, CANVAS_SIZE)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(0, i * cellSize)
-      ctx.lineTo(CANVAS_SIZE, i * cellSize)
-      ctx.stroke()
-    }
-  }, [gridSize, getCellSize])
-
   useEffect(() => {
-    drawGrid()
-    clearCanvas()
-  }, [gridSize, drawGrid, clearCanvas])
+    board.setGridSize(gridSize)
+    scheduleRender()
+    redrawOverlayGrid()
+  }, [gridSize, board, scheduleRender, redrawOverlayGrid])
 
-  const fillCellWithAnimation = useCallback(
-    (gridX: number, gridY: number, fillColor: string) => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const cellSize = getCellSize()
-      const key = `${gridX},${gridY}`
-      animatingCellsRef.current.set(key, {
-        startTime: performance.now(),
-        color: fillColor,
-      })
-      const centerX = gridX * cellSize + cellSize / 2
-      const centerY = gridY * cellSize + cellSize / 2
-      const maxRadius = cellSize / 2
-      const animate = (time: number) => {
-        const entry = animatingCellsRef.current.get(key)
-        if (!entry) return
-        const elapsed = time - entry.startTime
-        const duration = 150
-        const progress = Math.min(elapsed / duration, 1)
-        const easeOut = 1 - Math.pow(1 - progress, 3)
-        const currentRadius = maxRadius * easeOut
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.save()
-        ctx.beginPath()
-        ctx.rect(gridX * cellSize, gridY * cellSize, cellSize, cellSize)
-        ctx.clip()
-        ctx.fillStyle = entry.color
-        ctx.beginPath()
-        ctx.arc(centerX, centerY, currentRadius, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
-        if (progress < 1) {
-          requestAnimationFrame(animate)
-        } else {
-          ctx.fillStyle = entry.color
-          ctx.fillRect(gridX * cellSize, gridY * cellSize, cellSize, cellSize)
-          animatingCellsRef.current.delete(key)
-        }
-      }
-      requestAnimationFrame(animate)
-    },
-    [getCellSize]
-  )
-
-  const drawAtPosition = useCallback(
+  const paintAtPosition = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current
       if (!canvas) return
@@ -133,23 +119,20 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       const scaleY = CANVAS_SIZE / rect.height
       const x = (clientX - rect.left) * scaleX
       const y = (clientY - rect.top) * scaleY
-      const cellSize = getCellSize()
-      const centerGridX = Math.floor(x / cellSize)
-      const centerGridY = Math.floor(y / cellSize)
-      const halfBrush = Math.floor(brushSize / 2)
+      const size = board.cellSize
+      const centerGridX = Math.floor(x / size)
+      const centerGridY = Math.floor(y / size)
       const rgba = color.startsWith('#') ? hexToRgba(color, opacity) : color
-      for (let dx = -halfBrush; dx <= halfBrush; dx++) {
-        for (let dy = -halfBrush; dy <= halfBrush; dy++) {
-          if (brushSize % 2 === 0 && (dx === halfBrush || dy === halfBrush)) continue
-          const gx = centerGridX + dx
-          const gy = centerGridY + dy
-          if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
-            fillCellWithAnimation(gx, gy, rgba)
-          }
-        }
+      const painted = board.paint(
+        brushCells(centerGridX, centerGridY, brushSize),
+        rgba,
+        performance.now()
+      )
+      if (painted > 0) {
+        scheduleRender()
       }
     },
-    [color, opacity, brushSize, gridSize, getCellSize, fillCellWithAnimation]
+    [board, color, opacity, brushSize, scheduleRender]
   )
 
   const drawLine = useCallback(
@@ -169,7 +152,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
         const rect = canvas.getBoundingClientRect()
         const scaleX = CANVAS_SIZE / rect.width
         const scaleY = CANVAS_SIZE / rect.height
-        drawAtPosition(rect.left + x / scaleX, rect.top + y / scaleY)
+        paintAtPosition(rect.left + x / scaleX, rect.top + y / scaleY)
         if (x === x1 && y === y1) break
         const e2 = 2 * err
         if (e2 > -dy) {
@@ -183,7 +166,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
         steps++
       }
     },
-    [drawAtPosition]
+    [paintAtPosition]
   )
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -196,7 +179,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
     const x = (e.clientX - rect.left) * scaleX
     const y = (e.clientY - rect.top) * scaleY
     lastDrawPosRef.current = { x, y }
-    drawAtPosition(e.clientX, e.clientY)
+    paintAtPosition(e.clientX, e.clientY)
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -207,14 +190,14 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
     const scaleY = CANVAS_SIZE / rect.height
     const x = (e.clientX - rect.left) * scaleX
     const y = (e.clientY - rect.top) * scaleY
-    const cellSize = getCellSize()
-    const gridX = Math.floor(x / cellSize)
-    const gridY = Math.floor(y / cellSize)
+    const size = board.cellSize
+    const gridX = Math.floor(x / size)
+    const gridY = Math.floor(y / size)
     if (isDrawing) {
       if (lastDrawPosRef.current) {
         drawLine(lastDrawPosRef.current.x, lastDrawPosRef.current.y, x, y)
       } else {
-        drawAtPosition(e.clientX, e.clientY)
+        paintAtPosition(e.clientX, e.clientY)
       }
       lastDrawPosRef.current = { x, y }
     }
@@ -229,46 +212,21 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
   const handleMouseLeave = () => {
     setIsDrawing(false)
     lastDrawPosRef.current = null
-    clearHoverPreview()
+    redrawOverlayGrid()
   }
 
   const drawHoverPreview = (gridX: number, gridY: number) => {
     const overlay = overlayRef.current
-    if (!overlay) return
-    const ctx = overlay.getContext('2d')
+    const ctx = overlay?.getContext('2d')
     if (!ctx) return
-    drawGrid()
-    const cellSize = getCellSize()
-    const halfBrush = Math.floor(brushSize / 2)
-    for (let dx = -halfBrush; dx <= halfBrush; dx++) {
-      for (let dy = -halfBrush; dy <= halfBrush; dy++) {
-        if (brushSize % 2 === 0 && (dx === halfBrush || dy === halfBrush)) continue
-        const gx = gridX + dx
-        const gy = gridY + dy
-        if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
-          const px = gx * cellSize
-          const py = gy * cellSize
-          const scale = 1.2
-          const offset = cellSize * (scale - 1) / 2
-          ctx.save()
-          ctx.fillStyle = hexToRgba(color, opacity * 0.5)
-          ctx.fillRect(px - offset, py - offset, cellSize * scale, cellSize * scale)
-          ctx.restore()
-        }
-      }
-    }
-  }
-
-  const clearHoverPreview = () => {
-    drawGrid()
-  }
-
-  const getCursorStyle = (): React.CSSProperties => {
-    const cellSize = getCellSize()
-    const size = cellSize * brushSize * 1.5
-    return {
-      cursor: `crosshair`,
-    }
+    renderHoverPreview(ctx, {
+      gridSize: board.gridSize,
+      brushSize,
+      color,
+      opacity,
+      hoverX: gridX,
+      hoverY: gridY,
+    })
   }
 
   return (
@@ -309,7 +267,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
             left: 0,
             width: '100%',
             height: '100%',
-            ...getCursorStyle(),
+            cursor: 'crosshair',
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -332,15 +290,6 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       </div>
     </div>
   )
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  if (!result) return hex
-  const r = parseInt(result[1], 16)
-  const g = parseInt(result[2], 16)
-  const b = parseInt(result[3], 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 const styles: Record<string, React.CSSProperties> = {
