@@ -110,7 +110,7 @@ const showResults = ref(false)
 const isMobile = ref(false)
 
 const sortedCities = computed(() => store.sortedCities)
-const cityCount = computed(() => store.cities.length)
+const cityCount = computed(() => store.cityCount)
 const isOpen = computed(() => store.isSidebarOpen)
 
 const debouncedSearch = debounce((query: string) => {

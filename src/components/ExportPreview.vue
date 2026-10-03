@@ -21,11 +21,11 @@
 
             <div v-if="sortedCities.length > 0" class="export-photos-section">
               <div
-                v-for="(city, index) in displayCities"
+                v-for="city in displayCities"
                 :key="city.id"
                 class="export-photo-card"
               >
-                <div class="photo-number">{{ index + 1 }}</div>
+                <div class="photo-number">{{ serialOf(city.id) }}</div>
                 <div class="photo-wrapper">
                   <img v-if="city.photo" :src="city.photo" :alt="city.name" />
                   <div v-else class="photo-placeholder">
@@ -70,8 +70,6 @@ import { ref, computed, watch, nextTick } from 'vue'
 import L from 'leaflet'
 import html2canvas from 'html2canvas'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
-import type { City } from '../types'
 
 const props = defineProps<{
   visible: boolean
@@ -90,7 +88,11 @@ let exportMap: L.Map | null = null
 const exportMarkers: L.Marker[] = []
 
 const sortedCities = computed(() => store.sortedCities)
-const displayCities = computed(() => sortedCities.value.slice(0, 6))
+const displayCities = computed(() => store.exportDisplayCities)
+
+function serialOf(cityId: string): number {
+  return store.citySerialById.get(cityId) ?? 0
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -110,40 +112,41 @@ function initExportMap() {
   }
   exportMarkers.length = 0
 
-  const bounds = L.latLngBounds(sortedCities.value.map(c => [c.lat, c.lng]))
+  const bounds = L.latLngBounds(store.routePoints)
   const center = bounds.getCenter()
   const zoom = Math.min(10, Math.max(3, exportMapRef.value.clientWidth > 600 ? 5 : 4))
 
-  exportMap = L.map(exportMapRef.value, {
+  const map = L.map(exportMapRef.value, {
     center: [center.lat, center.lng],
     zoom,
     zoomControl: false,
     attributionControl: false
   })
+  exportMap = map
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap',
     maxZoom: 19
-  }).addTo(exportMap)
+  }).addTo(map)
 
-  sortedCities.value.forEach((city, index) => {
+  sortedCities.value.forEach((city) => {
     const icon = L.divIcon({
       className: 'export-marker',
       html: `
         <div class="export-marker-circle">
-          <span>${index + 1}</span>
+          <span>${serialOf(city.id)}</span>
         </div>
       `,
       iconSize: [28, 28],
       iconAnchor: [14, 14]
     })
 
-    const marker = L.marker([city.lat, city.lng], { icon }).addTo(exportMap)
+    const marker = L.marker([city.lat, city.lng], { icon }).addTo(map)
     exportMarkers.push(marker)
   })
 
   if (sortedCities.value.length >= 2) {
-    const points: L.LatLngExpression[] = sortedCities.value.map(city => [city.lat, city.lng])
+    const points: L.LatLngExpression[] = store.routePoints
 
     L.polyline(points, {
       weight: 4,
@@ -151,10 +154,10 @@ function initExportMap() {
       lineJoin: 'round',
       lineCap: 'round',
       color: '#ff6b6b'
-    }).addTo(exportMap)
+    }).addTo(map)
   }
 
-  exportMap.fitBounds(bounds, { padding: [40, 40] })
+  map.fitBounds(bounds, { padding: [40, 40] })
 }
 
 async function handleExport() {

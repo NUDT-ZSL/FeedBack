@@ -19,6 +19,24 @@ export const useTravelStore = defineStore('travel', () => {
     return [...cities.value].sort((a, b) => a.createdAt - b.createdAt)
   })
 
+  const cityCount = computed(() => sortedCities.value.length)
+
+  const routePoints = computed<[number, number][]>(() => {
+    return sortedCities.value.map(city => [city.lat, city.lng])
+  })
+
+  const citySerialById = computed(() => {
+    const serials = new Map<string, number>()
+    sortedCities.value.forEach((city, index) => {
+      serials.set(city.id, index + 1)
+    })
+    return serials
+  })
+
+  const exportDisplayCities = computed(() => {
+    return sortedCities.value.slice(0, 6)
+  })
+
   const activeCity = computed(() => {
     if (!activeCityId.value) return null
     return cities.value.find(c => c.id === activeCityId.value) || null
@@ -82,6 +100,10 @@ export const useTravelStore = defineStore('travel', () => {
   return {
     cities,
     sortedCities,
+    cityCount,
+    routePoints,
+    citySerialById,
+    exportDisplayCities,
     activeCityId,
     activeCity,
     isExportMode,

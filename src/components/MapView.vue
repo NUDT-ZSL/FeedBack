@@ -26,10 +26,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import L from 'leaflet'
 import { useTravelStore } from '../store/travelStore'
-import { interpolateColor } from '../utils/mapUtils'
+import { planCitySync, toLatLngs } from '../utils/citySync'
+import type { CitySyncPlan } from '../utils/citySync'
 import type { City } from '../types'
 
 const emit = defineEmits<{
@@ -44,9 +45,20 @@ const isMobile = ref(false)
 let map: L.Map | null = null
 const markers: Map<string, L.Marker> = new Map()
 let polyline: L.Polyline | null = null
-let animationFrame: number | null = null
+let routeOverlay: L.Polyline | null = null
+let polylineFrame: number | null = null
+let overlayFrame: number | null = null
+let latestRoutePoints: [number, number][] = []
 
-const sortedCities = store.sortedCities
+const sortedCities = computed(() => store.sortedCities)
+
+const ROUTE_STYLE: L.PolylineOptions = {
+  weight: 4,
+  opacity: 0.9,
+  lineJoin: 'round',
+  lineCap: 'round',
+  className: 'route-polyline'
+}
 
 function createCustomIcon(letter: string, isNew: boolean = false): L.DivIcon {
   const animationClass = isNew ? 'marker-animate' : ''
@@ -86,13 +98,13 @@ function initMap() {
   })
 
   renderExistingCities()
-  drawRoute()
+  initRoute()
 }
 
 function renderExistingCities() {
   if (!map) return
 
-  sortedCities.forEach((city, index) => {
+  sortedCities.value.forEach(city => {
     addMarker(city, false)
   })
 }
@@ -124,8 +136,10 @@ function removeMarker(cityId: string) {
   }
 }
 
-function drawRoute() {
-  if (!map || sortedCities.length < 2) {
+function setMainRoute(points: [number, number][]) {
+  if (!map) return
+
+  if (points.length < 2) {
     if (polyline) {
       polyline.remove()
       polyline = null
@@ -134,53 +148,126 @@ function drawRoute() {
   }
 
   if (polyline) {
-    polyline.remove()
+    polyline.setLatLngs(points)
+  } else {
+    polyline = L.polyline(points, ROUTE_STYLE).addTo(map)
   }
-
-  const points: L.LatLngExpression[] = sortedCities.map(city => [city.lat, city.lng])
-
-  polyline = L.polyline(points, {
-    weight: 4,
-    opacity: 0.9,
-    lineJoin: 'round',
-    lineCap: 'round',
-    className: 'route-polyline'
-  }).addTo(map)
-
-  animateRouteDrawing()
 }
 
-function animateRouteDrawing() {
-  if (!polyline || animationFrame) return
+function clearDashStyles(target: L.Polyline | null) {
+  const path = target?.getElement() as SVGPathElement | null
+  if (path) {
+    path.style.strokeDasharray = 'none'
+    path.style.strokeDashoffset = '0'
+  }
+}
 
-  const path = polyline.getElement()
-  if (!path) return
+function cancelRouteAnimations() {
+  if (polylineFrame !== null) {
+    cancelAnimationFrame(polylineFrame)
+    polylineFrame = null
+  }
+  if (overlayFrame !== null) {
+    cancelAnimationFrame(overlayFrame)
+    overlayFrame = null
+  }
+  if (routeOverlay) {
+    routeOverlay.remove()
+    routeOverlay = null
+  }
+  setMainRoute(latestRoutePoints)
+  clearDashStyles(polyline)
+  if (polyline) {
+    applyGradientColors()
+  }
+}
 
-  const length = (path as SVGPathElement).getTotalLength()
-  let progress = 0
-  const duration = 2000 * Math.max(1, sortedCities.length - 1)
+function startDrawAnimation(target: L.Polyline, isOverlay: boolean, onDone: () => void) {
+  const path = target.getElement() as SVGPathElement | null
+  if (!path) {
+    onDone()
+    return
+  }
+
+  const length = path.getTotalLength()
+  const segments = Math.max(1, (target.getLatLngs() as L.LatLng[]).length - 1)
+  const duration = 2000 * segments
   const startTime = performance.now()
 
   path.style.strokeDasharray = `${length}`
   path.style.strokeDashoffset = `${length}`
 
-  function animate(currentTime: number) {
-    const elapsed = currentTime - startTime
-    progress = Math.min(elapsed / duration, 1)
+  const setFrame = (frame: number | null) => {
+    if (isOverlay) {
+      overlayFrame = frame
+    } else {
+      polylineFrame = frame
+    }
+  }
+
+  const animate = (currentTime: number) => {
+    const progress = Math.min((currentTime - startTime) / duration, 1)
 
     path.style.strokeDashoffset = `${length * (1 - progress)}`
 
     if (progress < 1) {
-      animationFrame = requestAnimationFrame(animate)
+      setFrame(requestAnimationFrame(animate))
     } else {
-      path.style.strokeDasharray = 'none'
-      path.style.strokeDashoffset = '0'
-      applyGradientColors()
-      animationFrame = null
+      clearDashStyles(target)
+      setFrame(null)
+      onDone()
     }
   }
 
-  animationFrame = requestAnimationFrame(animate)
+  setFrame(requestAnimationFrame(animate))
+}
+
+function initRoute() {
+  latestRoutePoints = toLatLngs(sortedCities.value)
+  setMainRoute(latestRoutePoints)
+  if (polyline) {
+    startDrawAnimation(polyline, false, () => applyGradientColors())
+  }
+}
+
+function appendRoute(plan: CitySyncPlan) {
+  cancelRouteAnimations()
+  latestRoutePoints = plan.routePoints
+
+  if (!map) return
+
+  if (!polyline || plan.appendedPoints.length < 2) {
+    setMainRoute(latestRoutePoints)
+    if (polyline) {
+      startDrawAnimation(polyline, false, () => applyGradientColors())
+    }
+    return
+  }
+
+  routeOverlay = L.polyline(plan.appendedPoints, ROUTE_STYLE).addTo(map)
+  startDrawAnimation(routeOverlay, true, () => {
+    routeOverlay = null
+    setMainRoute(latestRoutePoints)
+    applyGradientColors()
+  })
+}
+
+function updateRoute(plan: CitySyncPlan) {
+  latestRoutePoints = plan.routePoints
+  cancelRouteAnimations()
+}
+
+function applyCitySyncPlan(plan: CitySyncPlan) {
+  if (!map) return
+
+  plan.cityIdsToRemove.forEach(removeMarker)
+  plan.citiesToAdd.forEach(city => addMarker(city, true))
+
+  if (plan.routeMode === 'append') {
+    appendRoute(plan)
+  } else if (plan.routeMode === 'update') {
+    updateRoute(plan)
+  }
 }
 
 function applyGradientColors() {
@@ -189,8 +276,8 @@ function applyGradientColors() {
   const path = polyline.getElement()
   if (!path) return
 
-  let gradientId = 'route-gradient'
-  let svg = path.closest('svg')
+  const gradientId = 'route-gradient'
+  const svg = path.closest('svg')
   if (!svg) return
 
   let defs = svg.querySelector('defs')
@@ -199,7 +286,7 @@ function applyGradientColors() {
     svg.insertBefore(defs, svg.firstChild)
   }
 
-  let existingGradient = defs.querySelector(`#${gradientId}`)
+  const existingGradient = defs.querySelector(`#${gradientId}`)
   if (existingGradient) {
     existingGradient.remove()
   }
@@ -248,28 +335,17 @@ watch(() => store.activeCity, (newCity) => {
   }
 })
 
-let previousLength = 0
-
 watch(
-  () => sortedCities.length,
-  (newLength) => {
-    if (newLength > previousLength && sortedCities.length > 0) {
-      const newCity = sortedCities[sortedCities.length - 1]
-      nextTick(() => {
-        addMarker(newCity, true)
-        drawRoute()
-        flyToCity(newCity)
-      })
-    } else if (newLength < previousLength) {
-      const currentIds = new Set(sortedCities.map(c => c.id))
-      markers.forEach((_, id) => {
-        if (!currentIds.has(id)) {
-          removeMarker(id)
-        }
-      })
-      drawRoute()
-    }
-    previousLength = newLength
+  sortedCities,
+  (current, previous) => {
+    const plan = planCitySync(previous ?? [], current)
+    nextTick(() => {
+      applyCitySyncPlan(plan)
+      if (plan.citiesToAdd.length > 0 && plan.cityIdsToRemove.length === 0) {
+        const newest = plan.citiesToAdd[plan.citiesToAdd.length - 1]
+        flyToCity(newest)
+      }
+    })
   },
   { immediate: false }
 )
@@ -280,7 +356,6 @@ function checkMobile() {
 
 onMounted(() => {
   checkMobile()
-  previousLength = sortedCities.length
   nextTick(() => {
     initMap()
     window.addEventListener('resize', () => {
@@ -291,8 +366,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
+  if (polylineFrame !== null) {
+    cancelAnimationFrame(polylineFrame)
+  }
+  if (overlayFrame !== null) {
+    cancelAnimationFrame(overlayFrame)
   }
   if (map) {
     map.remove()
@@ -306,6 +384,7 @@ defineExpose({
   invalidateSize
 })
 </script>
+
 
 <style>
 .map-container {
