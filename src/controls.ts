@@ -1,6 +1,6 @@
 import GUI from 'lil-gui'
-import * as THREE from 'three'
 import { ParticleSystem } from './ParticleSystem'
+import { EmitterConfig } from './core/engine'
 
 interface Stats {
   fps: number
@@ -8,17 +8,10 @@ interface Stats {
   renderTime: number
 }
 
-interface ControlParams {
+interface GlobalParams {
   particleCount: number
-  emissionRate: number
-  lifetime: number
   gravity: number
   turbulence: number
-  velocityX: number
-  velocityY: number
-  velocityZ: number
-  startColor: string
-  endColor: string
   lowPerformanceMode: boolean
 }
 
@@ -40,23 +33,272 @@ export function createControls(particleSystem: ParticleSystem): GUI {
   dom.style.border = '1px solid #3a3a5e'
   dom.style.borderRadius = '8px'
   dom.style.backdropFilter = 'blur(10px)'
-  dom.style.overflow = 'hidden'
+  dom.style.overflowY = 'auto'
   dom.style.zIndex = '1000'
 
-  const params: ControlParams = {
+  injectStyles()
+
+  const globalParams: GlobalParams = {
     particleCount: particleSystem.maxParticles,
-    emissionRate: particleSystem.emissionRate,
-    lifetime: particleSystem.lifetime,
     gravity: particleSystem.gravity,
     turbulence: particleSystem.turbulence,
-    velocityX: particleSystem.initialVelocity.x,
-    velocityY: particleSystem.initialVelocity.y,
-    velocityZ: particleSystem.initialVelocity.z,
-    startColor: '#' + particleSystem.startColor.getHexString(),
-    endColor: '#' + particleSystem.endColor.getHexString(),
     lowPerformanceMode: particleSystem.lowPerformanceMode
   }
 
+  const fGlobal = gui.addFolder('全局参数')
+  fGlobal.open()
+
+  const countController = fGlobal
+    .add(globalParams, 'particleCount', 200, 2000, 1)
+    .name('全局粒子上限')
+    .onChange((v: number) => {
+      particleSystem.maxParticles = v
+    })
+  addBarChart(countController, globalParams, 'particleCount', 2000)
+
+  fGlobal
+    .add(globalParams, 'gravity', 0, 2, 0.01)
+    .name('重力强度')
+    .onChange((v: number) => {
+      particleSystem.gravity = v
+    })
+
+  fGlobal
+    .add(globalParams, 'turbulence', 0, 5, 0.01)
+    .name('湍流强度')
+    .onChange((v: number) => {
+      particleSystem.turbulence = v
+    })
+
+  fGlobal
+    .add(globalParams, 'lowPerformanceMode')
+    .name('低性能模式')
+    .onChange((v: boolean) => {
+      particleSystem.lowPerformanceMode = v
+    })
+
+  const emittersFolder = gui.addFolder('发射源管理')
+  emittersFolder.open()
+
+  const emitterFolders = new Map<string, GUI>()
+
+  const buildEmitterFolder = (id: string) => {
+    const config = particleSystem.engine.getEmitter(id)
+    if (!config) return
+
+    const folder = emittersFolder.addFolder(`发射源 ${id}`)
+    folder.open()
+    emitterFolders.set(id, folder)
+
+    const apply = (changes: Partial<Omit<EmitterConfig, 'id'>>) => {
+      particleSystem.updateEmitter(id, changes)
+    }
+
+    const vec = (key: 'position' | 'direction' | 'initialVelocity', label: string, min: number, max: number) => {
+      const sub = folder.addFolder(label)
+      const proxy = {
+        x: config[key][0],
+        y: config[key][1],
+        z: config[key][2]
+      }
+      const read = () => {
+        const current = particleSystem.engine.getEmitter(id)
+        if (!current) return [proxy.x, proxy.y, proxy.z] as [number, number, number]
+        return current[key]
+      }
+      sub.add(proxy, 'x', min, max, 0.1).onChange(() => {
+        const [, y, z] = read()
+        apply({ [key]: [proxy.x, y, z] } as Partial<Omit<EmitterConfig, 'id'>>)
+      })
+      sub.add(proxy, 'y', min, max, 0.1).onChange(() => {
+        const [x, , z] = read()
+        apply({ [key]: [x, proxy.y, z] } as Partial<Omit<EmitterConfig, 'id'>>)
+      })
+      sub.add(proxy, 'z', min, max, 0.1).onChange(() => {
+        const [x, y] = read()
+        apply({ [key]: [x, y, proxy.z] } as Partial<Omit<EmitterConfig, 'id'>>)
+      })
+    }
+
+    vec('position', '位置', -10, 10)
+    vec('direction', '发射方向', -1, 1)
+    vec('initialVelocity', '初速度', -5, 5)
+
+    folder
+      .add(config, 'spread', 0, Math.PI, 0.01)
+      .name('扩散角(弧度)')
+      .onChange((v: number) => apply({ spread: v }))
+
+    const rateController = folder
+      .add(config, 'emissionRate', 0, 100, 1)
+      .name('发射速率/秒')
+      .onChange((v: number) => apply({ emissionRate: v }))
+    addBarChart(rateController, config, 'emissionRate', 100)
+
+    folder
+      .add(config, 'diffusionSpeed', 0, 5, 0.1)
+      .name('扩散速度')
+      .onChange((v: number) => apply({ diffusionSpeed: v }))
+
+    folder
+      .add(config, 'lifetimeMin', 0.1, 10, 0.1)
+      .name('寿命下限(秒)')
+      .onChange((v: number) => apply({ lifetimeMin: v }))
+
+    folder
+      .add(config, 'lifetimeMax', 0.1, 10, 0.1)
+      .name('寿命上限(秒)')
+      .onChange((v: number) => apply({ lifetimeMax: v }))
+
+    folder
+      .addColor(config, 'startColor')
+      .name('起始颜色')
+      .onChange((v: string) => apply({ startColor: v }))
+
+    folder
+      .addColor(config, 'endColor')
+      .name('结束颜色')
+      .onChange((v: string) => apply({ endColor: v }))
+
+    folder
+      .add({ remove: () => {
+        particleSystem.removeEmitter(id)
+        const f = emitterFolders.get(id)
+        if (f) {
+          f.destroy()
+          emitterFolders.delete(id)
+        }
+      } }, 'remove')
+      .name('删除此发射源')
+  }
+
+  for (const config of particleSystem.engine.listEmitters()) {
+    buildEmitterFolder(config.id)
+  }
+
+  emittersFolder
+    .add({ add: () => {
+      const id = particleSystem.addEmitter({
+        position: [0, 0, 0],
+        direction: [0, 1, 0],
+        spread: 0.6,
+        emissionRate: 20,
+        initialVelocity: [0, 1, 0],
+        diffusionSpeed: 1.5,
+        lifetimeMin: 2,
+        lifetimeMax: 5,
+        startColor: '#00ffff',
+        endColor: '#00008b'
+      })
+      buildEmitterFolder(id)
+    } }, 'add')
+    .name('＋ 添加发射源')
+
+  createStatsPanel(gui, particleSystem)
+
+  return gui
+}
+
+function addBarChart(
+  controller: any,
+  params: Record<string, any>,
+  key: string,
+  max: number
+): void {
+  const container = document.createElement('div')
+  container.className = 'bar-container'
+
+  const track = document.createElement('div')
+  track.className = 'bar-track'
+
+  const fill = document.createElement('div')
+  fill.className = 'bar-fill'
+  fill.style.background = '#00bcd4'
+  track.appendChild(fill)
+
+  const label = document.createElement('span')
+  label.className = 'bar-label'
+
+  container.appendChild(track)
+  container.appendChild(label)
+
+  const updateBar = () => {
+    const val = params[key] as number
+    const pct = Math.min(100, (val / max) * 100)
+    fill.style.width = pct + '%'
+    label.textContent = `${val}/${max}`
+  }
+
+  controller.domElement.parentNode.insertBefore(container, controller.domElement.nextSibling)
+  controller.onChange(updateBar)
+  controller.updateDisplay()
+  updateBar()
+}
+
+function createStatsPanel(gui: GUI, particleSystem: ParticleSystem): void {
+  const panel = document.createElement('div')
+  panel.className = 'stats-panel'
+
+  const fpsLine = createStatLine('FPS', '0')
+  const particleLine = createStatLine('粒子数', '0')
+  const renderLine = createStatLine('渲染耗时', '0.00 ms')
+
+  panel.appendChild(fpsLine.el)
+  panel.appendChild(particleLine.el)
+  panel.appendChild(renderLine.el)
+
+  const quotaContainer = document.createElement('div')
+  quotaContainer.className = 'quota-container'
+  panel.appendChild(quotaContainer)
+
+  gui.domElement.appendChild(panel)
+
+  particleSystem.setStatsCallback((stats: Stats) => {
+    fpsLine.setValue(stats.fps.toString())
+    particleLine.setValue(stats.avgParticles.toString())
+    renderLine.setValue(stats.renderTime.toFixed(2) + ' ms')
+
+    quotaContainer.innerHTML = ''
+    for (const s of particleSystem.getEmitterStats()) {
+      const line = document.createElement('div')
+      line.className = 'stats-line'
+      const name = document.createElement('span')
+      name.className = 'stats-label'
+      name.textContent = s.id
+      const value = document.createElement('span')
+      value.className = 'stats-value'
+      value.textContent = `${s.alive}/${Math.round(s.quota)} (弃${s.dropped})`
+      line.appendChild(name)
+      line.appendChild(value)
+      quotaContainer.appendChild(line)
+    }
+  })
+}
+
+function createStatLine(label: string, value: string) {
+  const line = document.createElement('div')
+  line.className = 'stats-line'
+
+  const labelEl = document.createElement('span')
+  labelEl.className = 'stats-label'
+  labelEl.textContent = label
+
+  const valueEl = document.createElement('span')
+  valueEl.className = 'stats-value'
+  valueEl.textContent = value
+
+  line.appendChild(labelEl)
+  line.appendChild(valueEl)
+
+  return {
+    el: line,
+    setValue: (v: string) => {
+      valueEl.textContent = v
+    }
+  }
+}
+
+function injectStyles(): void {
   const styleSheet = document.createElement('style')
   styleSheet.textContent = `
     .lil-gui {
@@ -178,179 +420,11 @@ export function createControls(particleSystem: ParticleSystem): GUI {
       font-weight: 600;
       font-family: 'SF Mono', Consolas, monospace;
     }
+    .quota-container {
+      margin-top: 6px;
+      border-top: 1px dashed #3a3a5e;
+      padding-top: 4px;
+    }
   `
   document.head.appendChild(styleSheet)
-
-  const f1 = gui.addFolder('粒子参数')
-  f1.open()
-
-  const countController = f1
-    .add(params, 'particleCount', 200, 2000, 1)
-    .name('粒子数量')
-    .onChange((v: number) => {
-      particleSystem.maxParticles = v
-    })
-  addBarChart(countController, params, 'particleCount', 2000, () => params.startColor)
-
-  const rateController = f1
-    .add(params, 'emissionRate', 1, 50, 1)
-    .name('发射速率/秒')
-    .onChange((v: number) => {
-      particleSystem.emissionRate = v
-    })
-  addBarChart(rateController, params, 'emissionRate', 50, () => params.startColor)
-
-  f1.add(params, 'lifetime', 2, 10, 0.1)
-    .name('粒子寿命(秒)')
-    .onChange((v: number) => {
-      particleSystem.lifetime = v
-    })
-
-  const f2 = gui.addFolder('物理参数')
-  f2.open()
-
-  f2.add(params, 'gravity', 0, 2, 0.01)
-    .name('重力强度')
-    .onChange((v: number) => {
-      particleSystem.gravity = v
-    })
-
-  f2.add(params, 'turbulence', 0, 5, 0.01)
-    .name('湍流强度')
-    .onChange((v: number) => {
-      particleSystem.turbulence = v
-    })
-
-  const f3 = gui.addFolder('初始速度')
-  f3.open()
-
-  f3.add(params, 'velocityX', -5, 5, 0.1)
-    .name('X 分量')
-    .onChange((v: number) => {
-      particleSystem.initialVelocity.x = v
-    })
-
-  f3.add(params, 'velocityY', -5, 5, 0.1)
-    .name('Y 分量')
-    .onChange((v: number) => {
-      particleSystem.initialVelocity.y = v
-    })
-
-  f3.add(params, 'velocityZ', -5, 5, 0.1)
-    .name('Z 分量')
-    .onChange((v: number) => {
-      particleSystem.initialVelocity.z = v
-    })
-
-  const f4 = gui.addFolder('外观设置')
-  f4.open()
-
-  f4.addColor(params, 'startColor')
-    .name('起始颜色')
-    .onChange((v: string) => {
-      particleSystem.startColor = new THREE.Color(v)
-    })
-
-  f4.addColor(params, 'endColor')
-    .name('结束颜色')
-    .onChange((v: string) => {
-      particleSystem.endColor = new THREE.Color(v)
-    })
-
-  f4.add(params, 'lowPerformanceMode')
-    .name('低性能模式')
-    .onChange((v: boolean) => {
-      particleSystem.lowPerformanceMode = v
-    })
-
-  createStatsPanel(gui, particleSystem)
-
-  return gui
-}
-
-function addBarChart(
-  controller: any,
-  params: ControlParams,
-  key: keyof ControlParams,
-  max: number,
-  getColor: () => string
-): void {
-  const container = document.createElement('div')
-  container.className = 'bar-container'
-
-  const track = document.createElement('div')
-  track.className = 'bar-track'
-
-  const fill = document.createElement('div')
-  fill.className = 'bar-fill'
-  fill.style.background = getColor()
-  track.appendChild(fill)
-
-  const label = document.createElement('span')
-  label.className = 'bar-label'
-
-  container.appendChild(track)
-  container.appendChild(label)
-
-  const updateBar = () => {
-    const val = params[key] as number
-    const pct = Math.min(100, (val / max) * 100)
-    fill.style.width = pct + '%'
-    fill.style.background = getColor()
-    label.textContent = `${val}/${max}`
-  }
-
-  controller.domElement.parentNode.insertBefore(container, controller.domElement.nextSibling)
-  controller.onChange(updateBar)
-  controller.updateDisplay()
-  updateBar()
-
-  const colorInterval = setInterval(() => {
-    fill.style.background = getColor()
-  }, 200)
-  controller.__barInterval = colorInterval
-}
-
-function createStatsPanel(gui: GUI, particleSystem: ParticleSystem): void {
-  const panel = document.createElement('div')
-  panel.className = 'stats-panel'
-
-  const fpsLine = createStatLine('FPS', '0')
-  const particleLine = createStatLine('粒子数', '0')
-  const renderLine = createStatLine('渲染耗时', '0.00 ms')
-
-  panel.appendChild(fpsLine.el)
-  panel.appendChild(particleLine.el)
-  panel.appendChild(renderLine.el)
-
-  gui.domElement.appendChild(panel)
-
-  particleSystem.setStatsCallback((stats: Stats) => {
-    fpsLine.setValue(stats.fps.toString())
-    particleLine.setValue(stats.avgParticles.toString())
-    renderLine.setValue(stats.renderTime.toFixed(2) + ' ms')
-  })
-}
-
-function createStatLine(label: string, value: string) {
-  const line = document.createElement('div')
-  line.className = 'stats-line'
-
-  const labelEl = document.createElement('span')
-  labelEl.className = 'stats-label'
-  labelEl.textContent = label
-
-  const valueEl = document.createElement('span')
-  valueEl.className = 'stats-value'
-  valueEl.textContent = value
-
-  line.appendChild(labelEl)
-  line.appendChild(valueEl)
-
-  return {
-    el: line,
-    setValue: (v: string) => {
-      valueEl.textContent = v
-    }
-  }
 }

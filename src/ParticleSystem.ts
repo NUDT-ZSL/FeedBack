@@ -1,17 +1,5 @@
 import * as THREE from 'three'
-
-interface ParticleData {
-  alive: boolean
-  age: number
-  lifetime: number
-  position: THREE.Vector3
-  velocity: THREE.Vector3
-  color: THREE.Color
-  startColor: THREE.Color
-  endColor: THREE.Color
-  size: number
-  trail: THREE.Vector3[]
-}
+import { ParticleEngine, EmitterConfig, EmitterStats } from './core/engine'
 
 interface Stats {
   fps: number
@@ -19,31 +7,23 @@ interface Stats {
   renderTime: number
 }
 
+const BUFFER_CAPACITY = 2000
+
 export class ParticleSystem {
-  public maxParticles = 800
-  public emissionRate = 20
-  public lifetime = 5
-  public gravity = 0.5
-  public turbulence = 1
-  public initialVelocity = new THREE.Vector3(0, 1, 0)
-  public startColor = new THREE.Color(0x00ffff)
-  public endColor = new THREE.Color(0x00008b)
-  public initialSize = 0.3
   public lowPerformanceMode = false
 
+  public readonly engine: ParticleEngine
   public points: THREE.Points
   public trailPoints: THREE.Points | null = null
-  public emitterMesh: THREE.Mesh
 
-  private particles: ParticleData[] = []
   private positions: Float32Array
   private colors: Float32Array
   private sizes: Float32Array
   private trailPositions: Float32Array
   private trailColors: Float32Array
 
-  private emissionAccumulator = 0
-  private readonly TRAIL_LENGTH = 5
+  private emitterMeshes = new Map<string, THREE.Mesh>()
+  private scene: THREE.Scene
 
   private frameCount = 0
   private lastStatsTime = performance.now()
@@ -53,11 +33,14 @@ export class ParticleSystem {
   private onStatsUpdate: ((stats: Stats) => void) | null = null
 
   constructor(scene: THREE.Scene) {
-    this.positions = new Float32Array(2000 * 3)
-    this.colors = new Float32Array(2000 * 3)
-    this.sizes = new Float32Array(2000)
-    this.trailPositions = new Float32Array(2000 * this.TRAIL_LENGTH * 3)
-    this.trailColors = new Float32Array(2000 * this.TRAIL_LENGTH * 3)
+    this.scene = scene
+    this.engine = new ParticleEngine()
+
+    this.positions = new Float32Array(BUFFER_CAPACITY * 3)
+    this.colors = new Float32Array(BUFFER_CAPACITY * 3)
+    this.sizes = new Float32Array(BUFFER_CAPACITY)
+    this.trailPositions = new Float32Array(BUFFER_CAPACITY * this.engine.trailLength * 3)
+    this.trailColors = new Float32Array(BUFFER_CAPACITY * this.engine.trailLength * 3)
 
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3))
@@ -99,7 +82,6 @@ export class ParticleSystem {
     scene.add(this.points)
 
     this.createTrailSystem(scene)
-    this.createEmitter(scene)
   }
 
   private createTrailSystem(scene: THREE.Scene): void {
@@ -141,108 +123,85 @@ export class ParticleSystem {
     scene.add(this.trailPoints)
   }
 
-  private createEmitter(scene: THREE.Scene): void {
-    const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32)
-    const sphereMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00bcd4,
+  public get maxParticles(): number {
+    return this.engine.maxParticles
+  }
+  public set maxParticles(v: number) {
+    this.engine.maxParticles = v
+  }
+  public get gravity(): number {
+    return this.engine.gravity
+  }
+  public set gravity(v: number) {
+    this.engine.gravity = v
+  }
+  public get turbulence(): number {
+    return this.engine.turbulence
+  }
+  public set turbulence(v: number) {
+    this.engine.turbulence = v
+  }
+
+  public addEmitter(config: Omit<EmitterConfig, 'id'> & { id?: string }): string {
+    const id = this.engine.addEmitter(config)
+    this.createEmitterMesh(id)
+    return id
+  }
+
+  public updateEmitter(id: string, changes: Partial<Omit<EmitterConfig, 'id'>>): boolean {
+    const ok = this.engine.updateEmitter(id, changes)
+    if (ok) this.syncEmitterMesh(id)
+    return ok
+  }
+
+  public removeEmitter(id: string): boolean {
+    const ok = this.engine.removeEmitter(id)
+    const mesh = this.emitterMeshes.get(id)
+    if (mesh) {
+      this.scene.remove(mesh)
+      mesh.geometry.dispose()
+      ;(mesh.material as THREE.Material).dispose()
+      this.emitterMeshes.delete(id)
+    }
+    return ok
+  }
+
+  private createEmitterMesh(id: string): void {
+    const geometry = new THREE.SphereGeometry(0.2, 32, 32)
+    const material = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0.3,
       wireframe: true
     })
-    this.emitterMesh = new THREE.Mesh(sphereGeometry, sphereMaterial)
-    scene.add(this.emitterMesh)
+    const mesh = new THREE.Mesh(geometry, material)
+    this.emitterMeshes.set(id, mesh)
+    this.scene.add(mesh)
+    this.syncEmitterMesh(id)
+  }
+
+  private syncEmitterMesh(id: string): void {
+    const mesh = this.emitterMeshes.get(id)
+    const config = this.engine.getEmitter(id)
+    if (!mesh || !config) return
+    mesh.position.set(...config.position)
+    ;(mesh.material as THREE.MeshBasicMaterial).color.set(config.startColor)
+  }
+
+  public getEmitterMeshes(): THREE.Mesh[] {
+    return Array.from(this.emitterMeshes.values())
+  }
+
+  public getEmitterStats(): EmitterStats[] {
+    return this.engine.getEmitterStats()
   }
 
   public setStatsCallback(callback: (stats: Stats) => void): void {
     this.onStatsUpdate = callback
   }
 
-  private randomSphereDirection(): THREE.Vector3 {
-    const u = Math.random()
-    const v = Math.random()
-    const theta = 2 * Math.PI * u
-    const phi = Math.acos(2 * v - 1)
-    return new THREE.Vector3(
-      Math.sin(phi) * Math.cos(theta),
-      Math.sin(phi) * Math.sin(theta),
-      Math.cos(phi)
-    )
-  }
-
-  private emitParticle(): void {
-    if (this.particles.filter(p => p.alive).length >= this.maxParticles) return
-
-    let particle = this.particles.find(p => !p.alive)
-    if (!particle) {
-      if (this.particles.length >= this.maxParticles) return
-      particle = {
-        alive: false,
-        age: 0,
-        lifetime: this.lifetime,
-        position: new THREE.Vector3(),
-        velocity: new THREE.Vector3(),
-        color: new THREE.Color(),
-        startColor: new THREE.Color(),
-        endColor: new THREE.Color(),
-        size: this.initialSize,
-        trail: []
-      }
-      this.particles.push(particle)
-    }
-
-    const direction = this.randomSphereDirection()
-    particle.alive = true
-    particle.age = 0
-    particle.lifetime = this.lifetime
-    particle.position.set(0, 0, 0)
-    particle.velocity.copy(direction).add(this.initialVelocity)
-    particle.startColor.copy(this.startColor)
-    particle.endColor.copy(this.endColor)
-    particle.color.copy(this.startColor)
-    particle.size = this.initialSize
-    particle.trail = []
-    for (let i = 0; i < this.TRAIL_LENGTH; i++) {
-      particle.trail.push(new THREE.Vector3(0, 0, 0))
-    }
-  }
-
   public update(deltaTime: number): void {
     const renderStart = performance.now()
-
-    this.emissionAccumulator += this.emissionRate * deltaTime
-    while (this.emissionAccumulator >= 1) {
-      this.emitParticle()
-      this.emissionAccumulator -= 1
-    }
-
-    let aliveCount = 0
-    for (let i = 0; i < this.particles.length; i++) {
-      const p = this.particles[i]
-      if (!p.alive) continue
-
-      p.age += deltaTime
-      if (p.age >= p.lifetime) {
-        p.alive = false
-        continue
-      }
-
-      for (let t = this.TRAIL_LENGTH - 1; t > 0; t--) {
-        p.trail[t].copy(p.trail[t - 1])
-      }
-      p.trail[0].copy(p.position)
-
-      p.velocity.y -= this.gravity * deltaTime
-      p.velocity.x += (Math.random() - 0.5) * this.turbulence * deltaTime
-      p.velocity.y += (Math.random() - 0.5) * this.turbulence * deltaTime
-      p.velocity.z += (Math.random() - 0.5) * this.turbulence * deltaTime
-
-      p.position.x += p.velocity.x * deltaTime
-      p.position.y += p.velocity.y * deltaTime
-      p.position.z += p.velocity.z * deltaTime
-
-      aliveCount++
-    }
-
+    this.engine.update(deltaTime)
     this.updateBuffers()
     this.updateStats(deltaTime, renderStart)
   }
@@ -250,19 +209,19 @@ export class ParticleSystem {
   private updateBuffers(): void {
     let idx = 0
     let trailIdx = 0
+    const particles = this.engine.getParticles()
 
-    for (let i = 0; i < this.particles.length; i++) {
-      const p = this.particles[i]
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i]
       if (!p.alive) continue
 
       const lifeRatio = p.age / p.lifetime
-      p.color.copy(p.startColor).lerp(p.endColor, lifeRatio)
 
-      let size = this.initialSize
+      let size = this.engine.initialSize
       let alpha = 0.9
 
       if (!this.lowPerformanceMode) {
-        size = this.initialSize * (1 - lifeRatio)
+        size = this.engine.initialSize * (1 - lifeRatio)
         alpha = 0.9 * (1 - lifeRatio)
       } else {
         size = 0.2
@@ -279,8 +238,8 @@ export class ParticleSystem {
       idx++
 
       if (!this.lowPerformanceMode && this.trailPoints) {
-        for (let t = 0; t < this.TRAIL_LENGTH; t++) {
-          const trailRatio = (t + 1) / (this.TRAIL_LENGTH + 1)
+        for (let t = 0; t < this.engine.trailLength; t++) {
+          const trailRatio = (t + 1) / (this.engine.trailLength + 1)
           const trailAlpha = alpha * (1 - trailRatio) * 0.5
           this.trailPositions[trailIdx * 3] = p.trail[t].x
           this.trailPositions[trailIdx * 3 + 1] = p.trail[t].y
@@ -317,8 +276,7 @@ export class ParticleSystem {
     this.frameCount++
     const renderEnd = performance.now()
     this.frameTimes.push(renderEnd - renderStart)
-    const aliveCount = this.particles.filter(p => p.alive).length
-    this.particleCounts.push(aliveCount)
+    this.particleCounts.push(this.engine.getAliveCount())
 
     const now = performance.now()
     if (now - this.lastStatsTime >= 1000) {
@@ -356,7 +314,11 @@ export class ParticleSystem {
       this.trailPoints.geometry.dispose()
       ;(this.trailPoints.material as THREE.Material).dispose()
     }
-    this.emitterMesh.geometry.dispose()
-    ;(this.emitterMesh.material as THREE.Material).dispose()
+    for (const mesh of this.emitterMeshes.values()) {
+      this.scene.remove(mesh)
+      mesh.geometry.dispose()
+      ;(mesh.material as THREE.Material).dispose()
+    }
+    this.emitterMeshes.clear()
   }
 }
