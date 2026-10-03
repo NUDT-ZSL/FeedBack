@@ -17,6 +17,6 @@ export interface Comment {
   createdAt: number
 }
 
-export type Page = 'canvas' | 'gallery' | 'detail'
+export type Page = 'canvas' | 'gallery' | 'detail' | 'alignment'
 
 export type GridSize = 16 | 32 | 64

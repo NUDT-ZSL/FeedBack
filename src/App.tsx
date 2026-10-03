@@ -3,6 +3,7 @@ import PixelCanvas from './PixelCanvas'
 import Palette from './Palette'
 import Gallery from './Gallery'
 import ArtDetail from './ArtDetail'
+import AlignmentPage from './AlignmentPage'
 import type { Artwork, GridSize, Page } from './types'
 import { addArtwork } from './db'
 
@@ -103,6 +104,15 @@ const App: React.FC = () => {
           >
             画廊
           </button>
+          <button
+            onClick={() => setCurrentPage('alignment')}
+            style={{
+              ...styles.navBtn,
+              ...(currentPage === 'alignment' ? styles.navBtnActive : {}),
+            }}
+          >
+            对齐推演
+          </button>
         </div>
       </nav>
 
@@ -156,6 +166,8 @@ const App: React.FC = () => {
             onBack={handleBackFromDetail}
           />
         )}
+
+        {currentPage === 'alignment' && <AlignmentPage />}
       </main>
 
       {showPublishModal && (
