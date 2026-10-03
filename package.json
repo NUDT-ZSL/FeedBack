@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "verify": "tsc -p tsconfig.verify.json && echo '{\"type\":\"commonjs\"}' > dist-verify/package.json && node dist-verify/scripts/verify.js",
     "preview": "vite preview"
   },
   "dependencies": {

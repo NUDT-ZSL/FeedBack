@@ -1,9 +1,11 @@
 import { CrystalScene } from './scene';
 import { CRYSTALS, getCrystalById } from './crystal';
+import type { CrystalStructure } from './crystal';
 
 class UIController {
   private scene: CrystalScene;
   private currentCrystalId: string = 'sc';
+  private currentStructure: CrystalStructure | null = null;
   private axesVisible: boolean = false;
   private gridVisible: boolean = false;
   private isExploded: boolean = false;
@@ -125,6 +127,7 @@ class UIController {
     if (!crystal) return;
 
     this.currentCrystalId = id;
+    this.currentStructure = crystal;
 
     const buttons = this.crystalButtonsContainer.querySelectorAll('.crystal-btn');
     buttons.forEach(btn => {
@@ -172,13 +175,7 @@ class UIController {
   }
 
   private getElementName(elem: string): string {
-    const names: Record<string, string> = {
-      'metal': '金属原子',
-      'Na': '钠 (Na)',
-      'Cl': '氯 (Cl)',
-      'C': '碳 (C)'
-    };
-    return names[elem] || elem;
+    return this.currentStructure?.elements[elem]?.name ?? elem;
   }
 
   private handleBackgroundClick(): void {

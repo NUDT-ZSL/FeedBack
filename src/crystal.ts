@@ -15,16 +15,46 @@ export interface CrystalBond {
   atomB: string;
 }
 
-export interface CrystalStructure {
+export type CellRange = [number, number];
+
+/** 晶胞基元：单个原子在一个晶胞内的分数坐标（约定 0 <= 坐标 < 1） */
+export interface BasisAtom {
+  element: string;
+  position: [number, number, number];
+}
+
+/** 晶体定义：只需描述一个晶胞，展开与成键均由定义推导 */
+export interface UnitCellDef {
   id: string;
   name: string;
   abbr: string;
   spaceGroup: string;
   latticeConstant: number;
   elements: Record<string, AtomElement>;
+  basis: BasisAtom[];
+  /** 成键距离阈值（分数坐标单位，物理距离 = 阈值 × 晶格常数） */
+  bondThreshold: number;
+}
+
+export interface CrystalStructure {
+  id: string;
+  name: string;
+  abbr: string;
+  spaceGroup: string;
+  latticeConstant: number;
+  range: CellRange;
+  elements: Record<string, AtomElement>;
   atoms: CrystalAtom[];
   bonds: CrystalBond[];
 }
+
+/** 默认展示范围：单个晶胞 [0,1]，边界闭合 */
+export const DEFAULT_RANGE: CellRange = [0, 0];
+
+/** 默认晶格常数（埃），渲染层以此为 1 倍缩放基准 */
+export const DEFAULT_LATTICE_CONSTANT = 2.5;
+
+const POS_EPS = 1e-6;
 
 const METAL: AtomElement = {
   name: '金属原子',
@@ -50,231 +80,197 @@ const CARBON: AtomElement = {
   radius: 0.4
 };
 
-function genBondsForCell(cellAtoms: CrystalAtom[], maxDist: number): CrystalBond[] {
+export const CRYSTAL_DEFS: UnitCellDef[] = [
+  {
+    id: 'sc',
+    name: '简单立方',
+    abbr: 'SC',
+    spaceGroup: 'Pm-3m',
+    latticeConstant: 2.5,
+    elements: { metal: METAL },
+    basis: [
+      { element: 'metal', position: [0, 0, 0] }
+    ],
+    bondThreshold: 1.01
+  },
+  {
+    id: 'bcc',
+    name: '体心立方',
+    abbr: 'BCC',
+    spaceGroup: 'Im-3m',
+    latticeConstant: 2.5,
+    elements: { metal: METAL },
+    basis: [
+      { element: 'metal', position: [0, 0, 0] },
+      { element: 'metal', position: [0.5, 0.5, 0.5] }
+    ],
+    bondThreshold: 0.87
+  },
+  {
+    id: 'fcc',
+    name: '面心立方',
+    abbr: 'FCC',
+    spaceGroup: 'Fm-3m',
+    latticeConstant: 2.5,
+    elements: { metal: METAL },
+    basis: [
+      { element: 'metal', position: [0, 0, 0] },
+      { element: 'metal', position: [0.5, 0.5, 0] },
+      { element: 'metal', position: [0.5, 0, 0.5] },
+      { element: 'metal', position: [0, 0.5, 0.5] }
+    ],
+    bondThreshold: 0.71
+  },
+  {
+    id: 'nacl',
+    name: '氯化钠',
+    abbr: 'NaCl',
+    spaceGroup: 'Fm-3m',
+    latticeConstant: 2.5,
+    elements: { Na: SODIUM, Cl: CHLORINE },
+    basis: [
+      { element: 'Na', position: [0, 0, 0] },
+      { element: 'Na', position: [0.5, 0.5, 0] },
+      { element: 'Na', position: [0.5, 0, 0.5] },
+      { element: 'Na', position: [0, 0.5, 0.5] },
+      { element: 'Cl', position: [0.5, 0, 0] },
+      { element: 'Cl', position: [0, 0.5, 0] },
+      { element: 'Cl', position: [0, 0, 0.5] },
+      { element: 'Cl', position: [0.5, 0.5, 0.5] }
+    ],
+    bondThreshold: 0.51
+  },
+  {
+    id: 'diamond',
+    name: '金刚石',
+    abbr: 'Dia',
+    spaceGroup: 'Fd-3m',
+    latticeConstant: 2.5,
+    elements: { C: CARBON },
+    basis: [
+      { element: 'C', position: [0, 0, 0] },
+      { element: 'C', position: [0.5, 0.5, 0] },
+      { element: 'C', position: [0.5, 0, 0.5] },
+      { element: 'C', position: [0, 0.5, 0.5] },
+      { element: 'C', position: [0.25, 0.25, 0.25] },
+      { element: 'C', position: [0.75, 0.75, 0.25] },
+      { element: 'C', position: [0.75, 0.25, 0.75] },
+      { element: 'C', position: [0.25, 0.75, 0.75] }
+    ],
+    bondThreshold: 0.44
+  }
+];
+
+function positionKey(p: [number, number, number]): string {
+  const quantize = (v: number): number => Math.round(v / POS_EPS);
+  return `${quantize(p[0])},${quantize(p[1])},${quantize(p[2])}`;
+}
+
+/**
+ * 将晶胞基元按 range 展开为分数坐标原子。
+ *
+ * range = [m, n] 表示覆盖 [m, n+1] 的超胞区域（每轴 n-m+1 个晶胞）。
+ * 迭代到 n+1 号晶胞并裁剪到上边界，使位于边界上的原子在相邻晶胞中的
+ * 周期镜像只保留一份（去重），从而避免重复实例与多余键。
+ */
+export function expandUnitCell(
+  def: UnitCellDef,
+  range: CellRange = DEFAULT_RANGE
+): CrystalAtom[] {
+  const [min, max] = range;
+  const upper = max + 1;
+  const seen = new Set<string>();
+  const atoms: CrystalAtom[] = [];
+
+  for (let ix = min; ix <= max + 1; ix++) {
+    for (let iy = min; iy <= max + 1; iy++) {
+      for (let iz = min; iz <= max + 1; iz++) {
+        for (const basisAtom of def.basis) {
+          const px = basisAtom.position[0] + ix;
+          const py = basisAtom.position[1] + iy;
+          const pz = basisAtom.position[2] + iz;
+          if (
+            px < min - POS_EPS || px > upper + POS_EPS ||
+            py < min - POS_EPS || py > upper + POS_EPS ||
+            pz < min - POS_EPS || pz > upper + POS_EPS
+          ) {
+            continue;
+          }
+          const position: [number, number, number] = [px, py, pz];
+          const key = positionKey(position);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          atoms.push({
+            id: `${def.id}-${atoms.length}`,
+            element: basisAtom.element,
+            position
+          });
+        }
+      }
+    }
+  }
+  return atoms;
+}
+
+/**
+ * 按距离阈值生成键（去重，无自连）。
+ * 阈值以分数坐标表示，物理距离随晶格常数等比缩放。
+ */
+export function generateBonds(
+  atoms: CrystalAtom[],
+  bondThreshold: number
+): CrystalBond[] {
   const bonds: CrystalBond[] = [];
-  for (let i = 0; i < cellAtoms.length; i++) {
-    for (let j = i + 1; j < cellAtoms.length; j++) {
-      const a = cellAtoms[i].position;
-      const b = cellAtoms[j].position;
+  const limit = bondThreshold + POS_EPS;
+  for (let i = 0; i < atoms.length; i++) {
+    for (let j = i + 1; j < atoms.length; j++) {
+      const a = atoms[i].position;
+      const b = atoms[j].position;
       const dx = a[0] - b[0];
       const dy = a[1] - b[1];
       const dz = a[2] - b[2];
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist <= maxDist + 0.01) {
-        bonds.push({ atomA: cellAtoms[i].id, atomB: cellAtoms[j].id });
+      if (dx * dx + dy * dy + dz * dz <= limit * limit) {
+        bonds.push({ atomA: atoms[i].id, atomB: atoms[j].id });
       }
     }
   }
   return bonds;
 }
 
-function expandUnitCell(
-  baseAtoms: CrystalAtom[],
-  range: [number, number] = [-1, 2]
-): CrystalAtom[] {
-  const expanded: CrystalAtom[] = [];
-  for (let ix = range[0]; ix <= range[1]; ix++) {
-    for (let iy = range[0]; iy <= range[1]; iy++) {
-      for (let iz = range[0]; iz <= range[1]; iz++) {
-        for (const atom of baseAtoms) {
-          const px = atom.position[0] + ix;
-          const py = atom.position[1] + iy;
-          const pz = atom.position[2] + iz;
-          if (px >= 0 && px < 1 && py >= 0 && py < 1 && pz >= 0 && pz < 1) {
-            if (ix === 0 && iy === 0 && iz === 0) {
-              expanded.push(atom);
-            }
-          } else if (ix === 0 && iy === 0 && iz === 0) {
-            continue;
-          }
-        }
-      }
-    }
-  }
-  return expanded;
+/** 完整推导链路：晶体定义 + 晶胞范围 + 晶格常数 -> 原子与键 */
+export function buildCrystalStructure(
+  def: UnitCellDef,
+  range: CellRange = DEFAULT_RANGE,
+  latticeConstant: number = def.latticeConstant
+): CrystalStructure {
+  const atoms = expandUnitCell(def, range);
+  const bonds = generateBonds(atoms, def.bondThreshold);
+  return {
+    id: def.id,
+    name: def.name,
+    abbr: def.abbr,
+    spaceGroup: def.spaceGroup,
+    latticeConstant,
+    range,
+    elements: def.elements,
+    atoms,
+    bonds
+  };
 }
 
-export const CRYSTALS: CrystalStructure[] = [
-  (() => {
-    const baseAtoms: CrystalAtom[] = [
-      { id: 'sc-1', element: 'metal', position: [0, 0, 0] }
-    ];
-
-    const allAtoms: CrystalAtom[] = [];
-    const offsets = [
-      [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]
-    ];
-    offsets.forEach((off, i) => {
-      allAtoms.push({
-        id: `sc-corner-${i}`,
-        element: 'metal',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-
-    return {
-      id: 'sc',
-      name: '简单立方',
-      abbr: 'SC',
-      spaceGroup: 'Pm-3m',
-      latticeConstant: 2.5,
-      elements: { metal: METAL },
-      atoms: allAtoms,
-      bonds: genBondsForCell(allAtoms, 0.51)
-    };
-  })(),
-
-  (() => {
-    const allAtoms: CrystalAtom[] = [];
-    const offsets = [
-      [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]
-    ];
-    offsets.forEach((off, i) => {
-      allAtoms.push({
-        id: `bcc-corner-${i}`,
-        element: 'metal',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-    allAtoms.push({
-      id: 'bcc-center',
-      element: 'metal',
-      position: [0.25, 0.25, 0.25]
-    });
-
-    return {
-      id: 'bcc',
-      name: '体心立方',
-      abbr: 'BCC',
-      spaceGroup: 'Im-3m',
-      latticeConstant: 2.5,
-      elements: { metal: METAL },
-      atoms: allAtoms,
-      bonds: genBondsForCell(allAtoms, 0.45)
-    };
-  })(),
-
-  (() => {
-    const allAtoms: CrystalAtom[] = [];
-    const corners = [
-      [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]
-    ];
-    corners.forEach((off, i) => {
-      allAtoms.push({
-        id: `fcc-corner-${i}`,
-        element: 'metal',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-    const faces = [
-      [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
-      [0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0],
-      [0, 0, 0.5], [0.5, 0.5, 1], [0.5, 1, 0.5], [1, 0.5, 0.5]
-    ];
-    faces.forEach((off, i) => {
-      allAtoms.push({
-        id: `fcc-face-${i}`,
-        element: 'metal',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-
-    return {
-      id: 'fcc',
-      name: '面心立方',
-      abbr: 'FCC',
-      spaceGroup: 'Fm-3m',
-      latticeConstant: 2.5,
-      elements: { metal: METAL },
-      atoms: allAtoms,
-      bonds: genBondsForCell(allAtoms, 0.37)
-    };
-  })(),
-
-  (() => {
-    const allAtoms: CrystalAtom[] = [];
-    const naOffsets = [
-      [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]
-    ];
-    naOffsets.forEach((off, i) => {
-      allAtoms.push({
-        id: `nacl-na-${i}`,
-        element: 'Na',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-    const clOffsets = [
-      [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
-      [0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0],
-      [0, 0, 0.5], [0.5, 0.5, 1], [0.5, 1, 0.5], [1, 0.5, 0.5]
-    ];
-    clOffsets.forEach((off, i) => {
-      allAtoms.push({
-        id: `nacl-cl-${i}`,
-        element: 'Cl',
-        position: [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5]
-      });
-    });
-
-    return {
-      id: 'nacl',
-      name: '氯化钠',
-      abbr: 'NaCl',
-      spaceGroup: 'Fm-3m',
-      latticeConstant: 2.5,
-      elements: { Na: SODIUM, Cl: CHLORINE },
-      atoms: allAtoms,
-      bonds: genBondsForCell(allAtoms, 0.37)
-    };
-  })(),
-
-  (() => {
-    const allAtoms: CrystalAtom[] = [];
-    const fccBase: [number, number, number][] = [
-      [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-      [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1],
-      [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
-      [0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0],
-      [0, 0, 0.5], [0.5, 0.5, 1], [0.5, 1, 0.5], [1, 0.5, 0.5]
-    ];
-    const shift: [number, number, number] = [0.25, 0.25, 0.25];
-    fccBase.forEach((off, i) => {
-      const p = [off[0] * 0.5, off[1] * 0.5, off[2] * 0.5];
-      allAtoms.push({
-        id: `diamond-fcc-${i}`,
-        element: 'C',
-        position: [p[0], p[1], p[2]]
-      });
-      allAtoms.push({
-        id: `diamond-shift-${i}`,
-        element: 'C',
-        position: [p[0] + shift[0] * 0.5, p[1] + shift[1] * 0.5, p[2] + shift[2] * 0.5]
-      });
-    });
-
-    const visibleAtoms = allAtoms.filter(a =>
-      a.position[0] >= -0.01 && a.position[0] <= 0.51 &&
-      a.position[1] >= -0.01 && a.position[1] <= 0.51 &&
-      a.position[2] >= -0.01 && a.position[2] <= 0.51
-    );
-
-    return {
-      id: 'diamond',
-      name: '金刚石',
-      abbr: 'Dia',
-      spaceGroup: 'Fd-3m',
-      latticeConstant: 2.5,
-      elements: { C: CARBON },
-      atoms: visibleAtoms,
-      bonds: genBondsForCell(visibleAtoms, 0.26)
-    };
-  })()
-];
-
-export function getCrystalById(id: string): CrystalStructure | undefined {
-  return CRYSTALS.find(c => c.id === id);
+export function getCrystalDefById(id: string): UnitCellDef | undefined {
+  return CRYSTAL_DEFS.find(c => c.id === id);
 }
+
+export function getCrystalById(
+  id: string,
+  range: CellRange = DEFAULT_RANGE
+): CrystalStructure | undefined {
+  const def = getCrystalDefById(id);
+  return def ? buildCrystalStructure(def, range) : undefined;
+}
+
+/** 向后兼容：默认范围下各晶体的已展开结构 */
+export const CRYSTALS: CrystalStructure[] = CRYSTAL_DEFS.map(def =>
+  buildCrystalStructure(def, DEFAULT_RANGE)
+);

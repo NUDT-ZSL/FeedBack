@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2020", "DOM"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": [],
+    "outDir": "dist-verify"
+  },
+  "include": ["src/crystal.ts", "src/renderPlan.ts", "scripts/verify.ts"]
+}

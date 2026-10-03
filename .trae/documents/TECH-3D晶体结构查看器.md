@@ -13,8 +13,9 @@ graph TD
 ```
 
 ### 模块职责
-- **crystal.ts**：纯数据层，定义晶体结构（原子坐标、化学键、元素属性），无外部依赖
-- **scene.ts**：Three.js场景管理，负责渲染、相机、灯光、动画、交互拾取
+- **crystal.ts**：纯数据层，定义晶胞基元（分数坐标），由 expandUnitCell / generateBonds / buildCrystalStructure 推导原子与键，无外部依赖
+- **renderPlan.ts**：纯推导层，由 CrystalStructure 推导渲染实例（原子球坐标/半径、键杆端点/长度），供渲染与离线校验共用
+- **scene.ts**：Three.js场景管理，按 renderPlan 的实例列表渲染，负责相机、灯光、动画、交互拾取，不自行维护与晶体脱节的坐标/半径状态
 - **ui.ts**：DOM操作与事件绑定，构建控制面板，通过回调与scene交互
 - **index.html**：页面入口，定义Canvas容器和面板布局
 
@@ -37,8 +38,12 @@ auto35/
 ├── index.html
 └── src/
     ├── crystal.ts      # 晶体结构数据定义
+    ├── renderPlan.ts   # 渲染实例推导（与离线校验共用）
     ├── scene.ts        # Three.js场景与渲染
     └── ui.ts           # DOM面板与事件绑定
+
+scripts/verify.ts       # 离线批量验证（npm run verify）：
+                        # 校验不同晶胞范围/晶格常数下原子数、键数、渲染实例数一致
 ```
 
 ## 4. 核心数据类型定义
