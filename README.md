@@ -1,3 +1,24 @@
+## 服务端离线验证
+
+仓库内置了一套不依赖浏览器和外网的服务端验证套件，通过本机 loopback 上的真实
+WebSocket 连接完整走一遍服务端的消息处理与状态变更路径。
+
+```bash
+npm install   # 首次需要联网安装依赖
+npm test      # 之后完全离线运行
+```
+
+覆盖场景：
+
+- 多客户端并发写入同一元素后的最终状态与版本推进自洽性
+- 同一元素重复提交、删除后再更新时画布内容与版本号的一致性
+- 客户端断线重连后 sync 消息与服务端当前状态（含 GET /api/board）的一致性
+- 非法 / 无法解析 / 空操作消息到达时服务端状态不被污染
+- 用户进出时广播的在线人数与真实连接集合吻合
+
+单次运行批量执行全部场景并给出 `N/M 通过` 的结论；任一失败会以非零退出码结束，
+并打印失败场景及期望状态与实际状态的差异。
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

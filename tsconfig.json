@@ -17,5 +17,5 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src", "server.ts"]
+  "include": ["src", "server.ts", "tests"]
 }

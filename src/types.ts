@@ -31,7 +31,7 @@ export type WSMessage =
   | { type: 'draw'; userId: string; element: CanvasElement; timestamp: number }
   | { type: 'update'; userId: string; elementId: string; updates: Partial<CanvasElement>; timestamp: number }
   | { type: 'delete'; userId: string; elementId: string; timestamp: number }
-  | { type: 'users'; count: number; userIds: string[] }
+  | { type: 'users'; count: number; userIds: string[]; timestamp?: number }
   | { type: 'sync'; elements: CanvasElement[] };
 
 export interface CanvasState {
