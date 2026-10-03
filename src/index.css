@@ -259,6 +259,27 @@ body {
   transform: translateY(0);
 }
 
+.history-group {
+  display: flex;
+  gap: 8px;
+}
+
+.history-btn {
+  background: #f9fafb;
+}
+
+.history-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.btn:disabled,
+.btn:disabled:hover {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .refresh-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #ffffff;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ColorCard from './components/ColorCard';
 import {
   ColorInfo,
@@ -7,30 +7,147 @@ import {
   generateHarmoniousPalette,
   getPresetPalette,
   presetNames,
-  adjustColorBrightness,
 } from './utils/colorUtils';
 
 type SlideDirection = 'in' | 'out' | 'none';
 
+interface PaletteSnapshot {
+  palette: ColorInfo[];
+  selectedIndex: number;
+}
+
+interface HistoryState {
+  entries: PaletteSnapshot[];
+  index: number;
+}
+
+const NO_SLIDE: SlideDirection[] = ['none', 'none', 'none', 'none', 'none'];
+const SLIDE_IN: SlideDirection[] = ['in', 'in', 'in', 'in', 'in'];
+
 function App() {
-  const [palette, setPalette] = useState<ColorInfo[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [history, setHistory] = useState<HistoryState>(() => ({
+    entries: [{ palette: generateHarmoniousPalette(), selectedIndex: 0 }],
+    index: 0,
+  }));
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [animationKey, setAnimationKey] = useState<number>(0);
-  const [slideDirections, setSlideDirections] = useState<SlideDirection[]>([
-    'none',
-    'none',
-    'none',
-    'none',
-    'none',
-  ]);
+  const [slideDirections, setSlideDirections] = useState<SlideDirection[]>(NO_SLIDE);
   const [displayedContrastBlack, setDisplayedContrastBlack] = useState<number>(0);
   const [displayedContrastWhite, setDisplayedContrastWhite] = useState<number>(0);
-  const isAnimatingRef = useRef(false);
+  const slideResetTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const initialPalette = generateHarmoniousPalette();
-    setPalette(initialPalette);
+  const present = history.entries[history.index];
+  const palette = present?.palette ?? [];
+  const selectedIndex = present?.selectedIndex ?? 0;
+  const canUndo = history.index > 0;
+  const canRedo = history.index < history.entries.length - 1;
+
+  const commitSnapshot = useCallback((snapshot: PaletteSnapshot) => {
+    setHistory((prev) => {
+      const entries = [...prev.entries.slice(0, prev.index + 1), snapshot];
+      return { entries, index: entries.length - 1 };
+    });
+  }, []);
+
+  const replayCardAnimation = useCallback(() => {
+    if (slideResetTimeoutRef.current !== null) {
+      window.clearTimeout(slideResetTimeoutRef.current);
+      slideResetTimeoutRef.current = null;
+    }
+    setSlideDirections(NO_SLIDE);
+    setAnimationKey((prev) => prev + 1);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    setHistory((prev) =>
+      prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev
+    );
+    replayCardAnimation();
+  }, [canUndo, replayCardAnimation]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    setHistory((prev) =>
+      prev.index < prev.entries.length - 1
+        ? { ...prev, index: prev.index + 1 }
+        : prev
+    );
+    replayCardAnimation();
+  }, [canRedo, replayCardAnimation]);
+
+  const handleRefresh = useCallback(() => {
+    commitSnapshot({ palette: generateHarmoniousPalette(), selectedIndex: 0 });
+    replayCardAnimation();
+  }, [commitSnapshot, replayCardAnimation]);
+
+  const handlePresetClick = useCallback(
+    (presetName: PresetName) => {
+      commitSnapshot({ palette: getPresetPalette(presetName), selectedIndex: 0 });
+
+      setAnimationKey((prev) => prev + 1);
+      setSlideDirections(SLIDE_IN);
+      if (slideResetTimeoutRef.current !== null) {
+        window.clearTimeout(slideResetTimeoutRef.current);
+      }
+      slideResetTimeoutRef.current = window.setTimeout(() => {
+        setSlideDirections(NO_SLIDE);
+        slideResetTimeoutRef.current = null;
+      }, 400);
+    },
+    [commitSnapshot]
+  );
+
+  const handleSelect = useCallback((index: number) => {
+    setHistory((prev) => {
+      const current = prev.entries[prev.index];
+      if (!current || current.selectedIndex === index) return prev;
+      const entries = [...prev.entries];
+      entries[prev.index] = { ...current, selectedIndex: index };
+      return { ...prev, entries };
+    });
+  }, []);
+
+  const handleCopy = useCallback(
+    async (index: number) => {
+      const color = palette[index]?.hex;
+      if (!color) return;
+
+      try {
+        await navigator.clipboard.writeText(color);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 1500);
+      } catch {
+        const textArea = document.createElement('textarea');
+        textArea.value = color;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 1500);
+      }
+    },
+    [palette]
+  );
+
+  const handleColorChange = useCallback((index: number, newColor: string) => {
+    setHistory((prev) => {
+      const current = prev.entries[prev.index];
+      const target = current?.palette[index];
+      if (!current || !target) return prev;
+
+      const normalizedColor = newColor.toUpperCase();
+      if (target.hex.toUpperCase() === normalizedColor) return prev;
+
+      const newPalette = [...current.palette];
+      newPalette[index] = { ...target, hex: normalizedColor };
+      const entries = [
+        ...prev.entries.slice(0, prev.index + 1),
+        { palette: newPalette, selectedIndex: current.selectedIndex },
+      ];
+      return { entries, index: entries.length - 1 };
+    });
   }, []);
 
   const mainColor = palette[selectedIndex]?.hex || '#000000';
@@ -75,74 +192,6 @@ function App() {
     return () => cancelAnimationFrame(animationFrame);
   }, [contrastWithBlack.ratio, contrastWithWhite.ratio]);
 
-  const handleRefresh = useCallback(() => {
-    if (isAnimatingRef.current) return;
-    isAnimatingRef.current = true;
-
-    const newPalette = generateHarmoniousPalette();
-    setPalette(newPalette);
-    setAnimationKey((prev) => prev + 1);
-    setSelectedIndex(0);
-
-    setTimeout(() => {
-      isAnimatingRef.current = false;
-    }, 800);
-  }, []);
-
-  const handlePresetClick = useCallback(
-    (presetName: PresetName) => {
-      if (isAnimatingRef.current) return;
-      isAnimatingRef.current = true;
-
-      setSlideDirections(['out', 'out', 'out', 'out', 'out']);
-
-      setTimeout(() => {
-        const newPalette = getPresetPalette(presetName);
-        setPalette(newPalette);
-        setSelectedIndex(0);
-        setSlideDirections(['in', 'in', 'in', 'in', 'in']);
-
-        setTimeout(() => {
-          setSlideDirections(['none', 'none', 'none', 'none', 'none']);
-          isAnimatingRef.current = false;
-        }, 400);
-      }, 400);
-    },
-    []
-  );
-
-  const handleSelect = useCallback((index: number) => {
-    setSelectedIndex(index);
-  }, []);
-
-  const handleCopy = useCallback(async (index: number) => {
-    const color = palette[index]?.hex;
-    if (!color) return;
-
-    try {
-      await navigator.clipboard.writeText(color);
-      setCopiedIndex(index);
-      setTimeout(() => setCopiedIndex(null), 1500);
-    } catch {
-      const textArea = document.createElement('textarea');
-      textArea.value = color;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopiedIndex(index);
-      setTimeout(() => setCopiedIndex(null), 1500);
-    }
-  }, [palette]);
-
-  const handleColorChange = useCallback((index: number, newColor: string) => {
-    setPalette((prev) => {
-      const newPalette = [...prev];
-      newPalette[index] = { ...newPalette[index], hex: newColor };
-      return newPalette;
-    });
-  }, []);
-
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'AAA':
@@ -170,7 +219,7 @@ function App() {
       <div className="palette-container">
         {palette.map((colorInfo, index) => (
           <ColorCard
-            key={index}
+            key={`${index}-${animationKey}`}
             color={colorInfo.hex}
             index={index}
             isSelected={index === selectedIndex}
@@ -185,6 +234,33 @@ function App() {
       </div>
 
       <div className="toolbar">
+        <div className="history-group">
+          <button
+            className="btn history-btn"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            aria-label="撤销"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 0 0-15-6.7L3 13" />
+            </svg>
+            撤销
+          </button>
+          <button
+            className="btn history-btn"
+            onClick={handleRedo}
+            disabled={!canRedo}
+            aria-label="重做"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 7v6h-6" />
+              <path d="M3 17a9 9 0 0 1 15-6.7L21 13" />
+            </svg>
+            重做
+          </button>
+        </div>
+
         <button className="btn refresh-btn" onClick={handleRefresh}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
@@ -242,7 +318,7 @@ function App() {
       </div>
 
       <div className="tips">
-        <span>提示：点击色块设为主色，双击修改颜色，悬停复制代码</span>
+        <span>提示：点击色块设为主色，双击修改颜色，悬停复制代码；支持撤销 / 重做色板历史</span>
       </div>
     </div>
   );
