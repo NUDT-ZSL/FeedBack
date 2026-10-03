@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Star, StarConfig } from './star';
-import { Orbit } from './orbit';
-import { setupGUI, GUIState } from './gui';
+import { Star, StarConfig } from './star.ts';
+import { Orbit } from './orbit.ts';
+import { setupGUI, GUIState } from './gui.ts';
 
 class StellarSimulator {
   private scene!: THREE.Scene;

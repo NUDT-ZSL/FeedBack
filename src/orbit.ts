@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Star } from './star';
+import { Star } from './star.ts';
 
 export interface OrbitParams {
   semiMajorAxis: number;
@@ -22,13 +22,13 @@ export class Orbit {
   private perturbationAmount: number;
   private time: number;
 
-  constructor(star: Star, otherStar: Star, semiMajorAxis: number, inclination: number) {
+  constructor(star: Star, otherStar: Star, semiMajorAxis: number, inclination: number, random: () => number = Math.random) {
     this.star = star;
     this.otherStar = otherStar;
     this.baseSemiMajorAxis = semiMajorAxis;
     this.baseInclination = inclination;
     this.baseEccentricity = 0.15;
-    this.time = Math.random() * Math.PI * 2;
+    this.time = random() * Math.PI * 2;
     this.perturbationAmount = 0;
 
     const period = this.calculatePeriod(star.config.mass, semiMajorAxis);
@@ -38,7 +38,7 @@ export class Orbit {
       eccentricity: this.baseEccentricity,
       inclination: inclination,
       period: period,
-      trueAnomaly: Math.random() * Math.PI * 2
+      trueAnomaly: random() * Math.PI * 2
     };
 
     this.targetParams = { ...this.params };
@@ -50,7 +50,7 @@ export class Orbit {
   }
 
   private calculatePeriod(mass: number, semiMajorAxis: number): number {
-    return Math.sqrt((semiMajorAxis * semiMajorAxis * semiMajorAxis) / Math.max(mass, 0.1)) * 2;
+    return Math.sqrt(Math.abs(semiMajorAxis * semiMajorAxis * semiMajorAxis) / Math.max(mass, 0.1)) * 2;
   }
 
   private createOrbitLine(color: number): THREE.Line {
@@ -116,8 +116,12 @@ export class Orbit {
   }
 
   public updateMass(mass: number): void {
+    this.targetParams.semiMajorAxis = Math.max(0.1, this.baseSemiMajorAxis * (1 + (mass - 3) * 0.08));
     this.targetParams.period = this.calculatePeriod(mass, this.targetParams.semiMajorAxis);
-    this.targetParams.semiMajorAxis = this.baseSemiMajorAxis * (1 + (mass - 3) * 0.08);
+  }
+
+  public getParams(): Readonly<OrbitParams> {
+    return { ...this.params };
   }
 
   public updateGeometry(): void {
