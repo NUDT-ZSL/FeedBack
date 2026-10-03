@@ -63,6 +63,12 @@ class CityApp {
     };
 
     this.cityBuilder = new CityBuilder(this.scene, initialParams);
+    this.cityBuilder.onCityCleared = () => this.clearSelection();
+    this.cityBuilder.onBuildingRemoved = (building) => {
+      if (this.selectedBuilding?.id === building.id) {
+        this.clearSelection();
+      }
+    };
 
     const panelConfig: ControlPanelConfig = {
       density: 0.7,
@@ -121,7 +127,7 @@ class CityApp {
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.tp-dfwv') && !target.closest('canvas')) {
-        this.hideInfoPanel();
+        this.clearSelection();
       }
     });
   }
@@ -153,23 +159,23 @@ class CityApp {
 
       if (building) {
         if (this.selectedBuilding?.id === building.id) {
-          this.hideInfoPanel();
+          this.clearSelection();
         } else {
           this.selectBuilding(building);
         }
       }
     } else {
-      this.hideInfoPanel();
+      this.clearSelection();
     }
   }
 
   private selectBuilding(building: BuildingData): void {
     if (this.selectedBuilding) {
-      this.cityBuilder.highlightBuilding(this.selectedBuilding, 0.1);
+      this.cityBuilder.setHighlight(this.selectedBuilding, false);
     }
 
     this.selectedBuilding = building;
-    this.cityBuilder.highlightBuilding(building, 0.3);
+    this.cityBuilder.setHighlight(building, true);
     this.showInfoPanel(building);
   }
 
@@ -187,8 +193,9 @@ class CityApp {
     this.infoPanel.classList.add('visible');
   }
 
-  private hideInfoPanel(): void {
+  private clearSelection(): void {
     if (this.selectedBuilding) {
+      this.cityBuilder.setHighlight(this.selectedBuilding, false);
       this.selectedBuilding = null;
     }
     this.infoPanel.classList.remove('visible');
@@ -206,7 +213,6 @@ class CityApp {
 
   private handleGenerate(): void {
     this.cityBuilder.generateCity();
-    this.hideInfoPanel();
   }
 
   private animate(currentTime: number = 0): void {

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "tsc src/cityBuilder.ts --outDir node_modules/.cache/city-verify --module es2020 --target es2020 --moduleResolution node --skipLibCheck && node scripts/verify-selection.mjs"
   },
   "dependencies": {
     "three": "^0.160.0",

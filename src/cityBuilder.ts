@@ -13,6 +13,7 @@ export interface BuildingData {
   width: number;
   color: THREE.Color;
   targetColor: THREE.Color;
+  isHighlighted: boolean;
   isAnimating: boolean;
   animationProgress: number;
   animationType: 'none' | 'rise' | 'fall' | 'color';
@@ -40,6 +41,11 @@ export class CityBuilder {
   private params: CityParams;
   private animationFrame: number | null = null;
   private fog: THREE.Fog;
+  private idCounter: number = 0;
+  private generation: number = 0;
+
+  onBuildingRemoved: ((building: BuildingData) => void) | null = null;
+  onCityCleared: (() => void) | null = null;
 
   constructor(scene: THREE.Scene, initialParams: Partial<CityParams> = {}) {
     this.scene = scene;
@@ -94,9 +100,14 @@ export class CityBuilder {
     return Array.from(this.buildings.values());
   }
 
+  getBuilding(id: string): BuildingData | undefined {
+    return this.buildings.get(id);
+  }
+
   generateCity(): void {
     this.clearCity();
     this.createGround();
+    const generation = this.generation;
 
     const totalCells = this.params.gridSize * this.params.gridSize;
     const targetBuildings = Math.floor(totalCells * this.params.density);
@@ -119,12 +130,14 @@ export class CityBuilder {
     selectedPositions.forEach((pos, index) => {
       const delay = index * 0.03;
       setTimeout(() => {
+        if (generation !== this.generation) return;
         this.createBuilding(pos.x, pos.z, 'rise');
       }, delay * 1000);
     });
   }
 
   rebuildCity(): void {
+    const generation = this.generation;
     const totalCells = this.params.gridSize * this.params.gridSize;
     const targetCount = Math.floor(totalCells * this.params.density);
     const currentCount = this.buildings.size;
@@ -154,6 +167,7 @@ export class CityBuilder {
       toAdd.forEach((pos, index) => {
         const delay = index * 0.02;
         setTimeout(() => {
+          if (generation !== this.generation) return;
           this.createBuilding(pos.x, pos.z, 'rise', 0.8);
         }, delay * 1000);
       });
@@ -165,6 +179,7 @@ export class CityBuilder {
       toRemove.forEach((building, index) => {
         const delay = index * 0.02;
         setTimeout(() => {
+          if (generation !== this.generation) return;
           this.removeBuilding(building, 0.8);
         }, delay * 1000);
       });
@@ -275,7 +290,7 @@ export class CityBuilder {
     this.scene.add(mesh);
     this.scene.add(glowMesh);
 
-    const id = `${gridX}-${gridZ}`;
+    const id = `building-${this.idCounter++}`;
     const building: BuildingData = {
       id,
       mesh,
@@ -286,6 +301,7 @@ export class CityBuilder {
       width,
       color: color.clone(),
       targetColor: color.clone(),
+      isHighlighted: false,
       isAnimating: animationType === 'rise',
       animationProgress: animationType === 'rise' ? 0 : 1,
       animationType: animationType === 'rise' ? 'rise' : 'none'
@@ -359,13 +375,18 @@ export class CityBuilder {
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
+        if (!this.buildings.has(building.id)) {
+          return;
+        }
         this.scene.remove(building.mesh);
         this.scene.remove(building.glowMesh);
         building.mesh.geometry.dispose();
         (building.mesh.material as THREE.Material).dispose();
         building.glowMesh.geometry.dispose();
         (building.glowMesh.material as THREE.Material).dispose();
+        building.isHighlighted = false;
         this.buildings.delete(building.id);
+        this.onBuildingRemoved?.(building);
       }
     };
 
@@ -393,7 +414,9 @@ export class CityBuilder {
 
         const material = building.mesh.material as THREE.MeshPhongMaterial;
         material.color.copy(building.color);
-        material.emissive.copy(building.color.clone().multiplyScalar(0.1));
+        material.emissive.copy(
+          building.color.clone().multiplyScalar(building.isHighlighted ? 0.6 : 0.1)
+        );
 
         const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
         glowMaterial.color.copy(building.color.clone().multiplyScalar(0.5));
@@ -411,37 +434,30 @@ export class CityBuilder {
     animate();
   }
 
-  highlightBuilding(building: BuildingData, duration: number = 0.3): void {
-    const originalEmissive = (building.mesh.material as THREE.MeshPhongMaterial).emissive.clone();
-    const originalGlowOpacity = (building.glowMesh.material as THREE.MeshBasicMaterial).opacity;
-    const targetEmissive = building.color.clone().multiplyScalar(0.6);
+  setHighlight(building: BuildingData, highlighted: boolean): void {
+    if (!this.buildings.has(building.id)) {
+      return;
+    }
+    if (building.isHighlighted === highlighted) {
+      return;
+    }
 
-    const startTime = performance.now();
+    building.isHighlighted = highlighted;
 
-    const animate = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      const progress = Math.min(elapsed / (duration / 2), 1);
-      const pulse = Math.sin(progress * Math.PI);
+    const material = building.mesh.material as THREE.MeshPhongMaterial;
+    material.emissive.copy(
+      building.color.clone().multiplyScalar(highlighted ? 0.6 : 0.1)
+    );
 
-      const material = building.mesh.material as THREE.MeshPhongMaterial;
-      material.emissive.lerpColors(originalEmissive, targetEmissive, pulse);
-
-      const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
-      glowMaterial.opacity = originalGlowOpacity + pulse * 0.5;
-
-      if (progress < 1 || elapsed < duration) {
-        requestAnimationFrame(animate);
-      } else {
-        material.emissive.copy(originalEmissive);
-        glowMaterial.opacity = originalGlowOpacity;
-      }
-    };
-
-    animate();
+    const glowMaterial = building.glowMesh.material as THREE.MeshBasicMaterial;
+    glowMaterial.opacity = highlighted ? 1.0 : 0.8;
   }
 
   clearCity(): void {
+    this.generation++;
+
     this.buildings.forEach(building => {
+      building.isHighlighted = false;
       this.scene.remove(building.mesh);
       this.scene.remove(building.glowMesh);
       building.mesh.geometry.dispose();
@@ -455,6 +471,8 @@ export class CityBuilder {
     if (ground) this.scene.remove(ground);
     const groundPlane = this.scene.getObjectByName('groundPlane');
     if (groundPlane) this.scene.remove(groundPlane);
+
+    this.onCityCleared?.();
   }
 
   private easeOutBack(t: number): number {
