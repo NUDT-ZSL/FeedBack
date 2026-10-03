@@ -147,12 +147,18 @@ export class Molecule {
     return id;
   }
 
-  public removeAtom(id: number): void {
+  public removeAtom(id: number, animate: boolean = true): void {
     const atom = this.atoms.find(a => a.id === id);
     if (!atom) return;
     
     const bondsToRemove = this.bonds.filter(b => b.atom1 === id || b.atom2 === id);
     bondsToRemove.forEach(b => this.removeBond(b.id));
+
+    if (!animate) {
+      this.atoms = this.atoms.filter(a => a.id !== id);
+      this.update();
+      return;
+    }
 
     atom.animating = true;
     atom.animStart = performance.now();
@@ -167,6 +173,9 @@ export class Molecule {
 
   public addBond(atom1Id: number, atom2Id: number, bondType: BondType = 1, animate: boolean = true): number | null {
     if (atom1Id === atom2Id) return null;
+    const atom1Exists = this.atoms.some(a => a.id === atom1Id);
+    const atom2Exists = this.atoms.some(a => a.id === atom2Id);
+    if (!atom1Exists || !atom2Exists) return null;
     const exists = this.bonds.some(b => 
       (b.atom1 === atom1Id && b.atom2 === atom2Id) || 
       (b.atom1 === atom2Id && b.atom2 === atom1Id)
@@ -185,7 +194,7 @@ export class Molecule {
       animDuration: animate ? 400 : 0
     };
     
-    if (animate) {
+    if (animate && typeof requestAnimationFrame === 'function') {
       const elapsed = performance.now();
       const animateColor = () => {
         const now = performance.now();
@@ -213,30 +222,32 @@ export class Molecule {
     this.bonds = this.bonds.filter(b => b.id !== id);
   }
 
-  public toggleBondType(bondId: number): void {
+  public toggleBondType(bondId: number, animate: boolean = true): void {
     const bond = this.bonds.find(b => b.id === bondId);
     if (!bond) return;
     
     bond.bondType = ((bond.bondType % 3) + 1) as BondType;
     
-    const start = performance.now();
-    const animateColor = () => {
-      const now = performance.now();
-      const t = Math.min((now - start) / 300, 1);
-      const targetColor = bond.bondType === 1 ? new THREE.Color(0x666666) :
-                          bond.bondType === 2 ? new THREE.Color(0xffff00) :
-                          new THREE.Color(0xff0000);
-      if (t < 0.5) {
-        bond.color.lerpColors(new THREE.Color(0xffffff), new THREE.Color(0xffff00), t * 2);
-      } else {
-        bond.color.lerpColors(new THREE.Color(0xffff00), targetColor, (t - 0.5) * 2);
-      }
-      if (t < 1) {
-        requestAnimationFrame(animateColor);
-      }
-      this.update();
-    };
-    animateColor();
+    if (animate && typeof requestAnimationFrame === 'function') {
+      const start = performance.now();
+      const animateColor = () => {
+        const now = performance.now();
+        const t = Math.min((now - start) / 300, 1);
+        const targetColor = bond.bondType === 1 ? new THREE.Color(0x666666) :
+                            bond.bondType === 2 ? new THREE.Color(0xffff00) :
+                            new THREE.Color(0xff0000);
+        if (t < 0.5) {
+          bond.color.lerpColors(new THREE.Color(0xffffff), new THREE.Color(0xffff00), t * 2);
+        } else {
+          bond.color.lerpColors(new THREE.Color(0xffff00), targetColor, (t - 0.5) * 2);
+        }
+        if (t < 1) {
+          requestAnimationFrame(animateColor);
+        }
+        this.update();
+      };
+      animateColor();
+    }
     
     this.update();
   }
