@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { Exhibition, ExhibitionComponent, ImageComponent } from './types';
 import ArtworkCard from './ArtworkCard';
+import { exhibitionSaves } from './saveClient';
 
 const ExhibitionView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +21,11 @@ const ExhibitionView: React.FC = () => {
   }, [id]);
 
   const fetchExhibition = async () => {
+    if (!id) return;
     try {
+      // Wait for any in-flight builder saves so the preview never reads
+      // a state older than the latest confirmed modification.
+      await exhibitionSaves.flushSaves(id);
       const res = await axios.get(`/api/exhibitions/${id}`);
       setExhibition(res.data);
     } catch (err) {

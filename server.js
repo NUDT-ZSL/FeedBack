@@ -33,6 +33,11 @@ const upload = multer({ storage });
 
 const exhibitions = [];
 
+const NOT_FOUND_BODY = { error: 'Exhibition not found', code: 'EXHIBITION_NOT_FOUND' };
+
+// Only these fields may be changed via PUT; id/createdAt/published are protected.
+const UPDATABLE_FIELDS = ['name', 'themeColor', 'description', 'components', 'thumbnail'];
+
 app.post('/api/upload', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
@@ -64,24 +69,30 @@ app.get('/api/exhibitions', (req, res) => {
 app.get('/api/exhibitions/:id', (req, res) => {
   const exhibition = exhibitions.find(e => e.id === req.params.id);
   if (!exhibition) {
-    return res.status(404).json({ error: 'Exhibition not found' });
+    return res.status(404).json(NOT_FOUND_BODY);
   }
   res.json(exhibition);
 });
 
 app.put('/api/exhibitions/:id', (req, res) => {
-  const index = exhibitions.findIndex(e => e.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Exhibition not found' });
+  const exhibition = exhibitions.find(e => e.id === req.params.id);
+  if (!exhibition) {
+    return res.status(404).json(NOT_FOUND_BODY);
   }
-  exhibitions[index] = { ...exhibitions[index], ...req.body };
-  res.json(exhibitions[index]);
+  // Partial update: only fields present in the request body are applied,
+  // everything else keeps its current value.
+  for (const field of UPDATABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+      exhibition[field] = req.body[field];
+    }
+  }
+  res.json(exhibition);
 });
 
 app.delete('/api/exhibitions/:id', (req, res) => {
   const index = exhibitions.findIndex(e => e.id === req.params.id);
   if (index === -1) {
-    return res.status(404).json({ error: 'Exhibition not found' });
+    return res.status(404).json(NOT_FOUND_BODY);
   }
   exhibitions.splice(index, 1);
   res.status(204).end();
@@ -90,12 +101,18 @@ app.delete('/api/exhibitions/:id', (req, res) => {
 app.post('/api/exhibitions/:id/publish', (req, res) => {
   const index = exhibitions.findIndex(e => e.id === req.params.id);
   if (index === -1) {
-    return res.status(404).json({ error: 'Exhibition not found' });
+    return res.status(404).json(NOT_FOUND_BODY);
   }
   exhibitions[index].published = true;
   res.json(exhibitions[index]);
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+export { app, exhibitions };

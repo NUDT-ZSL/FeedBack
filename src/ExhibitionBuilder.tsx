@@ -12,6 +12,8 @@ import type {
   BannerComponent
 } from './types';
 import ArtworkCard from './ArtworkCard';
+import { exhibitionSaves } from './saveClient';
+import type { SaveStatus } from './saveManager';
 
 interface DragItem {
   type: ComponentType;
@@ -39,6 +41,7 @@ const ExhibitionBuilder: React.FC = () => {
   const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
   const [newlyAdded, setNewlyAdded] = useState<Set<string>>(new Set());
   const [isPublishing, setIsPublishing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const lastPos = useRef({ x: 0, y: 0 });
@@ -48,6 +51,7 @@ const ExhibitionBuilder: React.FC = () => {
   useEffect(() => {
     if (id) {
       fetchExhibition();
+      return exhibitionSaves.subscribe(id, setSaveStatus);
     }
   }, [id]);
 
@@ -67,10 +71,13 @@ const ExhibitionBuilder: React.FC = () => {
   }, [newlyAdded]);
 
   const fetchExhibition = async () => {
+    if (!id) return;
     try {
+      await exhibitionSaves.flushSaves(id);
       const res = await axios.get(`/api/exhibitions/${id}`);
       setExhibition(res.data);
       setComponents(res.data.components || []);
+      setSaveStatus(exhibitionSaves.getStatus(id));
     } catch (err) {
       console.error('Failed to fetch exhibition:', err);
     }
@@ -79,10 +86,17 @@ const ExhibitionBuilder: React.FC = () => {
   const saveExhibition = async (comps: ExhibitionComponent[]) => {
     if (!id) return;
     try {
-      await axios.put(`/api/exhibitions/${id}`, { components: comps });
+      await exhibitionSaves.enqueueSave(id, { components: comps });
     } catch (err) {
-      console.error('Failed to save:', err);
+      setSaveStatus('error');
     }
+  };
+
+  const handleRetrySave = () => {
+    if (!id) return;
+    void exhibitionSaves.retrySave(id, { components })?.catch(() => {
+      setSaveStatus('error');
+    });
   };
 
   const themeColor = exhibition?.themeColor;
@@ -430,6 +444,11 @@ const ExhibitionBuilder: React.FC = () => {
     if (!id) return;
     setIsPublishing(true);
     try {
+      const finalStatus = await exhibitionSaves.flushSaves(id);
+      if (finalStatus === 'error') {
+        setIsPublishing(false);
+        return;
+      }
       await axios.post(`/api/exhibitions/${id}/publish`);
       navigate(`/exhibition/${id}`);
     } catch (err) {
@@ -576,6 +595,33 @@ const ExhibitionBuilder: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+            {saveStatus === 'saving' && (
+              <span style={{ color: '#888' }}>保存中…</span>
+            )}
+            {(saveStatus === 'idle' || saveStatus === 'saved') && (
+              <span style={{ color: '#4a8b3c' }}>✓ 已保存</span>
+            )}
+            {saveStatus === 'error' && (
+              <>
+                <span style={{ color: '#e57373', fontWeight: 600 }}>保存失败</span>
+                <button
+                  onClick={handleRetrySave}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #e57373',
+                    backgroundColor: '#fff',
+                    color: '#e57373',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  重试
+                </button>
+              </>
+            )}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
