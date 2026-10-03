@@ -12,6 +12,7 @@ export interface GalaxyParams {
 
 export function generateGalaxy(params: GalaxyParams): {
   geometry: THREE.BufferGeometry
+  positions: Float32Array
   baseSizes: Float32Array
   baseColors: Float32Array
 } {
@@ -123,5 +124,5 @@ export function generateGalaxy(params: GalaxyParams): {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
 
-  return { geometry, baseSizes, baseColors }
+  return { geometry, positions, baseSizes, baseColors }
 }
