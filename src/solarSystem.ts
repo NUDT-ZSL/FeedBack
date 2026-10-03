@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import {
+  FocusState,
+  advanceFocus,
+  orbitAngleDelta,
+  orbitalPosition,
+  rotationAngleDelta
+} from './simulation.js';
 
 export interface PlanetData {
   name: string;
@@ -484,19 +491,14 @@ export function createSolarSystem(scene: THREE.Scene, uiContainer: HTMLElement):
   };
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
 export function updateSolarSystem(
   system: SolarSystem,
   delta: number,
   speedMultiplier: number,
   camera: THREE.Camera,
   showOrbits: boolean,
-  focusTarget: THREE.Vector3 | null,
-  focusProgress: number
-): { focusProgress: number; shouldUpdateControls: boolean } {
+  focus: FocusState
+): { shouldUpdateControls: boolean } {
   const time = performance.now() * 0.001;
   
   if (system.sun.material instanceof THREE.ShaderMaterial) {
@@ -504,11 +506,12 @@ export function updateSolarSystem(
   }
   
   system.planets.forEach((planet) => {
-    planet.angle += planet.data.orbitSpeed * delta * 0.1 * speedMultiplier;
-    planet.mesh.position.x = Math.cos(planet.angle) * planet.data.distance;
-    planet.mesh.position.z = Math.sin(planet.angle) * planet.data.distance;
+    planet.angle += orbitAngleDelta(planet.data.orbitSpeed, delta, speedMultiplier);
+    const pos = orbitalPosition(planet.angle, planet.data.distance);
+    planet.mesh.position.x = pos.x;
+    planet.mesh.position.z = pos.z;
     
-    planet.mesh.rotation.y += planet.data.rotationSpeed * delta * speedMultiplier;
+    planet.mesh.rotation.y += rotationAngleDelta(planet.data.rotationSpeed, delta, speedMultiplier);
     
     planet.orbit.visible = showOrbits;
     
@@ -546,15 +549,9 @@ export function updateSolarSystem(
   }
   system.particles.geometry.attributes.size.needsUpdate = true;
   
-  let shouldUpdateControls = false;
-  if (focusTarget && focusProgress < 1) {
-    focusProgress = Math.min(1, focusProgress + delta);
-    const t = easeInOutCubic(focusProgress);
-    camera.position.lerp(focusTarget, t * 0.05);
-    shouldUpdateControls = true;
-  }
+  const shouldUpdateControls = advanceFocus(focus, delta, camera.position);
   
-  return { focusProgress, shouldUpdateControls };
+  return { shouldUpdateControls };
 }
 
 export function getPlanetFocusPosition(
