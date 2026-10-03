@@ -1,3 +1,11 @@
+# 移动轨迹推演与离线自动化验证
+
+本仓库包含移动轨迹推演核心逻辑（`src/trajectory/`）及其离线批量验证：
+
+- 停留段/移动段划分、同行关系识别、位置点修正与参数调整后的增量重推；
+- 统一验证入口：`npm run verify:trajectory`（Node ≥ 22.18，完全离线，无需安装依赖）；
+- 详细判定契约与用例清单见 [docs/trajectory-verification.md](docs/trajectory-verification.md)。
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
