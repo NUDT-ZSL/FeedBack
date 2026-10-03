@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  advanceOrbitAngle,
+  advanceRotationAngle,
+  orbitPosition,
+  computeFocusCameraPosition
+} from './motionCore';
 
 export interface PlanetData {
   name: string;
@@ -484,19 +490,19 @@ export function createSolarSystem(scene: THREE.Scene, uiContainer: HTMLElement):
   };
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
+/**
+ * 推进一帧的太阳系运动：行星公转/自转、轨道环显隐、标签与粒子。
+ *
+ * 聚焦逻辑已移至 FocusController（见 motionCore.ts），由调用方在
+ * 本函数之后单独推进，两类状态互不耦合。
+ */
 export function updateSolarSystem(
   system: SolarSystem,
   delta: number,
   speedMultiplier: number,
   camera: THREE.Camera,
-  showOrbits: boolean,
-  focusTarget: THREE.Vector3 | null,
-  focusProgress: number
-): { focusProgress: number; shouldUpdateControls: boolean } {
+  showOrbits: boolean
+): void {
   const time = performance.now() * 0.001;
   
   if (system.sun.material instanceof THREE.ShaderMaterial) {
@@ -504,11 +510,17 @@ export function updateSolarSystem(
   }
   
   system.planets.forEach((planet) => {
-    planet.angle += planet.data.orbitSpeed * delta * 0.1 * speedMultiplier;
-    planet.mesh.position.x = Math.cos(planet.angle) * planet.data.distance;
-    planet.mesh.position.z = Math.sin(planet.angle) * planet.data.distance;
+    planet.angle = advanceOrbitAngle(planet.angle, planet.data.orbitSpeed, delta, speedMultiplier);
+    const pos = orbitPosition(planet.data.distance, planet.angle);
+    planet.mesh.position.x = pos.x;
+    planet.mesh.position.z = pos.z;
     
-    planet.mesh.rotation.y += planet.data.rotationSpeed * delta * speedMultiplier;
+    planet.mesh.rotation.y = advanceRotationAngle(
+      planet.mesh.rotation.y,
+      planet.data.rotationSpeed,
+      delta,
+      speedMultiplier
+    );
     
     planet.orbit.visible = showOrbits;
     
@@ -545,16 +557,6 @@ export function updateSolarSystem(
     sizes[i] = Math.max(0.05, Math.min(0.5, 0.3 * (1 / (dist * 0.1))));
   }
   system.particles.geometry.attributes.size.needsUpdate = true;
-  
-  let shouldUpdateControls = false;
-  if (focusTarget && focusProgress < 1) {
-    focusProgress = Math.min(1, focusProgress + delta);
-    const t = easeInOutCubic(focusProgress);
-    camera.position.lerp(focusTarget, t * 0.05);
-    shouldUpdateControls = true;
-  }
-  
-  return { focusProgress, shouldUpdateControls };
 }
 
 export function getPlanetFocusPosition(
@@ -565,10 +567,10 @@ export function getPlanetFocusPosition(
   const planet = system.planets.find(p => p.data.name === planetName);
   if (!planet) return null;
   
-  const direction = new THREE.Vector3()
-    .subVectors(camera.position, planet.mesh.position)
-    .normalize();
-  
-  const distance = planet.data.radius * 6 + 5;
-  return planet.mesh.position.clone().add(direction.multiplyScalar(distance));
+  const pos = computeFocusCameraPosition(
+    planet.mesh.position,
+    camera.position,
+    planet.data.radius
+  );
+  return new THREE.Vector3(pos.x, pos.y, pos.z);
 }
