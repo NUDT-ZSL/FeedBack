@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TerrainData } from './terrain';
 import { getHeightAt } from './terrain';
+import { RoamSampler } from './route';
 
 export interface InteractionHandlers {
   onTerrainClick?: (point: THREE.Vector3, event: MouseEvent) => void;
@@ -29,10 +30,9 @@ export class InteractionManager {
   private maxPolarAngle: number = Math.PI * 0.48;
 
   private isRoaming: boolean = false;
-  private roamPath: THREE.Vector3[] = [];
-  private roamIndex: number = 0;
-  private roamProgress: number = 0;
-  private roamSpeed: number = 0.3;
+  private roamSampler: RoamSampler = new RoamSampler();
+  private roamDirection: THREE.Vector3 = new THREE.Vector3(0, 0, 1);
+  private roamLookTarget: THREE.Vector3 = new THREE.Vector3(0, 250, 0);
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -89,16 +89,38 @@ export class InteractionManager {
   }
 
   public setMode(mode: 'roam' | 'edit', path?: THREE.Vector3[]): void {
-    this.isRoaming = mode === 'roam';
-    if (this.isRoaming && path && path.length > 1) {
-      this.roamPath = path;
-      this.roamIndex = 0;
-      this.roamProgress = 0;
+    if (mode === 'roam') {
+      this.isRoaming = true;
+      if (path) this.roamSampler.setPath(path);
+    } else {
+      if (this.isRoaming) {
+        this.target.copy(this.roamLookTarget);
+        const diff = new THREE.Vector3().subVectors(this.camera.position, this.target);
+        this.spherical = {
+          radius: Math.max(this.minDistance, Math.min(this.maxDistance, diff.length())),
+          theta: Math.atan2(diff.x, diff.z),
+          phi: Math.acos(Math.max(-1, Math.min(1, diff.y / (diff.length() || 1))))
+        };
+        this.updateCameraPosition();
+      }
+      this.isRoaming = false;
     }
   }
 
+  public setRoamPath(path: THREE.Vector3[]): void {
+    this.roamSampler.setPath(path);
+  }
+
   public setRoamSpeed(speed: number): void {
-    this.roamSpeed = Math.max(0.05, Math.min(2, speed));
+    this.roamSampler.setSpeed(speed);
+  }
+
+  public getRoamSpeed(): number {
+    return this.roamSampler.getSpeed();
+  }
+
+  public isRoamMode(): boolean {
+    return this.isRoaming;
   }
 
   private updateMouseNDC(event: MouseEvent): void {
@@ -202,50 +224,45 @@ export class InteractionManager {
   }
 
   public update(deltaTime: number): void {
-    if (this.isRoaming && this.roamPath.length > 1) {
-      this.updateRoamCamera(deltaTime);
-    }
+    if (!this.isRoaming) return;
+    this.updateRoamCamera(deltaTime);
   }
 
   private updateRoamCamera(deltaTime: number): void {
-    const path = this.roamPath;
-    if (this.roamIndex >= path.length - 1) {
-      this.roamIndex = 0;
-      this.roamProgress = 0;
+    const frame = this.roamSampler.advance(deltaTime);
+    if (!frame.hasPath) return;
+
+    if (!frame.moving) {
+      const anchor = frame.position;
+      this.camera.position.set(anchor.x + 30, anchor.y + 45, anchor.z + 30);
+      this.roamLookTarget.copy(anchor);
+      this.camera.lookAt(this.roamLookTarget);
+      return;
     }
 
-    this.roamProgress += this.roamSpeed * deltaTime * 60;
-
-    while (this.roamProgress >= 1 && this.roamIndex < path.length - 1) {
-      this.roamProgress -= 1;
-      this.roamIndex++;
+    const blend = 1 - Math.exp(-deltaTime * 3);
+    if (this.roamDirection.dot(frame.direction) < -0.999) {
+      const side = new THREE.Vector3(-this.roamDirection.z, 0, this.roamDirection.x);
+      if (side.lengthSq() < 1e-8) side.set(1, 0, 0);
+      this.roamDirection.add(side.normalize().multiplyScalar(0.02)).normalize();
+    }
+    this.roamDirection.lerp(frame.direction, blend);
+    if (this.roamDirection.lengthSq() < 1e-8) {
+      this.roamDirection.copy(frame.direction);
+    } else {
+      this.roamDirection.normalize();
     }
 
-    if (this.roamIndex >= path.length - 1) {
-      this.roamIndex = path.length - 2;
-      this.roamProgress = 1;
-    }
-
-    const current = path[this.roamIndex];
-    const next = path[Math.min(this.roamIndex + 1, path.length - 1)];
-    const t = this.roamProgress;
-
-    const position = new THREE.Vector3(
-      current.x + (next.x - current.x) * t,
-      current.y + (next.y - current.y) * t,
-      current.z + (next.z - current.z) * t
+    this.camera.position.set(
+      frame.position.x - this.roamDirection.x * 12,
+      frame.position.y + 40,
+      frame.position.z - this.roamDirection.z * 12
     );
-
-    const lookAheadIndex = Math.min(this.roamIndex + 3, path.length - 1);
-    const lookTarget = path[lookAheadIndex].clone();
-    lookTarget.y += 10;
-
-    const cameraOffset = new THREE.Vector3(0, 25, -10);
-    const direction = new THREE.Vector3().subVectors(next, current).normalize();
-    cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(direction.x, direction.z));
-
-    this.camera.position.copy(position).add(cameraOffset);
-    this.camera.position.y += 15;
-    this.camera.lookAt(lookTarget);
+    this.roamLookTarget.set(
+      frame.position.x + this.roamDirection.x * 25,
+      frame.position.y + 10,
+      frame.position.z + this.roamDirection.z * 25
+    );
+    this.camera.lookAt(this.roamLookTarget);
   }
 }

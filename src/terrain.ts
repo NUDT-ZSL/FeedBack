@@ -235,7 +235,12 @@ export function generateSmoothPath(
   terrainData: TerrainData,
   segmentsPerCurve: number = 20
 ): THREE.Vector3[] {
-  if (controlPoints.length < 2) return controlPoints.map(p => p.clone());
+  if (controlPoints.length === 0) return [];
+
+  if (controlPoints.length === 1) {
+    const p = controlPoints[0];
+    return [new THREE.Vector3(p.x, getHeightAt(p.x, p.z, terrainData), p.z)];
+  }
 
   const points: THREE.Vector3[] = [];
 
@@ -275,28 +280,48 @@ export function generateSmoothPath(
   return points;
 }
 
+export interface PathMetrics {
+  distances: number[];
+  slopes: number[];
+  totalDistance: number;
+  avgSlope: number;
+  maxSlope: number;
+  maxSlopeIndex: number;
+}
+
 export function calculatePathMetrics(
   pathPoints: THREE.Vector3[]
-): { distances: number[]; slopes: number[]; totalDistance: number; avgSlope: number; maxSlope: number; maxSlopeIndex: number } {
+): PathMetrics {
   const distances: number[] = [0];
   const slopes: number[] = [0];
   let totalDistance = 0;
   let maxSlope = 0;
   let maxSlopeIndex = 0;
+  let slopeSum = 0;
+  let slopeCount = 0;
+
+  if (pathPoints.length === 0) {
+    return { distances: [], slopes: [], totalDistance: 0, avgSlope: 0, maxSlope: 0, maxSlopeIndex: 0 };
+  }
 
   for (let i = 1; i < pathPoints.length; i++) {
     const prev = pathPoints[i - 1];
     const curr = pathPoints[i];
 
-    const horizontalDist = Math.sqrt(
-      Math.pow(curr.x - prev.x, 2) + Math.pow(curr.z - prev.z, 2)
-    );
+    const dx = curr.x - prev.x;
+    const dz = curr.z - prev.z;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
     const verticalDist = curr.y - prev.y;
 
     totalDistance += horizontalDist;
     distances.push(totalDistance);
 
-    const slope = horizontalDist > 0 ? Math.abs(verticalDist / horizontalDist) * 100 : 0;
+    let slope = 0;
+    if (horizontalDist > 1e-6) {
+      slope = Math.abs(verticalDist / horizontalDist) * 100;
+      slopeSum += slope;
+      slopeCount++;
+    }
     slopes.push(slope);
 
     if (slope > maxSlope) {
@@ -305,7 +330,7 @@ export function calculatePathMetrics(
     }
   }
 
-  const avgSlope = slopes.length > 0 ? slopes.reduce((a, b) => a + b, 0) / slopes.length : 0;
+  const avgSlope = slopeCount > 0 ? slopeSum / slopeCount : 0;
 
   return { distances, slopes, totalDistance, avgSlope, maxSlope, maxSlopeIndex };
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import type { TerrainData } from './terrain';
-import { getHeightAt, calculatePathMetrics } from './terrain';
+import type { TerrainData, PathMetrics } from './terrain';
+import { getHeightAt } from './terrain';
+import type { RouteSnapshot } from './route';
 
 export interface UIState {
   mode: 'roam' | 'edit';
@@ -12,6 +13,7 @@ export interface UIState {
 
 export type ModeChangeCallback = (mode: 'roam' | 'edit') => void;
 export type ChartHoverCallback = (pathIndex: number) => void;
+export type SpeedChangeCallback = (speed: number) => void;
 
 export class UIManager {
   private container: HTMLElement;
@@ -20,6 +22,7 @@ export class UIManager {
   private terrainData: TerrainData;
   private onModeChange: ModeChangeCallback;
   private onChartHover?: ChartHoverCallback;
+  private onSpeedChange?: SpeedChangeCallback;
 
   private controlPanel!: HTMLDivElement;
   private modeButton!: HTMLButtonElement;
@@ -36,9 +39,11 @@ export class UIManager {
   private chartCtx!: CanvasRenderingContext2D;
   private elevationMarker!: HTMLDivElement;
   private elevationPopup!: HTMLDivElement;
+  private speedValue!: HTMLSpanElement;
+  private speedSlider!: HTMLInputElement;
 
-  private pathPoints: THREE.Vector3[] = [];
-  private smoothedPath: THREE.Vector3[] = [];
+  private snapshot: RouteSnapshot | null = null;
+  private metrics: PathMetrics | null = null;
   private chartWidth: number = 400;
   private chartHeight: number = 180;
   private padding: { top: number; right: number; bottom: number; left: number } = {
@@ -53,7 +58,8 @@ export class UIManager {
     appElement: HTMLElement,
     terrainData: TerrainData,
     onModeChange: ModeChangeCallback,
-    onChartHover?: ChartHoverCallback
+    onChartHover?: ChartHoverCallback,
+    onSpeedChange?: SpeedChangeCallback
   ) {
     this.appElement = appElement;
     this.container = document.createElement('div');
@@ -63,6 +69,7 @@ export class UIManager {
     this.terrainData = terrainData;
     this.onModeChange = onModeChange;
     this.onChartHover = onChartHover;
+    this.onSpeedChange = onSpeedChange;
     this.state = {
       mode: 'edit',
       elevation: 0,
@@ -135,6 +142,7 @@ export class UIManager {
     this.createModeButton();
     this.createElevationDisplay();
     this.createStatsDisplay();
+    this.createSpeedControl();
   }
 
   private createModeButton(): void {
@@ -269,6 +277,45 @@ export class UIManager {
     return { container, value: valueEl };
   }
 
+  private createSpeedControl(): void {
+    const container = document.createElement('div');
+    container.style.cssText = `
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+    `;
+    this.controlPanel.appendChild(container);
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;';
+    container.appendChild(header);
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;';
+    label.textContent = '漫游速度';
+    header.appendChild(label);
+
+    this.speedValue = document.createElement('span');
+    this.speedValue.style.cssText = 'font-size:12px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;';
+    this.speedValue.textContent = '25 m/s';
+    header.appendChild(this.speedValue);
+
+    this.speedSlider = document.createElement('input');
+    this.speedSlider.type = 'range';
+    this.speedSlider.min = '5';
+    this.speedSlider.max = '100';
+    this.speedSlider.step = '1';
+    this.speedSlider.value = '25';
+    this.speedSlider.style.cssText = 'width:100%;cursor:pointer;pointer-events:auto;';
+    this.speedSlider.addEventListener('input', () => {
+      const speed = Number(this.speedSlider.value);
+      this.speedValue.textContent = `${speed} m/s`;
+      if (this.onSpeedChange) this.onSpeedChange(speed);
+    });
+    container.appendChild(this.speedSlider);
+  }
+
   private createFPSDisplay(): void {
     this.fpsDisplay = document.createElement('div');
     this.fpsDisplay.style.cssText = `
@@ -367,6 +414,10 @@ export class UIManager {
     }
   }
 
+  public isEditMode(): boolean {
+    return this.state.mode === 'edit';
+  }
+
   public updateElevation(point: THREE.Vector3 | null): void {
     if (point) {
       const elevation = getHeightAt(point.x, point.z, this.terrainData);
@@ -375,35 +426,35 @@ export class UIManager {
     }
   }
 
-  public updatePathData(pathPoints: THREE.Vector3[], smoothedPath: THREE.Vector3[]): void {
-    this.pathPoints = pathPoints;
-    this.smoothedPath = smoothedPath;
-    this.state.pointCount = pathPoints.length;
-    this.pointCountValue.textContent = pathPoints.length.toString();
+  public renderRoute(snapshot: RouteSnapshot): void {
+    this.snapshot = snapshot;
+    this.metrics = snapshot.metrics;
 
-    if (smoothedPath.length >= 2) {
-      const metrics = calculatePathMetrics(smoothedPath);
-      this.state.totalDistance = metrics.totalDistance;
-      this.state.avgSlope = metrics.avgSlope;
-      this.distanceValue.textContent = Math.round(metrics.totalDistance).toString();
-      this.slopeValue.textContent = metrics.avgSlope.toFixed(1);
-      this.drawSlopeChart(metrics);
+    const controlCount = snapshot.controlPoints.length;
+    this.state.pointCount = controlCount;
+    this.pointCountValue.textContent = controlCount.toString();
+
+    this.state.totalDistance = snapshot.metrics.totalDistance;
+    this.state.avgSlope = snapshot.metrics.avgSlope;
+    this.distanceValue.textContent = Math.round(snapshot.metrics.totalDistance).toString();
+    this.slopeValue.textContent = snapshot.metrics.avgSlope.toFixed(1);
+
+    if (snapshot.smoothedPath.length >= 2) {
+      this.drawSlopeChart(snapshot.metrics);
     } else {
-      this.distanceValue.textContent = '0';
-      this.slopeValue.textContent = '0';
       this.drawEmptyChart();
     }
   }
 
   private onChartMouseMove = (e: MouseEvent): void => {
-    if (this.smoothedPath.length < 2) return;
+    if (!this.snapshot || this.snapshot.smoothedPath.length < 2) return;
     const rect = this.chartCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const chartInnerWidth = this.chartWidth - this.padding.left - this.padding.right;
     const ratio = (x - this.padding.left) / chartInnerWidth;
 
     if (ratio >= 0 && ratio <= 1) {
-      const index = Math.floor(ratio * (this.smoothedPath.length - 1));
+      const index = Math.floor(ratio * (this.snapshot.smoothedPath.length - 1));
       this.hoveredChartIndex = index;
       if (this.onChartHover) {
         this.onChartHover(index);
@@ -431,7 +482,7 @@ export class UIManager {
     ctx.fillText('添加路径点后显示坡度分析', this.chartWidth / 2, this.chartHeight / 2);
   }
 
-  private drawSlopeChart(metrics: ReturnType<typeof calculatePathMetrics>): void {
+  private drawSlopeChart(metrics: PathMetrics): void {
     const ctx = this.chartCtx;
     const { distances, slopes, maxSlopeIndex } = metrics;
 
@@ -531,10 +582,11 @@ export class UIManager {
   }
 
   private highlightChartPoint(): void {
-    if (this.hoveredChartIndex < 0 || this.smoothedPath.length < 2) return;
+    if (this.hoveredChartIndex < 0 || !this.snapshot || !this.metrics) return;
+    if (this.snapshot.smoothedPath.length < 2) return;
 
     const ctx = this.chartCtx;
-    const metrics = calculatePathMetrics(this.smoothedPath);
+    const metrics = this.metrics;
     const { distances, slopes } = metrics;
     const maxDist = distances[distances.length - 1] || 1;
     const innerW = this.chartWidth - this.padding.left - this.padding.right;
