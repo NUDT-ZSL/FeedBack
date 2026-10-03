@@ -1,3 +1,6 @@
+import { Rng } from './sim/rng';
+import type { SimEvent } from './sim/types';
+
 export interface FishGene {
   h: number;
   s: number;
@@ -41,24 +44,49 @@ export interface Food {
   life: number;
 }
 
+interface PendingBirth {
+  timer: number;
+  parent1Id: number;
+  parent2Id: number;
+}
+
+/** 心跳动画开始后，小鱼出生的延迟（秒）。原为 setTimeout(1500)，现改为模拟时间驱动 */
+const BREED_DELAY = 1.5;
+
 export class FishManager {
   private fishIdCounter = 0;
   private foodIdCounter = 0;
   private width: number;
   private height: number;
+  private rng: Rng;
+  private pendingBirths: PendingBirth[] = [];
+  /** 上一次 update() 期间产生的模拟事件，由 Simulation 逐步取走 */
+  private eventSink: SimEvent[] = [];
   public fishes: Fish[] = [];
   public foods: Food[] = [];
   public readonly MAX_FISH = 30;
   public readonly INITIAL_FISH = 10;
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, rng: Rng) {
     this.width = width;
     this.height = height;
+    this.rng = rng;
   }
 
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
+  }
+
+  /** 取走并清空自上次调用以来累积的模拟事件 */
+  drainEvents(): SimEvent[] {
+    const events = this.eventSink;
+    this.eventSink = [];
+    return events;
+  }
+
+  private emit(event: SimEvent): void {
+    this.eventSink.push(event);
   }
 
   private hsvToRgb(h: number, s: number, v: number): string {
@@ -81,22 +109,22 @@ export class FishManager {
 
   private createRandomGene(): FishGene {
     return {
-      h: Math.random() * 360,
-      s: 0.6 + Math.random() * 0.4,
-      v: 0.7 + Math.random() * 0.3,
-      size: 24 + Math.random() * 16,
-      speed: 30 + Math.random() * 50
+      h: this.rng.next() * 360,
+      s: 0.6 + this.rng.next() * 0.4,
+      v: 0.7 + this.rng.next() * 0.3,
+      size: 24 + this.rng.next() * 16,
+      speed: 30 + this.rng.next() * 50
     };
   }
 
   private createFish(gene: FishGene, x?: number, y?: number, isBaby = false): Fish {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = this.rng.next() * Math.PI * 2;
     const speed = gene.speed * (isBaby ? 1.2 : 1);
     const baseSize = isBaby ? gene.size * 0.5 : gene.size;
     return {
       id: this.fishIdCounter++,
-      x: x ?? Math.random() * (this.width - 100) + 50,
-      y: y ?? Math.random() * (this.height - 200) + 80,
+      x: x ?? this.rng.next() * (this.width - 100) + 50,
+      y: y ?? this.rng.next() * (this.height - 200) + 80,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed * 0.6,
       color: { h: gene.h, s: gene.s, v: gene.v },
@@ -104,47 +132,53 @@ export class FishManager {
       baseSize: baseSize,
       gene: { ...gene },
       speed: speed,
-      gender: Math.random() > 0.5 ? 'male' : 'female',
+      gender: this.rng.next() > 0.5 ? 'male' : 'female',
       state: 'swim',
       targetX: null,
       targetY: null,
       mateTargetId: null,
-      phase: Math.random() * Math.PI * 2,
-      swimFreq: 1 + Math.random() * 2,
-      blinkTimer: Math.random() * 3,
+      phase: this.rng.next() * Math.PI * 2,
+      swimFreq: 1 + this.rng.next() * 2,
+      blinkTimer: this.rng.next() * 3,
       isBlinking: false,
       blinkDuration: 0,
       heartbeatTimer: 0,
       canMate: !isBaby,
-      mateCooldown: isBaby ? 8 : Math.random() * 5,
+      mateCooldown: isBaby ? 8 : this.rng.next() * 5,
       eatenCount: 0
     };
   }
 
-  initialize(): void {
+  initialize(count: number = this.INITIAL_FISH): void {
     this.fishes = [];
     this.foods = [];
-    for (let i = 0; i < this.INITIAL_FISH; i++) {
+    this.pendingBirths = [];
+    for (let i = 0; i < count; i++) {
       this.fishes.push(this.createFish(this.createRandomGene()));
     }
   }
 
-  addFood(x: number, y: number): void {
+  /** 撒食：返回本批生成的食物（位置由 rng 确定性散布） */
+  addFood(x: number, y: number): Food[] {
+    const created: Food[] = [];
     for (let i = 0; i < 3; i++) {
-      this.foods.push({
+      const food: Food = {
         id: this.foodIdCounter++,
-        x: x + (Math.random() - 0.5) * 40,
-        y: y + (Math.random() - 0.5) * 20,
-        vy: 15 + Math.random() * 10,
+        x: x + (this.rng.next() - 0.5) * 40,
+        y: y + (this.rng.next() - 0.5) * 20,
+        vy: 15 + this.rng.next() * 10,
         life: 15
-      });
+      };
+      this.foods.push(food);
+      created.push(food);
     }
+    return created;
   }
 
   private inheritGene(p1: FishGene, p2: FishGene): FishGene {
     const mix = (a: number, b: number, mutate: number) => {
-      const base = Math.random() > 0.5 ? a : b;
-      return base + (Math.random() - 0.5) * mutate;
+      const base = this.rng.next() > 0.5 ? a : b;
+      return base + (this.rng.next() - 0.5) * mutate;
     };
     return {
       h: (mix(p1.h, p2.h, 40) + 360) % 360,
@@ -156,24 +190,51 @@ export class FishManager {
   }
 
   private breedFish(parent1: Fish, parent2: Fish): void {
-    if (this.fishes.length >= this.MAX_FISH) return;
+    if (this.fishes.length >= this.MAX_FISH) {
+      this.emit({ type: 'breedBlocked', parent1Id: parent1.id, parent2Id: parent2.id, reason: 'maxFishReached' });
+      return;
+    }
     const babyGene = this.inheritGene(parent1.gene, parent2.gene);
     const midX = (parent1.x + parent2.x) / 2;
     const midY = (parent1.y + parent2.y) / 2;
-    this.fishes.push(this.createFish(babyGene, midX, midY, true));
+    const baby = this.createFish(babyGene, midX, midY, true);
+    this.fishes.push(baby);
     parent1.mateCooldown = 10;
     parent2.mateCooldown = 10;
     parent1.canMate = false;
     parent2.canMate = false;
+    this.emit({ type: 'breed', babyId: baby.id, parent1Id: parent1.id, parent2Id: parent2.id, x: midX, y: midY });
+  }
+
+  /** 处理到期的繁殖计划（FIFO，保证同一步内多个繁殖的顺序稳定） */
+  private processPendingBirths(dt: number): void {
+    if (this.pendingBirths.length === 0) return;
+    for (const birth of this.pendingBirths) {
+      birth.timer -= dt;
+    }
+    const due = this.pendingBirths.filter(b => b.timer <= 0);
+    this.pendingBirths = this.pendingBirths.filter(b => b.timer > 0);
+    for (const birth of due) {
+      const parent1 = this.fishes.find(f => f.id === birth.parent1Id);
+      const parent2 = this.fishes.find(f => f.id === birth.parent2Id);
+      if (!parent1 || !parent2) {
+        this.emit({ type: 'breedBlocked', parent1Id: birth.parent1Id, parent2Id: birth.parent2Id, reason: 'parentUnavailable' });
+        continue;
+      }
+      this.breedFish(parent1, parent2);
+    }
   }
 
   update(dt: number): void {
+    this.processPendingBirths(dt);
+
     for (let i = this.foods.length - 1; i >= 0; i--) {
       const f = this.foods[i];
       f.y += f.vy * dt;
       f.life -= dt;
       if (f.y > this.height - 50 || f.life <= 0) {
         this.foods.splice(i, 1);
+        this.emit({ type: 'foodRemoved', foodId: f.id, reason: f.life <= 0 ? 'expired' : 'sank' });
       }
     }
 
@@ -184,7 +245,7 @@ export class FishManager {
         fish.blinkDuration -= dt;
         if (fish.blinkDuration <= 0) {
           fish.isBlinking = false;
-          fish.blinkTimer = 2 + Math.random() * 3;
+          fish.blinkTimer = 2 + this.rng.next() * 3;
         }
       } else {
         fish.blinkTimer -= dt;
@@ -261,7 +322,8 @@ export class FishManager {
           nearestMate.heartbeatTimer = 2;
           fish.mateTargetId = nearestMate.id;
           nearestMate.mateTargetId = fish.id;
-          setTimeout(() => this.breedFish(fish, nearestMate!), 1500);
+          // 原为 setTimeout(1500)，与帧率/真实时间耦合；改为模拟时间驱动的繁殖计划
+          this.pendingBirths.push({ timer: BREED_DELAY, parent1Id: fish.id, parent2Id: nearestMate.id });
         } else if (nearestMate) {
           fish.state = 'mate';
           fish.targetX = nearestMate.x;
@@ -286,8 +348,8 @@ export class FishManager {
         if (fish.y < 80) desiredVy = Math.abs(fish.speed * 0.6);
         if (fish.y > this.height - 80) desiredVy = -Math.abs(fish.speed * 0.6);
 
-        if (Math.random() < 0.005) {
-          const angle = Math.random() * Math.PI * 2;
+        if (this.rng.next() < 0.005) {
+          const angle = this.rng.next() * Math.PI * 2;
           desiredVx = Math.cos(angle) * fish.speed;
           desiredVy = Math.sin(angle) * fish.speed * 0.6;
         }
@@ -311,8 +373,9 @@ export class FishManager {
           this.foods.splice(i, 1);
           fish.eatenCount++;
           fish.gene.size = Math.min(56, fish.gene.size * 1.05);
-          fish.color.h = (fish.color.h + 30 + Math.random() * 60) % 360;
+          fish.color.h = (fish.color.h + 30 + this.rng.next() * 60) % 360;
           fish.color.s = Math.min(1, fish.color.s + 0.05);
+          this.emit({ type: 'foodEaten', foodId: f.id, fishId: fish.id });
         }
       }
     }

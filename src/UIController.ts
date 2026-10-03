@@ -15,6 +15,7 @@ export class UIController {
   private fpsEl!: HTMLElement;
   private onFoodClick: ((x: number, y: number) => void) | null = null;
   private onDecorationPlace: ((type: DecorationType, x: number, y: number) => void) | null = null;
+  private onTrajectoryExport: (() => void) | null = null;
   private frameCount = 0;
   private fpsTime = 0;
   private currentFps = 60;
@@ -39,6 +40,10 @@ export class UIController {
 
   setDecorationPlaceHandler(handler: (type: DecorationType, x: number, y: number) => void): void {
     this.onDecorationPlace = handler;
+  }
+
+  setTrajectoryExportHandler(handler: () => void): void {
+    this.onTrajectoryExport = handler;
   }
 
   private glassStyle(): Partial<CSSStyleDeclaration> {
@@ -171,9 +176,15 @@ export class UIController {
     const importIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22l5-5h-3V9h-4v8H7l5 5zM5 4h14v2H5V4z"/></svg>`;
     const importBtn = createBtn('导入', importIcon, () => this.importGenes());
 
+    const trajectoryIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v2H3V3zm0 8h18v2H3v-2zm0 8h18v2H3v-2zM6 7h12v2H6V7zm0 8h12v2H6v-2z"/></svg>`;
+    const trajectoryBtn = createBtn('轨迹', trajectoryIcon, () => {
+      if (this.onTrajectoryExport) this.onTrajectoryExport();
+    });
+
     toolbar.appendChild(screenshotBtn);
     toolbar.appendChild(exportBtn);
     toolbar.appendChild(importBtn);
+    toolbar.appendChild(trajectoryBtn);
 
     this.container.appendChild(toolbar);
 

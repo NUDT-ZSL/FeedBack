@@ -1,14 +1,7 @@
 import type { Fish, Food, FishManager } from './FishManager';
+import { DecorationManager, type Decoration, type DecorationType } from './sim/DecorationManager';
 
-export type DecorationType = 'coral' | 'shell' | 'wreck';
-
-export interface Decoration {
-  id: number;
-  type: DecorationType;
-  x: number;
-  y: number;
-  scale: number;
-}
+export type { DecorationType } from './sim/DecorationManager';
 
 interface Bubble {
   x: number;
@@ -50,16 +43,26 @@ export class SceneManager {
   private bubbles: Bubble[] = [];
   private seaweeds: Seaweed[] = [];
   private sands: Sand[] = [];
-  public decorations: Decoration[] = [];
   private particles: Particle[] = [];
-  private decorationIdCounter = 0;
+  private decorationManager: DecorationManager;
   private time = 0;
 
-  constructor(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  constructor(ctx: CanvasRenderingContext2D, width: number, height: number, decorationManager: DecorationManager) {
     this.ctx = ctx;
     this.width = width;
     this.height = height;
+    this.decorationManager = decorationManager;
     this.generateScene();
+  }
+
+  /** 装饰物状态由确定性模拟层（DecorationManager）持有 */
+  get decorations(): readonly Decoration[] {
+    return this.decorationManager.getAll();
+  }
+
+  /** 整体替换装饰物（基因编码导入用），id 重新确定性分配 */
+  set decorations(items: Array<{ type: DecorationType; x: number; y: number; scale: number }>) {
+    this.decorationManager.replaceAll(items);
   }
 
   resize(width: number, height: number): void {
@@ -101,17 +104,6 @@ export class SceneManager {
         phase: Math.random() * Math.PI * 2
       });
     }
-  }
-
-  addDecoration(type: DecorationType, x: number, y: number): void {
-    this.decorations.push({
-      id: this.decorationIdCounter++,
-      type,
-      x,
-      y: Math.max(y, this.height - 100),
-      scale: 0.8 + Math.random() * 0.4
-    });
-    this.spawnParticles(x, y, '#ff7043', 20);
   }
 
   spawnParticles(x: number, y: number, color: string, count: number): void {
@@ -293,7 +285,7 @@ export class SceneManager {
   }
 
   private drawDecorations(): void {
-    for (const d of this.decorations) {
+    for (const d of this.decorationManager.getAll()) {
       this.drawDecoration(d);
     }
   }
