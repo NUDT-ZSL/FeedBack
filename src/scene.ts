@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { CrystalStructure, CrystalAtom } from './crystal';
+import { buildRenderInstances } from './render';
 
 export interface CrystalSceneCallbacks {
   onAtomClick?: (
@@ -53,11 +54,12 @@ export class CrystalScene {
   private axesHelper: THREE.AxesHelper | null = null;
   private gridHelper: THREE.GridHelper | null = null;
 
-  private atomMeshes: Map<string, { mesh: THREE.Mesh; glow: THREE.Mesh; data: CrystalAtom }>;
+  private atomMeshes: Map<string, { mesh: THREE.Mesh; glow: THREE.Mesh; data: CrystalAtom; baseRadius: number }>;
   private bondMeshes: THREE.Mesh[];
 
   private atomRadiusScale: number = 0.5;
-  private latticeConstant: number = 2.5;
+  /** 当前结构的默认晶格常数（埃），晶格缩放的基准，来自晶体数据本身 */
+  private latticeReference: number = 2.5;
   private isExploded: boolean = false;
   private autoRotate: boolean = true;
   private userInteracting: boolean = false;
@@ -315,9 +317,13 @@ export class CrystalScene {
   }
 
   private buildCrystal(structure: CrystalStructure): void {
-    this.atomRadiusScale = 0.5;
-    this.latticeConstant = structure.latticeConstant;
-    this.crystalGroup.scale.setScalar(this.latticeConstant / 2.5);
+    // 晶格基准与半径参数均取自晶体数据/渲染参数，不再由场景层自行维护独立副本。
+    this.latticeReference = structure.latticeConstant;
+    this.crystalGroup.scale.setScalar(1);
+
+    const instances = buildRenderInstances(structure, {
+      atomRadiusScale: this.atomRadiusScale
+    });
 
     const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
     const glowGeometry = new THREE.SphereGeometry(1.35, 32, 32);
@@ -341,18 +347,23 @@ export class CrystalScene {
       depthWrite: false
     });
 
-    structure.atoms.forEach(atom => {
-      const elem = structure.elements[atom.element];
-      if (!elem) return;
+    const atomById = new Map(structure.atoms.map(atom => [atom.id, atom]));
 
-      const mesh = new THREE.Mesh(sphereGeometry, elementMaterials[atom.element].clone());
-      const baseRadius = elem.radius * this.atomRadiusScale * 0.3;
-      mesh.scale.setScalar(baseRadius);
+    instances.atoms.forEach(instance => {
+      const atom = atomById.get(instance.id);
+      if (!atom) return;
+
+      const mesh = new THREE.Mesh(
+        sphereGeometry,
+        elementMaterials[instance.element].clone()
+      );
+      const baseRadius = instance.radius / this.atomRadiusScale;
+      mesh.scale.setScalar(instance.radius);
 
       const pos = new THREE.Vector3(
-        (atom.position[0] - 0.25) * 2,
-        (atom.position[1] - 0.25) * 2,
-        (atom.position[2] - 0.25) * 2
+        instance.position[0],
+        instance.position[1],
+        instance.position[2]
       );
       mesh.position.copy(pos);
       mesh.userData.atomId = atom.id;
@@ -364,7 +375,7 @@ export class CrystalScene {
 
       this.atomGroup.add(mesh);
       this.atomGroup.add(glow);
-      this.atomMeshes.set(atom.id, { mesh, glow, data: atom });
+      this.atomMeshes.set(atom.id, { mesh, glow, data: atom, baseRadius });
       this.basePositions.set(atom.id, pos.clone());
     });
 
@@ -377,27 +388,18 @@ export class CrystalScene {
       depthWrite: false
     });
 
-    const atomById = new Map(structure.atoms.map(a => [a.id, a]));
-    structure.bonds.forEach(bond => {
-      const a = atomById.get(bond.atomA);
-      const b = atomById.get(bond.atomB);
-      if (!a || !b) return;
-
+    instances.bonds.forEach(instance => {
       const mesh = this.createBondMesh(
-        new THREE.Vector3(
-          (a.position[0] - 0.25) * 2,
-          (a.position[1] - 0.25) * 2,
-          (a.position[2] - 0.25) * 2
-        ),
-        new THREE.Vector3(
-          (b.position[0] - 0.25) * 2,
-          (b.position[1] - 0.25) * 2,
-          (b.position[2] - 0.25) * 2
-        ),
+        new THREE.Vector3(instance.start[0], instance.start[1], instance.start[2]),
+        new THREE.Vector3(instance.end[0], instance.end[1], instance.end[2]),
         this.originalBondRadius,
         bondMaterial
       );
-      mesh.userData = { bondA: bond.atomA, bondB: bond.atomB };
+      mesh.userData = {
+        bondA: instance.atomA,
+        bondB: instance.atomB,
+        baseLength: instance.length
+      };
       this.bondGroup.add(mesh);
       this.bondMeshes.push(mesh);
     });
@@ -458,9 +460,9 @@ export class CrystalScene {
   }
 
   setLatticeConstant(value: number, animate: boolean = true): void {
-    const targetScale = value / 2.5;
+    // 以当前结构的默认晶格常数为基准整体缩放，键长随晶格常数同比变化
+    const targetScale = value / this.latticeReference;
     const startScale = this.crystalGroup.scale.x;
-    this.latticeConstant = value;
 
     if (!animate) {
       this.crystalGroup.scale.setScalar(targetScale);
@@ -501,13 +503,12 @@ export class CrystalScene {
   }
 
   private applyAtomRadiusScale(scale: number): void {
-    this.atomMeshes.forEach((val, id) => {
-      const elem = val.data.element;
-      const data = val.data;
-      const defaultRadius = (data.position.length > 0 ? 0.5 : 0.5);
-      const baseRadius = defaultRadius * scale * 0.3;
-      val.mesh.scale.setScalar(baseRadius);
-      val.glow.scale.setScalar(baseRadius * 1.35);
+    this.atomMeshes.forEach((val) => {
+      // baseRadius 由元素半径推导（元素半径 × ATOM_RADIUS_FACTOR），
+      // 不再使用与晶体数据无关的硬编码值
+      const radius = val.baseRadius * scale;
+      val.mesh.scale.setScalar(radius);
+      val.glow.scale.setScalar(radius * 1.35);
     });
   }
 
@@ -567,7 +568,7 @@ export class CrystalScene {
 
       const dir = new THREE.Vector3().subVectors(posB, posA);
       const len = dir.length();
-      mesh.scale.set(1, len / mesh.geometry.parameters.height, 1);
+      mesh.scale.set(1, len / mesh.userData.baseLength, 1);
       mesh.scale.x = 1 - factor * 0.3;
       mesh.scale.z = 1 - factor * 0.3;
 

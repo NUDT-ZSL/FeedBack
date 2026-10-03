@@ -88,7 +88,25 @@ interface CrystalStructure {
 | nacl | 氯化钠 | Fm-3m | Na: (0,0,0),(0.5,0.5,0),(0.5,0,0.5),(0,0.5,0.5); Cl: (0.5,0,0),(0,0.5,0),(0,0,0.5),(0.5,0.5,0.5) |
 | diamond | 金刚石 | Fd-3m | (0,0,0),(0.5,0.5,0),(0.5,0,0.5),(0,0.5,0.5),(0.25,0.25,0.25),(0.75,0.75,0.25),(0.75,0.25,0.75),(0.25,0.75,0.75) |
 
-## 5. 场景管理器接口
+## 5. 数据派生链路
+
+晶体数据遵循单一数据源的派生链路，各层不再各自维护可能不一致的副本：
+
+```
+CrystalDefinition (基元分数坐标 [0,1) + 元素表 + 键长阈值)
+  └─ expandUnitCell(basis, cellRange)      → 展开原子（边界原子按全局坐标去重）
+  └─ generateBonds(atoms, threshold, a)    → 化学键（阈值 = bondThreshold × 晶格常数）
+  └─ buildCrystalStructure(def, range, a)  → CrystalStructure
+       └─ buildRenderInstances(structure, params) → 原子/键渲染实例（scene.ts 与离线验证共用）
+```
+
+- **晶胞范围**：`CellRange = [minCell, maxCell]`（闭区间整数晶胞索引），展开坐标盒为 `[minCell, maxCell+1]³`，`[0,0]` 为含全部边界的单胞视图
+- **边界处理**：基元坐标先归一化到 `[0,1)`（坐标 1 等价于相邻晶胞的 0），展开时按量化全局坐标去重，边界原子不会产生重复实例或多余键
+- **键长阈值**：以晶格常数倍数存储（如 SC=1.0、BCC=√3/2、FCC=√2/2、NaCl=0.5、金刚石=√3/4），距离与阈值均在埃空间计算并随晶格常数同比缩放，调整晶格常数不改变键连接关系
+- **渲染层**：`scene.ts` 的晶格缩放以 `structure.latticeConstant` 为基准，原子半径由元素半径推导，不保存与晶体数据脱节的独立状态
+- **离线验证**：`npm run verify`（`scripts/verify.ts`，Node 22 原生运行 TS，无需构建）批量校验全部晶体 × 晶胞范围 × 晶格常数下的原子数、键数与渲染实例数一致性
+
+## 6. 场景管理器接口
 
 ```typescript
 interface CrystalSceneCallbacks {
@@ -124,7 +142,7 @@ class CrystalScene {
 }
 ```
 
-## 6. 动画系统设计
+## 7. 动画系统设计
 
 ### 6.1 动画类型与参数
 | 动画 | 时长 | 缓动函数 | 说明 |
@@ -142,7 +160,7 @@ class CrystalScene {
 - 每个动画维护startTime、duration、easing函数
 - 支持动画叠加（如爆炸视图+自动旋转可同时进行）
 
-## 7. 性能优化策略
+## 8. 性能优化策略
 
 1. **几何复用**：同种元素的原子共享同一个SphereGeometry实例
 2. **材质复用**：相同属性的原子共享MeshStandardMaterial
