@@ -116,8 +116,8 @@ export class Orbit {
   }
 
   public updateMass(mass: number): void {
-    this.targetParams.period = this.calculatePeriod(mass, this.targetParams.semiMajorAxis);
     this.targetParams.semiMajorAxis = this.baseSemiMajorAxis * (1 + (mass - 3) * 0.08);
+    this.targetParams.period = this.calculatePeriod(mass, this.targetParams.semiMajorAxis);
   }
 
   public updateGeometry(): void {
@@ -172,9 +172,7 @@ export class Orbit {
 
     const angularVelocity = (Math.PI * 2) / Math.max(this.params.period, 0.1) * speedMultiplier;
     this.params.trueAnomaly += angularVelocity * deltaTime;
-    if (this.params.trueAnomaly > Math.PI * 2) {
-      this.params.trueAnomaly -= Math.PI * 2;
-    }
+    this.params.trueAnomaly = ((this.params.trueAnomaly % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
     this.updateGeometry();
 
