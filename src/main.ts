@@ -28,15 +28,6 @@ let frameCount = 0
 let fpsTime = 0
 let currentFps = 60
 
-let pendingRebuild: {
-  active: boolean
-  targetCount: number
-  newGeometry: THREE.BufferGeometry | null
-  newBaseSizes: Float32Array | null
-  newBaseColors: Float32Array | null
-  processed: number
-} | null = null
-
 function init() {
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x0a0a1a)
@@ -93,104 +84,13 @@ function buildGalaxy(count: number, vivid: number) {
   const { geometry, baseSizes, baseColors } = generateGalaxy(params)
 
   if (particleSystem) {
-    pendingRebuild = {
-      active: true,
-      targetCount: count,
-      newGeometry: geometry,
-      newBaseSizes: baseSizes,
-      newBaseColors: baseColors,
-      processed: 0,
-    }
+    const positions = (geometry.getAttribute('position') as THREE.BufferAttribute).array as Float32Array
+    particleSystem.transitionTo(positions, baseSizes, baseColors)
+    geometry.dispose()
   } else {
     particleSystem = new ParticleSystem(geometry, baseSizes, baseColors)
     particleSystem.setRotationSpeed(rotationSpeed)
     scene.add(particleSystem.points)
-  }
-}
-
-function processRebuild() {
-  if (!pendingRebuild || !pendingRebuild.active || !particleSystem) return
-  if (!pendingRebuild.newGeometry || !pendingRebuild.newBaseSizes || !pendingRebuild.newBaseColors) return
-
-  const batchSize = 500
-  const { newGeometry, newBaseSizes, newBaseColors, targetCount } = pendingRebuild
-
-  const currentCount = particleSystem.count
-  const startIdx = pendingRebuild.processed
-  const endIdx = Math.min(startIdx + batchSize, targetCount)
-
-  const oldPosAttr = particleSystem.geometry.getAttribute('position') as THREE.BufferAttribute
-  const oldColorAttr = particleSystem.geometry.getAttribute('color') as THREE.BufferAttribute
-  const oldSizeAttr = particleSystem.geometry.getAttribute('size') as THREE.BufferAttribute
-
-  const newPosAttr = newGeometry.getAttribute('position') as THREE.BufferAttribute
-  const newColorAttr = newGeometry.getAttribute('color') as THREE.BufferAttribute
-  const newSizeAttr = newGeometry.getAttribute('size') as THREE.BufferAttribute
-
-  if (targetCount !== currentCount) {
-    if (pendingRebuild.processed === 0) {
-      const newPositions = new Float32Array(targetCount * 3)
-      const newColors = new Float32Array(targetCount * 3)
-      const newSizes = new Float32Array(targetCount)
-
-      particleSystem.geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3))
-      particleSystem.geometry.setAttribute('color', new THREE.BufferAttribute(newColors, 3))
-      particleSystem.geometry.setAttribute('size', new THREE.BufferAttribute(newSizes, 1))
-      particleSystem.geometry.attributes.position.needsUpdate = true
-      particleSystem.geometry.attributes.color.needsUpdate = true
-      particleSystem.geometry.attributes.size.needsUpdate = true
-
-      particleSystem.baseSizes = new Float32Array(targetCount)
-      particleSystem.baseColors = new Float32Array(targetCount * 3)
-      particleSystem.currentSizes = new Float32Array(targetCount)
-      particleSystem.currentColors = new Float32Array(targetCount * 3)
-      particleSystem.targetSizes = new Float32Array(targetCount)
-      particleSystem.targetColors = new Float32Array(targetCount * 3)
-      particleSystem.twinklePhase = new Float32Array(targetCount)
-      for (let i = 0; i < targetCount; i++) {
-        particleSystem.twinklePhase[i] = Math.random() * Math.PI * 2
-      }
-      particleSystem.count = targetCount
-    }
-
-    const posAttr = particleSystem.geometry.getAttribute('position') as THREE.BufferAttribute
-    const colAttr = particleSystem.geometry.getAttribute('color') as THREE.BufferAttribute
-    const szAttr = particleSystem.geometry.getAttribute('size') as THREE.BufferAttribute
-
-    for (let i = startIdx; i < endIdx; i++) {
-      posAttr.setXYZ(i, newPosAttr.getX(i), newPosAttr.getY(i), newPosAttr.getZ(i))
-      colAttr.setXYZ(i, newColorAttr.getX(i), newColorAttr.getY(i), newColorAttr.getZ(i))
-      szAttr.setX(i, newSizeAttr.getX(i))
-
-      particleSystem.baseSizes[i] = newBaseSizes[i]
-      particleSystem.baseColors[i * 3] = newBaseColors[i * 3]
-      particleSystem.baseColors[i * 3 + 1] = newBaseColors[i * 3 + 1]
-      particleSystem.baseColors[i * 3 + 2] = newBaseColors[i * 3 + 2]
-      particleSystem.currentSizes[i] = newBaseSizes[i]
-      particleSystem.currentColors[i * 3] = newBaseColors[i * 3]
-      particleSystem.currentColors[i * 3 + 1] = newBaseColors[i * 3 + 1]
-      particleSystem.currentColors[i * 3 + 2] = newBaseColors[i * 3 + 2]
-      particleSystem.targetSizes[i] = newBaseSizes[i]
-      particleSystem.targetColors[i * 3] = newBaseColors[i * 3]
-      particleSystem.targetColors[i * 3 + 1] = newBaseColors[i * 3 + 1]
-      particleSystem.targetColors[i * 3 + 2] = newBaseColors[i * 3 + 2]
-    }
-
-    posAttr.needsUpdate = true
-    colAttr.needsUpdate = true
-    szAttr.needsUpdate = true
-  } else {
-    particleSystem.updateBaseData(newBaseSizes, newBaseColors)
-    pendingRebuild.processed = targetCount
-  }
-
-  pendingRebuild.processed = endIdx
-
-  if (pendingRebuild.processed >= targetCount) {
-    newGeometry.dispose()
-    pendingRebuild.active = false
-    pendingRebuild = null
-    particleCount = targetCount
   }
 }
 
@@ -234,12 +134,12 @@ function setupControls() {
   }
 
   particlesRange.addEventListener('input', () => {
-    const val = parseInt(particlesRange.value)
-    particlesValue.textContent = val.toString()
+    particlesValue.textContent = particlesRange.value
     bump(particlesValue)
-    if (!pendingRebuild?.active) {
-      buildGalaxy(val, vividness)
-    }
+  })
+  particlesRange.addEventListener('change', () => {
+    particleCount = parseInt(particlesRange.value)
+    buildGalaxy(particleCount, vividness)
   })
 
   speedRange.addEventListener('input', () => {
@@ -251,13 +151,12 @@ function setupControls() {
   })
 
   vividRange.addEventListener('input', () => {
-    const val = parseFloat(vividRange.value)
-    vividValue.textContent = val.toFixed(2)
+    vividValue.textContent = parseFloat(vividRange.value).toFixed(2)
     bump(vividValue)
-    vividness = val
-    if (!pendingRebuild?.active) {
-      buildGalaxy(particleCount, val)
-    }
+  })
+  vividRange.addEventListener('change', () => {
+    vividness = parseFloat(vividRange.value)
+    buildGalaxy(particleCount, vividness)
   })
 }
 
@@ -303,7 +202,6 @@ function animate() {
   elapsedTime += delta
 
   controls.update()
-  processRebuild()
 
   if (particleSystem) {
     particleSystem.update(delta, elapsedTime)

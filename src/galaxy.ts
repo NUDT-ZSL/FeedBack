@@ -49,7 +49,6 @@ export function generateGalaxy(params: GalaxyParams): {
       const distanceFactor = Math.pow(t, 1.2)
       const distance = distanceFactor * armRadius
 
-      const densityFalloff = 1 - distanceFactor * 0.7
       const scatterRadius = (isMainArm ? 0.3 : 0.15) * (0.5 + distanceFactor * 0.5)
       const scatter = scatterRadius * (Math.random() - 0.5) * 2
 
