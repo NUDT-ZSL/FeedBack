@@ -81,6 +81,12 @@ export class Molecule {
   private atomIdCounter = 0;
   private bondIdCounter = 0;
   private tempColor = new THREE.Color();
+
+  private requestFrame(callback: () => void): void {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(callback);
+    }
+  }
   
   public settings: MoleculeSettings = {
     globalScale: 1.0,
@@ -147,12 +153,18 @@ export class Molecule {
     return id;
   }
 
-  public removeAtom(id: number): void {
+  public removeAtom(id: number, animate: boolean = true): void {
     const atom = this.atoms.find(a => a.id === id);
     if (!atom) return;
     
     const bondsToRemove = this.bonds.filter(b => b.atom1 === id || b.atom2 === id);
     bondsToRemove.forEach(b => this.removeBond(b.id));
+
+    if (!animate) {
+      this.atoms = this.atoms.filter(a => a.id !== id);
+      this.update();
+      return;
+    }
 
     atom.animating = true;
     atom.animStart = performance.now();
@@ -167,6 +179,9 @@ export class Molecule {
 
   public addBond(atom1Id: number, atom2Id: number, bondType: BondType = 1, animate: boolean = true): number | null {
     if (atom1Id === atom2Id) return null;
+    const atom1Exists = this.atoms.some(a => a.id === atom1Id);
+    const atom2Exists = this.atoms.some(a => a.id === atom2Id);
+    if (!atom1Exists || !atom2Exists) return null;
     const exists = this.bonds.some(b => 
       (b.atom1 === atom1Id && b.atom2 === atom2Id) || 
       (b.atom1 === atom2Id && b.atom2 === atom1Id)
@@ -196,7 +211,7 @@ export class Molecule {
           bond.color.lerpColors(new THREE.Color(0xffff00), new THREE.Color(0x666666), (t - 0.5) * 2);
         }
         if (t < 1) {
-          requestAnimationFrame(animateColor);
+          this.requestFrame(animateColor);
         }
       };
       animateColor();
@@ -232,7 +247,7 @@ export class Molecule {
         bond.color.lerpColors(new THREE.Color(0xffff00), targetColor, (t - 0.5) * 2);
       }
       if (t < 1) {
-        requestAnimationFrame(animateColor);
+        this.requestFrame(animateColor);
       }
       this.update();
     };
