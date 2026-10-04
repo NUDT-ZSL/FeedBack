@@ -50,12 +50,15 @@ interface PlayerSprite {
   targetX: number;
   targetY: number;
   moveTween: Phaser.Tweens.Tween | null;
+  containerX: number;
+  containerY: number;
 }
 
 interface BlockSprite {
   rect: Phaser.GameObjects.Rectangle;
   x: number;
   y: number;
+  isIndestructible: boolean;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -78,6 +81,7 @@ export class GameScene extends Phaser.Scene {
   private longPressTimer: number | null = null;
   private longPressTarget: { x: number; y: number } | null = null;
   private paletteBlocks: Phaser.GameObjects.Rectangle[] = [];
+  private prefabPlacing = false;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -346,4 +350,359 @@ export class GameScene extends Phaser.Scene {
       container.add(btnText);
 
       btnBg.on('pointerover', () => {
-        btnBg.setFillStyle(0x4a4a6
+        btnBg.setFillStyle(0x4a4a6e);
+      });
+
+      btnBg.on('pointerout', () => {
+        btnBg.setFillStyle(0x2a2a4e);
+      });
+
+      btnBg.on('pointerdown', () => {
+        this.placePrefab(data.type);
+      });
+    });
+  }
+
+  private createCursorBlock(): void {
+    this.cursorBlock = this.add.rectangle(
+      -TILE_SIZE, -TILE_SIZE, TILE_SIZE - 2, TILE_SIZE - 2,
+      Phaser.Display.Color.HexStringToColor(this.currentColor).color, 0.8
+    );
+    this.cursorBlock.setStrokeStyle(1, 0xffffff, 0.8);
+    this.cursorBlock.setDepth(10);
+    this.cursorBlock.setVisible(false);
+  }
+
+  private setupInput(): void {
+    this.keys = {
+      W: this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      A: this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      S: this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+      D: this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+    };
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      const gridPos = this.pointerToGrid(pointer);
+      if (!gridPos) return;
+      if (this.longPressTimer !== null && this.longPressTarget &&
+        (this.longPressTarget.x !== gridPos.x || this.longPressTarget.y !== gridPos.y)) {
+        this.cancelLongPress();
+      }
+      if (this.cursorBlock) {
+        this.cursorBlock.setPosition(gridPos.x * TILE_SIZE + TILE_SIZE / 2, gridPos.y * TILE_SIZE + TILE_SIZE / 2);
+        this.cursorBlock.setVisible(true);
+      }
+    });
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      const gridPos = this.pointerToGrid(pointer);
+      if (!gridPos) return;
+      if (pointer.rightButtonDown()) {
+        this.breakBlockAt(gridPos.x, gridPos.y);
+        return;
+      }
+      if (pointer.leftButtonDown()) {
+        this.placeBlockAt(gridPos.x, gridPos.y);
+        this.startLongPress(gridPos.x, gridPos.y);
+      }
+    });
+
+    this.input.on('pointerup', () => {
+      this.cancelLongPress();
+    });
+
+    this.input.mouse?.disableContextMenu();
+  }
+
+  private pointerToGrid(pointer: Phaser.Input.Pointer): { x: number; y: number } | null {
+    const worldX = pointer.x + this.cameras.main.scrollX;
+    const worldY = pointer.y + this.cameras.main.scrollY;
+    const gx = Math.floor(worldX / TILE_SIZE);
+    const gy = Math.floor(worldY / TILE_SIZE);
+    if (gx < 0 || gx >= GRID_WIDTH || gy < 0 || gy >= GRID_HEIGHT) return null;
+    return { x: gx, y: gy };
+  }
+
+  private startLongPress(x: number, y: number): void {
+    this.cancelLongPress();
+    this.longPressTarget = { x, y };
+    this.longPressTimer = window.setTimeout(() => {
+      this.breakBlockAt(x, y);
+      this.longPressTimer = null;
+      this.longPressTarget = null;
+    }, 600);
+  }
+
+  private cancelLongPress(): void {
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    this.longPressTarget = null;
+  }
+
+  private placeBlockAt(x: number, y: number): void {
+    if (!this.networkManager) return;
+    this.networkManager.sendBlockPlace(x, y, this.currentColor);
+  }
+
+  private breakBlockAt(x: number, y: number): void {
+    const key = `${x},${y}`;
+    const existing = this.blocks.get(key);
+    if (existing && existing.isIndestructible) return;
+    this.networkManager?.sendBlockBreak(x, y);
+  }
+
+  private placePrefab(type: string): void {
+    if (!this.networkManager || this.prefabPlacing) return;
+    const cells = PREFABS[type];
+    if (!cells || this.currentPlayerId === '') return;
+    const me = this.players.get(this.currentPlayerId);
+    if (!me) return;
+
+    const baseX = Math.round(me.containerX);
+    const baseY = Math.round(me.containerY);
+    const rotated = cells.map(cell => ({ ...cell, dy: -cell.dy }));
+
+    this.prefabPlacing = true;
+    rotated.forEach((cell, index) => {
+      this.time.delayedCall(index * 50, () => {
+        const px = baseX + cell.dx;
+        const py = baseY + cell.dy;
+        if (px >= 0 && px < GRID_WIDTH && py >= 0 && py < GRID_HEIGHT) {
+          this.networkManager?.sendBlockPlace(px, py, cell.color);
+          this.playClickSound();
+        }
+        if (index === rotated.length - 1) {
+          this.prefabPlacing = false;
+        }
+      });
+    });
+  }
+
+  private handleResize(gameSize: Phaser.Structs.Size): void {
+    if (this.paletteContainer) {
+      this.paletteContainer.setPosition(gameSize.width - 20, gameSize.height - 20);
+    }
+    if (this.prefabButtons) {
+      this.prefabButtons.setPosition(gameSize.width - 20, gameSize.height - 180);
+    }
+  }
+
+  private handleWorldState(blocksData: BlockData[], playersData: PlayerData[]): void {
+    this.blocks.forEach(sprite => sprite.rect.destroy());
+    this.blocks.clear();
+    blocksData.forEach(block => this.addBlockSprite(block.x, block.y, block.color, block.isIndestructible));
+
+    this.players.forEach(sprite => sprite.sprite.destroy());
+    this.players.clear();
+    playersData.forEach(player => this.handlePlayerJoin(player));
+
+    this.updatePlayerList();
+  }
+
+  private handlePlayerJoin(player: PlayerData): void {
+    const color = Phaser.Display.Color.HexStringToColor(player.hatColor).color;
+
+    const body = this.add.rectangle(0, 0, 18, 22, 0xf0d0a0);
+    body.setOrigin(0.5);
+    const hat = this.add.rectangle(0, -14, 16, 8, color);
+    hat.setOrigin(0.5);
+    const nameText = this.add.text(0, -26, player.name, {
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      color: player.isCurrentPlayer ? '#FFFF00' : '#FFFFFF'
+    });
+    nameText.setOrigin(0.5);
+
+    const container = this.add.container(
+      player.x * TILE_SIZE + TILE_SIZE / 2,
+      player.y * TILE_SIZE + TILE_SIZE / 2,
+      [body, hat, nameText]
+    );
+    container.setDepth(20);
+
+    this.players.set(player.id, {
+      sprite: container,
+      body,
+      hat,
+      nameText,
+      isMoving: false,
+      targetX: player.x,
+      targetY: player.y,
+      moveTween: null,
+      containerX: player.x,
+      containerY: player.y
+    });
+    this.updatePlayerList();
+  }
+
+  private handlePlayerLeave(playerId: string): void {
+    const sprite = this.players.get(playerId);
+    if (sprite) {
+      if (sprite.moveTween) sprite.moveTween.stop();
+      sprite.sprite.destroy();
+      this.players.delete(playerId);
+    }
+    this.updatePlayerList();
+  }
+
+  private handlePlayerMove(playerId: string, x: number, y: number): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    player.targetX = x;
+    player.targetY = y;
+    if (player.moveTween) player.moveTween.stop();
+
+    const px = x * TILE_SIZE + TILE_SIZE / 2;
+    const py = y * TILE_SIZE + TILE_SIZE / 2;
+    player.moveTween = this.tweens.add({
+      targets: player.sprite,
+      x: px,
+      y: py,
+      duration: 120,
+      ease: 'Linear',
+      onComplete: () => {
+        player.isMoving = false;
+        player.containerX = x;
+        player.containerY = y;
+      }
+    });
+    player.isMoving = true;
+    player.containerX = x;
+    player.containerY = y;
+  }
+
+  private handleBlockPlace(x: number, y: number, color: string): void {
+    const key = `${x},${y}`;
+    const existing = this.blocks.get(key);
+    if (existing) {
+      existing.rect.setFillStyle(Phaser.Display.Color.HexStringToColor(color).color);
+      this.playPlaceAnimation(existing.rect);
+      return;
+    }
+    const rect = this.addBlockSprite(x, y, color, false);
+    if (rect) {
+      this.playPlaceAnimation(rect);
+      this.playRippleEffect(x, y);
+    }
+  }
+
+  private handleBlockBreak(x: number, y: number): void {
+    const key = `${x},${y}`;
+    const sprite = this.blocks.get(key);
+    if (!sprite || sprite.isIndestructible) return;
+    this.playBreakParticles(x, y, sprite.rect.fillColor);
+    sprite.rect.destroy();
+    this.blocks.delete(key);
+  }
+
+  private addBlockSprite(x: number, y: number, color: string, isIndestructible: boolean): Phaser.GameObjects.Rectangle {
+    const rect = this.add.rectangle(
+      x * TILE_SIZE + TILE_SIZE / 2,
+      y * TILE_SIZE + TILE_SIZE / 2,
+      TILE_SIZE - 1,
+      TILE_SIZE - 1,
+      Phaser.Display.Color.HexStringToColor(color).color
+    );
+    rect.setStrokeStyle(1, 0x000000, 0.3);
+    this.blocks.set(`${x},${y}`, { rect, x, y, isIndestructible });
+    return rect;
+  }
+
+  private playPlaceAnimation(rect: Phaser.GameObjects.Rectangle): void {
+    this.tweens.add({
+      targets: rect,
+      scaleX: 1.15,
+      scaleY: 0.85,
+      duration: 100,
+      yoyo: true,
+      ease: 'Quad.easeOut'
+    });
+  }
+
+  private playRippleEffect(x: number, y: number): void {
+    const ring = this.add.circle(
+      x * TILE_SIZE + TILE_SIZE / 2,
+      y * TILE_SIZE + TILE_SIZE / 2,
+      TILE_SIZE / 2,
+      undefined,
+      0
+    );
+    ring.setStrokeStyle(2, 0xffffff, 0.8);
+    ring.setDepth(5);
+    this.tweens.add({
+      targets: ring,
+      scale: 2,
+      duration: 300,
+      ease: 'Quad.easeOut',
+      onComplete: () => ring.destroy()
+    });
+    this.tweens.add({
+      targets: ring,
+      alpha: 0,
+      duration: 300,
+      ease: 'Quad.easeOut'
+    });
+  }
+
+  private playBreakParticles(x: number, y: number, fillColor: number): void {
+    const px = x * TILE_SIZE + TILE_SIZE / 2;
+    const py = y * TILE_SIZE + TILE_SIZE / 2;
+    for (let i = 0; i < 5; i++) {
+      const shard = this.add.rectangle(px, py, 6, 6, fillColor);
+      shard.setDepth(15);
+      const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.6;
+      const distance = 10 + Math.random() * 12;
+      this.tweens.add({
+        targets: shard,
+        x: px + Math.cos(angle) * distance,
+        y: py + Math.sin(angle) * distance,
+        alpha: 0,
+        angle: Math.random() * 180,
+        duration: 400,
+        ease: 'Quad.easeOut',
+        onComplete: () => shard.destroy()
+      });
+    }
+  }
+
+  update(): void {
+    this.updateCurrentPlayerMovement();
+    this.updateCameraFollow();
+  }
+
+  private updateCameraFollow(): void {
+    if (!this.currentPlayerId) return;
+    const me = this.players.get(this.currentPlayerId);
+    if (!me) return;
+    this.cameraTargetX = me.sprite.x;
+    this.cameraTargetY = me.sprite.y;
+    this.cameras.main.centerOn(this.cameraTargetX, this.cameraTargetY);
+  }
+
+  private updateCurrentPlayerMovement(): void {
+    if (!this.currentPlayerId) return;
+    const me = this.players.get(this.currentPlayerId);
+    if (!me) return;
+
+    const now = performance.now();
+    if (now - this.lastMoveTime < 120) return;
+
+    let dx = 0;
+    let dy = 0;
+    if (this.keys.W?.isDown) dy -= 1;
+    if (this.keys.S?.isDown) dy += 1;
+    if (this.keys.A?.isDown) dx -= 1;
+    if (this.keys.D?.isDown) dx += 1;
+    if (dx === 0 && dy === 0) return;
+
+    const nextX = Math.max(0, Math.min(GRID_WIDTH - 1, me.targetX + dx));
+    const nextY = Math.max(0, Math.min(GRID_HEIGHT - 1, me.targetY + dy));
+    if (nextX === me.targetX && nextY === me.targetY) return;
+
+    this.lastMoveTime = now;
+    this.networkManager?.sendPlayerMove(nextX, nextY);
+  }
+}

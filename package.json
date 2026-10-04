@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:sync": "esbuild scripts/verify-sync.mts --bundle --platform=node --format=esm --external:socket.io-client --outfile=.verify-tmp/verify.mjs --log-level=warning && node .verify-tmp/verify.mjs"
   },
   "dependencies": {
     "phaser": "^3.80.1",
