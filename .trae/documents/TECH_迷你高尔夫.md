@@ -95,3 +95,12 @@ interface Particle {
 - 上坡：沿坡度反方向施加减速力
 - 下坡：沿坡度方向施加加速力
 - 坡度越陡，方向偏差越大（添加随机扰动）
+
+## 6. 离线验证
+
+- 一条命令跑全部验证：`npm run verify`（Node ≥ 22，内置 test runner + type stripping，无需浏览器与网络，无额外依赖）。
+- 测试位于 `tests/`：`terrain.test.ts`（地形减速/坡度推力/方向扰动/确定性/重叠归属）、`fence.test.ts`（端点/相切/穿透/反弹衰减）、`hole.test.ts`（进洞判定与帧率无关性）、`session.test.ts`（击球上限/停止/重置/下一关状态机）、`course.test.ts`（种子化关卡生成）。
+- 物理核心约定：固定步长 `PHYSICS.FIXED_STEP = 1/120s`（`src/ball.ts`），`GameSession.update` 用累加器把任意帧率折算成固定步数，因此同输入逐帧可复现且结论与帧率无关。
+- 随机性全部可注入：关卡布局由 `Course` 种子决定（`regenerate()` 重置本关布局不变，`nextLevel()` 推进确定性种子序列），物理扰动由 `rngFactory` 注入（默认 `mulberry32(seed)`）。
+- 进洞规则：球心轨迹距洞心 < 半径一半必进；< 半径且速度 < 8 进；静止在洞口范围内判进；其余不进。
+- 地形重叠归属：沙地 > 上坡 > 下坡 > 草地，同优先级取圆心更近者，与区域数组顺序无关。

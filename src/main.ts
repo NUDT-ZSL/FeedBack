@@ -1,7 +1,7 @@
-import { Ball, Vector2 } from './ball';
-import { Course } from './course';
-import { UI } from './ui';
-import { ParticleSystem } from './particles';
+import { Vector2 } from './ball.ts';
+import { UI } from './ui.ts';
+import { ParticleSystem } from './particles.ts';
+import { GameSession } from './session.ts';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -9,8 +9,7 @@ class Game {
   private width: number;
   private height: number;
 
-  private ball: Ball;
-  private course: Course;
+  private session: GameSession;
   private ui: UI;
   private particles: ParticleSystem;
 
@@ -20,11 +19,6 @@ class Game {
   private chargeStartTime: number;
   private maxChargeTime: number;
   private mousePosition: Vector2;
-
-  private strokeCount: number;
-  private maxStrokes: number;
-
-  private gameState: 'aiming' | 'charging' | 'rolling' | 'win' | 'fail';
 
   private lastTime: number;
   private animationId: number | null;
@@ -42,8 +36,7 @@ class Game {
 
     this.tiltAngle = 15 * Math.PI / 180;
 
-    this.course = new Course(this.width, this.height);
-    this.ball = new Ball(this.course.teePosition.x, this.course.teePosition.y);
+    this.session = new GameSession({ width: this.width, height: this.height, maxStrokes: 10 });
     this.ui = new UI(this.width, this.height);
     this.particles = new ParticleSystem(200);
 
@@ -52,10 +45,6 @@ class Game {
     this.maxChargeTime = 2000;
     this.mousePosition = { x: 0, y: 0 };
 
-    this.strokeCount = 0;
-    this.maxStrokes = 10;
-
-    this.gameState = 'aiming';
     this.lastTime = performance.now();
     this.animationId = null;
 
@@ -88,26 +77,42 @@ class Game {
         return;
       }
 
-      if (this.gameState === 'aiming') {
-        this.startCharging();
+      if (this.session.beginCharge()) {
+        this.isCharging = true;
+        this.chargeStartTime = performance.now();
+        this.ui.setCharging(true);
       }
     });
 
     this.canvas.addEventListener('mouseup', (e) => {
       if (e.button !== 0) return;
-
-      if (this.gameState === 'charging') {
-        this.strike();
-      }
+      this.releaseStroke();
     });
 
     this.canvas.addEventListener('mouseleave', () => {
-      if (this.gameState === 'charging') {
-        this.strike();
-      }
+      this.releaseStroke();
     });
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private releaseStroke(): void {
+    if (!this.isCharging) return;
+
+    const chargeTime = performance.now() - this.chargeStartTime;
+    const power = Math.min(chargeTime / this.maxChargeTime, 1) * 12 + 2;
+
+    const direction: Vector2 = {
+      x: this.mousePosition.x - this.session.ball.position.x,
+      y: this.mousePosition.y - this.session.ball.position.y
+    };
+
+    if (this.session.strike(direction, power)) {
+      this.ui.setStrokeCount(this.session.strokeCount);
+    }
+
+    this.isCharging = false;
+    this.ui.setCharging(false);
   }
 
   private setupButtonCallbacks(): void {
@@ -116,80 +121,44 @@ class Game {
   }
 
   private updateAimDirection(): void {
-    if (this.gameState !== 'aiming' && this.gameState !== 'charging') {
+    if (!this.session.canStrike) {
       this.ui.setAimDirection(null, null);
       return;
     }
 
     const direction: Vector2 = {
-      x: this.mousePosition.x - this.ball.position.x,
-      y: this.mousePosition.y - this.ball.position.y
+      x: this.mousePosition.x - this.session.ball.position.x,
+      y: this.mousePosition.y - this.session.ball.position.y
     };
 
-    const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    const length = Math.hypot(direction.x, direction.y);
     if (length > 0) {
       direction.x /= length;
       direction.y /= length;
     }
 
-    this.ui.setAimDirection(direction, this.ball.position);
-  }
-
-  private startCharging(): void {
-    this.isCharging = true;
-    this.chargeStartTime = performance.now();
-    this.gameState = 'charging';
-    this.ui.setCharging(true);
-  }
-
-  private strike(): void {
-    if (!this.isCharging) return;
-
-    const chargeTime = performance.now() - this.chargeStartTime;
-    const power = Math.min(chargeTime / this.maxChargeTime, 1) * 12 + 2;
-
-    const direction: Vector2 = {
-      x: this.mousePosition.x - this.ball.position.x,
-      y: this.mousePosition.y - this.ball.position.y
-    };
-
-    this.ball.applyForce(direction, power);
-
-    this.strokeCount++;
-    this.ui.setStrokeCount(this.strokeCount);
-    this.ui.setCharging(false);
-
-    this.isCharging = false;
-    this.gameState = 'rolling';
+    this.ui.setAimDirection(direction, this.session.ball.position);
   }
 
   private resetLevel(): void {
-    this.course.generate();
-    this.ball.reset(this.course.teePosition.x, this.course.teePosition.y);
-    this.particles.clear();
-
-    this.strokeCount = 0;
-    this.ui.setStrokeCount(this.strokeCount);
-    this.ui.showWin(false);
-    this.ui.showFail(false);
-    this.ui.nextLevelButton.visible = false;
-
-    this.gameState = 'aiming';
-    this.isCharging = false;
+    this.session.resetLevel();
+    this.afterLevelUiReset();
   }
 
   private nextLevel(): void {
-    this.course.generate();
-    this.ball.reset(this.course.teePosition.x, this.course.teePosition.y);
+    this.session.nextLevel();
+    this.afterLevelUiReset();
+  }
+
+  private afterLevelUiReset(): void {
     this.particles.clear();
-
-    this.strokeCount = 0;
-    this.ui.setStrokeCount(this.strokeCount);
-    this.ui.showWin(false);
-    this.ui.nextLevelButton.visible = false;
-
-    this.gameState = 'aiming';
     this.isCharging = false;
+    this.ui.setStrokeCount(0);
+    this.ui.setCharging(false);
+    this.ui.showWin(false);
+    this.ui.showFail(false);
+    this.ui.nextLevelButton.visible = false;
+    this.updateAimDirection();
   }
 
   private handleResize(): void {
@@ -198,8 +167,7 @@ class Game {
     this.canvas.width = this.width;
     this.canvas.height = this.height;
 
-    this.course.resize(this.width, this.height);
-    this.ball.reset(this.course.teePosition.x, this.course.teePosition.y);
+    this.session.resize(this.width, this.height);
     this.ui.resize(this.width, this.height);
   }
 
@@ -210,41 +178,29 @@ class Game {
       this.ui.setPower(power);
     }
 
-    this.course.update(deltaTime);
+    this.session.course.update(deltaTime);
     this.ui.update(deltaTime);
     this.particles.update(deltaTime);
 
-    if (this.gameState === 'rolling') {
-      this.ball.update(
-        deltaTime,
-        this.course.terrainZones,
-        this.course.fences,
-        this.course.holePosition,
-        this.course.holeRadius
-      );
+    const previousState = this.session.state;
+    this.session.update(deltaTime);
+    this.session.ball.updateVisual(deltaTime);
 
-      if (this.ball.isInHole) {
-        this.handleWin();
-      } else if (!this.ball.isMoving) {
-        this.handleBallStopped();
-      }
+    if (this.session.state !== previousState) {
+      this.handleStateChange(previousState, this.session.state);
     }
   }
 
-  private handleWin(): void {
-    this.gameState = 'win';
-    this.particles.emitHoleEffect(this.course.holePosition);
-    this.ui.showWin(true);
-    this.ui.nextLevelButton.visible = true;
-  }
-
-  private handleBallStopped(): void {
-    if (this.strokeCount >= this.maxStrokes) {
-      this.gameState = 'fail';
-      this.particles.emitFailEffect(this.ball.position);
+  private handleStateChange(_previous: string, current: string): void {
+    const course = this.session.course;
+    if (current === 'win') {
+      this.particles.emitHoleEffect(course.holePosition);
+      this.ui.showWin(true);
+      this.ui.nextLevelButton.visible = true;
+    } else if (current === 'fail') {
+      this.particles.emitFailEffect(this.session.ball.position);
       this.ui.showFail(true);
-    } else {
-      this.gameState = 'aiming';
+    } else if (current === 'aiming') {
       this.ui.setAimDirection(null, null);
     }
   }
@@ -252,9 +208,9 @@ class Game {
   private render(): void {
     this.ctx.clearRect(0, 0, this.width, this.height);
 
-    this.course.render(this.ctx, this.tiltAngle);
+    this.session.course.render(this.ctx, this.tiltAngle);
     this.particles.render(this.ctx, this.tiltAngle);
-    this.ball.render(this.ctx, this.tiltAngle);
+    this.session.ball.render(this.ctx, this.tiltAngle);
     this.ui.render(this.ctx);
   }
 

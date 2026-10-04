@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/*.test.ts",
+    "test": "npm run verify"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
