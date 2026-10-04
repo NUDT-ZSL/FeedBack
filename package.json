@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "test": "node --experimental-strip-types --test tests/audioEngine.test.ts tests/waveRenderer.test.ts tests/spectrumRenderer.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

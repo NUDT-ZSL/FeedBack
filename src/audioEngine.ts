@@ -63,6 +63,10 @@ export class AudioEngine {
     const blockSize = Math.floor(channelData.length / samples);
     const result = new Float32Array(samples);
 
+    if (blockSize === 0) {
+      return result;
+    }
+
     for (let i = 0; i < samples; i++) {
       const start = i * blockSize;
       let sum = 0;

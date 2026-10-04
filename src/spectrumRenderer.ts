@@ -90,6 +90,15 @@ export class SpectrumRenderer {
     const freqData = this.frequencyData;
     const binSize = Math.floor(freqData.length / BAR_COUNT);
 
+    if (binSize === 0) {
+      for (let i = 0; i < BAR_COUNT; i++) {
+        this.smoothedHeights[i] *= 0.95;
+        if (this.smoothedHeights[i] < 0.5) this.smoothedHeights[i] = 0;
+      }
+      this.drawGlow(startX, bottomY, maxHeight);
+      return;
+    }
+
     for (let i = 0; i < BAR_COUNT; i++) {
       let sum = 0;
       for (let j = 0; j < binSize; j++) {
