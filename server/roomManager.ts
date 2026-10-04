@@ -1,9 +1,26 @@
-import { v4 as uuidv4 } from 'uuid';
 import type { User, Question, MatchResult, RadarData, RoomStatus, ServerMessage } from '../shared/types';
-import { selectRandomQuestions } from '../shared/questions';
+import { selectRandomQuestions } from '../shared/questions.ts';
+import { calculateMatches, generateRadarData, QUESTION_TIME_MS } from '../shared/matching.ts';
 
-const QUESTION_TIME = 15000;
-const USER_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+const START_COUNTDOWN_MS = 3000;
+const REVEAL_DURATION_MS = 2000;
+const DEFAULT_QUESTION_COUNT = 10;
+
+export interface Scheduler {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+
+export const systemScheduler: Scheduler = {
+  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+  clearTimeout: handle => clearTimeout(handle as NodeJS.Timeout),
+};
+
+export interface RoomOptions {
+  scheduler?: Scheduler;
+  selectQuestions?: (count: number) => Question[];
+  questionCount?: number;
+}
 
 export class Room {
   id: string;
@@ -11,15 +28,23 @@ export class Room {
   users: User[];
   questions: Question[];
   currentQuestion: number;
-  timers: { questionTimer?: NodeJS.Timeout };
 
-  constructor(id: string) {
+  private scheduler: Scheduler;
+  private selectQuestions: (count: number) => Question[];
+  private questionCount: number;
+  private timerHandles = new Set<unknown>();
+  private destroyed = false;
+  private answersRevealed = false;
+
+  constructor(id: string, options: RoomOptions = {}) {
     this.id = id;
     this.status = 'waiting';
     this.users = [];
     this.questions = [];
     this.currentQuestion = -1;
-    this.timers = {};
+    this.scheduler = options.scheduler ?? systemScheduler;
+    this.selectQuestions = options.selectQuestions ?? ((count: number) => selectRandomQuestions(count));
+    this.questionCount = options.questionCount ?? DEFAULT_QUESTION_COUNT;
   }
 
   broadcast(message: ServerMessage): void {
@@ -38,10 +63,10 @@ export class Room {
     }
   }
 
-  addUser(user: Omit<User, 'id' | 'answers'> & { ws?: WebSocket }): User {
+  addUser(user: Omit<User, 'id' | 'answers'>): User {
     const newUser: User = {
       ...user,
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       answers: [],
     };
     this.users.push(newUser);
@@ -57,33 +82,31 @@ export class Room {
   }
 
   startGame(): void {
-    if (this.status !== 'waiting') return;
+    if (this.destroyed || this.status !== 'waiting') return;
     if (this.users.length < 2) {
       throw new Error('至少需要2名用户才能开始游戏');
     }
 
     this.status = 'playing';
-    this.questions = selectRandomQuestions(10);
+    this.questions = this.selectQuestions(this.questionCount);
     this.currentQuestion = -1;
+    this.answersRevealed = false;
     this.users.forEach(user => {
       user.answers = [];
     });
 
     this.broadcast({ type: 'GAME_STARTING', payload: { countdown: 3 } });
 
-    setTimeout(() => {
+    this.schedule(() => {
       this.nextQuestion();
-    }, 3000);
+    }, START_COUNTDOWN_MS);
   }
 
   nextQuestion(): void {
-    if (this.status !== 'playing') return;
-
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
-    }
+    if (this.destroyed || this.status !== 'playing') return;
 
     this.currentQuestion++;
+    this.answersRevealed = false;
 
     if (this.currentQuestion >= this.questions.length) {
       this.endGame();
@@ -103,17 +126,16 @@ export class Room {
       },
     });
 
-    this.timers.questionTimer = setTimeout(() => {
-      this.sendAllAnswers();
-      setTimeout(() => {
-        this.nextQuestion();
-      }, 2000);
-    }, QUESTION_TIME);
+    this.schedule(() => {
+      this.revealAnswers();
+    }, QUESTION_TIME_MS);
   }
 
   submitAnswer(userId: string, questionIndex: number, answer: number, timeSpent: number): void {
+    if (this.destroyed || this.status !== 'playing') return;
+    if (this.answersRevealed) return;
     const user = this.getUser(userId);
-    if (!user || this.status !== 'playing') return;
+    if (!user) return;
     if (questionIndex !== this.currentQuestion) return;
     if (user.answers.some(a => a.questionIndex === questionIndex)) return;
 
@@ -132,14 +154,20 @@ export class Room {
     );
 
     if (allAnswered) {
-      if (this.timers.questionTimer) {
-        clearTimeout(this.timers.questionTimer);
-      }
-      this.sendAllAnswers();
-      setTimeout(() => {
-        this.nextQuestion();
-      }, 2000);
+      this.revealAnswers();
     }
+  }
+
+  private revealAnswers(): void {
+    if (this.destroyed || this.status !== 'playing') return;
+    if (this.answersRevealed) return;
+    this.answersRevealed = true;
+
+    this.clearAllTimers();
+    this.sendAllAnswers();
+    this.schedule(() => {
+      this.nextQuestion();
+    }, REVEAL_DURATION_MS);
   }
 
   private sendAllAnswers(): void {
@@ -160,10 +188,9 @@ export class Room {
   }
 
   private endGame(): void {
+    if (this.destroyed) return;
     this.status = 'finished';
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
-    }
+    this.clearAllTimers();
 
     const matches = this.calculateMatches();
     const radarData = this.generateRadarData();
@@ -175,133 +202,48 @@ export class Room {
   }
 
   calculateMatches(): MatchResult[] {
-    if (this.users.length < 2) return [];
-
-    const results: MatchResult[] = [];
-
-    for (let i = 0; i < this.users.length; i++) {
-      for (let j = i + 1; j < this.users.length; j++) {
-        const user1 = this.users[i];
-        const user2 = this.users[j];
-
-        let commonCount = 0;
-        const commonAnswers: MatchResult['commonAnswers'] = [];
-
-        this.questions.forEach((question, idx) => {
-          const ans1 = user1.answers.find(a => a.questionIndex === idx);
-          const ans2 = user2.answers.find(a => a.questionIndex === idx);
-
-          if (ans1 && ans2 && ans1.answer === ans2.answer && ans1.answer !== -1) {
-            commonCount++;
-            commonAnswers.push({
-              questionIndex: idx,
-              answer: ans1.answer,
-              questionText: question.text,
-              optionText: question.options[ans1.answer],
-            });
-          }
-        });
-
-        const matchPercentage = Math.round((commonCount / this.questions.length) * 100);
-
-        results.push({
-          userId: user2.id,
-          userName: user2.name,
-          userAvatar: user2.avatar,
-          matchPercentage,
-          commonAnswers,
-        });
-      }
-    }
-
-    return results.sort((a, b) => b.matchPercentage - a.matchPercentage);
+    return calculateMatches(this.users, this.questions);
   }
 
   generateRadarData(): RadarData {
-    const categories = ['生活偏好', '观点态度', '知识掌握', '答题速度', '正确率'];
-
-    const users = this.users.map((user, idx) => {
-      const scores = this.calculateUserScores(user);
-      return {
-        userId: user.id,
-        userName: user.name,
-        color: USER_COLORS[idx % USER_COLORS.length],
-        scores,
-      };
-    });
-
-    return {
-      categories,
-      selfScores: users[0]?.scores ?? [0, 0, 0, 0, 0],
-      users,
-    };
-  }
-
-  private calculateUserScores(user: User): number[] {
-    let preferenceScore = 0;
-    let opinionScore = 0;
-    let factScore = 0;
-    let preferenceCount = 0;
-    let opinionCount = 0;
-    let factCount = 0;
-    let totalTime = 0;
-    let correctCount = 0;
-    let answeredCount = 0;
-
-    this.questions.forEach((question, idx) => {
-      const answer = user.answers.find(a => a.questionIndex === idx);
-      if (!answer || answer.answer === -1) return;
-
-      answeredCount++;
-      totalTime += answer.timeSpent;
-
-      if (question.type === 'preference') {
-        preferenceCount++;
-        preferenceScore += 100;
-      } else if (question.type === 'opinion') {
-        opinionCount++;
-        opinionScore += 100;
-      } else if (question.type === 'fact') {
-        factCount++;
-        if (answer.correct) {
-          correctCount++;
-          factScore += 100;
-        }
-      }
-    });
-
-    const avgPreference = preferenceCount > 0 ? preferenceScore / preferenceCount : 0;
-    const avgOpinion = opinionCount > 0 ? opinionScore / opinionCount : 0;
-    const avgFact = factCount > 0 ? factScore / factCount : 0;
-    const speedScore = answeredCount > 0 ? Math.max(0, 100 - (totalTime / answeredCount / 15000) * 50) : 0;
-    const accuracyScore = answeredCount > 0 ? (correctCount / factCount) * 100 : 0;
-
-    return [
-      Math.round(avgPreference),
-      Math.round(avgOpinion),
-      Math.round(avgFact),
-      Math.round(speedScore),
-      Math.round(accuracyScore),
-    ];
+    return generateRadarData(this.users, this.questions);
   }
 
   cleanup(): void {
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
-    }
+    this.destroyed = true;
+    this.clearAllTimers();
+  }
+
+  private schedule(callback: () => void, delayMs: number): void {
+    if (this.destroyed) return;
+    const handle = this.scheduler.setTimeout(() => {
+      this.timerHandles.delete(handle);
+      if (this.destroyed) return;
+      callback();
+    }, delayMs);
+    this.timerHandles.add(handle);
+  }
+
+  private clearAllTimers(): void {
+    this.timerHandles.forEach(handle => {
+      this.scheduler.clearTimeout(handle);
+    });
+    this.timerHandles.clear();
   }
 }
 
 export class RoomManager {
   private rooms: Map<string, Room>;
+  private roomOptions: RoomOptions;
 
-  constructor() {
+  constructor(roomOptions: RoomOptions = {}) {
     this.rooms = new Map();
+    this.roomOptions = roomOptions;
   }
 
   createRoom(roomId?: string): Room {
     const id = roomId ?? this.generateRoomId();
-    const room = new Room(id);
+    const room = new Room(id, this.roomOptions);
     this.rooms.set(id, room);
     return room;
   }

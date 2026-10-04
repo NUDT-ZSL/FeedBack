@@ -55,3 +55,20 @@ export default tseslint.config({
   },
 })
 ```
+
+## 房间对局链路离线验证
+
+`verification/` 提供一条零依赖、可重复执行的验证链路，直接用 Node.js（>= 22，内置 TypeScript 类型擦除）运行真实业务模块，不启动网络服务、不使用真实计时器：
+
+- 时间依赖：`Room`/`RoomManager` 支持注入 `Scheduler`（`setTimeout`/`clearTimeout`），验证中使用手动推进的 `FakeScheduler`。
+- 网络依赖：客户端连接以 `MockWebSocket` 代替，通过广播消息记录断言行为。
+- 随机依赖：`selectRandomQuestions(count, seed)` 支持种子化抽题，题目 ID 固定。
+- 计算口径：匹配度/共同答案/雷达数据统一抽到 `shared/matching.ts`，服务端与客户端共用。
+
+运行：
+
+```bash
+npm run verify
+```
+
+覆盖五类行为：匹配计算确定性与口径、种子化抽题、作答提交健壮性、手动计时推进、房间销毁后计时隔离。全部通过时退出码为 0；失败时输出失败用例所属类别与具体断言，退出码为 1。
