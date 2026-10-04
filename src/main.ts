@@ -3,6 +3,8 @@ import * as CANNON from 'cannon-es';
 import { levelData, getSurfaceMaterial, SurfaceType } from './level';
 import { Player } from './player';
 import { Hammer, FireColumn, Elevator, Star, Gate, HiddenPath, Goal } from './obstacles';
+import { GameEngine, DEFAULT_FIXED_DT } from './sim/engine';
+import { Effect } from './sim/types';
 import { UI } from './ui';
 
 class Game {
@@ -12,6 +14,7 @@ class Game {
   world: CANNON.World;
   clock: THREE.Clock;
 
+  engine: GameEngine;
   player: Player;
   ui: UI;
   hammers: Hammer[] = [];
@@ -24,8 +27,7 @@ class Game {
 
   platforms: Array<{ mesh: THREE.Mesh; body: CANNON.Body }> = [];
   time: number = 0;
-  gameOver: boolean = false;
-  won: boolean = false;
+  accumulator: number = 0;
 
   cameraOffset: THREE.Vector3 = new THREE.Vector3(0, 8, 10);
   cameraTarget: THREE.Vector3 = new THREE.Vector3();
@@ -66,13 +68,27 @@ class Game {
 
     this.clock = new THREE.Clock();
 
+    this.engine = new GameEngine({
+      fixedDt: DEFAULT_FIXED_DT,
+      fires: levelData.fireColumns.map((f, i) => ({
+        id: `fire-${i}`,
+        interval: f.interval
+      })),
+      elevators: levelData.elevators.map((e, i) => ({
+        id: `elevator-${i}`,
+        baseY: e.position[1],
+        minHeight: e.minHeight,
+        maxHeight: e.maxHeight,
+        speed: e.speed
+      }))
+    });
+
     this.ui = new UI();
 
     this.setupLights();
     this.loadLevel();
 
-    this.player = new Player(this.scene, this.world, levelData.start);
-    this.bindPlayerEvents();
+    this.player = new Player(this.scene, this.world, levelData.start, this.engine);
 
     this.ui.onJoystickChange = (input) => {
       this.player.setJoystickInput(input);
@@ -157,16 +173,16 @@ class Game {
       this.platforms.push({ mesh, body });
     });
 
-    levelData.hammers.forEach((h) => {
-      this.hammers.push(new Hammer(this.scene, this.world, h));
+    levelData.hammers.forEach((h, i) => {
+      this.hammers.push(new Hammer(this.scene, this.world, h, `hammer-${i}`));
     });
 
-    levelData.fireColumns.forEach((f) => {
-      this.fireColumns.push(new FireColumn(this.scene, this.world, f));
+    levelData.fireColumns.forEach((f, i) => {
+      this.fireColumns.push(new FireColumn(this.scene, this.world, f, `fire-${i}`));
     });
 
-    levelData.elevators.forEach((e) => {
-      this.elevators.push(new Elevator(this.scene, this.world, e, 'metal'));
+    levelData.elevators.forEach((e, i) => {
+      this.elevators.push(new Elevator(this.scene, this.world, e, 'metal', `elevator-${i}`));
     });
 
     levelData.stars.forEach((s, i) => {
@@ -184,54 +200,63 @@ class Game {
     );
   }
 
-  bindPlayerEvents(): void {
-    this.player.onLifeLost = () => {
-      this.ui.setLives(this.player.lives);
-      this.ui.showDamageFlash();
-      if (this.player.lives <= 0) {
-        this.gameOver = true;
-        this.ui.showMessage('游戏结束', '最终得分: ' + this.player.score, 0);
+  /**
+   * 引擎结算出的副作用统一在这里消费：
+   * UI、音效、粒子、击退等表现层只做“呈现”，不持有任何规则状态。
+   */
+  applyEffects(effects: Effect[]): void {
+    for (const effect of effects) {
+      switch (effect.type) {
+        case 'damage':
+          this.ui.setLives(effect.lives);
+          this.ui.showDamageFlash();
+          this.player.playSound(150, 0.3, 'sawtooth');
+          break;
+        case 'gameOver':
+          this.ui.showMessage('游戏结束', '最终得分: ' + effect.score, 0);
+          break;
+        case 'score':
+          this.ui.addScore(effect.points);
+          break;
+        case 'star':
+          this.ui.setStars(effect.total);
+          this.stars[effect.index].collected = true;
+          this.scene.remove(this.stars[effect.index].mesh);
+          this.player.playSound(880, 0.2, 'sine');
+          break;
+        case 'hammerHit':
+          this.player.applyKnockback(effect.velocity);
+          this.player.triggerShockwave();
+          this.player.playSound(300, 0.15, 'square');
+          break;
+        case 'surface':
+          this.player.applySurfaceVisuals(effect.surface as SurfaceType);
+          break;
+        case 'unlockHiddenPath':
+          this.gate?.open();
+          this.player.playGearSound();
+          this.hiddenPath = new HiddenPath(
+            this.scene,
+            this.world,
+            levelData.hiddenPath.pathStart,
+            levelData.hiddenPath.pathEnd
+          );
+          this.ui.showMessage('隐藏通道已开启!', '收集 500 奖励分', 2500);
+          break;
+        case 'goal':
+          this.ui.showMessage(
+            effect.hiddenPath ? '完美通关!' : '通关成功!',
+            effect.hiddenPath
+              ? '隐藏路径奖励 +500  总分: ' + this.engine.state.score
+              : '总分: ' + this.engine.state.score + '  收集所有星星可获得高分',
+            0
+          );
+          break;
+        case 'respawn':
+          this.player.resetPosition();
+          break;
       }
-    };
-
-    this.player.onStarCollected = (index) => {
-      this.ui.setStars(this.player.starsCollected.size);
-      if (this.stars[index]) {
-        this.stars[index].collected = true;
-      }
-      if (this.player.starsCollected.size >= 3 && this.gate) {
-        this.gate.open();
-        this.player.playGearSound();
-        this.hiddenPath = new HiddenPath(
-          this.scene,
-          this.world,
-          levelData.hiddenPath.pathStart,
-          levelData.hiddenPath.pathEnd
-        );
-        this.ui.showMessage('隐藏通道已开启!', '收集 500 奖励分', 2500);
-      }
-    };
-
-    this.player.onScoreAdd = (points) => {
-      this.ui.addScore(points);
-    };
-
-    this.player.onGoal = (hiddenPath) => {
-      if (!this.won) {
-        this.won = true;
-        this.ui.showMessage(
-          hiddenPath ? '完美通关!' : '通关成功!',
-          hiddenPath
-            ? '隐藏路径奖励 +500  总分: ' + this.player.score
-            : '总分: ' + this.player.score + '  收集所有星星可获得高分',
-          0
-        );
-      }
-    };
-
-    this.player.onSurfaceChange = (_surface: SurfaceType) => {
-      // 可添加更多表面反馈
-    };
+    }
   }
 
   onResize(): void {
@@ -259,14 +284,29 @@ class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.time += dt;
 
-    if (!this.gameOver && !this.won) {
-      this.world.step(1 / 60, dt, 3);
+    if (!this.engine.state.gameOver && !this.engine.state.won) {
+      // 固定步长累加器：无论渲染帧率多少，规则推演都以固定物理时间推进
+      this.accumulator = Math.min(this.accumulator + dt, 0.15);
+      while (this.accumulator >= DEFAULT_FIXED_DT) {
+        this.world.step(DEFAULT_FIXED_DT);
+        this.player.fixedUpdate(DEFAULT_FIXED_DT);
+        this.hammers.forEach((h) => h.update(DEFAULT_FIXED_DT));
 
-      this.player.update(dt);
+        const effects = this.engine.step();
+        this.applyEffects(effects);
 
-      this.hammers.forEach((h) => h.update(dt));
-      this.fireColumns.forEach((f) => f.update(dt));
-      this.elevators.forEach((e) => e.update(dt));
+        this.accumulator -= DEFAULT_FIXED_DT;
+      }
+
+      // 机关的物理位置与可见状态完全由引擎状态驱动
+      this.fireColumns.forEach((f, i) => {
+        f.update(dt, this.engine.state.fires[`fire-${i}`].active);
+      });
+      this.elevators.forEach((e, i) => {
+        e.update(this.engine.state.elevators[`elevator-${i}`].y);
+      });
+
+      this.player.visualUpdate(dt);
       this.stars.forEach((s) => s.update(dt, this.time));
       this.gate?.update(dt);
       this.hiddenPath?.update(dt, this.time);

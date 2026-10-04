@@ -5,12 +5,14 @@ import { HammerData, FireColumnData, ElevatorData, StarData, SurfaceType } from 
 export class Hammer {
   group: THREE.Group;
   body: CANNON.Body;
+  id: string;
   armLength: number;
   rotationSpeed: number;
   angle: number = 0;
   headRadius: number = 0.5;
 
-  constructor(scene: THREE.Scene, world: CANNON.World, data: HammerData) {
+  constructor(scene: THREE.Scene, world: CANNON.World, data: HammerData, id: string) {
+    this.id = id;
     this.armLength = data.armLength;
     this.rotationSpeed = data.rotationSpeed;
 
@@ -54,7 +56,7 @@ export class Hammer {
       ),
       material: new CANNON.Material('hammer')
     });
-    this.body.userData = { type: 'hammer' };
+    this.body.userData = { type: 'hammer', id };
     world.addBody(this.body);
   }
 
@@ -74,14 +76,12 @@ export class FireColumn {
   group: THREE.Group;
   body: CANNON.Body;
   flameMesh?: THREE.Mesh;
-  interval: number;
-  timer: number = 0;
-  active: boolean = false;
+  id: string;
+  visualTimer: number = 0;
   flameHeight: number = 3;
 
-  constructor(scene: THREE.Scene, world: CANNON.World, data: FireColumnData) {
-    this.interval = data.interval;
-    this.timer = Math.random() * data.interval;
+  constructor(scene: THREE.Scene, world: CANNON.World, data: FireColumnData, id: string) {
+    this.id = id;
 
     this.group = new THREE.Group();
     this.group.position.set(...data.position);
@@ -147,33 +147,20 @@ export class FireColumn {
       material: new CANNON.Material('fire'),
       isTrigger: true
     });
-    this.body.userData = { type: 'fire', active: false };
+    this.body.userData = { type: 'fire', id };
     world.addBody(this.body);
   }
 
-  update(dt: number): void {
-    this.timer += dt;
+  /** active 由 GameEngine 按累计物理时间推演，这里只同步视觉表现 */
+  update(dt: number, active: boolean): void {
+    this.visualTimer += dt;
+    if (this.flameMesh) this.flameMesh.visible = active;
 
-    if (this.timer >= this.interval) {
-      this.timer = 0;
-      this.active = !this.active;
-      if (this.flameMesh) this.flameMesh.visible = this.active;
-      (this.body.userData as any).active = this.active;
-
-      if (this.active) {
-        setTimeout(() => {
-          if (this.flameMesh) this.flameMesh.visible = false;
-          (this.body.userData as any).active = false;
-          this.active = false;
-        }, 800);
-      }
-    }
-
-    if (this.active && this.flameMesh) {
-      const s = 0.95 + Math.sin(this.timer * 20) * 0.05;
+    if (active && this.flameMesh) {
+      const s = 0.95 + Math.sin(this.visualTimer * 20) * 0.05;
       this.flameMesh.scale.set(s, 1, s);
       const mat = this.flameMesh.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.4 + Math.sin(this.timer * 15) * 0.1;
+      mat.opacity = 0.4 + Math.sin(this.visualTimer * 15) * 0.1;
     }
   }
 }
@@ -181,19 +168,10 @@ export class FireColumn {
 export class Elevator {
   mesh: THREE.Mesh;
   body: CANNON.Body;
-  minHeight: number;
-  maxHeight: number;
-  speed: number;
-  baseY: number;
-  direction: number = 1;
-  prevPosition: CANNON.Vec3;
+  id: string;
 
-  constructor(scene: THREE.Scene, world: CANNON.World, data: ElevatorData, surface: SurfaceType = 'metal') {
-    this.minHeight = data.minHeight;
-    this.maxHeight = data.maxHeight;
-    this.speed = data.speed;
-    this.baseY = data.position[1];
-    this.prevPosition = new CANNON.Vec3(...data.position);
+  constructor(scene: THREE.Scene, world: CANNON.World, data: ElevatorData, surface: SurfaceType = 'metal', id: string = 'elevator-0') {
+    this.id = id;
 
     let color: number, metalness: number, roughness: number;
     if (surface === 'sand') { color = 0xc9a96a; metalness = 0; roughness = 0.9; }
@@ -230,18 +208,8 @@ export class Elevator {
     world.addBody(this.body);
   }
 
-  update(dt: number): void {
-    let y = this.body.position.y + this.direction * this.speed * dt;
-
-    if (y > this.baseY + this.maxHeight) {
-      y = this.baseY + this.maxHeight;
-      this.direction = -1;
-    } else if (y < this.baseY + this.minHeight) {
-      y = this.baseY + this.minHeight;
-      this.direction = 1;
-    }
-
-    this.prevPosition.copy(this.body.position);
+  /** y 由 GameEngine 按固定步长推演，这里只应用到物理体和网格 */
+  update(y: number): void {
     this.body.position.set(this.body.position.x, y, this.body.position.z);
     this.mesh.position.copy(this.body.position as any);
   }

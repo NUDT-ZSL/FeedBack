@@ -1,0 +1,19 @@
+{
+  "name": "火焰激活窗口边界：熄灭期不扣血，激活期扣血，窗口结束即熄灭",
+  "duration": 6,
+  "config": { "fires": [{ "id": "fire-0", "interval": 2 }] },
+  "events": [
+    { "time": 1.0, "event": { "kind": "fire", "id": "fire-0" } },
+    { "time": 2.1, "event": { "kind": "fire", "id": "fire-0" } },
+    { "time": 3.5, "event": { "kind": "fire", "id": "fire-0" } },
+    { "time": 4.2, "event": { "kind": "fire", "id": "fire-0" } }
+  ],
+  "expect": [
+    { "time": 1.5, "state": { "lives": 5, "fires": { "fire-0": { "active": false } } } },
+    { "time": 2.0, "state": { "fires": { "fire-0": { "active": true } } } },
+    { "time": 2.5, "state": { "lives": 4, "burning": true } },
+    { "time": 2.84, "state": { "fires": { "fire-0": { "active": false } } } },
+    { "time": 3.6, "state": { "lives": 4, "burning": false } },
+    { "time": 5.0, "state": { "lives": 3 } }
+  ]
+}

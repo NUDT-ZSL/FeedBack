@@ -1,7 +1,9 @@
 import * as CANNON from 'cannon-es';
 import * as THREE from 'three';
 
-export type SurfaceType = 'metal' | 'sand' | 'ice';
+import type { SurfaceType } from './sim/types';
+
+export type { SurfaceType };
 
 export interface PlatformData {
   position: [number, number, number];

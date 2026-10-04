@@ -1,0 +1,12 @@
+{
+  "name": "电梯到达上下限并折返：精确贴合边界、方向翻转、不越界",
+  "duration": 8,
+  "config": {
+    "elevators": [{ "id": "elevator-0", "baseY": 0, "minHeight": -1, "maxHeight": 1.5, "speed": 0.8 }]
+  },
+  "expect": [
+    { "time": 1.9, "state": { "elevators": { "elevator-0": { "y": { "$approx": 1.4867, "$eps": 0.001 }, "direction": -1 } } } },
+    { "time": 5.01, "state": { "elevators": { "elevator-0": { "y": -1, "direction": 1 } } } },
+    { "time": 8.0, "state": { "elevators": { "elevator-0": { "y": { "$approx": 1.3867, "$eps": 0.001 }, "direction": 1 } } } }
+  ]
+}

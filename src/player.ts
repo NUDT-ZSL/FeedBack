@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { SurfaceType } from './level';
+import { GameEngine } from './sim/engine';
 import { JoystickOutput } from './ui';
 
 export interface Particle {
@@ -10,6 +11,8 @@ export interface Particle {
   maxLife: number;
 }
 
+const RESPAWN_POSITION: [number, number, number] = [0, 3, 0];
+
 export class Player {
   mesh: THREE.Mesh;
   body: CANNON.Body;
@@ -18,38 +21,25 @@ export class Player {
   keys: { [key: string]: boolean } = {};
   joystickInput: JoystickOutput = { x: 0, y: 0, active: false };
 
-  currentSurface: SurfaceType = 'metal';
-  onSand: boolean = false;
-  onIce: boolean = false;
-
-  lives: number = 5;
-  starsCollected: Set<number> = new Set();
-  score: number = 0;
-  burning: boolean = false;
-  burnTimer: number = 0;
-
   scene: THREE.Scene;
   world: CANNON.World;
+  engine: GameEngine;
 
   particles: Particle[] = [];
   maxParticles: number = 200;
   shockwaveActive: boolean = false;
   shockwaveTime: number = 0;
   shockwaveMesh?: THREE.Mesh;
+  private prevBurning: boolean = false;
 
   iceGlow?: THREE.PointLight;
 
-  onLifeLost?: () => void;
-  onStarCollected?: (index: number) => void;
-  onScoreAdd?: (points: number) => void;
-  onGoal?: (hiddenPath: boolean) => void;
-  onSurfaceChange?: (surface: SurfaceType) => void;
-
   audioCtx?: AudioContext;
 
-  constructor(scene: THREE.Scene, world: CANNON.World, startPos: [number, number, number]) {
+  constructor(scene: THREE.Scene, world: CANNON.World, startPos: [number, number, number], engine: GameEngine) {
     this.scene = scene;
     this.world = world;
+    this.engine = engine;
 
     const ballGeo = new THREE.SphereGeometry(this.radius, 32, 32);
     const ballMat = new THREE.MeshStandardMaterial({
@@ -117,92 +107,59 @@ export class Player {
     this.joystickInput = input;
   }
 
+  /**
+   * 碰撞回调的唯一职责：把物理接触转成确定性事件投递到引擎。
+   * 不在这里扣血 / 加分 / 开关机关 —— 全部在引擎本步结束时统一结算。
+   */
   handleCollision(e: { body: CANNON.Body }): void {
     const other = e.body;
-
-    if (other.userData) {
-      const data = other.userData as any;
-
-      if (data.type === 'surface') {
-        this.setSurface(data.surface as SurfaceType);
-      }
-
-      if (data.type === 'hammer') {
-        this.triggerShockwave();
-        const dir = new CANNON.Vec3(
-          this.body.position.x - other.position.x,
-          0.5,
-          this.body.position.z - other.position.z
-        );
-        dir.normalize();
-        this.body.velocity.set(dir.x * 12, dir.y * 8, dir.z * 12);
-        this.playSound(300, 0.15, 'square');
-      }
-
-      if (data.type === 'fire' && data.active && !this.burning) {
-        this.takeDamage();
-      }
-
-      if (data.type === 'star') {
-        const idx = data.index as number;
-        if (!this.starsCollected.has(idx)) {
-          this.starsCollected.add(idx);
-          this.onStarCollected?.(idx);
-          this.addScore(100);
-          this.playSound(880, 0.2, 'sine');
-          if (data.mesh) {
-            this.scene.remove(data.mesh);
-          }
+    const data = other.userData as
+      | {
+          type?: string;
+          surface?: SurfaceType;
+          id?: string;
+          index?: number;
+          hiddenPath?: boolean;
         }
-      }
+      | undefined;
+    if (!data || !data.type) return;
 
-      if (data.type === 'goal') {
-        this.onGoal?.(!!data.hiddenPath);
-        if (data.hiddenPath) {
-          this.addScore(500);
-        } else {
-          this.addScore(200);
+    switch (data.type) {
+      case 'surface':
+        if (data.surface) {
+          this.engine.queueEvent({ kind: 'surface', surface: data.surface });
         }
-      }
-
-      if (data.type === 'hiddenPath') {
-        this.addScore(10);
-      }
+        break;
+      case 'hammer':
+        this.engine.queueEvent({
+          kind: 'hammer',
+          id: data.id ?? 'hammer',
+          direction: [
+            this.body.position.x - other.position.x,
+            this.body.position.z - other.position.z
+          ]
+        });
+        break;
+      case 'fire':
+        this.engine.queueEvent({ kind: 'fire', id: data.id ?? 'fire' });
+        break;
+      case 'star':
+        if (typeof data.index === 'number') {
+          this.engine.queueEvent({ kind: 'star', index: data.index });
+        }
+        break;
+      case 'goal':
+        this.engine.queueEvent({ kind: 'goal', hiddenPath: !!data.hiddenPath });
+        break;
+      case 'hiddenPath':
+        this.engine.queueEvent({ kind: 'hiddenPath' });
+        break;
     }
   }
 
-  setSurface(surface: SurfaceType): void {
-    if (this.currentSurface !== surface) {
-      this.currentSurface = surface;
-      this.onSurfaceChange?.(surface);
-    }
-    this.onSand = surface === 'sand';
-    this.onIce = surface === 'ice';
-
-    if (this.iceGlow) {
-      this.iceGlow.intensity = this.onIce ? 1.5 : 0;
-    }
-
-    const mat = this.mesh.material as THREE.MeshStandardMaterial;
-    if (this.onIce) {
-      mat.emissive = new THREE.Color(0x4488cc);
-      mat.emissiveIntensity = 0.3;
-    } else {
-      mat.emissive = new THREE.Color(0x000000);
-      mat.emissiveIntensity = 0;
-    }
-  }
-
-  takeDamage(): void {
-    this.lives = Math.max(0, this.lives - 1);
-    this.burning = true;
-    this.burnTimer = 1;
-    this.onLifeLost?.();
-    this.playSound(150, 0.3, 'sawtooth');
-
-    const mat = this.mesh.material as THREE.MeshStandardMaterial;
-    mat.emissive = new THREE.Color(0xff4400);
-    mat.emissiveIntensity = 0.8;
+  /** 结算后由 Game 调用：击退方向/速度完全沿用原实现的数值 */
+  applyKnockback(velocity: [number, number, number]): void {
+    this.body.velocity.set(velocity[0], velocity[1], velocity[2]);
   }
 
   triggerShockwave(): void {
@@ -215,6 +172,28 @@ export class Player {
       (this.shockwaveMesh.material as THREE.MeshBasicMaterial).opacity = 0.8;
       this.shockwaveMesh.scale.set(1, 1, 1);
     }
+  }
+
+  /** 材质变更的纯视觉反馈（摩擦/弹性由 ContactMaterial 保持不变） */
+  applySurfaceVisuals(surface: SurfaceType): void {
+    if (this.iceGlow) {
+      this.iceGlow.intensity = surface === 'ice' ? 1.5 : 0;
+    }
+    if (this.engine.state.burning) return;
+    const mat = this.mesh.material as THREE.MeshStandardMaterial;
+    if (surface === 'ice') {
+      mat.emissive = new THREE.Color(0x4488cc);
+      mat.emissiveIntensity = 0.3;
+    } else {
+      mat.emissive = new THREE.Color(0x000000);
+      mat.emissiveIntensity = 0;
+    }
+  }
+
+  resetPosition(): void {
+    this.body.position.set(...RESPAWN_POSITION);
+    this.body.velocity.set(0, 0, 0);
+    this.body.angularVelocity.set(0, 0, 0);
   }
 
   spawnParticle(type: 'sand' | 'fire' | 'shockwave'): void {
@@ -266,11 +245,6 @@ export class Player {
     });
   }
 
-  addScore(points: number): void {
-    this.score += points;
-    this.onScoreAdd?.(points);
-  }
-
   playSound(freq: number, duration: number, type: OscillatorType = 'sine'): void {
     if (!this.audioCtx) return;
     try {
@@ -307,7 +281,11 @@ export class Player {
     } catch (e) { /* ignore */ }
   }
 
-  update(dt: number): void {
+  /**
+   * 固定物理步更新：输入力矩与坠落检测。
+   * 由 Game 在固定步循环里调用，与渲染帧率解耦。
+   */
+  fixedUpdate(dt: number): void {
     let inputX = 0;
     let inputZ = 0;
 
@@ -330,10 +308,13 @@ export class Player {
     let torqueStrength = 18;
     let speedMultiplier = 1;
 
-    if (this.onSand) {
+    const onSand = this.engine.state.surface === 'sand';
+    const onIce = this.engine.state.surface === 'ice';
+
+    if (onSand) {
       speedMultiplier = 0.7;
     }
-    if (this.onIce) {
+    if (onIce) {
       speedMultiplier = 1.0;
       torqueStrength *= 0.4;
     }
@@ -345,26 +326,30 @@ export class Player {
         inputX * torqueStrength * speedMultiplier
       ));
 
-      if (this.onSand && Math.random() < 0.4) {
+      if (onSand && Math.random() < 0.4) {
         this.spawnParticle('sand');
       }
     }
 
-    if (this.burning) {
-      this.burnTimer -= dt;
-      if (Math.random() < 0.5) {
-        this.spawnParticle('fire');
-      }
-      if (this.burnTimer <= 0) {
-        this.burning = false;
-        const mat = this.mesh.material as THREE.MeshStandardMaterial;
-        if (this.onIce) {
-          mat.emissive = new THREE.Color(0x4488cc);
-          mat.emissiveIntensity = 0.3;
-        } else {
-          mat.emissive = new THREE.Color(0x000000);
-          mat.emissiveIntensity = 0;
-        }
+    if (this.body.position.y < -15) {
+      this.engine.queueEvent({ kind: 'fall' });
+    }
+  }
+
+  /** 每帧渲染更新：纯视觉（粒子、冲击波、发光、网格同步） */
+  visualUpdate(dt: number): void {
+    const burning = this.engine.state.burning;
+    if (burning && Math.random() < 0.5) {
+      this.spawnParticle('fire');
+    }
+    if (burning !== this.prevBurning) {
+      this.prevBurning = burning;
+      const mat = this.mesh.material as THREE.MeshStandardMaterial;
+      if (burning) {
+        mat.emissive = new THREE.Color(0xff4400);
+        mat.emissiveIntensity = 0.8;
+      } else {
+        this.applySurfaceVisuals(this.engine.state.surface);
       }
     }
 
@@ -396,18 +381,7 @@ export class Player {
       return true;
     });
 
-    if (this.body.position.y < -15) {
-      this.respawn();
-    }
-
     this.mesh.position.copy(this.body.position as any);
     this.mesh.quaternion.copy(this.body.quaternion as any);
-  }
-
-  respawn(): void {
-    this.takeDamage();
-    this.body.position.set(0, 3, 0);
-    this.body.velocity.set(0, 0, 0);
-    this.body.angularVelocity.set(0, 0, 0);
   }
 }

@@ -1,0 +1,26 @@
+{
+  "name": "同帧多机关+重复触发：两个火焰只扣一次血，重复星星/通道奖励只结算一次",
+  "duration": 5,
+  "config": {
+    "fires": [
+      { "id": "fire-a", "interval": 2 },
+      { "id": "fire-b", "interval": 2 }
+    ]
+  },
+  "events": [
+    { "time": 2.1, "event": { "kind": "fire", "id": "fire-a" } },
+    { "time": 2.1, "event": { "kind": "fire", "id": "fire-a" } },
+    { "time": 2.1, "event": { "kind": "fire", "id": "fire-b" } },
+    { "time": 2.1, "event": { "kind": "hammer", "id": "hammer-0", "direction": [1, 0] } },
+    { "time": 2.1, "event": { "kind": "hammer", "id": "hammer-0", "direction": [1, 0] } },
+    { "time": 2.1, "event": { "kind": "star", "index": 0 } },
+    { "time": 2.1, "event": { "kind": "star", "index": 0 } },
+    { "time": 2.1, "event": { "kind": "hiddenPath" } },
+    { "time": 2.1, "event": { "kind": "hiddenPath" } },
+    { "time": 4.3, "event": { "kind": "fire", "id": "fire-a" } }
+  ],
+  "expect": [
+    { "time": 2.2, "state": { "lives": 4, "score": 110, "stars": [0], "burning": true } },
+    { "time": 4.5, "state": { "lives": 3, "score": 110 } }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "隐藏通道解锁边界：同帧重复星星只算一次，集齐 3 颗解锁，隐藏终点 +500",
+  "duration": 3,
+  "events": [
+    { "time": 0.5, "event": { "kind": "star", "index": 0 } },
+    { "time": 0.5, "event": { "kind": "star", "index": 0 } },
+    { "time": 1.0, "event": { "kind": "star", "index": 1 } },
+    { "time": 1.5, "event": { "kind": "star", "index": 2 } },
+    { "time": 1.5, "event": { "kind": "star", "index": 2 } },
+    { "time": 2.0, "event": { "kind": "goal", "hiddenPath": true } }
+  ],
+  "expect": [
+    { "time": 0.6, "state": { "score": 100, "stars": [0], "hiddenPathUnlocked": false } },
+    { "time": 1.2, "state": { "score": 200, "hiddenPathUnlocked": false, "gateOpen": false } },
+    { "time": 1.6, "state": { "score": 300, "stars": [0, 1, 2], "hiddenPathUnlocked": true, "gateOpen": true } },
+    { "time": 2.5, "state": { "score": 800, "won": true } }
+  ]
+}
