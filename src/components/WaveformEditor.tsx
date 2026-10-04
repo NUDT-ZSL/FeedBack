@@ -287,15 +287,12 @@ export default function WaveformEditor({
       const width = rect.width
 
       if (dragging) {
+        // 越界/反向由上层引擎统一夹住，这里只上报原始拖拽位置
         const time = xToTime(mouseX, width)
         if (dragging === 'in') {
-          if (time < outPoint) {
-            onInPointChange(time)
-          }
+          onInPointChange(time)
         } else if (dragging === 'out') {
-          if (time > inPoint) {
-            onOutPointChange(time)
-          }
+          onOutPointChange(time)
         }
       } else {
         const inX = timeToX(inPoint, width)

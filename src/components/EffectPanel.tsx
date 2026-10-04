@@ -7,20 +7,14 @@ import {
   FlipHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { EffectParams, EffectType } from '@/lib/workbench/types'
 
-export type EffectType = 'fadeIn' | 'fadeOut' | 'echo' | 'speed' | 'reverse'
-
-export interface EffectParams {
-  fadeIn?: { start: number; end: number; duration: number }
-  fadeOut?: { start: number; end: number; duration: number }
-  echo?: { delay: number; decay: number }
-  speed?: { rate: number }
-  reverse?: Record<string, never>
-}
+export type { EffectType, EffectParams } from '@/lib/workbench/types'
 
 export interface EffectPanelProps {
   inPoint: number
   outPoint: number
+  disabled?: boolean
   onApplyEffect: (type: EffectType, params: EffectParams, inPoint: number, outPoint: number) => void
 }
 
@@ -33,35 +27,30 @@ interface EffectButton {
   hasSlider?: boolean
 }
 
-export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: EffectPanelProps) {
+function buildParams(type: EffectType, speedRate: number): EffectParams {
+  switch (type) {
+    case 'fadeIn':
+      return { fadeIn: { start: 0, end: 1, duration: 2 } }
+    case 'fadeOut':
+      return { fadeOut: { start: 1, end: 0, duration: 2 } }
+    case 'echo':
+      return { echo: { delay: 0.3, decay: 0.5 } }
+    case 'speed':
+      return { speed: { rate: speedRate } }
+    case 'reverse':
+      return { reverse: {} }
+  }
+}
+
+export default function EffectPanel({ inPoint, outPoint, disabled = false, onApplyEffect }: EffectPanelProps) {
   const [speedRate, setSpeedRate] = useState(1.0)
   const [pressedButton, setPressedButton] = useState<EffectType | null>(null)
 
   const handleButtonClick = (type: EffectType) => {
+    if (disabled) return
     setPressedButton(type)
     setTimeout(() => setPressedButton(null), 150)
-
-    let params: EffectParams = {}
-
-    switch (type) {
-      case 'fadeIn':
-        params = { fadeIn: { start: 0, end: 1, duration: 2 } }
-        break
-      case 'fadeOut':
-        params = { fadeOut: { start: 1, end: 0, duration: 2 } }
-        break
-      case 'echo':
-        params = { echo: { delay: 0.3, decay: 0.5 } }
-        break
-      case 'speed':
-        params = { speed: { rate: speedRate } }
-        break
-      case 'reverse':
-        params = { reverse: {} }
-        break
-    }
-
-    onApplyEffect(type, params, inPoint, outPoint)
+    onApplyEffect(type, buildParams(type, speedRate), inPoint, outPoint)
   }
 
   const effectButtons: EffectButton[] = [
@@ -110,12 +99,14 @@ export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: Effect
         {effectButtons.map((button) => (
           <div key={button.type} className="flex flex-col gap-2">
             <button
+              disabled={disabled}
               onClick={() => handleButtonClick(button.type)}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-4 py-2.5 text-white font-medium',
                 'transition-all duration-150 ease-out',
                 'hover:-translate-y-0.5 hover:shadow-lg',
                 'active:scale-95',
+                'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none',
                 pressedButton === button.type ? 'scale-95' : ''
               )}
               style={{
@@ -123,7 +114,7 @@ export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: Effect
                 transition: 'transform 0.15s ease-out, background-color 0.15s ease-out',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = button.hoverColor
+                if (!disabled) e.currentTarget.style.backgroundColor = button.hoverColor
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = button.color
@@ -140,8 +131,9 @@ export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: Effect
                   max="2.0"
                   step="0.1"
                   value={speedRate}
+                  disabled={disabled}
                   onChange={(e) => setSpeedRate(parseFloat(e.target.value))}
-                  className="h-1.5 w-24 cursor-pointer appearance-none rounded-lg bg-gray-700"
+                  className="h-1.5 w-24 cursor-pointer appearance-none rounded-lg bg-gray-700 disabled:cursor-not-allowed"
                   style={{
                     accentColor: button.color,
                   }}

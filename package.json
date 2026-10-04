@@ -11,7 +11,8 @@
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
     "server:upload": "tsx server/index.ts",
-    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
+    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
+    "test": "node --import tsx --test tests/workbench.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

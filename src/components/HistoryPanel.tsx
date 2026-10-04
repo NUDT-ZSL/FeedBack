@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Undo2, Redo2, Waves, Volume2, VolumeX, RotateCcw, Gauge, FlipHorizontal } from 'lucide-react';
+import { Undo2, Redo2, Waves, Volume2, VolumeX, RotateCcw, Gauge, FlipHorizontal, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HistoryEntry {
@@ -13,6 +13,8 @@ interface HistoryEntry {
 interface HistoryPanelProps {
   history: HistoryEntry[];
   historyIndex: number;
+  /** 跳转（含撤销/重做动画）进行中：所有入口禁用且可观察 */
+  isJumping: boolean;
   onUndo: () => void;
   onRedo: () => void;
   onJumpToHistory: (index: number) => void;
@@ -34,57 +36,45 @@ const getIcon = (iconName: string) => {
 export default function HistoryPanel({
   history,
   historyIndex,
+  isJumping,
   onUndo,
   onRedo,
   onJumpToHistory,
 }: HistoryPanelProps) {
-  const [isAnimating, setIsAnimating] = useState(false);
   const [pressedButton, setPressedButton] = useState<'undo' | 'redo' | null>(null);
 
   const handleJumpToHistory = (index: number) => {
-    if (index === historyIndex || isAnimating) return;
-    setIsAnimating(true);
-    setTimeout(() => {
-      onJumpToHistory(index);
-      setIsAnimating(false);
-    }, 300);
+    if (index === historyIndex || isJumping) return;
+    onJumpToHistory(index);
   };
 
   const handleUndo = () => {
-    if (historyIndex <= 0 || isAnimating) return;
-    setIsAnimating(true);
-    setTimeout(() => {
-      onUndo();
-      setIsAnimating(false);
-    }, 300);
+    if (historyIndex < 0 || isJumping) return;
+    onUndo();
   };
 
   const handleRedo = () => {
-    if (historyIndex >= history.length - 1 || isAnimating) return;
-    setIsAnimating(true);
-    setTimeout(() => {
-      onRedo();
-      setIsAnimating(false);
-    }, 300);
+    if (historyIndex >= history.length - 1 || isJumping) return;
+    onRedo();
   };
 
-  const handleMouseDown = (button: 'undo' | 'redo') => {
-    setPressedButton(button);
-  };
-
-  const handleMouseUp = () => {
-    setPressedButton(null);
-  };
-
-  const canUndo = historyIndex > 0 && !isAnimating;
-  const canRedo = historyIndex < history.length - 1 && !isAnimating;
+  const canUndo = historyIndex >= 0 && !isJumping;
+  const canRedo = historyIndex < history.length - 1 && !isJumping;
 
   return (
     <div
       className="flex h-full flex-col rounded-lg p-4"
       style={{ backgroundColor: '#16213e', color: '#e0e0e0' }}
     >
-      <h3 className="mb-4 text-base font-bold">操作历史</h3>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-base font-bold">操作历史</h3>
+        {isJumping && (
+          <span className="flex items-center gap-1.5 text-xs text-cyan-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            跳转中…
+          </span>
+        )}
+      </div>
 
       <div className="relative flex-1 overflow-y-auto">
         <div className="absolute left-4 top-0 h-full w-0.5 bg-gray-600" />
@@ -99,10 +89,10 @@ export default function HistoryPanel({
               <div
                 key={entry.id}
                 className={cn(
-                  'relative flex cursor-pointer items-start gap-3 pl-10 pr-2 py-2 rounded-md transition-all duration-200',
+                  'relative flex items-start gap-3 pl-10 pr-2 py-2 rounded-md transition-all duration-200',
                   isActive ? 'opacity-100' : 'opacity-40',
                   isCurrent && 'ring-1 ring-cyan-500/50',
-                  'hover:bg-white/5'
+                  isJumping ? 'cursor-wait' : 'cursor-pointer hover:bg-white/5'
                 )}
                 onClick={() => handleJumpToHistory(index)}
               >
@@ -124,10 +114,10 @@ export default function HistoryPanel({
                   <p
                     className={cn(
                       'text-sm truncate transition-all duration-300',
-                      isAnimating && isCurrent && 'animate-pulse'
+                      isJumping && isCurrent && 'animate-pulse'
                     )}
                     style={{
-                      transform: isAnimating && isCurrent ? 'scaleY(0)' : 'scaleY(1)',
+                      transform: isJumping && isCurrent ? 'scaleY(0)' : 'scaleY(1)',
                       transformOrigin: 'top',
                       transition: 'transform 0.3s ease-in-out',
                     }}
@@ -158,9 +148,9 @@ export default function HistoryPanel({
       <div className="mt-4 flex items-center justify-center gap-4 pt-4 border-t border-gray-700">
         <button
           onClick={handleUndo}
-          onMouseDown={() => handleMouseDown('undo')}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseDown={() => setPressedButton('undo')}
+          onMouseUp={() => setPressedButton(null)}
+          onMouseLeave={() => setPressedButton(null)}
           disabled={!canUndo}
           className={cn(
             'flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150',
@@ -185,9 +175,9 @@ export default function HistoryPanel({
 
         <button
           onClick={handleRedo}
-          onMouseDown={() => handleMouseDown('redo')}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseDown={() => setPressedButton('redo')}
+          onMouseUp={() => setPressedButton(null)}
+          onMouseLeave={() => setPressedButton(null)}
           disabled={!canRedo}
           className={cn(
             'flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150',
