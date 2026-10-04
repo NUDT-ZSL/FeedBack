@@ -62,3 +62,18 @@ interface SlideData {
 | 按钮悬停 | CSS transform: scale(1.05) + 0.2s过渡 | GPU加速 |
 | 焦点高亮 | CSS border-color transition 0.3s | 仅重绘边框 |
 | 演示模式 | Fullscreen API + CSS backdrop-filter | 平滑过渡 |
+
+## 6. 离线验证体系
+
+界面操作（新增/删除/切换幻灯片、图表类型切换、数据点编辑、富文本注释、演示模式进出、键盘导航）的状态推演已抽离为纯函数模型，可在无 DOM、无全屏能力的 Node 环境下离线断言。
+
+| 文件 | 用途 |
+|-------|---------|
+| `src/model/slides.ts` | 幻灯片集合的纯状态模型：`DeckState` + `deckReducer`，含上限忽略、越界跳过、删除收敛、重复提交空操作等口径 |
+| `src/model/presentation.ts` | 演示模式与键盘的纯逻辑：`FullscreenPort` 全屏能力端口（浏览器实现/Null 降级实现）、`resolveKeyCommand` 键盘映射 |
+| `tests/harness.ts` | 验证设施：`DeckDriver` 操作序列重演、`expectState` 逐字段断言、种子化随机源、全屏替身、批量运行器 |
+| `tests/cases/*.cases.ts` | 用例集：新增删除、导航键盘、内容编辑、演示降级、随机序列不变量 |
+| `tests/run.ts` | 统一批量入口，输出通过/失败结论与失败定位（套件/用例/步骤/字段/期望/实际/操作序列） |
+| `tsconfig.test.json` | 测试专用编译配置（NodeNext，输出到 `.test-build/`） |
+
+运行方式：`npm run verify`（或 `npm test`）。失败时进程退出码为 1，并打印具体不符的状态字段；全部通过时退出码为 0。验证过程不依赖网络字体、真实全屏或任何在线资源。

@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
+import type { DataPoint } from './model/slides';
 
-export interface DataPoint {
-  label: string;
-  value: number;
-}
+export type { DataPoint };
 
 interface DataVizProps {
   data: DataPoint[];

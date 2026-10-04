@@ -1,15 +1,9 @@
 import React, { useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import DataViz, { DataPoint } from './DataViz';
+import DataViz from './DataViz';
+import type { SlideData } from './model/slides';
 
-export interface SlideData {
-  id: string;
-  title: string;
-  chartType: 'bar' | 'line';
-  data: DataPoint[];
-  note: string;
-  noteFontSize: number;
-}
+export type { SlideData };
 
 interface SlideProps {
   slide: SlideData;
