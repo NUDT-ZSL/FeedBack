@@ -4,6 +4,14 @@ import { OrbitControls, Line, Sphere, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 import { soundEngine, ScaleType } from './SoundEngine'
 import NoteGrid from './NoteGrid'
+import {
+  NOTE_LIGHT_DURATION_MS,
+  quantizeRecordedBeat,
+  findNoteInSlot,
+  buildPlaybackSchedule,
+  PlaybackCursor,
+  HighlightTracker,
+} from './sequencing'
 
 interface Note {
   id: string
@@ -22,7 +30,6 @@ interface TrailPoint {
 const LOW_COLOR = new THREE.Color('#ff4466')
 const HIGH_COLOR = new THREE.Color('#ffaa00')
 const TRAIL_DURATION = 500
-const NOTE_LIGHT_DURATION = 200
 const MAX_NOTES = 300
 
 const getNoteColor = (pitchIndex: number, maxPitch: number): string => {
@@ -254,11 +261,39 @@ const MelodyEditor: React.FC = () => {
   const [currentBeat, setCurrentBeat] = useState(0)
   const [playingNoteIds, setPlayingNoteIds] = useState<Set<string>>(new Set())
   const [beatPulse, setBeatPulse] = useState(false)
+  const [dedupeSkips, setDedupeSkips] = useState(0)
 
   const recordingStartTime = useRef<number>(0)
   const playStartTime = useRef<number>(0)
   const playIntervalRef = useRef<number | null>(null)
   const recordedNotesRef = useRef<Note[]>([])
+  const notesRef = useRef<Note[]>([])
+  const highlightTrackerRef = useRef<HighlightTracker>(new HighlightTracker())
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
+
+  useEffect(() => {
+    let rafId = 0
+    const pruneHighlights = () => {
+      const now = performance.now()
+      setPlayingNoteIds(prev => {
+        const next = highlightTrackerRef.current.activeNoteIds(now)
+        if (next.size === prev.size) {
+          let unchanged = true
+          next.forEach(id => {
+            if (!prev.has(id)) unchanged = false
+          })
+          if (unchanged) return prev
+        }
+        return next
+      })
+      rafId = requestAnimationFrame(pruneHighlights)
+    }
+    rafId = requestAnimationFrame(pruneHighlights)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   useEffect(() => {
     soundEngine.init()
@@ -280,12 +315,46 @@ const MelodyEditor: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isPlaying, notes])
 
-  const addNote = useCallback((pitchIndex: number, beatPosition?: number) => {
-    if (notes.length >= MAX_NOTES) return
+  const lightUpNote = useCallback((noteId: string) => {
+    const now = performance.now()
+    highlightTrackerRef.current.fire(noteId, now, NOTE_LIGHT_DURATION_MS)
+    setPlayingNoteIds(highlightTrackerRef.current.activeNoteIds(now))
+  }, [])
 
+  const addNote = useCallback((pitchIndex: number, beatPosition?: number): boolean => {
     const now = Date.now()
-    const timestamp = isRecording ? now - recordingStartTime.current : now
-    const actualBeatPosition = beatPosition ?? (isRecording ? (timestamp / 1000) * (bpm / 60) : (notes.length % maxBeats))
+
+    if (isRecording) {
+      const timestamp = now - recordingStartTime.current
+      const quantizedBeat = quantizeRecordedBeat(timestamp, bpm)
+      const existing = findNoteInSlot(notesRef.current, pitchIndex, quantizedBeat)
+
+      soundEngine.playNote(pitchIndex, scale)
+
+      if (existing) {
+        setDedupeSkips(count => count + 1)
+        lightUpNote(existing.id)
+        return false
+      }
+      if (notesRef.current.length >= MAX_NOTES) return false
+
+      const newNote: Note = {
+        id: `note-${now}-${Math.random().toString(36).substr(2, 9)}`,
+        pitchIndex,
+        beatPosition: quantizedBeat,
+        timestamp,
+        color: getNoteColor(pitchIndex, maxPitch),
+      }
+
+      recordedNotesRef.current.push(newNote)
+      setNotes(prev => [...prev, newNote])
+      return true
+    }
+
+    if (notes.length >= MAX_NOTES) return false
+
+    const timestamp = now
+    const actualBeatPosition = beatPosition ?? (notes.length % maxBeats)
 
     const newNote: Note = {
       id: `note-${now}-${Math.random().toString(36).substr(2, 9)}`,
@@ -296,28 +365,10 @@ const MelodyEditor: React.FC = () => {
     }
 
     soundEngine.playNote(pitchIndex, scale)
-
-    if (isRecording) {
-      recordedNotesRef.current.push(newNote)
-    }
-
     setNotes(prev => [...prev, newNote])
-
-    if (!isRecording) {
-      lightUpNote(newNote.id)
-    }
-  }, [notes.length, isRecording, bpm, maxBeats, maxPitch, scale])
-
-  const lightUpNote = useCallback((noteId: string) => {
-    setPlayingNoteIds(prev => new Set(prev).add(noteId))
-    setTimeout(() => {
-      setPlayingNoteIds(prev => {
-        const next = new Set(prev)
-        next.delete(noteId)
-        return next
-      })
-    }, NOTE_LIGHT_DURATION)
-  }, [])
+    lightUpNote(newNote.id)
+    return true
+  }, [notes.length, isRecording, bpm, maxBeats, maxPitch, scale, lightUpNote])
 
   const deleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId))
@@ -326,12 +377,14 @@ const MelodyEditor: React.FC = () => {
 
   const clearAllNotes = useCallback(() => {
     setNotes([])
+    setDedupeSkips(0)
   }, [])
 
   const startRecording = useCallback(async () => {
     await soundEngine.init()
     setIsRecording(true)
     setIsPlaying(false)
+    setDedupeSkips(0)
     recordingStartTime.current = Date.now()
     recordedNotesRef.current = []
   }, [])
@@ -351,29 +404,30 @@ const MelodyEditor: React.FC = () => {
     setIsRecording(false)
     playStartTime.current = Date.now()
 
-    const sortedNotes = [...notes].sort((a, b) => a.timestamp - b.timestamp)
-    let noteIndex = 0
-
-    const maxTimestamp = sortedNotes[sortedNotes.length - 1].timestamp + 1000
+    const cursor = new PlaybackCursor(buildPlaybackSchedule(notes, bpm))
 
     const tick = () => {
       const elapsed = Date.now() - playStartTime.current
       const beat = (elapsed / 1000) * (bpm / 60)
       setCurrentBeat(beat % maxBeats)
 
-      if (Math.floor(beat) !== Math.floor((elapsed - 16) / 1000 * (bpm / 60))) {
+      const previousBeat = ((elapsed - 16) / 1000) * (bpm / 60)
+      if (Math.floor(beat) !== Math.floor(previousBeat)) {
         setBeatPulse(true)
         setTimeout(() => setBeatPulse(false), 200)
       }
 
-      while (noteIndex < sortedNotes.length && sortedNotes[noteIndex].timestamp <= elapsed) {
-        const note = sortedNotes[noteIndex]
-        soundEngine.playNote(note.pitchIndex, scale)
-        lightUpNote(note.id)
-        noteIndex++
+      const dueEvents = cursor.advance(elapsed)
+      if (dueEvents.length > 0) {
+        const highlightNow = performance.now()
+        dueEvents.forEach(event => {
+          soundEngine.playNote(event.pitchIndex, scale)
+          highlightTrackerRef.current.fire(event.noteId, highlightNow, NOTE_LIGHT_DURATION_MS)
+        })
+        setPlayingNoteIds(highlightTrackerRef.current.activeNoteIds(highlightNow))
       }
 
-      if (elapsed < maxTimestamp && noteIndex < sortedNotes.length) {
+      if (!cursor.done && elapsed < cursor.endMs) {
         playIntervalRef.current = requestAnimationFrame(tick)
       } else {
         setIsPlaying(false)
@@ -382,12 +436,13 @@ const MelodyEditor: React.FC = () => {
     }
 
     playIntervalRef.current = requestAnimationFrame(tick)
-  }, [notes, bpm, maxBeats, scale, lightUpNote])
+  }, [notes, bpm, maxBeats, scale])
 
   const stopPlayback = useCallback(() => {
     setIsPlaying(false)
     setCurrentBeat(0)
     setPlayingNoteIds(new Set())
+    highlightTrackerRef.current.clear()
     if (playIntervalRef.current) {
       cancelAnimationFrame(playIntervalRef.current)
       playIntervalRef.current = null
@@ -565,6 +620,9 @@ const MelodyEditor: React.FC = () => {
         </div>
         <div style={{ fontSize: '14px', opacity: 0.9 }}>
           音符: <span style={{ color: '#ff4466' }}>{notes.length}</span> / {MAX_NOTES}
+        </div>
+        <div style={{ fontSize: '14px', opacity: 0.9 }}>
+          去重: <span style={{ color: '#00ffff' }}>{dedupeSkips}</span>
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{
