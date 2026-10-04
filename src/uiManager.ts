@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import type { MoleculeData, AtomData } from './moleculeData';
 
 export interface UIManagerCallbacks {
@@ -181,18 +180,5 @@ export class UIManager {
 
   updateFPS(fps: number): void {
     this.fpsCounter.textContent = `${fps.toFixed(0)} FPS`;
-  }
-
-  getScreenPosition(
-    worldPos: THREE.Vector3,
-    camera: THREE.Camera,
-    renderer: THREE.WebGLRenderer
-  ): { x: number; y: number } {
-    const vector = worldPos.clone().project(camera);
-    const rect = renderer.domElement.getBoundingClientRect();
-    return {
-      x: (vector.x * 0.5 + 0.5) * rect.width + rect.left,
-      y: (-vector.y * 0.5 + 0.5) * rect.height + rect.top
-    };
   }
 }

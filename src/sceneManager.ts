@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { MoleculeData, AtomData } from './moleculeData';
+import { buildMoleculeModel, type BondModel } from './core/moleculeGeometry';
+import type { Quat } from './core/math3';
 
 export interface MoleculeObject {
   group: THREE.Group;
@@ -12,7 +14,7 @@ export interface MoleculeObject {
 export class SceneManager {
   private scene: THREE.Scene;
   private currentMolecule: MoleculeObject | null = null;
-  private targetMolecule: MoleculeObject | null = null;
+  private transitionId: number = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -74,12 +76,8 @@ export class SceneManager {
     return points;
   }
 
-  createBondMesh(pos1: [number, number, number], pos2: [number, number, number]): THREE.Mesh {
-    const start = new THREE.Vector3(...pos1);
-    const end = new THREE.Vector3(...pos2);
-    const direction = new THREE.Vector3().subVectors(end, start);
-    const length = direction.length();
-
+  createBondMesh(bond: BondModel): THREE.Mesh {
+    const length = bond.geometryLength;
     const geometry = new THREE.CylinderGeometry(0.08, 0.08, length, 16);
     geometry.translate(0, length / 2, 0);
 
@@ -90,17 +88,15 @@ export class SceneManager {
       metalness: 0.2,
       roughness: 0.6
     });
-
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(start);
-    mesh.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0),
-      direction.clone().normalize()
-    );
+    mesh.position.set(...bond.start);
+    const q: Quat = bond.quaternion;
+    mesh.quaternion.set(q[0], q[1], q[2], q[3]);
     return mesh;
   }
 
   buildMolecule(moleculeData: MoleculeData): MoleculeObject {
+    const model = buildMoleculeModel(moleculeData);
     const group = new THREE.Group();
     const atoms: THREE.Mesh[] = [];
     const bonds: THREE.Mesh[] = [];
@@ -119,10 +115,8 @@ export class SceneManager {
       group.add(cloud);
     });
 
-    moleculeData.bonds.forEach(bond => {
-      const atom1 = moleculeData.atoms[bond.atom1];
-      const atom2 = moleculeData.atoms[bond.atom2];
-      const bondMesh = this.createBondMesh(atom1.position, atom2.position);
+    model.bonds.forEach(bond => {
+      const bondMesh = this.createBondMesh(bond);
       bonds.push(bondMesh);
       group.add(bondMesh);
     });
@@ -130,10 +124,10 @@ export class SceneManager {
     group.scale.set(0, 0, 0);
     group.traverse(obj => {
       if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-        const anyObj = obj as any;
+        const anyObj = obj as unknown as { material?: THREE.Material };
         if (anyObj.material && 'opacity' in anyObj.material) {
-          anyObj.material.opacity = 0;
-          anyObj.material.transparent = true;
+          (anyObj.material as { opacity: number }).opacity = 0;
+          (anyObj.material as { transparent: boolean }).transparent = true;
         }
       }
     });
@@ -142,54 +136,59 @@ export class SceneManager {
   }
 
   async loadMolecule(moleculeData: MoleculeData): Promise<void> {
+    const transitionId = ++this.transitionId;
     return new Promise((resolve) => {
-      this.targetMolecule = this.buildMolecule(moleculeData);
-      this.scene.add(this.targetMolecule.group);
+      const outgoing = this.currentMolecule;
+      const incoming = this.buildMolecule(moleculeData);
+      this.scene.add(incoming.group);
 
       const startTime = performance.now();
       const duration = 400;
 
       const animate = () => {
+        if (transitionId !== this.transitionId) {
+          this.disposeMolecule(incoming);
+          resolve();
+          return;
+        }
         const elapsed = performance.now() - startTime;
         const t = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - t, 3);
 
-        if (this.currentMolecule) {
+        if (outgoing) {
           const outScale = 1 - eased;
-          this.currentMolecule.group.scale.set(outScale, outScale, outScale);
-          this.currentMolecule.group.traverse(obj => {
+          outgoing.group.scale.set(outScale, outScale, outScale);
+          outgoing.group.traverse(obj => {
             if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-              const anyObj = obj as any;
+              const anyObj = obj as unknown as { material?: THREE.Material };
               if (anyObj.material && 'opacity' in anyObj.material) {
-                anyObj.material.opacity = (obj instanceof THREE.Points ? 0.5 : 1) * (1 - eased);
+                (anyObj.material as { opacity: number }).opacity =
+                  (obj instanceof THREE.Points ? 0.5 : 1) * (1 - eased);
               }
             }
           });
         }
 
-        if (this.targetMolecule) {
-          const inScale = eased;
-          this.targetMolecule.group.scale.set(inScale, inScale, inScale);
-          this.targetMolecule.group.traverse(obj => {
-            if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-              const anyObj = obj as any;
-              if (anyObj.material && 'opacity' in anyObj.material) {
-                const targetOpacity = obj instanceof THREE.Points ? 0.5 :
-                  (obj.geometry instanceof THREE.CylinderGeometry ? 0.7 : 1);
-                anyObj.material.opacity = targetOpacity * eased;
-              }
+        const inScale = eased;
+        incoming.group.scale.set(inScale, inScale, inScale);
+        incoming.group.traverse(obj => {
+          if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
+            const anyObj = obj as unknown as { material?: THREE.Material };
+            if (anyObj.material && 'opacity' in anyObj.material) {
+              const targetOpacity = obj instanceof THREE.Points ? 0.5 :
+                (obj.geometry instanceof THREE.CylinderGeometry ? 0.7 : 1);
+              (anyObj.material as { opacity: number }).opacity = targetOpacity * eased;
             }
-          });
-        }
+          }
+        });
 
         if (t < 1) {
           requestAnimationFrame(animate);
         } else {
-          if (this.currentMolecule) {
-            this.disposeMolecule(this.currentMolecule);
+          if (outgoing) {
+            this.disposeMolecule(outgoing);
           }
-          this.currentMolecule = this.targetMolecule;
-          this.targetMolecule = null;
+          this.currentMolecule = incoming;
           resolve();
         }
       };
@@ -199,40 +198,44 @@ export class SceneManager {
   }
 
   async unloadMolecule(): Promise<void> {
-    if (!this.currentMolecule) return;
+    const transitionId = ++this.transitionId;
+    const molecule = this.currentMolecule;
+    this.currentMolecule = null;
+    if (!molecule) {
+      return;
+    }
 
     return new Promise((resolve) => {
       const startTime = performance.now();
       const duration = 400;
-      const molecule = this.currentMolecule;
 
       const animate = () => {
+        if (transitionId !== this.transitionId) {
+          this.disposeMolecule(molecule);
+          resolve();
+          return;
+        }
         const elapsed = performance.now() - startTime;
         const t = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - t, 3);
 
-        if (molecule) {
-          const scale = 1 - eased;
-          molecule.group.scale.set(scale, scale, scale);
-          molecule.group.traverse(obj => {
-            if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-              const anyObj = obj as any;
-              if (anyObj.material && 'opacity' in anyObj.material) {
-                const targetOpacity = obj instanceof THREE.Points ? 0.5 :
-                  (obj.geometry instanceof THREE.CylinderGeometry ? 0.7 : 1);
-                anyObj.material.opacity = targetOpacity * (1 - eased);
-              }
+        const scale = 1 - eased;
+        molecule.group.scale.set(scale, scale, scale);
+        molecule.group.traverse(obj => {
+          if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
+            const anyObj = obj as unknown as { material?: THREE.Material };
+            if (anyObj.material && 'opacity' in anyObj.material) {
+              const targetOpacity = obj instanceof THREE.Points ? 0.5 :
+                (obj.geometry instanceof THREE.CylinderGeometry ? 0.7 : 1);
+              (anyObj.material as { opacity: number }).opacity = targetOpacity * (1 - eased);
             }
-          });
-        }
+          }
+        });
 
         if (t < 1) {
           requestAnimationFrame(animate);
         } else {
-          if (molecule) {
-            this.disposeMolecule(molecule);
-          }
-          this.currentMolecule = null;
+          this.disposeMolecule(molecule);
           resolve();
         }
       };
