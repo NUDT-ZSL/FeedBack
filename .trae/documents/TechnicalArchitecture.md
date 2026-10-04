@@ -6,10 +6,15 @@ graph TD
     A["index.html 入口"] --> B["main.ts 场景控制器"]
     B --> C["nebula.ts 粒子系统模块"]
     B --> D["controls.ts UI控制面板模块"]
+    C --> F["particles.ts 粒子数据/增量应用（纯逻辑）"]
+    C --> G["animation.ts 动画状态（纯逻辑）"]
+    D --> H["scheduler.ts 更新调度（纯逻辑）"]
+    H --> C["参数快照回调"]
     C --> E["Three.js 渲染引擎"]
-    D --> C["参数更新回调"]
     B --> E
 ```
+
+分层说明：`params.ts` / `particles.ts` / `animation.ts` / `scheduler.ts` 为不依赖 Three.js 与 DOM 的纯逻辑层，可在 Node 中离线验证（`npm run verify`）；`nebula.ts` 仅负责 Three.js 对象装配，`main.ts` 仅负责渲染循环与相机。
 
 ## 2. 技术描述
 - **前端框架**：原生 TypeScript + Three.js（不使用React/Vue，按用户要求最小化依赖）
@@ -28,8 +33,13 @@ graph TD
 | `tsconfig.json` | TypeScript严格模式，ESNext模块解析 |
 | `index.html` | 入口页面，全屏Canvas，深空渐变背景 |
 | `src/main.ts` | 场景/相机/渲染器初始化，渲染循环，相机自动旋转 |
-| `src/nebula.ts` | 粒子系统创建、参数更新、销毁函数 |
-| `src/controls.ts` | 右侧控制面板DOM创建，滑块事件监听 |
+| `src/nebula.ts` | Three.js 装配层：几何体/材质创建、增量更新标记、销毁 |
+| `src/controls.ts` | 右侧控制面板DOM创建，滑块事件监听，接入更新调度器 |
+| `src/params.ts` | 参数快照类型、比较与差异计算（纯逻辑） |
+| `src/particles.ts` | 粒子基础数据生成（种子随机）与按参数增量计算缓冲（纯逻辑） |
+| `src/animation.ts` | 动画状态（旋转角、时间）推进，独立于参数快照（纯逻辑） |
+| `src/scheduler.ts` | 参数更新调度：帧内合并、去重、防丢失（纯逻辑） |
+| `scripts/verify-offline.ts` | 离线验证：顺序无关性、增量隔离、调度行为、动画独立性 |
 
 ## 4. 核心模块API定义
 
@@ -65,7 +75,8 @@ export function createControls(
 - **颜色映射**：根据粒子到中心的距离进行HSL插值，中心 `hsl(20, 100%, 60%)` → 外围 `hsl(250, 80%, 50%)`，叠加色相偏移
 - **透明度**：随机 `0.3-1.0`，存储在 `BufferAttribute`
 - **大小**：随机 `0.05-0.5` 单位，存储在 `BufferAttribute`
-- **更新策略**：参数变化时仅更新 `BufferAttribute` 数据，不重建几何体，保证平滑过渡和30fps+性能
+- **更新策略**：参数变化时仅增量更新受影响的 `BufferAttribute`（色相→颜色、半径→位置、数量→drawRange、旋转速度→无缓冲操作），不重建几何体；位置/颜色始终由不可变基础数据与当前参数纯函数计算，与调整顺序无关
+- **动画透明度波动**：基础透明度存于静态属性，波动在顶点着色器中由 `uTime` uniform 计算，不再每帧回写 CPU 缓冲
 
 ## 6. 性能优化策略
 1. **单个Points对象**：所有粒子使用单个BufferGeometry + PointsMaterial，减少Draw Call

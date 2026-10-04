@@ -1,4 +1,5 @@
 import { NebulaParams } from './nebula';
+import { createUpdateScheduler } from './scheduler.ts';
 
 export type ControlChangeHandler = (params: NebulaParams) => void;
 
@@ -57,7 +58,11 @@ export function createControls(
   onChange: ControlChangeHandler
 ): void {
   const currentParams: NebulaParams = { ...initialParams };
-  let pendingUpdate = false;
+
+  const scheduler = createUpdateScheduler(
+    (callback) => requestAnimationFrame(callback),
+    (params) => onChange(params)
+  );
 
   const title = document.createElement('div');
   title.className = 'panel-title';
@@ -88,28 +93,21 @@ export function createControls(
     slider.step = config.step.toString();
     slider.value = (currentParams[config.key] as number).toString();
 
-    const triggerUpdate = () => {
-      if (!pendingUpdate) {
-        pendingUpdate = true;
-        requestAnimationFrame(() => {
-          onChange({ ...currentParams });
-          pendingUpdate = false;
-        });
-      }
+    const readSlider = (event: Event): void => {
+      const value = parseFloat((event.target as HTMLInputElement).value);
+      currentParams[config.key] = value;
+      valueDisplay.textContent = config.format(value) + config.unit;
     };
 
-    slider.addEventListener('input', (e) => {
-      const value = parseFloat((e.target as HTMLInputElement).value);
-      (currentParams[config.key] as number) = value;
-      valueDisplay.textContent = config.format(value) + config.unit;
-      triggerUpdate();
+    slider.addEventListener('input', (event) => {
+      readSlider(event);
+      scheduler.push(currentParams);
     });
 
-    slider.addEventListener('change', (e) => {
-      const value = parseFloat((e.target as HTMLInputElement).value);
-      (currentParams[config.key] as number) = value;
-      valueDisplay.textContent = config.format(value) + config.unit;
-      onChange({ ...currentParams });
+    slider.addEventListener('change', (event) => {
+      readSlider(event);
+      scheduler.push(currentParams);
+      scheduler.flush();
     });
 
     group.appendChild(labelRow);
