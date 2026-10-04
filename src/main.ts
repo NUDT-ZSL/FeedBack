@@ -6,6 +6,8 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { AudioAnalyzer } from './audioAnalyzer';
 import { SculptureBuilder, VisualizationMode } from './sculptureBuilder';
 import { UIController } from './uiController';
+import { AppController } from './appController';
+import { applyCameraFit } from './cameraFit';
 
 class App {
   private scene: THREE.Scene;
@@ -14,19 +16,15 @@ class App {
   private composer: EffectComposer;
   private controls: OrbitControls;
   private clock: THREE.Clock;
-  
+
   private audioAnalyzer: AudioAnalyzer;
   private sculptureBuilder: SculptureBuilder;
   private uiController: UIController;
-  
-  private frequencyData: number[] = [];
-  private waveformData: number[] = [];
+  private appController: AppController;
+
   private lastFrameTime: number = 0;
   private frameCount: number = 0;
   private fps: number = 0;
-  
-  private readonly FREQ_BANDS = 16;
-  private readonly WAVEFORM_SAMPLES = 128;
 
   constructor() {
     this.clock = new THREE.Clock();
@@ -86,13 +84,21 @@ class App {
     
     this.setupLighting();
     this.sculptureBuilder.init(this.scene);
-    this.uiController.init(this.audioAnalyzer, this.sculptureBuilder);
-    
-    this.setupUICallbacks();
+
+    this.appController = new AppController(
+      this.audioAnalyzer,
+      this.sculptureBuilder,
+      this.uiController,
+      { frequencyBands: 16, waveformSamples: 128 }
+    );
+    this.uiController.setIntents({
+      upload: (file) => this.appController.upload(file),
+      togglePlayPause: () => this.appController.togglePlayPause(),
+      seek: (time) => this.appController.seek(time),
+      changeMode: (mode: VisualizationMode) => this.appController.changeMode(mode)
+    });
+
     this.setupEventListeners();
-    
-    this.frequencyData = new Array(this.FREQ_BANDS).fill(0);
-    this.waveformData = new Array(this.WAVEFORM_SAMPLES).fill(0.5);
     
     this.animate();
   }
@@ -127,41 +133,19 @@ class App {
     this.scene.add(topLight);
   }
 
-  private setupUICallbacks(): void {
-    this.uiController.onUpload(() => {
-      this.resetSculpture();
-    });
-    
-    this.uiController.onPlayPause((_playing) => {
-    });
-    
-    this.uiController.onModeChange((_mode: VisualizationMode) => {
-    });
-    
-    this.uiController.onSeek((_time: number) => {
-      this.resetSculpturePhysics();
-    });
-  }
-
   private setupEventListeners(): void {
     window.addEventListener('resize', () => this.onWindowResize());
     
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && this.audioAnalyzer.isPlaying()) {
-        this.audioAnalyzer.pause();
-        this.uiController.updatePlayState();
+      if (document.hidden) {
+        this.appController.pausePlayback();
       }
     });
     
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && this.audioAnalyzer.hasAudio()) {
+      if (e.code === 'Space' && this.appController.hasAudio()) {
         e.preventDefault();
-        if (this.audioAnalyzer.isPlaying()) {
-          this.audioAnalyzer.pause();
-        } else {
-          this.audioAnalyzer.play();
-        }
-        this.uiController.updatePlayState();
+        this.appController.togglePlayPause();
       }
     });
   }
@@ -176,63 +160,15 @@ class App {
     this.renderer.setSize(width, height);
     this.composer.setSize(width, height);
     
-    this.adjustCameraForScreenSize();
-  }
-
-  private adjustCameraForScreenSize(): void {
-    const width = window.innerWidth;
-    
-    if (width < 768) {
-      this.controls.maxDistance = 30;
-      if (this.camera.position.length() > 25) {
-        this.camera.position.setLength(22);
-      }
-    } else if (width < 1200) {
-      this.controls.maxDistance = 35;
-    } else {
-      this.controls.maxDistance = 40;
-    }
-  }
-
-  private resetSculpture(): void {
-    this.frequencyData = new Array(this.FREQ_BANDS).fill(0);
-    this.waveformData = new Array(this.WAVEFORM_SAMPLES).fill(0.5);
-    this.resetSculpturePhysics();
-  }
-
-  private resetSculpturePhysics(): void {
-    this.sculptureBuilder.rotate(0);
-  }
-
-  private updateAudioData(): void {
-    if (this.audioAnalyzer.hasAudio()) {
-      this.frequencyData = this.audioAnalyzer.getFrequencyBands(this.FREQ_BANDS);
-      this.waveformData = this.audioAnalyzer.getWaveformData(this.WAVEFORM_SAMPLES);
-      
-      const currentTime = this.audioAnalyzer.getCurrentTime();
-      const duration = this.audioAnalyzer.getDuration();
-      this.uiController.updateProgress(currentTime, duration);
-      
-      if (this.audioAnalyzer.isPlaying() && currentTime >= duration) {
-        this.uiController.updatePlayState();
-      }
-    }
+    applyCameraFit(this.camera, this.controls, width);
   }
 
   private animate(): void {
     requestAnimationFrame(() => this.animate());
     
     const delta = Math.min(this.clock.getDelta(), 0.1);
-    const isPlaying = this.audioAnalyzer.isPlaying();
-    
-    this.updateAudioData();
-    
-    this.sculptureBuilder.update(
-      this.frequencyData,
-      this.waveformData,
-      delta,
-      isPlaying
-    );
+
+    this.appController.tick(delta);
     
     this.controls.update();
     

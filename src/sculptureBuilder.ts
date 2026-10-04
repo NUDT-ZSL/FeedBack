@@ -1,9 +1,32 @@
 import * as THREE from 'three';
+import type { AudioFrame, SculpturePort } from './contracts';
 
 export enum VisualizationMode {
   SPECTRUM = 'spectrum',
   WAVEFORM = 'waveform',
   PARTICLES = 'particles'
+}
+
+/** 各可视化模式的自描述定义：新增模式只需在 MODES 注册表中增加一项。 */
+interface ModeController {
+  usesCubes: boolean;
+  usesParticles: boolean;
+  update(frame: AudioFrame, delta: number): void;
+}
+
+/** 雕塑状态只读快照，供离线验证与调试观察使用。 */
+export interface SculptureStateSnapshot {
+  mode: VisualizationMode;
+  targetMode: VisualizationMode;
+  transitioning: boolean;
+  rotationY: number;
+  cubesVisible: boolean;
+  particlesVisible: boolean;
+  meanHeight: number;
+  maxHeight: number;
+  meanEmissiveIntensity: number;
+  columnHeights: number[];
+  particleMeanY: number;
 }
 
 interface CubeState {
@@ -27,7 +50,7 @@ interface ParticleState {
   size: number;
 }
 
-export class SculptureBuilder {
+export class SculptureBuilder implements SculpturePort {
   private scene: THREE.Scene | null = null;
   private sculptureGroup: THREE.Group = new THREE.Group();
   private cubes: THREE.Mesh[][][] = [];
@@ -39,6 +62,7 @@ export class SculptureBuilder {
   private particleColors: Float32Array = new Float32Array();
   
   private currentMode: VisualizationMode = VisualizationMode.SPECTRUM;
+  private pendingMode: VisualizationMode | null = null;
   private animationState: 'idle' | 'collapsing' | 'reforming' = 'idle';
   private animationProgress: number = 0;
   private animationDuration: number = 1;
@@ -54,6 +78,24 @@ export class SculptureBuilder {
   private starField: THREE.Points | null = null;
   private sharedMaterial: THREE.MeshStandardMaterial | null = null;
   private edgeMaterial: THREE.LineBasicMaterial | null = null;
+
+  private readonly modes: Record<VisualizationMode, ModeController> = {
+    [VisualizationMode.SPECTRUM]: {
+      usesCubes: true,
+      usesParticles: false,
+      update: (frame, delta) => this.updateSpectrumMode(frame, delta)
+    },
+    [VisualizationMode.WAVEFORM]: {
+      usesCubes: true,
+      usesParticles: false,
+      update: (frame, delta) => this.updateWaveformMode(frame, delta)
+    },
+    [VisualizationMode.PARTICLES]: {
+      usesCubes: false,
+      usesParticles: true,
+      update: (frame, delta) => this.updateParticlesMode(frame, delta)
+    }
+  };
 
   constructor() {
     this.sculptureGroup.name = 'sculptureGroup';
@@ -265,7 +307,7 @@ export class SculptureBuilder {
     return color;
   }
 
-  update(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  update(frame: AudioFrame, delta: number): void {
     if (this.animationState !== 'idle') {
       this.updateTransition(delta);
       return;
@@ -277,20 +319,12 @@ export class SculptureBuilder {
       this.starField.rotation.y += this.ROTATION_SPEED * 0.1 * delta;
     }
 
-    switch (this.currentMode) {
-      case VisualizationMode.SPECTRUM:
-        this.updateSpectrumMode(frequencyData, delta, isPlaying);
-        break;
-      case VisualizationMode.WAVEFORM:
-        this.updateWaveformMode(frequencyData, waveformData, delta, isPlaying);
-        break;
-      case VisualizationMode.PARTICLES:
-        this.updateParticlesMode(frequencyData, waveformData, delta, isPlaying);
-        break;
-    }
+    this.modes[this.currentMode].update(frame, delta);
   }
 
-  private updateSpectrumMode(frequencyData: number[], delta: number, isPlaying: boolean): void {
+  private updateSpectrumMode(frame: AudioFrame, delta: number): void {
+    const frequencyData = frame.frequencyData;
+    const isPlaying = frame.isPlaying;
     const stiffness = 180;
     const damping = 12;
 
@@ -341,7 +375,10 @@ export class SculptureBuilder {
     }
   }
 
-  private updateWaveformMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateWaveformMode(frame: AudioFrame, delta: number): void {
+    const frequencyData = frame.frequencyData;
+    const waveformData = frame.waveformData;
+    const isPlaying = frame.isPlaying;
     const stiffness = 150;
     const damping = 10;
 
@@ -389,7 +426,10 @@ export class SculptureBuilder {
     }
   }
 
-  private updateParticlesMode(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  private updateParticlesMode(frame: AudioFrame, delta: number): void {
+    const frequencyData = frame.frequencyData;
+    const waveformData = frame.waveformData;
+    const isPlaying = frame.isPlaying;
     if (!this.particleSystem || !this.particleGeometry) return;
 
     const positions = this.particleGeometry.attributes.position.array as Float32Array;
@@ -446,6 +486,10 @@ export class SculptureBuilder {
     if (this.animationState === 'collapsing') {
       this.updateCollapse(delta, this.animationProgress);
       if (this.animationProgress >= 1) {
+        if (this.pendingMode !== null) {
+          this.currentMode = this.pendingMode;
+          this.pendingMode = null;
+        }
         this.animationState = 'reforming';
         this.animationProgress = 0;
         this.updateModeVisibility();
@@ -590,8 +634,9 @@ export class SculptureBuilder {
   }
 
   private updateModeVisibility(): void {
-    const showCubes = this.currentMode !== VisualizationMode.PARTICLES;
-    const showParticles = this.currentMode === VisualizationMode.PARTICLES;
+    const mode = this.modes[this.currentMode];
+    const showCubes = mode.usesCubes;
+    const showParticles = mode.usesParticles;
     
     for (let x = 0; x < this.GRID_X; x++) {
       for (let z = 0; z < this.GRID_Z; z++) {
@@ -606,32 +651,80 @@ export class SculptureBuilder {
     }
   }
 
-  async setMode(mode: VisualizationMode): Promise<void> {
-    if (mode === this.currentMode || this.animationState !== 'idle') return;
-    
+  /**
+   * 请求切换可视化模式。过渡进行中或目标模式与当前模式相同时拒绝请求，
+   * 保证过渡过程不会被重复触发或相互打断。
+   */
+  requestModeChange(mode: VisualizationMode): boolean {
+    if (this.animationState !== 'idle') return false;
+    if (mode === this.currentMode) return false;
+
+    this.pendingMode = mode;
     this.animationState = 'collapsing';
     this.animationProgress = 0;
     this.animationDuration = 0.5;
-    
-    await new Promise<void>(resolve => {
-      const checkComplete = () => {
-        if (this.animationState === 'idle') {
-          this.currentMode = mode;
-          resolve();
-        } else {
-          requestAnimationFrame(checkComplete);
-        }
-      };
-      checkComplete();
-    });
+    return true;
   }
 
   getCurrentMode(): VisualizationMode {
     return this.currentMode;
   }
 
+  getTargetMode(): VisualizationMode {
+    return this.pendingMode ?? this.currentMode;
+  }
+
+  getAvailableModes(): VisualizationMode[] {
+    return Object.keys(this.modes) as VisualizationMode[];
+  }
+
   isTransitioning(): boolean {
     return this.animationState !== 'idle';
+  }
+
+  getStateSnapshot(): SculptureStateSnapshot {
+    let heightSum = 0;
+    let maxHeight = 0;
+    let emissiveSum = 0;
+    let cubeCount = 0;
+    const columnHeights: number[] = [];
+
+    for (let x = 0; x < this.GRID_X; x++) {
+      let columnSum = 0;
+      for (let z = 0; z < this.GRID_Z; z++) {
+        for (let y = 0; y < this.GRID_Y; y++) {
+          const state = this.cubeStates[x][z][y];
+          heightSum += state.currentHeight;
+          maxHeight = Math.max(maxHeight, state.currentHeight);
+          const material = this.cubes[x][z][y].material as THREE.MeshStandardMaterial;
+          emissiveSum += material.emissiveIntensity;
+          cubeCount++;
+          if (z === 0) {
+            columnSum += state.currentHeight;
+          }
+        }
+      }
+      columnHeights.push(columnSum);
+    }
+
+    let particleYSum = 0;
+    for (const state of this.particleStates) {
+      particleYSum += state.position.y;
+    }
+
+    return {
+      mode: this.currentMode,
+      targetMode: this.getTargetMode(),
+      transitioning: this.isTransitioning(),
+      rotationY: this.sculptureGroup.rotation.y,
+      cubesVisible: this.cubes.length > 0 ? this.cubes[0][0][0].visible : false,
+      particlesVisible: this.particleSystem ? this.particleSystem.visible : false,
+      meanHeight: cubeCount > 0 ? heightSum / cubeCount : 0,
+      maxHeight,
+      meanEmissiveIntensity: cubeCount > 0 ? emissiveSum / cubeCount : 0,
+      columnHeights,
+      particleMeanY: this.particleStates.length > 0 ? particleYSum / this.particleStates.length : 0
+    };
   }
 
   rotate(angle: number): void {

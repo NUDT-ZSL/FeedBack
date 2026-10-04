@@ -1,4 +1,6 @@
-export class AudioAnalyzer {
+import type { AudioFrame, AudioPort } from './contracts';
+
+export class AudioAnalyzer implements AudioPort {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: AudioBufferSourceNode | null = null;
@@ -151,6 +153,17 @@ export class AudioAnalyzer {
     }
 
     return result;
+  }
+
+  getFrame(frequencyBands: number = 16, waveformSamples: number = 128): AudioFrame {
+    return {
+      frequencyData: this.getFrequencyBands(frequencyBands),
+      waveformData: this.getWaveformData(waveformSamples),
+      isPlaying: this.isPlaying(),
+      currentTime: this.getCurrentTime(),
+      duration: this.getDuration(),
+      hasAudio: this.hasAudio()
+    };
   }
 
   getCurrentTime(): number {

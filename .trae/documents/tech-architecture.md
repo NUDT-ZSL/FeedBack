@@ -43,6 +43,17 @@ graph TD
 | `/src/audioAnalyzer.ts` | 音频加载解码、FFT分析、频谱数据接口 |
 | `/src/sculptureBuilder.ts` | 立方体网格创建、模式切换动画、数据更新 |
 | `/src/uiController.ts` | 按钮事件绑定、进度条控制、UI状态反馈 |
+| `/src/contracts.ts` | 模块间契约：AudioFrame/AudioPort/SculpturePort/UIPort/UIViewState |
+| `/src/appController.ts` | 状态协调器：接收UI意图，驱动音频与雕塑模块，单点同步UI |
+| `/src/cameraFit.ts` | 窗口尺寸变化的相机布局纯函数（响应式断点） |
+| `/sim/` | 离线批量验证入口（`npm run verify`）：脚本化音源+无头UI+真实雕塑模块，断言各操作序列下雕塑状态与UI状态一致 |
+
+### 3.1 状态解耦说明
+
+- **音频分析**（`AudioAnalyzer` 实现 `AudioPort`）：输入为 load/play/pause/seek，输出为 `getFrame()` 单次快照，频段/波形取值语义不变。
+- **雕塑动画**（`SculptureBuilder` 实现 `SculpturePort`）：输入为 `update(frame, delta)` 与 `requestModeChange(mode)`；模式由注册表 `modes` 自描述（新增模式只需增加枚举成员与注册表项）；过渡守卫单点化，过渡中或同模式请求直接拒绝；`pendingMode` 在瓦解→重组边界生效并同步可见性。
+- **界面控制**（`UIController` 实现 `UIPort`）：DOM 事件仅转为 `UIIntents` 意图，全部界面刷新收敛到 `render(UIViewState)` 单点。
+- **协调**（`AppController`）：不依赖 DOM/WebGL，可离线确定性步进；`sim/` 测试台复用同一协调器与雕塑模块验证一致性。
 
 ## 4. 核心类与接口定义
 

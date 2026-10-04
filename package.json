@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "tsc -p sim/tsconfig.json && esbuild sim/main.ts --bundle --platform=node --format=esm --outfile=dist-sim/verify.mjs --log-level=warning && node dist-sim/verify.mjs"
   },
   "dependencies": {
     "three": "^0.160.0"
