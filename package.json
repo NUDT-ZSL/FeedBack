@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "verify": "node scripts/verify-simulation.mjs"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "framer-motion": "^11.0.0",
+    "tailwind-merge": "^3.7.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
@@ -19,6 +22,10 @@
     "@types/react-dom": "^18.3.1",
     "@types/uuid": "^9.0.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.6.1",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }
