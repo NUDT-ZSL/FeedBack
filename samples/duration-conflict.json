@@ -1,0 +1,24 @@
+{
+  "name": "conflict-多来源耗时冲突",
+  "declarations": [
+    { "taskId": "fetch", "duration": 2, "source": "module:io", "note": "拉取依赖" },
+    { "taskId": "compile", "duration": 3, "source": "module:core", "dependsOn": ["fetch"], "note": "核心模块实测 3 分钟" },
+    { "taskId": "compile", "duration": 5, "source": "module:ui", "dependsOn": ["fetch"], "note": "界面模块估算 5 分钟（含资源处理）" },
+    { "taskId": "package", "duration": 1, "source": "module:release", "dependsOn": ["compile"], "note": "打包" }
+  ],
+  "decisions": [],
+  "fixes": [
+    {
+      "label": "裁决：采纳 module:core 的耗时 3",
+      "decisions": [
+        { "type": "select-duration", "taskId": "compile", "source": "module:core" }
+      ]
+    },
+    {
+      "label": "裁决：人工指定耗时 4",
+      "decisions": [
+        { "type": "override-duration", "taskId": "compile", "duration": 4 }
+      ]
+    }
+  ]
+}

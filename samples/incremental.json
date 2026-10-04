@@ -1,0 +1,29 @@
+{
+  "name": "incremental-局部修正后重推",
+  "declarations": [
+    { "taskId": "fetch", "duration": 2, "source": "module:io", "note": "拉取源码" },
+    { "taskId": "compile-core", "duration": 3, "source": "module:core", "dependsOn": ["fetch"], "note": "核心编译" },
+    { "taskId": "compile-ui", "duration": 2, "source": "module:ui", "dependsOn": ["fetch"], "note": "界面编译" },
+    { "taskId": "link", "duration": 1, "source": "module:core", "dependsOn": ["compile-core", "compile-ui"], "note": "链接" },
+    { "taskId": "test", "duration": 4, "source": "module:qa", "dependsOn": ["link"], "note": "测试" },
+    { "taskId": "package", "duration": 1, "source": "module:release", "dependsOn": ["test"], "note": "打包" }
+  ],
+  "decisions": [],
+  "edits": [
+    {
+      "label": "修正：compile-core 耗时 3 -> 6（来源 module:core 更新实测值）",
+      "replaceDeclarations": [
+        { "taskId": "compile-core", "duration": 6, "source": "module:core", "dependsOn": ["fetch"], "note": "核心编译（更新实测）" }
+      ]
+    },
+    {
+      "label": "修正：新增 lint 任务并接入 link 的依赖",
+      "addDeclarations": [
+        { "taskId": "lint", "duration": 1, "source": "module:qa", "dependsOn": ["fetch"], "note": "静态检查" }
+      ],
+      "replaceDeclarations": [
+        { "taskId": "link", "duration": 1, "source": "module:core", "dependsOn": ["compile-core", "compile-ui", "lint"], "note": "链接（新增 lint 前置）" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "cycle-依赖成环",
+  "declarations": [
+    { "taskId": "types", "duration": 1, "source": "module:core", "note": "类型定义" },
+    { "taskId": "impl", "duration": 2, "source": "module:core", "dependsOn": ["types"], "note": "实现依赖类型" },
+    { "taskId": "types", "duration": 1, "source": "module:legacy", "dependsOn": ["impl"], "note": "旧模块反向声明：类型依赖实现（成环）" },
+    { "taskId": "bundle", "duration": 1, "source": "module:release", "dependsOn": ["impl"], "note": "下游打包" }
+  ],
+  "decisions": [],
+  "fixes": [
+    {
+      "label": "裁决：放弃 types -> impl 这条反向依赖边",
+      "decisions": [
+        { "type": "drop-edge", "from": "types", "to": "impl" }
+      ]
+    }
+  ]
+}

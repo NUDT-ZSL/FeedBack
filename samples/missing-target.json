@@ -1,0 +1,24 @@
+{
+  "name": "missing-依赖指向缺失",
+  "declarations": [
+    { "taskId": "prepare", "duration": 1, "source": "module:io", "note": "准备环境" },
+    { "taskId": "build", "duration": 3, "source": "module:core", "dependsOn": ["prepare", "ghost"], "note": "依赖一个未声明的任务 ghost" },
+    { "taskId": "docs", "duration": 1, "source": "module:docs", "dependsOn": ["prepare"], "optionalDependsOn": ["ghost"], "note": "文档生成，ghost 只是可选增强" },
+    { "taskId": "ship", "duration": 1, "source": "module:release", "dependsOn": ["build", "docs"], "note": "发布" }
+  ],
+  "decisions": [],
+  "fixes": [
+    {
+      "label": "裁决：放弃 build -> ghost 的缺失依赖",
+      "decisions": [
+        { "type": "drop-edge", "from": "build", "to": "ghost" }
+      ]
+    },
+    {
+      "label": "裁决：把 ghost 登记为外部任务（耗时 2）",
+      "decisions": [
+        { "type": "declare-external", "taskId": "ghost", "duration": 2 }
+      ]
+    }
+  ]
+}

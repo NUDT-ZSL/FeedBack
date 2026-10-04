@@ -1,0 +1,12 @@
+{
+  "name": "normal-正常DAG",
+  "declarations": [
+    { "taskId": "fetch", "duration": 2, "source": "module:io", "note": "拉取源码与元数据" },
+    { "taskId": "compile-core", "duration": 3, "source": "module:core", "dependsOn": ["fetch"], "note": "核心模块编译" },
+    { "taskId": "compile-ui", "duration": 2, "source": "module:ui", "dependsOn": ["fetch"], "note": "界面模块编译" },
+    { "taskId": "link", "duration": 1, "source": "module:core", "dependsOn": ["compile-core", "compile-ui"], "note": "链接产物" },
+    { "taskId": "test", "duration": 4, "source": "module:qa", "dependsOn": ["link"], "note": "集成测试" },
+    { "taskId": "package", "duration": 1, "source": "module:release", "dependsOn": ["test"], "note": "打包发布" }
+  ],
+  "decisions": []
+}

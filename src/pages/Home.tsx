@@ -1,3 +1,5 @@
+import { Workbench } from '@/components/workbench/Workbench.tsx';
+
 export default function Home() {
-  return <div></div>;
+  return <Workbench />;
 }

@@ -1,0 +1,24 @@
+{
+  "name": "all-综合问题（缺失+成环+耗时冲突+可选依赖）",
+  "declarations": [
+    { "taskId": "a", "duration": 1, "source": "module:core", "note": "入口任务" },
+    { "taskId": "b", "duration": 2, "source": "module:core", "dependsOn": ["a"], "note": "核心步骤" },
+    { "taskId": "c", "duration": 1, "source": "module:core", "dependsOn": ["b"], "note": "被旧模块反向依赖" },
+    { "taskId": "b", "duration": 2, "source": "module:legacy", "dependsOn": ["c"], "note": "旧模块反向声明：b 依赖 c（成环）" },
+    { "taskId": "d", "duration": 3, "source": "module:ui", "dependsOn": ["b"], "note": "界面侧实测 3" },
+    { "taskId": "d", "duration": 5, "source": "module:core", "dependsOn": ["b"], "note": "核心侧估算 5" },
+    { "taskId": "e", "duration": 1, "source": "module:ext", "dependsOn": ["d", "ghost"], "optionalDependsOn": ["maybe"], "note": "依赖缺失的 ghost，maybe 为可选" },
+    { "taskId": "f", "duration": 1, "source": "module:release", "dependsOn": ["e"], "note": "收尾" }
+  ],
+  "decisions": [],
+  "fixes": [
+    {
+      "label": "裁决：解除环（放弃 b -> c）、d 耗时取 3、ghost 登记为外部任务",
+      "decisions": [
+        { "type": "drop-edge", "from": "b", "to": "c" },
+        { "type": "select-duration", "taskId": "d", "source": "module:ui" },
+        { "type": "declare-external", "taskId": "ghost", "duration": 1 }
+      ]
+    }
+  ]
+}
