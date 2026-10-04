@@ -8,7 +8,9 @@
     "server:dev": "tsx watch server.ts",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
     "build": "tsc -b && vite build",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "verify": "tsx tests/run.ts",
+    "test": "npm run verify"
   },
   "dependencies": {
     "react": "^18.3.1",
