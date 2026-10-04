@@ -339,6 +339,7 @@ class App {
   private reset() {
     this.gui.reset();
     this.plant.reset();
+    this.plant.updateParams(this.gui.getParams());
     this.plant.triggerSparkle();
     this.updateDataPanel(this.gui.getParams());
     this.updateLightIntensity(50);
@@ -355,12 +356,7 @@ class App {
 
     document.getElementById('stageName')!.textContent = this.stageNames[this.plant.currentStage];
 
-    const growthRate = 0.3 + 0.7 *
-      Math.sin((params.light / 100) * Math.PI) *
-      Math.sin((params.water / 100) * Math.PI) *
-      (params.temperature >= 10 && params.temperature <= 32 ? 1 : 0.3);
-
-    const timeToFlowering = Math.max(0, 30 - (this.plant as any).growthTime) / Math.max(0.1, growthRate);
+    const timeToFlowering = this.plant.getFloweringCountdown();
     document.getElementById('countdown')!.textContent =
       this.plant.currentStage === 'flowering' ? '已开花 🌸' : `${Math.ceil(timeToFlowering)} 秒`;
   }

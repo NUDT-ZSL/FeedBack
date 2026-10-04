@@ -1,12 +1,7 @@
 import * as THREE from 'three';
+import { PlantSimulation, PlantParams, GrowthStage } from './simulation';
 
-export interface PlantParams {
-  light: number;
-  water: number;
-  temperature: number;
-}
-
-export type GrowthStage = 'seed' | 'sprout' | 'adult' | 'flowering';
+export type { PlantParams, GrowthStage };
 
 interface LeafData {
   mesh: THREE.Mesh;
@@ -27,12 +22,8 @@ interface FlowerData {
 
 export class Plant {
   public group: THREE.Group;
-  private params: PlantParams;
-  private growthTime: number = 0;
-  public currentStage: GrowthStage = 'seed';
+  private sim: PlantSimulation;
   private stageTransitionStart: number = -1;
-  private isWilting: boolean = false;
-  private wiltProgress: number = 0;
 
   private stemSegments: THREE.Mesh[] = [];
   private leaves: LeafData[] = [];
@@ -51,8 +42,40 @@ export class Plant {
   private time: number = 0;
   public lightDirection: THREE.Vector3 = new THREE.Vector3(1, 1, 1).normalize();
 
+  public get params(): PlantParams {
+    return this.sim.params;
+  }
+
+  public get currentStage(): GrowthStage {
+    return this.sim.currentStage;
+  }
+
+  public get growthTime(): number {
+    return this.sim.growthTime;
+  }
+
+  private get isWilting(): boolean {
+    return this.sim.isWilting;
+  }
+
+  private get wiltProgress(): number {
+    return this.sim.wiltProgress;
+  }
+
+  public getStage(): GrowthStage {
+    return this.sim.getStage();
+  }
+
+  public getGrowthDays(): number {
+    return this.sim.getGrowthDays();
+  }
+
+  public getFloweringCountdown(): number {
+    return this.sim.getFloweringCountdown();
+  }
+
   constructor(params: PlantParams) {
-    this.params = { ...params };
+    this.sim = new PlantSimulation(params);
     this.group = new THREE.Group();
     this.initPlant();
     this.initParticleSystems();
@@ -68,7 +91,6 @@ export class Plant {
     this.group.add(this.flowersGroup);
 
     this.createSeed();
-    this.updateGrowth();
   }
 
   private createSeed() {
@@ -374,24 +396,12 @@ export class Plant {
   }
 
   public updateParams(params: PlantParams) {
-    this.params = { ...params };
-    this.checkWilting();
-    this.updateMaterials();
-  }
-
-  private checkWilting() {
-    const { light, water, temperature } = this.params;
-    const badConditions =
-      light < 15 || light > 90 ||
-      water < 15 || water > 90 ||
-      temperature < 5 || temperature > 35;
-
-    if (badConditions && !this.isWilting) {
-      this.isWilting = true;
+    const wasWilting = this.sim.isWilting;
+    this.sim.updateParams(params);
+    if (!wasWilting && this.sim.isWilting) {
       this.wiltParticles.visible = true;
-    } else if (!badConditions && this.isWilting) {
-      this.isWilting = false;
     }
+    this.updateMaterials();
   }
 
   private updateMaterials() {
@@ -402,34 +412,6 @@ export class Plant {
     this.leaves.forEach(l => {
       (l.mesh.material as THREE.MeshStandardMaterial).color.copy(this.getLeafColor());
     });
-  }
-
-  private getGrowthRate(): number {
-    const { light, water } = this.params;
-    const lightFactor = Math.sin((light / 100) * Math.PI);
-    const waterFactor = Math.sin((water / 100) * Math.PI);
-    const tempFactor = this.params.temperature >= 10 && this.params.temperature <= 32 ? 1 : 0.3;
-    return 0.3 + 0.7 * lightFactor * waterFactor * tempFactor;
-  }
-
-  public getStage(): GrowthStage {
-    if (this.growthTime < 5) return 'seed';
-    if (this.growthTime < 15) return 'sprout';
-    if (this.growthTime < 30) return 'adult';
-    return 'flowering';
-  }
-
-  public getGrowthDays(): number {
-    return Math.floor(this.growthTime * 1.5);
-  }
-
-  private updateGrowth() {
-    const newStage = this.getStage();
-    if (newStage !== this.currentStage) {
-      this.currentStage = newStage;
-      this.stageTransitionStart = this.time;
-      this.rebuildPlant();
-    }
   }
 
   private rebuildPlant() {
@@ -473,10 +455,7 @@ export class Plant {
   }
 
   public reset() {
-    this.growthTime = 0;
-    this.currentStage = 'seed';
-    this.isWilting = false;
-    this.wiltProgress = 0;
+    this.sim.reset();
     this.wiltParticles.visible = false;
     this.flowerParticles.visible = false;
     this.rebuildPlant();
@@ -540,13 +519,12 @@ export class Plant {
   public update(delta: number) {
     this.time += delta;
 
-    if (!this.isWilting || this.wiltProgress < 0.9) {
-      this.growthTime += delta * this.getGrowthRate();
+    const prevStage = this.sim.currentStage;
+    this.sim.update(delta);
+    if (this.sim.currentStage !== prevStage) {
+      this.stageTransitionStart = this.time;
+      this.rebuildPlant();
     }
-    this.updateGrowth();
-
-    const targetWilt = this.isWilting ? 1 : 0;
-    this.wiltProgress += (targetWilt - this.wiltProgress) * delta * 2;
 
     if (this.stageTransitionStart > 0) {
       const t = (this.time - this.stageTransitionStart) / 0.5;

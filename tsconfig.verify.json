@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "./dist-verify",
+    "noEmit": false,
+    "types": ["node"],
+    "lib": ["ESNext"]
+  },
+  "include": ["src/simulation.ts", "test/**/*.ts"]
+}
