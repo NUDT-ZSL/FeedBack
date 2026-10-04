@@ -1,11 +1,19 @@
 export type QuestionType = 'preference' | 'opinion' | 'fact';
 
+export type RoomStatus = 'waiting' | 'playing' | 'finished';
+
+export interface SocketLike {
+  readyState: number;
+  send(data: string): void;
+}
+
 export interface User {
   id: string;
   name: string;
   avatar: string;
   roomId: string;
-  answers: { questionIndex: number; answer: number; correct: boolean }[];
+  answers: { questionIndex: number; answer: number; correct: boolean; timeSpent: number }[];
+  ws?: SocketLike;
 }
 
 export interface Question {

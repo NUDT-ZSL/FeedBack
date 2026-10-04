@@ -19,25 +19,37 @@ const factQuestions: Omit<Question, 'id' | 'type'>[] = [
   { text: '世界上最长的河流是？', options: ['亚马逊河', '长江', '尼罗河', '密西西比河'], correctAnswer: 2, icon: 'waves' },
 ];
 
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
-}
-
 export const allQuestions: Question[] = [
-  ...preferenceQuestions.map(q => ({ ...q, id: generateId(), type: 'preference' as const, correctAnswer: -1 })),
-  ...opinionQuestions.map(q => ({ ...q, id: generateId(), type: 'opinion' as const, correctAnswer: -1 })),
-  ...factQuestions.map(q => ({ ...q, id: generateId(), type: 'fact' as const })),
+  ...preferenceQuestions.map((q, i) => ({ ...q, id: `preference-${i + 1}`, type: 'preference' as const, correctAnswer: -1 })),
+  ...opinionQuestions.map((q, i) => ({ ...q, id: `opinion-${i + 1}`, type: 'opinion' as const, correctAnswer: -1 })),
+  ...factQuestions.map((q, i) => ({ ...q, id: `fact-${i + 1}`, type: 'fact' as const })),
 ];
 
-export function shuffleArray<T>(array: T[]): T[] {
+export function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function shuffleArray<T>(array: T[], random: () => number = Math.random): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
 }
 
+export function selectQuestions(count: number = 10, seed?: number): Question[] {
+  const random = seed === undefined ? Math.random : createSeededRandom(seed);
+  return shuffleArray(allQuestions, random).slice(0, count);
+}
+
 export function selectRandomQuestions(count: number = 10): Question[] {
-  return shuffleArray(allQuestions).slice(0, count);
+  return selectQuestions(count);
 }

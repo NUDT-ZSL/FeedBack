@@ -1,9 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { User, Question, MatchResult, RadarData, RoomStatus, ServerMessage } from '../shared/types';
-import { selectRandomQuestions } from '../shared/questions';
+import type { User, Question, MatchResult, RadarData, RoomStatus, ServerMessage, SocketLike } from '../shared/types';
+import { selectQuestions } from '../shared/questions';
+import { calculateMatches, generateRadarData } from '../shared/match';
+import { realScheduler, type Scheduler } from '../shared/scheduler';
 
 const QUESTION_TIME = 15000;
-const USER_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+
+export interface RoomOptions {
+  seed?: number;
+  scheduler?: Scheduler;
+}
 
 export class Room {
   id: string;
@@ -11,15 +17,43 @@ export class Room {
   users: User[];
   questions: Question[];
   currentQuestion: number;
-  timers: { questionTimer?: NodeJS.Timeout };
+  timers: { questionTimer?: unknown };
+  private seed?: number;
+  private scheduler: Scheduler;
+  private timerHandles: Set<unknown>;
+  private destroyed: boolean;
+  private acceptingAnswers: boolean;
 
-  constructor(id: string) {
+  constructor(id: string, options: RoomOptions = {}) {
     this.id = id;
     this.status = 'waiting';
     this.users = [];
     this.questions = [];
     this.currentQuestion = -1;
     this.timers = {};
+    this.seed = options.seed;
+    this.scheduler = options.scheduler ?? realScheduler;
+    this.timerHandles = new Set();
+    this.destroyed = false;
+    this.acceptingAnswers = false;
+  }
+
+  private schedule(callback: () => void, delayMs: number): void {
+    if (this.destroyed) return;
+    const handle = this.scheduler.setTimeout(() => {
+      this.timerHandles.delete(handle);
+      if (this.destroyed) return;
+      callback();
+    }, delayMs);
+    this.timerHandles.add(handle);
+  }
+
+  private clearQuestionTimer(): void {
+    if (this.timers.questionTimer !== undefined) {
+      this.scheduler.clearTimeout(this.timers.questionTimer);
+      this.timerHandles.delete(this.timers.questionTimer);
+      this.timers.questionTimer = undefined;
+    }
   }
 
   broadcast(message: ServerMessage): void {
@@ -38,7 +72,7 @@ export class Room {
     }
   }
 
-  addUser(user: Omit<User, 'id' | 'answers'> & { ws?: WebSocket }): User {
+  addUser(user: Omit<User, 'id' | 'answers'> & { ws?: SocketLike }): User {
     const newUser: User = {
       ...user,
       id: uuidv4(),
@@ -63,7 +97,7 @@ export class Room {
     }
 
     this.status = 'playing';
-    this.questions = selectRandomQuestions(10);
+    this.questions = selectQuestions(10, this.seed);
     this.currentQuestion = -1;
     this.users.forEach(user => {
       user.answers = [];
@@ -71,7 +105,7 @@ export class Room {
 
     this.broadcast({ type: 'GAME_STARTING', payload: { countdown: 3 } });
 
-    setTimeout(() => {
+    this.schedule(() => {
       this.nextQuestion();
     }, 3000);
   }
@@ -79,9 +113,8 @@ export class Room {
   nextQuestion(): void {
     if (this.status !== 'playing') return;
 
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
-    }
+    this.clearQuestionTimer();
+    this.acceptingAnswers = false;
 
     this.currentQuestion++;
 
@@ -91,7 +124,7 @@ export class Room {
     }
 
     const question = this.questions[this.currentQuestion];
-    const startTime = Date.now();
+    const startTime = this.scheduler.now();
 
     this.broadcast({
       type: 'QUESTION',
@@ -103,17 +136,26 @@ export class Room {
       },
     });
 
-    this.timers.questionTimer = setTimeout(() => {
+    this.acceptingAnswers = true;
+
+    const handle = this.scheduler.setTimeout(() => {
+      this.timerHandles.delete(handle);
+      if (this.destroyed) return;
+      this.timers.questionTimer = undefined;
+      this.acceptingAnswers = false;
       this.sendAllAnswers();
-      setTimeout(() => {
+      this.schedule(() => {
         this.nextQuestion();
       }, 2000);
     }, QUESTION_TIME);
+    this.timers.questionTimer = handle;
+    this.timerHandles.add(handle);
   }
 
   submitAnswer(userId: string, questionIndex: number, answer: number, timeSpent: number): void {
     const user = this.getUser(userId);
     if (!user || this.status !== 'playing') return;
+    if (!this.acceptingAnswers) return;
     if (questionIndex !== this.currentQuestion) return;
     if (user.answers.some(a => a.questionIndex === questionIndex)) return;
 
@@ -132,11 +174,10 @@ export class Room {
     );
 
     if (allAnswered) {
-      if (this.timers.questionTimer) {
-        clearTimeout(this.timers.questionTimer);
-      }
+      this.clearQuestionTimer();
+      this.acceptingAnswers = false;
       this.sendAllAnswers();
-      setTimeout(() => {
+      this.schedule(() => {
         this.nextQuestion();
       }, 2000);
     }
@@ -161,12 +202,11 @@ export class Room {
 
   private endGame(): void {
     this.status = 'finished';
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
-    }
+    this.clearQuestionTimer();
+    this.acceptingAnswers = false;
 
-    const matches = this.calculateMatches();
-    const radarData = this.generateRadarData();
+    const matches = calculateMatches(this.users, this.questions);
+    const radarData = generateRadarData(this.users, this.questions);
 
     this.broadcast({
       type: 'MATCH_RESULT',
@@ -175,133 +215,36 @@ export class Room {
   }
 
   calculateMatches(): MatchResult[] {
-    if (this.users.length < 2) return [];
-
-    const results: MatchResult[] = [];
-
-    for (let i = 0; i < this.users.length; i++) {
-      for (let j = i + 1; j < this.users.length; j++) {
-        const user1 = this.users[i];
-        const user2 = this.users[j];
-
-        let commonCount = 0;
-        const commonAnswers: MatchResult['commonAnswers'] = [];
-
-        this.questions.forEach((question, idx) => {
-          const ans1 = user1.answers.find(a => a.questionIndex === idx);
-          const ans2 = user2.answers.find(a => a.questionIndex === idx);
-
-          if (ans1 && ans2 && ans1.answer === ans2.answer && ans1.answer !== -1) {
-            commonCount++;
-            commonAnswers.push({
-              questionIndex: idx,
-              answer: ans1.answer,
-              questionText: question.text,
-              optionText: question.options[ans1.answer],
-            });
-          }
-        });
-
-        const matchPercentage = Math.round((commonCount / this.questions.length) * 100);
-
-        results.push({
-          userId: user2.id,
-          userName: user2.name,
-          userAvatar: user2.avatar,
-          matchPercentage,
-          commonAnswers,
-        });
-      }
-    }
-
-    return results.sort((a, b) => b.matchPercentage - a.matchPercentage);
+    return calculateMatches(this.users, this.questions);
   }
 
   generateRadarData(): RadarData {
-    const categories = ['生活偏好', '观点态度', '知识掌握', '答题速度', '正确率'];
-
-    const users = this.users.map((user, idx) => {
-      const scores = this.calculateUserScores(user);
-      return {
-        userId: user.id,
-        userName: user.name,
-        color: USER_COLORS[idx % USER_COLORS.length],
-        scores,
-      };
-    });
-
-    return {
-      categories,
-      selfScores: users[0]?.scores ?? [0, 0, 0, 0, 0],
-      users,
-    };
-  }
-
-  private calculateUserScores(user: User): number[] {
-    let preferenceScore = 0;
-    let opinionScore = 0;
-    let factScore = 0;
-    let preferenceCount = 0;
-    let opinionCount = 0;
-    let factCount = 0;
-    let totalTime = 0;
-    let correctCount = 0;
-    let answeredCount = 0;
-
-    this.questions.forEach((question, idx) => {
-      const answer = user.answers.find(a => a.questionIndex === idx);
-      if (!answer || answer.answer === -1) return;
-
-      answeredCount++;
-      totalTime += answer.timeSpent;
-
-      if (question.type === 'preference') {
-        preferenceCount++;
-        preferenceScore += 100;
-      } else if (question.type === 'opinion') {
-        opinionCount++;
-        opinionScore += 100;
-      } else if (question.type === 'fact') {
-        factCount++;
-        if (answer.correct) {
-          correctCount++;
-          factScore += 100;
-        }
-      }
-    });
-
-    const avgPreference = preferenceCount > 0 ? preferenceScore / preferenceCount : 0;
-    const avgOpinion = opinionCount > 0 ? opinionScore / opinionCount : 0;
-    const avgFact = factCount > 0 ? factScore / factCount : 0;
-    const speedScore = answeredCount > 0 ? Math.max(0, 100 - (totalTime / answeredCount / 15000) * 50) : 0;
-    const accuracyScore = answeredCount > 0 ? (correctCount / factCount) * 100 : 0;
-
-    return [
-      Math.round(avgPreference),
-      Math.round(avgOpinion),
-      Math.round(avgFact),
-      Math.round(speedScore),
-      Math.round(accuracyScore),
-    ];
+    return generateRadarData(this.users, this.questions);
   }
 
   cleanup(): void {
-    if (this.timers.questionTimer) {
-      clearTimeout(this.timers.questionTimer);
+    this.destroyed = true;
+    this.acceptingAnswers = false;
+    for (const handle of this.timerHandles) {
+      this.scheduler.clearTimeout(handle);
     }
+    this.timerHandles.clear();
+    this.timers.questionTimer = undefined;
   }
 }
 
 export class RoomManager {
   private rooms: Map<string, Room>;
+  private defaultOptions: RoomOptions;
 
-  constructor() {
+  constructor(defaultOptions: RoomOptions = {}) {
     this.rooms = new Map();
+    this.defaultOptions = defaultOptions;
   }
 
-  createRoom(roomId?: string): Room {
+  createRoom(roomId?: string, options?: RoomOptions): Room {
     const id = roomId ?? this.generateRoomId();
-    const room = new Room(id);
+    const room = new Room(id, { ...this.defaultOptions, ...options });
     this.rooms.set(id, room);
     return room;
   }
@@ -319,10 +262,10 @@ export class RoomManager {
     return false;
   }
 
-  getOrCreateRoom(roomId: string): Room {
+  getOrCreateRoom(roomId: string, options?: RoomOptions): Room {
     let room = this.getRoom(roomId);
     if (!room) {
-      room = this.createRoom(roomId);
+      room = this.createRoom(roomId, options);
     }
     return room;
   }

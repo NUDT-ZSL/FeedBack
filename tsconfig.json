@@ -37,6 +37,8 @@
     "src",
     "api",
     "shared",
-    "client"
+    "client",
+    "server",
+    "verification"
   ]
 }

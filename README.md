@@ -1,5 +1,17 @@
 # React + TypeScript + Vite
 
+## 离线验证
+
+运行 `npm run verify` 可一次性执行 `verification/` 下的全部验证套件（无需真实网络与真实计时器），覆盖：
+
+- 匹配度 / 共同答案 / 雷达数据的一致性与逐题按题型归类口径
+- 给定种子的题目抽取可复现性（`selectQuestions(count, seed)`）
+- 作答提交健壮性（重复提交、越界题号、对局结束后提交、非房间成员提交）
+- 手动调度器驱动下的计时推进（倒计时、收齐作答、逐题推进至结束）
+- 房间清理与销毁后残留计时不再触发广播
+
+时间依赖通过 `shared/scheduler.ts` 的 `Scheduler` 接口注入（默认真实计时器，验证时使用 `ManualScheduler`），网络依赖通过 `FakeWebSocket` 替换。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
