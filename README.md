@@ -55,3 +55,13 @@ export default tseslint.config({
   },
 })
 ```
+
+## 皮影关节链路离线验证
+
+关节角度操控、多关节联动与角色合成的自动化验证，完全离线运行（Node ≥ 22.6，无需安装依赖、浏览器或网络）：
+
+```bash
+npm run verify
+```
+
+输出可读的逐项通过/失败汇总，退出码 0/1 可直接用于 CI。详见 [docs/verification.md](docs/verification.md)。
