@@ -60,7 +60,7 @@ export class AudioEngine {
 
   private extractWaveformData(audioBuffer: AudioBuffer, samples: number): Float32Array {
     const channelData = audioBuffer.getChannelData(0);
-    const blockSize = Math.floor(channelData.length / samples);
+    const blockSize = Math.max(1, Math.floor(channelData.length / samples));
     const result = new Float32Array(samples);
 
     for (let i = 0; i < samples; i++) {

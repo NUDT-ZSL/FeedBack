@@ -88,7 +88,7 @@ export class SpectrumRenderer {
     }
 
     const freqData = this.frequencyData;
-    const binSize = Math.floor(freqData.length / BAR_COUNT);
+    const binSize = Math.max(1, Math.floor(freqData.length / BAR_COUNT));
 
     for (let i = 0; i < BAR_COUNT; i++) {
       let sum = 0;

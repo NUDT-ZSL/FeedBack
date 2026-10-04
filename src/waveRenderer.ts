@@ -198,7 +198,7 @@ export class WaveRenderer {
     const points: { x: number; y: number }[] = [];
 
     for (let i = 0; i < data.length; i++) {
-      const x = (i / (data.length - 1)) * width;
+      const x = data.length > 1 ? (i / (data.length - 1)) * width : width / 2;
       const amplitude = data[i] * (height * 0.4);
       points.push({ x, y: centerY - amplitude });
     }
