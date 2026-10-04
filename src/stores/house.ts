@@ -1,60 +1,58 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { House, FilterState, SortType, Appointment, ChatMessage, ChatData } from '@/types'
-import { generateMockHouses } from '@/data/mockHouses'
+import { generateMockHouses } from '../data/mockHouses.ts'
+import {
+  DEFAULT_FILTER,
+  SORT_TYPES,
+  normalizeFilter,
+  selectHouses,
+  moveItem
+} from '../utils/listQuery.ts'
 
 const FAVORITES_KEY = 'rental_favorites'
 const APPOINTMENTS_KEY = 'rental_appointments'
 const CHAT_KEY = 'rental_chats'
+const FILTER_KEY = 'rental_filter'
+const SORT_KEY = 'rental_sort'
+
+function readJson(key: string): unknown {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function parseFavoriteIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<number>()
+  const ids: number[] = []
+  for (const item of value) {
+    if (typeof item === 'number' && Number.isFinite(item) && !seen.has(item)) {
+      seen.add(item)
+      ids.push(item)
+    }
+  }
+  return ids
+}
+
+function parseSortType(value: unknown): SortType | null {
+  return typeof value === 'string' && (SORT_TYPES as string[]).includes(value)
+    ? (value as SortType)
+    : null
+}
 
 export const useHouseStore = defineStore('house', () => {
   const houses = ref<House[]>([])
-  const filter = ref<FilterState>({
-    priceMin: null,
-    priceMax: null,
-    areaMin: null,
-    areaMax: null,
-    layout: null
-  })
+  const filter = ref<FilterState>({ ...DEFAULT_FILTER })
   const sortType = ref<SortType>('timeDesc')
   const favoriteIds = ref<number[]>([])
   const appointments = ref<Appointment[]>([])
   const chats = ref<ChatData[]>([])
 
-  const filteredHouses = computed(() => {
-    let result = [...houses.value]
-
-    if (filter.value.priceMin !== null) {
-      result = result.filter(h => h.price >= filter.value.priceMin!)
-    }
-    if (filter.value.priceMax !== null) {
-      result = result.filter(h => h.price <= filter.value.priceMax!)
-    }
-    if (filter.value.areaMin !== null) {
-      result = result.filter(h => h.area >= filter.value.areaMin!)
-    }
-    if (filter.value.areaMax !== null) {
-      result = result.filter(h => h.area <= filter.value.areaMax!)
-    }
-    if (filter.value.layout) {
-      result = result.filter(h => h.layout === filter.value.layout)
-    }
-
-    switch (sortType.value) {
-      case 'priceAsc':
-        result.sort((a, b) => a.price - b.price)
-        break
-      case 'priceDesc':
-        result.sort((a, b) => b.price - a.price)
-        break
-      case 'timeDesc':
-      default:
-        result.sort((a, b) => b.publishTime - a.publishTime)
-        break
-    }
-
-    return result
-  })
+  const filteredHouses = computed(() => selectHouses(houses.value, filter.value, sortType.value))
 
   const favoriteHouses = computed(() => {
     return favoriteIds.value
@@ -62,21 +60,30 @@ export const useHouseStore = defineStore('house', () => {
       .filter((h): h is House => h !== undefined)
   })
 
-  function loadFromStorage() {
-    try {
-      const fav = localStorage.getItem(FAVORITES_KEY)
-      if (fav) favoriteIds.value = JSON.parse(fav)
-      const appt = localStorage.getItem(APPOINTMENTS_KEY)
-      if (appt) appointments.value = JSON.parse(appt)
-      const cht = localStorage.getItem(CHAT_KEY)
-      if (cht) chats.value = JSON.parse(cht)
-    } catch (e) {
-      console.error('Load storage error:', e)
+  function loadPersistedState() {
+    favoriteIds.value = parseFavoriteIds(readJson(FAVORITES_KEY))
+    const storedFilter = readJson(FILTER_KEY)
+    if (storedFilter && typeof storedFilter === 'object') {
+      filter.value = normalizeFilter(storedFilter as Partial<FilterState>)
     }
+    const storedSort = parseSortType(readJson(SORT_KEY))
+    if (storedSort) sortType.value = storedSort
+    const appt = readJson(APPOINTMENTS_KEY)
+    if (Array.isArray(appt)) appointments.value = appt
+    const cht = readJson(CHAT_KEY)
+    if (Array.isArray(cht)) chats.value = cht
   }
 
   function saveFavorites() {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteIds.value))
+  }
+
+  function saveFilter() {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(filter.value))
+  }
+
+  function saveSort() {
+    localStorage.setItem(SORT_KEY, JSON.stringify(sortType.value))
   }
 
   function saveAppointments() {
@@ -87,10 +94,11 @@ export const useHouseStore = defineStore('house', () => {
     localStorage.setItem(CHAT_KEY, JSON.stringify(chats.value))
   }
 
+  loadPersistedState()
+
   async function fetchHouses() {
     await new Promise(r => setTimeout(r, 300))
     houses.value = generateMockHouses()
-    loadFromStorage()
   }
 
   function getHouseById(id: number): House | undefined {
@@ -112,11 +120,11 @@ export const useHouseStore = defineStore('house', () => {
   }
 
   function reorderFavorites(fromIndex: number, toIndex: number) {
-    const arr = [...favoriteIds.value]
-    const [removed] = arr.splice(fromIndex, 1)
-    arr.splice(toIndex, 0, removed)
-    favoriteIds.value = arr
-    saveFavorites()
+    const next = moveItem(favoriteIds.value, fromIndex, toIndex)
+    if (next.join(',') !== favoriteIds.value.join(',')) {
+      favoriteIds.value = next
+      saveFavorites()
+    }
   }
 
   function submitAppointment(data: Omit<Appointment, 'id' | 'createdAt'>): Appointment {
@@ -184,21 +192,19 @@ export const useHouseStore = defineStore('house', () => {
   }
 
   function setFilter(newFilter: Partial<FilterState>) {
-    filter.value = { ...filter.value, ...newFilter }
+    filter.value = normalizeFilter({ ...filter.value, ...newFilter })
+    saveFilter()
   }
 
   function setSort(type: SortType) {
+    if (!parseSortType(type)) return
     sortType.value = type
+    saveSort()
   }
 
   function resetFilter() {
-    filter.value = {
-      priceMin: null,
-      priceMax: null,
-      areaMin: null,
-      areaMax: null,
-      layout: null
-    }
+    filter.value = { ...DEFAULT_FILTER }
+    saveFilter()
   }
 
   return {

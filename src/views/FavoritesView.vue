@@ -29,10 +29,10 @@
           class="fav-wrap"
           draggable="true"
           @dragstart="onDragStart(index, $event)"
-          @dragover.prevent
-          @dragend="onDragEnd(index)"
+          @dragover.prevent="onDragOver(index)"
+          @dragend="onDragEnd"
           @drop.prevent="onDrop(index)"
-          :class="{ dragging: dragFrom === index }"
+          :class="{ dragging: dragIndex === index }"
         >
           <HouseCard
             :house="house"
@@ -54,22 +54,28 @@ import HouseCard from '@/components/HouseCard.vue'
 const store = useHouseStore()
 const { favoriteHouses } = storeToRefs(store)
 
-const dragFrom = ref<number | null>(null)
+const dragIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 function onDragStart(index: number, e: DragEvent) {
-  dragFrom.value = index
+  dragIndex.value = index
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
   }
 }
-function onDragEnd(toIndex: number) {
-  if (dragFrom.value !== null && dragFrom.value !== toIndex) {
-    store.reorderFavorites(dragFrom.value, toIndex)
+function onDragOver(index: number) {
+  dragOverIndex.value = index
+}
+function onDragEnd() {
+  if (dragIndex.value !== null && dragOverIndex.value !== null && dragIndex.value !== dragOverIndex.value) {
+    store.reorderFavorites(dragIndex.value, dragOverIndex.value)
   }
-  dragFrom.value = null
+  dragIndex.value = null
+  dragOverIndex.value = null
 }
 function onDrop(index: number) {
-  onDragEnd(index)
+  dragOverIndex.value = index
 }
 function removeFav(id: number) {
   store.toggleFavorite(id)
