@@ -1,4 +1,5 @@
 import type { PlacedCharacter } from '../types';
+import type { Rng } from './random';
 
 export const GRID_ROWS = 15;
 export const GRID_COLS = 30;
@@ -7,18 +8,21 @@ export const CANVAS_PADDING = 40;
 export const FONT_SIZE = 24;
 export const LINE_HEIGHT = 36;
 
-export function calculatePlateOffset(pressure: number): { x: number; y: number } {
+export function calculatePlateOffset(
+  pressure: number,
+  rng: Rng = Math.random
+): { x: number; y: number } {
   if (pressure > 80) {
-    const offsetX = (Math.random() - 0.5) * 6;
-    const offsetY = (Math.random() - 0.5) * 6;
+    const offsetX = (rng() - 0.5) * 6;
+    const offsetY = (rng() - 0.5) * 6;
     return { x: Math.round(offsetX * 10) / 10, y: Math.round(offsetY * 10) / 10 };
   }
   return { x: 0, y: 0 };
 }
 
-export function calculateInkUniformity(inkLevel: number): number {
+export function calculateInkUniformity(inkLevel: number, rng: Rng = Math.random): number {
   const baseUniformity = Math.min(100, Math.max(20, inkLevel));
-  const variance = Math.random() * 15;
+  const variance = rng() * 15;
   return Math.round(Math.min(100, Math.max(0, baseUniformity - variance)));
 }
 
@@ -53,9 +57,9 @@ export function formatTimestamp(timestamp: number): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
-export function hasWhiteSpot(inkLevel: number): boolean {
+export function hasWhiteSpot(inkLevel: number, rng: Rng = Math.random): boolean {
   if (inkLevel < 20) {
-    return Math.random() < 0.3;
+    return rng() < 0.3;
   }
   return false;
 }

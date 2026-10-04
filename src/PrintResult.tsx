@@ -4,13 +4,12 @@ import {
   CELL_SIZE, 
   CANVAS_PADDING, 
   FONT_SIZE, 
-  LINE_HEIGHT,
   GRID_COLS,
   GRID_ROWS,
-  hasWhiteSpot,
-  getTextOpacity,
-  formatTimestamp
+  getTextOpacity
 } from './utils/printUtils';
+import { computeRenderPlan, getRecordCardData } from './utils/printPipeline';
+import { hashString, mulberry32 } from './utils/random';
 import { playRevealSound } from './utils/audio';
 
 interface PrintResultProps {
@@ -63,44 +62,37 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
     ctx.fillStyle = '#f5ebd4';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+    // 纸纹噪点使用由记录 id 派生的确定性随机源，
+    // 同一份记录重复渲染时纹理与文字结果保持一致
+    const textureRng = mulberry32(hashString(`${record.id}:texture`));
     ctx.globalAlpha = 0.05;
     for (let i = 0; i < 500; i++) {
-      const x = Math.random() * canvasWidth;
-      const y = Math.random() * canvasHeight;
-      ctx.fillStyle = Math.random() > 0.5 ? '#8b7355' : '#d4c4a8';
+      const x = textureRng() * canvasWidth;
+      const y = textureRng() * canvasHeight;
+      ctx.fillStyle = textureRng() > 0.5 ? '#8b7355' : '#d4c4a8';
       ctx.fillRect(x, y, 1, 1);
     }
     ctx.globalAlpha = 1;
 
-    const offsetX = record.plateOffsetX;
-    const offsetY = record.plateOffsetY;
-    const opacity = getTextOpacity(pressure, inkLevel);
+    const plan = computeRenderPlan({
+      ...record,
+      inkLevel,
+      pressure,
+      characters,
+    });
 
     ctx.font = `600 ${FONT_SIZE}px "Noto Serif SC", serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const sortedChars = [...characters].sort((a, b) => {
-      if (a.row !== b.row) return a.row - b.row;
-      return a.col - b.col;
-    });
-
-    sortedChars.forEach((char) => {
-      const x = CANVAS_PADDING + char.col * CELL_SIZE + CELL_SIZE / 2 + offsetX + char.offsetX;
-      const y = CANVAS_PADDING + char.row * CELL_SIZE + CELL_SIZE / 2 + offsetY + char.offsetY;
-
-      if (hasWhiteSpot(inkLevel)) {
-        ctx.globalAlpha = opacity * 0.3;
-      } else {
-        ctx.globalAlpha = opacity;
-      }
-
+    plan.glyphs.forEach((glyph) => {
+      ctx.globalAlpha = glyph.whiteSpot ? glyph.opacity * 0.3 : glyph.opacity;
       ctx.fillStyle = '#222222';
-      ctx.fillText(char.char, x, y);
+      ctx.fillText(glyph.char, glyph.x, glyph.y);
 
-      if (pressure < 30) {
-        ctx.globalAlpha = opacity * 0.3;
-        ctx.fillText(char.char, x + 0.5, y + 0.5);
+      if (glyph.ghost) {
+        ctx.globalAlpha = glyph.opacity * 0.3;
+        ctx.fillText(glyph.char, glyph.x + 0.5, glyph.y + 0.5);
       }
     });
 
@@ -188,41 +180,13 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
         
         <div className="record-card">
           <h4 className="record-card-title">印刷记录卡</h4>
-          
-          <div className="record-item">
-            <span className="record-label">印刷时间</span>
-            <span className="record-value">{formatTimestamp(record.timestamp)}</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">版心X偏移</span>
-            <span className="record-value">{record.plateOffsetX.toFixed(1)} px</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">版心Y偏移</span>
-            <span className="record-value">{record.plateOffsetY.toFixed(1)} px</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">墨色均匀度</span>
-            <span className="record-value">{record.inkUniformity}%</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">用墨量</span>
-            <span className="record-value">{record.inkLevel}%</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">压力值</span>
-            <span className="record-value">{record.pressure}</span>
-          </div>
-          
-          <div className="record-item">
-            <span className="record-label">活字数量</span>
-            <span className="record-value">{record.characters.length} 个</span>
-          </div>
+
+          {getRecordCardData(record).map((entry) => (
+            <div className="record-item" key={entry.key}>
+              <span className="record-label">{entry.label}</span>
+              <span className="record-value">{entry.value}</span>
+            </div>
+          ))}
           
           <div className="record-seal">
             毕昇印
