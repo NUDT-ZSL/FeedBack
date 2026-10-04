@@ -67,11 +67,16 @@ class App {
     this.uiManager = new UIManager('toolbar', {
       onAddFurniture: (type: string) => this.addFurniture(type),
       onRotate: () => this.rotateFurniture(),
-      onDelete: () => this.deleteFurniture()
+      onDelete: () => this.deleteFurniture(),
+      onGroup: () => this.furnitureManager.groupSelected(),
+      onUngroup: () => this.furnitureManager.ungroupSelected()
     });
 
-    this.furnitureManager.setOnSelectChange((item: FurnitureItem | null) => {
-      this.uiManager.setSelectedItem(item);
+    this.furnitureManager.setOnSelectChange(() => {
+      this.uiManager.setSelection(
+        this.furnitureManager.getSelectedItems(),
+        this.furnitureManager.getSelectedGroup()
+      );
     });
 
     this.setupEventListeners();
@@ -169,7 +174,7 @@ class App {
     window.addEventListener('resize', () => this.onResize());
     this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
     this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    this.renderer.domElement.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    this.renderer.domElement.addEventListener('mouseup', () => this.onMouseUp());
     this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseUp());
   }
 
@@ -187,6 +192,8 @@ class App {
     this.mouseDownPos.set(e.clientX, e.clientY);
     this.updateMouse(e);
 
+    const additive = e.ctrlKey || e.metaKey;
+
     if (!this.furnitureManager.isDraggingActive()) {
       this.raycaster.setFromCamera(this.mouse, this.camera);
       const intersects = this.raycaster.intersectObjects(this.scene.children, true);
@@ -199,14 +206,17 @@ class App {
         
         const item = obj.userData.furnitureItem as FurnitureItem | undefined;
         if (item) {
-          this.furnitureManager.selectItem(item);
+          this.furnitureManager.selectItem(item, additive);
+          if (additive) return;
           this.controls.enabled = false;
           this.furnitureManager.startDrag(item, this.mouse, this.camera);
           return;
         }
       }
       
-      this.furnitureManager.selectItem(null);
+      if (!additive) {
+        this.furnitureManager.selectItem(null);
+      }
     }
   }
 

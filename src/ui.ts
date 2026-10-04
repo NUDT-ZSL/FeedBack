@@ -1,4 +1,4 @@
-import { FURNITURE_TYPES, FurnitureItem } from './furniture';
+import { FURNITURE_TYPES, FurnitureGroup, FurnitureItem } from './furniture';
 
 const ICONS: Record<string, string> = {
   sofa: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -34,6 +34,20 @@ const ICONS: Record<string, string> = {
     <path d="M2 17h20"/>
     <path d="M6 8v9"/>
     <path d="M18 8v9"/>
+  </svg>`,
+  group: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+    <path d="M10 6.5h4a3 3 0 0 1 3 3V14"/>
+    <path d="m15.5 12 1.5 2 1.5-2"/>
+  </svg>`,
+  ungroup: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+    <path d="M10 6.5h4"/>
+    <path d="m12 4.5 2 2-2 2"/>
+    <path d="M14 17.5h-4"/>
+    <path d="m12 15.5-2 2 2 2"/>
   </svg>`
 };
 
@@ -41,43 +55,78 @@ export interface UICallbacks {
   onAddFurniture: (type: string) => void;
   onRotate: () => void;
   onDelete: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
 }
 
 export class UIManager {
   private toolbar: HTMLElement;
   private callbacks: UICallbacks;
-  private selectedItem: FurnitureItem | null = null;
+  private selectedItems: FurnitureItem[] = [];
+  private selectedGroup: FurnitureGroup | null = null;
   private buttons: Map<string, HTMLButtonElement> = new Map();
+  private groupBtn!: HTMLButtonElement;
+  private ungroupBtn!: HTMLButtonElement;
+  private infoPanel: HTMLElement;
 
   constructor(toolbarId: string, callbacks: UICallbacks) {
     const toolbar = document.getElementById(toolbarId);
     if (!toolbar) throw new Error(`Toolbar element #${toolbarId} not found`);
-    
+
     this.toolbar = toolbar;
     this.callbacks = callbacks;
-    
+
+    this.infoPanel = document.createElement('div');
+    this.infoPanel.id = 'selection-info';
+    const app = document.getElementById('app');
+    if (app) app.appendChild(this.infoPanel);
+
     this.createButtons();
     this.bindKeyboardEvents();
+    this.updateSelectionUI();
   }
 
   private createButtons(): void {
     const types = Object.keys(FURNITURE_TYPES);
-    
+
     for (const type of types) {
       const data = FURNITURE_TYPES[type];
       const btn = document.createElement('button');
       btn.className = 'toolbar-btn';
-      btn.title = data.name;
+      btn.title = `添加${data.name}`;
       btn.innerHTML = ICONS[type] + `<span>${data.name}</span>`;
-      
+
       btn.addEventListener('click', () => {
         this.callbacks.onAddFurniture(type);
         this.highlightButton(type);
       });
-      
+
       this.toolbar.appendChild(btn);
       this.buttons.set(type, btn);
     }
+
+    const divider = document.createElement('div');
+    divider.className = 'toolbar-divider';
+    this.toolbar.appendChild(divider);
+
+    this.groupBtn = this.createActionButton('group', '分组', () => {
+      this.callbacks.onGroup();
+    });
+    this.toolbar.appendChild(this.groupBtn);
+
+    this.ungroupBtn = this.createActionButton('ungroup', '取消分组', () => {
+      this.callbacks.onUngroup();
+    });
+    this.toolbar.appendChild(this.ungroupBtn);
+  }
+
+  private createActionButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = 'toolbar-btn action-btn';
+    btn.title = label;
+    btn.innerHTML = ICONS[icon] + `<span>${label}</span>`;
+    btn.addEventListener('click', onClick);
+    return btn;
   }
 
   private highlightButton(type: string): void {
@@ -88,7 +137,7 @@ export class UIManager {
         btn.style.boxShadow = '';
       }
     });
-    
+
     setTimeout(() => {
       this.buttons.forEach((btn) => {
         btn.style.boxShadow = '';
@@ -101,12 +150,22 @@ export class UIManager {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
-      
+
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         this.callbacks.onRotate();
       }
-      
+
+      if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        this.callbacks.onGroup();
+      }
+
+      if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        this.callbacks.onUngroup();
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         this.callbacks.onDelete();
@@ -114,15 +173,36 @@ export class UIManager {
     });
   }
 
-  setSelectedItem(item: FurnitureItem | null): void {
-    this.selectedItem = item;
+  setSelection(items: FurnitureItem[], group: FurnitureGroup | null): void {
+    this.selectedItems = items;
+    this.selectedGroup = group;
+    this.updateSelectionUI();
   }
 
-  getSelectedItem(): FurnitureItem | null {
-    return this.selectedItem;
+  private updateSelectionUI(): void {
+    let text = '';
+
+    if (this.selectedGroup) {
+      text = `${this.selectedGroup.name} · ${this.selectedGroup.memberIds.size} 件家具`;
+    } else if (this.selectedItems.length > 1) {
+      text = `已选 ${this.selectedItems.length} 件家具`;
+    } else if (this.selectedItems.length === 1) {
+      text = this.selectedItems[0].data.name;
+    }
+
+    if (text) {
+      this.infoPanel.textContent = text;
+      this.infoPanel.style.display = 'block';
+    } else {
+      this.infoPanel.style.display = 'none';
+    }
+
+    this.groupBtn.disabled = this.selectedItems.length < 2;
+    this.ungroupBtn.disabled = !this.selectedItems.some((item) => item.groupId);
   }
 
   dispose(): void {
     this.buttons.clear();
+    this.infoPanel.remove();
   }
 }

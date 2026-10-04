@@ -12,6 +12,7 @@ export interface FurnitureData {
 export interface FurnitureItem {
   id: string;
   type: string;
+  groupId: string | null;
   group: THREE.Group;
   data: FurnitureData;
   originalPosition: THREE.Vector3;
@@ -27,6 +28,12 @@ export interface FurnitureItem {
   bounceEndPosition: THREE.Vector3;
   bounceAnimationTime: number;
   blinkTime: number;
+}
+
+export interface FurnitureGroup {
+  id: string;
+  name: string;
+  memberIds: Set<string>;
 }
 
 export const FURNITURE_TYPES: Record<string, FurnitureData> = {
@@ -83,14 +90,28 @@ function easeOutElastic(t: number): number {
 export class FurnitureManager {
   private scene: THREE.Scene;
   private items: FurnitureItem[] = [];
-  private selectedItem: FurnitureItem | null = null;
+  private selectedItems: FurnitureItem[] = [];
+  private groups: Map<string, FurnitureGroup> = new Map();
+  private groupLines: Map<string, THREE.LineSegments> = new Map();
+  private groupNameCounter = 0;
   private dragItem: FurnitureItem | null = null;
+  private dragGroupMembers: Array<{ item: FurnitureItem; offsetX: number; offsetZ: number }> | null = null;
+  private dragAnchor: THREE.Vector2 = new THREE.Vector2();
   private dragOffset: THREE.Vector2 = new THREE.Vector2();
   private groundPlane: THREE.Mesh;
   private raycaster: THREE.Raycaster;
-  private onSelectChange: ((item: FurnitureItem | null) => void) | null = null;
+  private onSelectChange: ((items: FurnitureItem[]) => void) | null = null;
   private dragLight: THREE.PointLight | null = null;
   private groundProjection: THREE.Mesh | null = null;
+  private groupRotationAnim: {
+    anchorX: number;
+    anchorZ: number;
+    angle: number;
+    time: number;
+    members: Array<{ item: FurnitureItem; offsetX: number; offsetZ: number; startRot: number }>;
+  } | null = null;
+  private flashItems: FurnitureItem[] = [];
+  private flashTime = 0;
 
   constructor(scene: THREE.Scene, groundPlane: THREE.Mesh, raycaster: THREE.Raycaster) {
     this.scene = scene;
@@ -98,7 +119,7 @@ export class FurnitureManager {
     this.raycaster = raycaster;
   }
 
-  setOnSelectChange(callback: (item: FurnitureItem | null) => void): void {
+  setOnSelectChange(callback: (items: FurnitureItem[]) => void): void {
     this.onSelectChange = callback;
   }
 
@@ -131,6 +152,7 @@ export class FurnitureManager {
     const item: FurnitureItem = {
       id: generateId(),
       type,
+      groupId: null,
       group,
       data,
       originalPosition: group.position.clone(),
@@ -157,26 +179,67 @@ export class FurnitureManager {
     return item;
   }
 
-  selectItem(item: FurnitureItem | null): void {
-    if (this.selectedItem && this.selectedItem !== item) {
-      this.selectedItem.isSelected = false;
-      this.updateItemVisual(this.selectedItem);
+  selectItem(item: FurnitureItem | null, additive: boolean = false): void {
+    if (additive && item) {
+      const next = this.selectedItems.slice();
+      const index = next.indexOf(item);
+      if (index > -1) {
+        next.splice(index, 1);
+      } else {
+        next.push(item);
+      }
+      this.setSelection(next);
+      return;
     }
-    
-    this.selectedItem = item;
-    
-    if (item) {
-      item.isSelected = true;
-      this.updateItemVisual(item);
+
+    if (item && item.groupId && this.groups.has(item.groupId)) {
+      this.setSelection(this.items.filter((i) => i.groupId === item.groupId));
+      return;
     }
-    
+
+    this.setSelection(item ? [item] : []);
+  }
+
+  private setSelection(items: FurnitureItem[]): void {
+    for (const prev of this.selectedItems) {
+      if (!items.includes(prev)) {
+        prev.isSelected = false;
+        this.updateItemVisual(prev);
+      }
+    }
+
+    this.selectedItems = items.slice();
+
+    for (const item of this.selectedItems) {
+      if (!item.isSelected) {
+        item.isSelected = true;
+        this.updateItemVisual(item);
+      }
+    }
+
     if (this.onSelectChange) {
-      this.onSelectChange(item);
+      this.onSelectChange(this.selectedItems);
     }
   }
 
-  getSelectedItem(): FurnitureItem | null {
-    return this.selectedItem;
+  getSelectedItems(): FurnitureItem[] {
+    return this.selectedItems;
+  }
+
+  getSelectedGroup(): FurnitureGroup | null {
+    if (this.selectedItems.length < 2) return null;
+
+    const groupId = this.selectedItems[0].groupId;
+    if (!groupId) return null;
+
+    const group = this.groups.get(groupId);
+    if (!group || group.memberIds.size !== this.selectedItems.length) return null;
+
+    for (const item of this.selectedItems) {
+      if (item.groupId !== groupId) return null;
+    }
+
+    return group;
   }
 
   getItems(): FurnitureItem[] {
@@ -209,13 +272,40 @@ export class FurnitureManager {
       this.dragItem = item;
       item.isDragging = true;
       item.originalPosition.copy(item.group.position);
-      this.dragOffset.set(
-        item.group.position.x - point.x,
-        item.group.position.z - point.z
-      );
-      
+
+      const group = item.groupId ? this.groups.get(item.groupId) : undefined;
+      if (group) {
+        const members = this.items.filter((i) => i.groupId === group.id);
+        let anchorX = 0;
+        let anchorZ = 0;
+        for (const member of members) {
+          anchorX += member.group.position.x;
+          anchorZ += member.group.position.z;
+        }
+        anchorX /= members.length;
+        anchorZ /= members.length;
+
+        this.dragAnchor.set(anchorX, anchorZ);
+        this.dragGroupMembers = members.map((member) => ({
+          item: member,
+          offsetX: member.group.position.x - anchorX,
+          offsetZ: member.group.position.z - anchorZ
+        }));
+        for (const member of members) {
+          member.isDragging = true;
+          member.originalPosition.copy(member.group.position);
+        }
+        this.dragOffset.set(anchorX - point.x, anchorZ - point.z);
+      } else {
+        this.dragGroupMembers = null;
+        this.dragOffset.set(
+          item.group.position.x - point.x,
+          item.group.position.z - point.z
+        );
+        this.createGroundProjection(item);
+      }
+
       this.createDragLight(point);
-      this.createGroundProjection(item);
     }
   }
 
@@ -259,9 +349,15 @@ export class FurnitureManager {
     this.raycaster.setFromCamera(mouse, camera);
     const intersects = this.raycaster.intersectObject(this.groundPlane);
     
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
-      
+    if (intersects.length === 0) return;
+    const point = intersects[0].point;
+
+    if (this.dragGroupMembers) {
+      this.updateGroupDrag(point);
+      return;
+    }
+
+    {
       let newX = point.x + this.dragOffset.x;
       let newZ = point.z + this.dragOffset.y;
       
@@ -294,7 +390,85 @@ export class FurnitureManager {
     }
   }
 
+  private updateGroupDrag(point: THREE.Vector3): void {
+    if (!this.dragGroupMembers) return;
+
+    const desiredX = point.x + this.dragOffset.x;
+    const desiredZ = point.z + this.dragOffset.y;
+
+    const memberIds = new Set(this.dragGroupMembers.map((m) => m.item.id));
+
+    const dx = desiredX - this.dragAnchor.x;
+    if (dx !== 0) {
+      const t = this.maxValidStep(dx, 0, memberIds);
+      this.dragAnchor.x += dx * t;
+      for (const m of this.dragGroupMembers) {
+        m.item.group.position.x = this.dragAnchor.x + m.offsetX;
+      }
+    }
+
+    const dz = desiredZ - this.dragAnchor.y;
+    if (dz !== 0) {
+      const t = this.maxValidStep(0, dz, memberIds);
+      this.dragAnchor.y += dz * t;
+      for (const m of this.dragGroupMembers) {
+        m.item.group.position.z = this.dragAnchor.y + m.offsetZ;
+      }
+    }
+
+    for (const m of this.dragGroupMembers) {
+      const blocked = !this.isPlacementValid(
+        m.item,
+        desiredX + m.offsetX,
+        desiredZ + m.offsetZ,
+        m.item.currentRotation,
+        memberIds
+      );
+      if (blocked !== m.item.isColliding) {
+        m.item.isColliding = blocked;
+        m.item.blinkTime = 0;
+        this.updateItemVisual(m.item);
+      }
+    }
+
+    if (this.dragLight) {
+      this.dragLight.position.x = this.dragAnchor.x;
+      this.dragLight.position.z = this.dragAnchor.y;
+    }
+  }
+
+  private maxValidStep(dx: number, dz: number, memberIds: Set<string>): number {
+    const distance = Math.hypot(dx, dz);
+    if (distance === 0) return 1;
+
+    const stepSize = 0.05;
+    const steps = Math.ceil(distance / stepSize);
+    let valid = 0;
+
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      if (this.canMoveGroup(dx * t, dz * t, memberIds)) {
+        valid = t;
+      } else {
+        break;
+      }
+    }
+
+    return valid;
+  }
+
   endDrag(): void {
+    if (this.dragGroupMembers) {
+      for (const m of this.dragGroupMembers) {
+        m.item.isDragging = false;
+        m.item.isColliding = false;
+        m.item.blinkTime = 0;
+        m.item.originalPosition.copy(m.item.group.position);
+        this.updateItemVisual(m.item);
+      }
+      this.dragGroupMembers = null;
+      this.dragItem = null;
+    } else
     if (this.dragItem) {
       if (this.dragItem.isColliding) {
         this.startBounce(this.dragItem);
@@ -330,32 +504,255 @@ export class FurnitureManager {
   }
 
   rotateSelected(): void {
-    if (!this.selectedItem || this.selectedItem.isAnimatingRotation || this.selectedItem.isBouncing) return;
-    
-    this.selectedItem.targetRotation += Math.PI / 4;
-    this.selectedItem.isAnimatingRotation = true;
-    this.selectedItem.rotationAnimationTime = 0;
+    const group = this.getSelectedGroup();
+    if (group) {
+      this.rotateGroup(group);
+      return;
+    }
+
+    for (const item of this.selectedItems) {
+      if (item.isAnimatingRotation || item.isBouncing) continue;
+      item.targetRotation += Math.PI / 4;
+      item.isAnimatingRotation = true;
+      item.rotationAnimationTime = 0;
+    }
+  }
+
+  private rotateGroup(group: FurnitureGroup): void {
+    if (this.groupRotationAnim) return;
+
+    const members = this.items.filter((i) => i.groupId === group.id);
+    if (members.length < 2) return;
+    if (members.some((m) => m.isAnimatingRotation || m.isBouncing || m.isDragging)) return;
+
+    let anchorX = 0;
+    let anchorZ = 0;
+    for (const member of members) {
+      anchorX += member.group.position.x;
+      anchorZ += member.group.position.z;
+    }
+    anchorX /= members.length;
+    anchorZ /= members.length;
+
+    const angle = Math.PI / 4;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const memberIds = new Set(members.map((m) => m.id));
+
+    const targets = members.map((member) => {
+      const offsetX = member.group.position.x - anchorX;
+      const offsetZ = member.group.position.z - anchorZ;
+      return {
+        item: member,
+        offsetX,
+        offsetZ,
+        startRot: member.currentRotation,
+        targetX: anchorX + offsetX * cos - offsetZ * sin,
+        targetZ: anchorZ + offsetX * sin + offsetZ * cos,
+        targetRot: member.currentRotation + angle
+      };
+    });
+
+    for (const t of targets) {
+      if (!this.isPlacementValid(t.item, t.targetX, t.targetZ, t.targetRot, memberIds)) {
+        this.flashInvalid(members);
+        return;
+      }
+    }
+
+    for (const t of targets) {
+      t.item.targetRotation = t.targetRot;
+    }
+
+    this.groupRotationAnim = {
+      anchorX,
+      anchorZ,
+      angle,
+      time: 0,
+      members: targets.map((t) => ({
+        item: t.item,
+        offsetX: t.offsetX,
+        offsetZ: t.offsetZ,
+        startRot: t.startRot
+      }))
+    };
+  }
+
+  private flashInvalid(items: FurnitureItem[]): void {
+    for (const item of this.flashItems) {
+      item.isColliding = false;
+      this.updateItemVisual(item);
+    }
+    this.flashItems = items.slice();
+    this.flashTime = 0.6;
+    for (const item of items) {
+      item.isColliding = true;
+      item.blinkTime = 0;
+      this.updateItemVisual(item);
+    }
   }
 
   deleteSelected(): void {
-    if (!this.selectedItem) return;
-    
-    this.deleteItem(this.selectedItem);
+    const toDelete = this.selectedItems.slice();
+    for (const item of toDelete) {
+      this.deleteItem(item);
+    }
+    this.setSelection([]);
   }
 
   private deleteItem(item: FurnitureItem): void {
     const index = this.items.indexOf(item);
-    if (index > -1) {
-      this.items.splice(index, 1);
-      this.scene.remove(item.group);
-      
-      const mesh = item.group.children[0] as THREE.Mesh;
-      (mesh.material as THREE.Material).dispose();
-      
-      if (this.selectedItem === item) {
-        this.selectItem(null);
+    if (index === -1) return;
+
+    this.items.splice(index, 1);
+    this.scene.remove(item.group);
+
+    const mesh = item.group.children[0] as THREE.Mesh;
+    (mesh.material as THREE.Material).dispose();
+
+    this.removeFromGroup(item);
+
+    const selIndex = this.selectedItems.indexOf(item);
+    if (selIndex > -1) this.selectedItems.splice(selIndex, 1);
+
+    if (this.dragItem === item) this.dragItem = null;
+    if (this.dragGroupMembers) {
+      this.dragGroupMembers = this.dragGroupMembers.filter((m) => m.item !== item);
+      if (this.dragGroupMembers.length === 0) this.dragGroupMembers = null;
+    }
+    if (this.groupRotationAnim && this.groupRotationAnim.members.some((m) => m.item === item)) {
+      this.groupRotationAnim = null;
+    }
+    const flashIndex = this.flashItems.indexOf(item);
+    if (flashIndex > -1) this.flashItems.splice(flashIndex, 1);
+  }
+
+  groupSelected(): void {
+    if (this.selectedItems.length < 2) return;
+
+    const members = this.selectedItems.slice();
+    for (const member of members) {
+      this.removeFromGroup(member);
+    }
+
+    this.groupNameCounter += 1;
+    const group: FurnitureGroup = {
+      id: generateId(),
+      name: `组合 ${this.groupNameCounter}`,
+      memberIds: new Set()
+    };
+
+    for (const member of members) {
+      member.groupId = group.id;
+      group.memberIds.add(member.id);
+    }
+
+    this.groups.set(group.id, group);
+    this.createGroupLines(group);
+    this.setSelection(members);
+  }
+
+  ungroupSelected(): void {
+    const groupIds = new Set<string>();
+    for (const item of this.selectedItems) {
+      if (item.groupId) groupIds.add(item.groupId);
+    }
+    for (const groupId of groupIds) {
+      this.ungroup(groupId);
+    }
+    this.setSelection(this.selectedItems.slice());
+  }
+
+  private ungroup(groupId: string): void {
+    if (!this.groups.has(groupId)) return;
+
+    for (const item of this.items) {
+      if (item.groupId === groupId) {
+        item.groupId = null;
       }
     }
+
+    this.removeGroupLines(groupId);
+    this.groups.delete(groupId);
+  }
+
+  private removeFromGroup(item: FurnitureItem): void {
+    if (!item.groupId) return;
+
+    const groupId = item.groupId;
+    const group = this.groups.get(groupId);
+    item.groupId = null;
+
+    if (!group) return;
+
+    group.memberIds.delete(item.id);
+
+    if (group.memberIds.size < 2) {
+      this.ungroup(groupId);
+    } else {
+      this.rebuildGroupLines(group);
+    }
+  }
+
+  private createGroupLines(group: FurnitureGroup): void {
+    const positions = new Float32Array(group.memberIds.size * 2 * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.LineBasicMaterial({
+      color: 0x6A8EAE,
+      transparent: true,
+      opacity: 0.7
+    });
+
+    const lines = new THREE.LineSegments(geometry, material);
+    lines.frustumCulled = false;
+    this.scene.add(lines);
+    this.groupLines.set(group.id, lines);
+    this.updateGroupLines(group.id);
+  }
+
+  private rebuildGroupLines(group: FurnitureGroup): void {
+    this.removeGroupLines(group.id);
+    this.createGroupLines(group);
+  }
+
+  private removeGroupLines(groupId: string): void {
+    const lines = this.groupLines.get(groupId);
+    if (!lines) return;
+
+    this.scene.remove(lines);
+    lines.geometry.dispose();
+    (lines.material as THREE.Material).dispose();
+    this.groupLines.delete(groupId);
+  }
+
+  private updateGroupLines(groupId: string): void {
+    const lines = this.groupLines.get(groupId);
+    const group = this.groups.get(groupId);
+    if (!lines || !group) return;
+
+    const members = this.items.filter((i) => i.groupId === groupId);
+    if (members.length === 0) return;
+
+    let anchorX = 0;
+    let anchorZ = 0;
+    for (const member of members) {
+      anchorX += member.group.position.x;
+      anchorZ += member.group.position.z;
+    }
+    anchorX /= members.length;
+    anchorZ /= members.length;
+
+    const attribute = lines.geometry.getAttribute('position') as THREE.BufferAttribute;
+    let cursor = 0;
+    for (const member of members) {
+      attribute.setXYZ(cursor, anchorX, 0.03, anchorZ);
+      cursor += 1;
+      attribute.setXYZ(cursor, member.group.position.x, 0.03, member.group.position.z);
+      cursor += 1;
+    }
+    attribute.needsUpdate = true;
   }
 
   private checkCollisions(item: FurnitureItem): void {
@@ -364,7 +761,10 @@ export class FurnitureManager {
     for (const other of this.items) {
       if (other.id === item.id) continue;
       
-      if (this.checkOBBCollision(item, other)) {
+      if (this.obbIntersect(
+        item.group.position.x, item.group.position.z, item.currentRotation, item.data,
+        other.group.position.x, other.group.position.z, other.currentRotation, other.data
+      )) {
         colliding = true;
         break;
       }
@@ -377,22 +777,22 @@ export class FurnitureManager {
     }
   }
 
-  private checkOBBCollision(a: FurnitureItem, b: FurnitureItem): boolean {
-    const aCenter = a.group.position;
-    const bCenter = b.group.position;
+  private obbIntersect(
+    ax: number, az: number, aRot: number, aData: FurnitureData,
+    bx: number, bz: number, bRot: number, bData: FurnitureData
+  ): boolean {
+    const dx = bx - ax;
+    const dz = bz - az;
     
-    const dx = bCenter.x - aCenter.x;
-    const dz = bCenter.z - aCenter.z;
+    const cosA = Math.cos(aRot);
+    const sinA = Math.sin(aRot);
+    const cosB = Math.cos(bRot);
+    const sinB = Math.sin(bRot);
     
-    const cosA = Math.cos(a.currentRotation);
-    const sinA = Math.sin(a.currentRotation);
-    const cosB = Math.cos(b.currentRotation);
-    const sinB = Math.sin(b.currentRotation);
-    
-    const aHalfW = a.data.width / 2;
-    const aHalfD = a.data.depth / 2;
-    const bHalfW = b.data.width / 2;
-    const bHalfD = b.data.depth / 2;
+    const aHalfW = aData.width / 2;
+    const aHalfD = aData.depth / 2;
+    const bHalfW = bData.width / 2;
+    const bHalfD = bData.depth / 2;
     
     const axes: Array<[number, number]> = [
       [cosA, sinA],
@@ -414,7 +814,104 @@ export class FurnitureManager {
     return true;
   }
 
+  private isWithinBounds(x: number, z: number, rotation: number, data: FurnitureData): boolean {
+    const halfW = data.width / 2;
+    const halfD = data.depth / 2;
+    const cos = Math.abs(Math.cos(rotation));
+    const sin = Math.abs(Math.sin(rotation));
+    const boundX = halfW * cos + halfD * sin;
+    const boundZ = halfW * sin + halfD * cos;
+    const epsilon = 1e-6;
+
+    return (
+      x >= ROOM_BOUNDS.minX + boundX - epsilon &&
+      x <= ROOM_BOUNDS.maxX - boundX + epsilon &&
+      z >= ROOM_BOUNDS.minZ + boundZ - epsilon &&
+      z <= ROOM_BOUNDS.maxZ - boundZ + epsilon
+    );
+  }
+
+  private isPlacementValid(
+    item: FurnitureItem,
+    x: number,
+    z: number,
+    rotation: number,
+    ignoreIds: Set<string>
+  ): boolean {
+    if (!this.isWithinBounds(x, z, rotation, item.data)) return false;
+
+    for (const other of this.items) {
+      if (other.id === item.id || ignoreIds.has(other.id)) continue;
+      if (this.obbIntersect(
+        x, z, rotation, item.data,
+        other.group.position.x, other.group.position.z, other.currentRotation, other.data
+      )) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private canMoveGroup(dx: number, dz: number, memberIds: Set<string>): boolean {
+    if (!this.dragGroupMembers) return false;
+
+    for (const m of this.dragGroupMembers) {
+      const item = m.item;
+      if (!this.isPlacementValid(
+        item,
+        item.group.position.x + dx,
+        item.group.position.z + dz,
+        item.currentRotation,
+        memberIds
+      )) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   animate(delta: number): void {
+    if (this.flashTime > 0) {
+      this.flashTime -= delta;
+      if (this.flashTime <= 0) {
+        for (const item of this.flashItems) {
+          item.isColliding = false;
+          item.blinkTime = 0;
+          this.updateItemVisual(item);
+        }
+        this.flashItems = [];
+      }
+    }
+
+    if (this.groupRotationAnim) {
+      const anim = this.groupRotationAnim;
+      anim.time += delta;
+      const duration = 0.25;
+      const t = Math.min(anim.time / duration, 1);
+      const eased = easeOutCubic(t);
+      const theta = anim.angle * eased;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+
+      for (const m of anim.members) {
+        m.item.group.position.x = anim.anchorX + m.offsetX * cos - m.offsetZ * sin;
+        m.item.group.position.z = anim.anchorZ + m.offsetX * sin + m.offsetZ * cos;
+        m.item.currentRotation = m.startRot + theta;
+        m.item.group.rotation.y = m.item.currentRotation;
+      }
+
+      if (t >= 1) {
+        for (const m of anim.members) {
+          m.item.currentRotation = m.item.targetRotation;
+          m.item.group.rotation.y = m.item.currentRotation;
+          m.item.originalPosition.copy(m.item.group.position);
+        }
+        this.groupRotationAnim = null;
+      }
+    }
+
     for (const item of this.items) {
       if (item.isAnimatingRotation) {
         item.rotationAnimationTime += delta;
@@ -456,6 +953,10 @@ export class FurnitureManager {
         this.updateItemVisual(item);
       }
     }
+
+    for (const groupId of this.groupLines.keys()) {
+      this.updateGroupLines(groupId);
+    }
   }
 
   isDraggingActive(): boolean {
@@ -481,5 +982,13 @@ export class FurnitureManager {
     materialCache.clear();
     
     edgeMaterial.dispose();
+
+    this.groupLines.forEach((lines) => {
+      this.scene.remove(lines);
+      lines.geometry.dispose();
+      (lines.material as THREE.Material).dispose();
+    });
+    this.groupLines.clear();
+    this.groups.clear();
   }
 }
