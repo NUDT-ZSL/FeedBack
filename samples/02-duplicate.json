@@ -1,0 +1,26 @@
+{
+  "name": "02-duplicate",
+  "title": "同一位置重复提交：幂等忽略；同修订号内容冲突/过期修订号均记录可观察",
+  "rules": [
+    { "id": "R-ice", "priority": 1, "scope": [0, 99], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰" },
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰" },
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "火" },
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 0, "text": "水" }
+  ],
+  "checkpoints": [
+    { "afterOp": 1, "labels": ["ICE"], "lastDerivedEmpty": true, "ingest": { "duplicate": 1 } },
+    { "afterOp": 2, "labels": ["ICE"], "ingest": { "revisionClash": 1 } }
+  ],
+  "expect": {
+    "text": "冰",
+    "labels": ["ICE"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": [],
+    "ingest": { "accepted": 1, "duplicate": 1, "revisionClash": 1, "stale": 1 }
+  }
+}

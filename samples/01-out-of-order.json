@@ -1,0 +1,21 @@
+{
+  "name": "01-out-of-order",
+  "title": "片段乱序到达：最终顺序与标记只取决于 (来源, 顺序号)，与到达顺序无关",
+  "rules": [
+    { "id": "R-ice", "priority": 1, "scope": [0, 99], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 2, "revision": 1, "text": "鉴酒" },
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "温水" },
+    { "op": "submit", "source": "s1", "seq": 1, "revision": 1, "text": "冰" }
+  ],
+  "expect": {
+    "text": "温水冰鉴酒",
+    "labels": ["O", "O", "ICE", "O", "O"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": [],
+    "ingest": { "accepted": 3 }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "12-joint-evidence",
+  "title": "多规则共同作用：同优先级同结论时正常收敛，但全部命中规则与依据都保留在标记上",
+  "rules": [
+    { "id": "R-j1", "priority": 3, "scope": [0, 99], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE" },
+    { "id": "R-j2", "priority": 3, "scope": [0, 99], "match": { "kind": "charIn", "values": ["冰", "水"] }, "label": "ICE" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰" }
+  ],
+  "expect": {
+    "text": "冰",
+    "labels": ["ICE"],
+    "statuses": ["resolved"],
+    "candidateAt": { "0": ["R-j1:ICE@3", "R-j2:ICE@3"] },
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": []
+  }
+}

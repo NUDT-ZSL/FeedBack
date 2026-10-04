@@ -1,0 +1,134 @@
+{
+  "name": "09-adjudication",
+  "title": "人工裁决：裁决结果钉住冲突位，下游位置必须立即级联重推，不允许漏推",
+  "rules": [
+    {
+      "id": "R-vessel-a",
+      "priority": 5,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "charEq",
+        "value": "鉴"
+      },
+      "label": "V_A"
+    },
+    {
+      "id": "R-vessel-b",
+      "priority": 5,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "charEq",
+        "value": "鉴"
+      },
+      "label": "V_B"
+    },
+    {
+      "id": "R-down",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "all",
+        "of": [
+          {
+            "kind": "charEq",
+            "value": "酒"
+          },
+          {
+            "kind": "depLabelEq",
+            "value": "V_A"
+          }
+        ]
+      },
+      "label": "SERVED_A",
+      "deps": [
+        -1
+      ]
+    }
+  ],
+  "ops": [
+    {
+      "op": "submit",
+      "source": "s1",
+      "seq": 0,
+      "revision": 1,
+      "text": "鉴酒"
+    },
+    {
+      "op": "adjudicate",
+      "index": 0,
+      "label": "V_B",
+      "note": "第一次裁定"
+    },
+    {
+      "op": "release",
+      "index": 0
+    },
+    {
+      "op": "adjudicate",
+      "index": 0,
+      "label": "V_A",
+      "note": "最终裁定"
+    }
+  ],
+  "checkpoints": [
+    {
+      "afterOp": 0,
+      "labels": [
+        null,
+        "O"
+      ],
+      "conflicts": [
+        0
+      ]
+    },
+    {
+      "afterOp": 1,
+      "labels": [
+        "V_B",
+        "O"
+      ],
+      "statuses": [
+        "pinned",
+        "resolved"
+      ]
+    },
+    {
+      "afterOp": 2,
+      "labels": [
+        null,
+        "O"
+      ],
+      "conflicts": [
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "text": "鉴酒",
+    "labels": [
+      "V_A",
+      "SERVED_A"
+    ],
+    "statuses": [
+      "pinned",
+      "resolved"
+    ],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": []
+  },
+  "explainAt": {
+    "afterOp": 3,
+    "index": 1
+  }
+}

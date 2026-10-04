@@ -1,0 +1,19 @@
+{
+  "name": "11-oscillation",
+  "title": "自环振荡：标记在 X/Y 间往复无法收敛，引擎必须如实列出未收敛位置而非伪造结论",
+  "rules": [
+    { "id": "R-flip-x", "priority": 1, "scope": [0, 0], "match": { "kind": "not", "of": { "kind": "depLabelEq", "value": "X" } }, "label": "X", "deps": [0] },
+    { "id": "R-flip-y", "priority": 1, "scope": [0, 0], "match": { "kind": "depLabelEq", "value": "X" }, "label": "Y", "deps": [0] }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "甲" }
+  ],
+  "expect": {
+    "text": "甲",
+    "statuses": ["unconverged"],
+    "conflicts": [],
+    "unconverged": [0],
+    "cycles": [[0]],
+    "dangling": []
+  }
+}

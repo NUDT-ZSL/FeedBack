@@ -1,0 +1,26 @@
+{
+  "name": "10-rule-rewrite",
+  "title": "规则改写：只重推被改/新增规则的作用范围，结果与整体重推一致",
+  "rules": [
+    { "id": "R-ice", "priority": 1, "scope": [0, 0], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰温" },
+    { "op": "setRules", "rules": [
+      { "id": "R-ice", "priority": 1, "scope": [0, 0], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE2" },
+      { "id": "R-warm", "priority": 1, "scope": [1, 1], "match": { "kind": "charEq", "value": "温" }, "label": "WARM" }
+    ]}
+  ],
+  "checkpoints": [
+    { "afterOp": 0, "labels": ["ICE", "O"] }
+  ],
+  "expect": {
+    "text": "冰温",
+    "labels": ["ICE2", "WARM"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": [],
+    "lastDerived": [0, 1]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "07-cycle",
+  "title": "依赖成环：环结构如实列出；初始无依据时环上位置收敛为 O，人工裁决打破僵局后环上再次收敛",
+  "rules": [
+    { "id": "R-a", "priority": 1, "scope": [0, 1], "match": { "kind": "all", "of": [
+      { "kind": "charEq", "value": "甲" },
+      { "kind": "depLabelEq", "value": "B" }
+    ]}, "label": "A", "deps": [1] },
+    { "id": "R-b", "priority": 1, "scope": [0, 1], "match": { "kind": "all", "of": [
+      { "kind": "charEq", "value": "乙" },
+      { "kind": "depLabelEq", "value": "A" }
+    ]}, "label": "B", "deps": [-1] }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "甲乙" },
+    { "op": "adjudicate", "index": 0, "label": "A", "note": "凌人裁定甲位为 A" }
+  ],
+  "checkpoints": [
+    { "afterOp": 0, "labels": ["O", "O"], "cycles": [[0, 1]] }
+  ],
+  "expect": {
+    "text": "甲乙",
+    "labels": ["A", "B"],
+    "statuses": ["pinned", "resolved"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [[0, 1]],
+    "dangling": []
+  }
+}

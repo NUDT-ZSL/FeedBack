@@ -1,0 +1,95 @@
+{
+  "name": "03-correction",
+  "rules": [
+    {
+      "id": "R-ice",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "charEq",
+        "value": "冰"
+      },
+      "label": "ICE"
+    },
+    {
+      "id": "R-chill",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "all",
+        "of": [
+          {
+            "kind": "charEq",
+            "value": "酒"
+          },
+          {
+            "kind": "depLabelEq",
+            "value": "ICE"
+          }
+        ]
+      },
+      "label": "CHILLED",
+      "deps": [
+        -1
+      ]
+    }
+  ],
+  "ops": [
+    {
+      "op": "submit",
+      "source": "s1",
+      "seq": 0,
+      "revision": 1,
+      "text": "冰酒温"
+    },
+    {
+      "op": "submit",
+      "source": "s1",
+      "seq": 0,
+      "revision": 2,
+      "text": "水酒温"
+    }
+  ],
+  "checkpoints": [
+    {
+      "afterOp": 0,
+      "labels": [
+        "ICE",
+        "CHILLED",
+        "O"
+      ]
+    }
+  ],
+  "expect": {
+    "text": "水酒温",
+    "labels": [
+      "O",
+      "O",
+      "O"
+    ],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": [],
+    "ingest": {
+      "accepted": 1,
+      "corrected": 1
+    },
+    "lastDerived": [
+      0,
+      1,
+      2
+    ],
+    "lastChanged": [
+      0,
+      1
+    ]
+  },
+  "title": "片段中途修正：直接命中位置0，依赖它的下游位置1必须级联重推，位置2不受影响"
+}

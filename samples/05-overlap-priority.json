@@ -1,0 +1,19 @@
+{
+  "name": "05-overlap-priority",
+  "title": "作用范围部分重叠：重叠区高优先级获胜，非重叠区各自命中，结果与规则注册顺序无关",
+  "rules": [
+    { "id": "R-low", "priority": 1, "scope": [0, 3], "match": { "kind": "charEq", "value": "冰" }, "label": "LOW" },
+    { "id": "R-high", "priority": 2, "scope": [2, 5], "match": { "kind": "charEq", "value": "冰" }, "label": "HIGH" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰冰冰冰冰冰" }
+  ],
+  "expect": {
+    "text": "冰冰冰冰冰冰",
+    "labels": ["LOW", "LOW", "HIGH", "HIGH", "HIGH", "HIGH"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": []
+  }
+}

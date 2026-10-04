@@ -1,0 +1,21 @@
+{
+  "name": "04-conflict",
+  "title": "同优先级多规则同位置分歧：不静默择一，输出 conflict 与各方候选依据，等待裁决",
+  "rules": [
+    { "id": "R-vessel-a", "priority": 5, "scope": [0, 99], "match": { "kind": "charEq", "value": "鉴" }, "label": "VESSEL_A" },
+    { "id": "R-vessel-b", "priority": 5, "scope": [0, 99], "match": { "kind": "charIn", "values": ["鉴", "鼎"] }, "label": "VESSEL_B" }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "冰鉴" }
+  ],
+  "expect": {
+    "text": "冰鉴",
+    "labels": ["O", null],
+    "statuses": ["resolved", "conflict"],
+    "conflicts": [1],
+    "conflictCandidates": { "1": ["R-vessel-a:VESSEL_A", "R-vessel-b:VESSEL_B"] },
+    "unconverged": [],
+    "cycles": [],
+    "dangling": []
+  }
+}

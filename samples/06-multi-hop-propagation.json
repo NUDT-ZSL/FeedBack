@@ -1,0 +1,120 @@
+{
+  "name": "06-multi-hop",
+  "title": "多级依赖传播：起点修正后，沿依赖方向逐级级联，最终全链路旧结论被清除",
+  "rules": [
+    {
+      "id": "R-ice",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "charEq",
+        "value": "冰"
+      },
+      "label": "ICE"
+    },
+    {
+      "id": "R-vessel",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "all",
+        "of": [
+          {
+            "kind": "charEq",
+            "value": "鉴"
+          },
+          {
+            "kind": "depLabelEq",
+            "value": "ICE"
+          }
+        ]
+      },
+      "label": "CHILLED_VESSEL",
+      "deps": [
+        -1
+      ]
+    },
+    {
+      "id": "R-serve",
+      "priority": 1,
+      "scope": [
+        0,
+        99
+      ],
+      "match": {
+        "kind": "all",
+        "of": [
+          {
+            "kind": "charEq",
+            "value": "酒"
+          },
+          {
+            "kind": "depLabelEq",
+            "value": "CHILLED_VESSEL"
+          }
+        ]
+      },
+      "label": "SERVED",
+      "deps": [
+        -1
+      ]
+    }
+  ],
+  "ops": [
+    {
+      "op": "submit",
+      "source": "s1",
+      "seq": 0,
+      "revision": 1,
+      "text": "冰鉴酒"
+    },
+    {
+      "op": "submit",
+      "source": "s1",
+      "seq": 0,
+      "revision": 2,
+      "text": "水鉴酒"
+    }
+  ],
+  "checkpoints": [
+    {
+      "afterOp": 0,
+      "labels": [
+        "ICE",
+        "CHILLED_VESSEL",
+        "SERVED"
+      ]
+    }
+  ],
+  "expect": {
+    "text": "水鉴酒",
+    "labels": [
+      "O",
+      "O",
+      "O"
+    ],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": [],
+    "ingest": {
+      "accepted": 1,
+      "corrected": 1
+    },
+    "lastDerived": [
+      0,
+      1,
+      2
+    ]
+  },
+  "explainAt": {
+    "afterOp": 0,
+    "index": 2
+  }
+}

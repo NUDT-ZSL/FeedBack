@@ -1,0 +1,26 @@
+{
+  "name": "08-dangling",
+  "title": "依赖指向不存在位置：悬空清单如实列出；后续片段补全目标后悬空消除，上游位置自动补推",
+  "rules": [
+    { "id": "R-ice", "priority": 1, "scope": [0, 99], "match": { "kind": "charEq", "value": "冰" }, "label": "ICE" },
+    { "id": "R-look", "priority": 1, "scope": [0, 99], "match": { "kind": "all", "of": [
+      { "kind": "charEq", "value": "酒" },
+      { "kind": "depLabelEq", "value": "ICE" }
+    ]}, "label": "CHILLED", "deps": [3] }
+  ],
+  "ops": [
+    { "op": "submit", "source": "s1", "seq": 0, "revision": 1, "text": "酒" },
+    { "op": "submit", "source": "s1", "seq": 1, "revision": 1, "text": "甲乙冰" }
+  ],
+  "checkpoints": [
+    { "afterOp": 0, "labels": ["O"], "dangling": [{ "index": 0, "ruleId": "R-look", "target": 3 }] }
+  ],
+  "expect": {
+    "text": "酒甲乙冰",
+    "labels": ["CHILLED", "O", "O", "ICE"],
+    "conflicts": [],
+    "unconverged": [],
+    "cycles": [],
+    "dangling": []
+  }
+}
