@@ -289,13 +289,10 @@ export default function WaveformEditor({
       if (dragging) {
         const time = xToTime(mouseX, width)
         if (dragging === 'in') {
-          if (time < outPoint) {
-            onInPointChange(time)
-          }
+          // 入点不允许越过出点：越界拖拽被夹住，选区始终保持 in <= out
+          onInPointChange(Math.min(time, outPoint))
         } else if (dragging === 'out') {
-          if (time > inPoint) {
-            onOutPointChange(time)
-          }
+          onOutPointChange(Math.max(time, inPoint))
         }
       } else {
         const inX = timeToX(inPoint, width)

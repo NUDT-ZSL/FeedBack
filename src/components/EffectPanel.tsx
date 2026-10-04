@@ -21,6 +21,7 @@ export interface EffectParams {
 export interface EffectPanelProps {
   inPoint: number
   outPoint: number
+  disabled?: boolean
   onApplyEffect: (type: EffectType, params: EffectParams, inPoint: number, outPoint: number) => void
 }
 
@@ -33,11 +34,12 @@ interface EffectButton {
   hasSlider?: boolean
 }
 
-export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: EffectPanelProps) {
+export default function EffectPanel({ inPoint, outPoint, disabled = false, onApplyEffect }: EffectPanelProps) {
   const [speedRate, setSpeedRate] = useState(1.0)
   const [pressedButton, setPressedButton] = useState<EffectType | null>(null)
 
   const handleButtonClick = (type: EffectType) => {
+    if (disabled) return
     setPressedButton(type)
     setTimeout(() => setPressedButton(null), 150)
 
@@ -111,12 +113,14 @@ export default function EffectPanel({ inPoint, outPoint, onApplyEffect }: Effect
           <div key={button.type} className="flex flex-col gap-2">
             <button
               onClick={() => handleButtonClick(button.type)}
+              disabled={disabled}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-4 py-2.5 text-white font-medium',
                 'transition-all duration-150 ease-out',
                 'hover:-translate-y-0.5 hover:shadow-lg',
                 'active:scale-95',
-                pressedButton === button.type ? 'scale-95' : ''
+                pressedButton === button.type ? 'scale-95' : '',
+                disabled && 'cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none'
               )}
               style={{
                 backgroundColor: button.color,
