@@ -1,0 +1,254 @@
+{
+  "description": "多关节联动夹具：双骨 IK 黄金值由独立三角计算生成（非被测代码输出）。角度单位为度。",
+  "chain": {
+    "origin": {
+      "x": 0,
+      "y": 0
+    },
+    "upperLength": 100,
+    "lowerLength": 80,
+    "rootLimit": {
+      "minDeg": -180,
+      "maxDeg": 180
+    },
+    "bendLimit": {
+      "minDeg": 0,
+      "maxDeg": 180
+    }
+  },
+  "ikCases": [
+    {
+      "name": "right-angle-down",
+      "target": {
+        "x": 100,
+        "y": 100
+      },
+      "bendSign": 1,
+      "expect": {
+        "rootAngleDeg": 11.551958535304585,
+        "bendAngleDeg": 76.99712183708606,
+        "end": {
+          "x": 100,
+          "y": 100
+        },
+        "reachable": true,
+        "limited": false
+      }
+    },
+    {
+      "name": "stretched-exact",
+      "target": {
+        "x": 200,
+        "y": 0
+      },
+      "bendSign": 1,
+      "expect": {
+        "rootAngleDeg": 0,
+        "bendAngleDeg": 0,
+        "end": {
+          "x": 180,
+          "y": 0
+        },
+        "reachable": false,
+        "limited": false
+      }
+    },
+    {
+      "name": "beyond-reach",
+      "target": {
+        "x": 300,
+        "y": 0
+      },
+      "bendSign": 1,
+      "expect": {
+        "rootAngleDeg": 0,
+        "bendAngleDeg": 0,
+        "end": {
+          "x": 180,
+          "y": 0
+        },
+        "reachable": false,
+        "limited": false
+      }
+    },
+    {
+      "name": "stretched-up",
+      "target": {
+        "x": 0,
+        "y": 200
+      },
+      "bendSign": 1,
+      "expect": {
+        "rootAngleDeg": 90,
+        "bendAngleDeg": 0,
+        "end": {
+          "x": 0,
+          "y": 180
+        },
+        "reachable": false,
+        "limited": false
+      }
+    },
+    {
+      "name": "fold-back-left",
+      "target": {
+        "x": -100,
+        "y": 100
+      },
+      "bendSign": -1,
+      "expect": {
+        "rootAngleDeg": 168.44804146469542,
+        "bendAngleDeg": 76.99712183708606,
+        "end": {
+          "x": -100,
+          "y": 100
+        },
+        "reachable": true,
+        "limited": false
+      }
+    },
+    {
+      "name": "same-origin-degenerate",
+      "target": {
+        "x": 0,
+        "y": 0
+      },
+      "bendSign": 1,
+      "expect": {
+        "rootAngleDeg": 0,
+        "bendAngleDeg": 180,
+        "end": {
+          "x": 20,
+          "y": 0
+        },
+        "reachable": false,
+        "limited": false
+      }
+    }
+  ],
+  "restrictedChain": {
+    "origin": {
+      "x": 0,
+      "y": 0
+    },
+    "upperLength": 100,
+    "lowerLength": 80,
+    "rootLimit": {
+      "minDeg": -180,
+      "maxDeg": 180
+    },
+    "bendLimit": {
+      "minDeg": 0,
+      "maxDeg": 60
+    },
+    "bendSign": 1
+  },
+  "restrictedCase": {
+    "name": "bend-limit-clamps",
+    "target": {
+      "x": 100,
+      "y": 100
+    },
+    "expect": {
+      "rootAngleDeg": 11.551958535304585,
+      "bendAngleDeg": 60,
+      "requiredBendDeg": 76.99712183708606,
+      "elbow": {
+        "x": 97.97435053981016,
+        "y": 20.02564946018983
+      },
+      "end": {
+        "x": 123.28991382788902,
+        "y": 95.91453043367153
+      },
+      "reachable": true,
+      "limited": true
+    }
+  },
+  "propagateChain": {
+    "nodes": [
+      {
+        "id": "shoulder",
+        "limit": {
+          "minDeg": -90,
+          "maxDeg": 90
+        },
+        "couplingToChild": 1.0
+      },
+      {
+        "id": "elbow",
+        "limit": {
+          "minDeg": -45,
+          "maxDeg": 45
+        },
+        "couplingToChild": 0.5
+      },
+      {
+        "id": "wrist",
+        "limit": {
+          "minDeg": -30,
+          "maxDeg": 30
+        },
+        "couplingToChild": 0
+      }
+    ],
+    "cases": [
+      {
+        "name": "pass-through",
+        "rawDeltaDeg": 30,
+        "expectRealized": [
+          30,
+          30,
+          15
+        ],
+        "expectBlocked": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "root-clipped",
+        "rawDeltaDeg": 200,
+        "expectRealized": [
+          90,
+          45,
+          22.5
+        ],
+        "expectBlocked": [
+          110,
+          45,
+          0
+        ]
+      },
+      {
+        "name": "child-clipped",
+        "rawDeltaDeg": 100,
+        "expectRealized": [
+          90,
+          45,
+          22.5
+        ],
+        "expectBlocked": [
+          10,
+          45,
+          0
+        ]
+      },
+      {
+        "name": "negative",
+        "rawDeltaDeg": -40,
+        "expectRealized": [
+          -40,
+          -40,
+          -20
+        ],
+        "expectBlocked": [
+          0,
+          0,
+          0
+        ]
+      }
+    ]
+  }
+}

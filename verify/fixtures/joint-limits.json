@@ -1,0 +1,14 @@
+{
+  "description": "关节铰链收敛行为夹具：边界与越界输入。所有角度单位为度，步长固定 1/60s。",
+  "joint": { "minDeg": -90, "maxDeg": 90, "damping": 0.3, "stiffness": 30 },
+  "settle": { "maxSteps": 600, "angleToleranceDeg": 0.05, "velocityToleranceDegPerSec": 0.5, "holdSteps": 120 },
+  "scenarios": [
+    { "name": "interior-target", "targetDeg": 45, "expect": { "clamped": false, "settleAtDeg": 45 } },
+    { "name": "exact-min-boundary", "targetDeg": -90, "expect": { "clamped": false, "settleAtDeg": -90 } },
+    { "name": "exact-max-boundary", "targetDeg": 90, "expect": { "clamped": false, "settleAtDeg": 90 } },
+    { "name": "beyond-max", "targetDeg": 720, "expect": { "clamped": true, "settleAtDeg": 90 } },
+    { "name": "beyond-min", "targetDeg": -720, "expect": { "clamped": true, "settleAtDeg": -90 } }
+  ],
+  "invalidTargets": ["NaN", "Infinity", "-Infinity"],
+  "forceScenario": { "forceDegPerSecSq": 3000, "steps": 600, "expectSettleAtDeg": 0 }
+}

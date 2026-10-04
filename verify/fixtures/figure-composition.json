@@ -1,0 +1,66 @@
+{
+  "description": "角色合成夹具：6 部件标准影人。黄金姿态由独立旋转矩阵计算生成（非被测代码输出）。坐标为戏台坐标，角度为度。",
+  "figure": {
+    "id": "fixture-figure-1",
+    "rootPlacement": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90 },
+    "parts": [
+      { "id": "body", "type": "body", "length": 120, "anchor": { "x": 0, "y": 0 } },
+      { "id": "head", "type": "head", "length": 0, "anchor": { "x": 0, "y": 0 } },
+      { "id": "armLeft", "type": "armLeft", "length": 80, "anchor": { "x": 0, "y": 0 } },
+      { "id": "armRight", "type": "armRight", "length": 80, "anchor": { "x": 0, "y": 0 } },
+      { "id": "legLeft", "type": "legLeft", "length": 90, "anchor": { "x": 0, "y": 0 } },
+      { "id": "legRight", "type": "legRight", "length": 90, "anchor": { "x": 0, "y": 0 } }
+    ],
+    "bindings": [
+      { "id": "neck", "childPartId": "head", "parentPartId": "body", "pivot": { "x": 0, "y": 0 }, "minDeg": -45, "maxDeg": 45 },
+      { "id": "shoulderL", "childPartId": "armLeft", "parentPartId": "body", "pivot": { "x": 10, "y": -12 }, "minDeg": -170, "maxDeg": 170 },
+      { "id": "shoulderR", "childPartId": "armRight", "parentPartId": "body", "pivot": { "x": 10, "y": 12 }, "minDeg": -170, "maxDeg": 170 },
+      { "id": "hipL", "childPartId": "legLeft", "parentPartId": "body", "pivot": { "x": 115, "y": -8 }, "minDeg": -60, "maxDeg": 60 },
+      { "id": "hipR", "childPartId": "legRight", "parentPartId": "body", "pivot": { "x": 115, "y": 8 }, "minDeg": -60, "maxDeg": 60 }
+    ]
+  },
+  "poses": [
+    {
+      "name": "rest",
+      "jointAngles": { "neck": 0, "shoulderL": 0, "shoulderR": 0, "hipL": 0, "hipR": 0 },
+      "expectClamped": [],
+      "expectMissing": [],
+      "expectParts": {
+        "body": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90, "tip": { "x": 400, "y": 320 } },
+        "head": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90, "tip": { "x": 400, "y": 200 } },
+        "armLeft": { "position": { "x": 412, "y": 210 }, "rotationDeg": 90, "tip": { "x": 412, "y": 290 } },
+        "armRight": { "position": { "x": 388, "y": 210 }, "rotationDeg": 90, "tip": { "x": 388, "y": 290 } },
+        "legLeft": { "position": { "x": 408, "y": 315 }, "rotationDeg": 90, "tip": { "x": 408, "y": 405 } },
+        "legRight": { "position": { "x": 392, "y": 315 }, "rotationDeg": 90, "tip": { "x": 392, "y": 405 } }
+      }
+    },
+    {
+      "name": "wave",
+      "jointAngles": { "neck": 15, "shoulderL": -90, "shoulderR": 0, "hipL": 30 },
+      "expectClamped": [],
+      "expectMissing": ["hipR"],
+      "expectParts": {
+        "body": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90, "tip": { "x": 400, "y": 320 } },
+        "head": { "position": { "x": 400, "y": 200 }, "rotationDeg": 105, "tip": { "x": 400, "y": 200 } },
+        "armLeft": { "position": { "x": 412, "y": 210 }, "rotationDeg": 0, "tip": { "x": 492, "y": 210 } },
+        "armRight": { "position": { "x": 388, "y": 210 }, "rotationDeg": 90, "tip": { "x": 388, "y": 290 } },
+        "legLeft": { "position": { "x": 408, "y": 315 }, "rotationDeg": 120, "tip": { "x": 363, "y": 392.9422863405995 } },
+        "legRight": { "position": { "x": 392, "y": 315 }, "rotationDeg": 90, "tip": { "x": 392, "y": 405 } }
+      }
+    },
+    {
+      "name": "beyond-limits",
+      "jointAngles": { "neck": 0, "shoulderL": -200, "shoulderR": 0, "hipL": 0, "hipR": 120 },
+      "expectClamped": ["shoulderL", "hipR"],
+      "expectMissing": [],
+      "expectParts": {
+        "body": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90, "tip": { "x": 400, "y": 320 } },
+        "head": { "position": { "x": 400, "y": 200 }, "rotationDeg": 90, "tip": { "x": 400, "y": 200 } },
+        "armLeft": { "position": { "x": 412, "y": 210 }, "rotationDeg": -80, "tip": { "x": 425.8918542133544, "y": 131.21537975902336 } },
+        "armRight": { "position": { "x": 388, "y": 210 }, "rotationDeg": 90, "tip": { "x": 388, "y": 290 } },
+        "legLeft": { "position": { "x": 408, "y": 315 }, "rotationDeg": 90, "tip": { "x": 408, "y": 405 } },
+        "legRight": { "position": { "x": 392, "y": 315 }, "rotationDeg": 150, "tip": { "x": 314.0577136594005, "y": 360 } }
+      }
+    }
+  ]
+}
