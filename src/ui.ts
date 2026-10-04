@@ -118,6 +118,9 @@ export class UIManager {
         line.setAttribute('stroke-width', '2');
         line.setAttribute('marker-end', 'url(#arrowhead)');
         line.setAttribute('opacity', '0.6');
+        line.setAttribute('class', 'food-chain-line');
+        line.dataset.predator = predator;
+        line.dataset.prey = prey;
         svg.appendChild(line);
       }
     }
@@ -190,6 +193,8 @@ export class UIManager {
     const stats = this.ecosystem.getPopulationStats();
     const maxPop = this.ecosystem.getMaxPopulation();
 
+    this.updateFoodChain(stats);
+
     const bars = this.chartContainer.querySelectorAll<HTMLElement>('.chart-bar');
     bars.forEach((bar) => {
       const type = bar.dataset.type as AnimalType;
@@ -202,6 +207,15 @@ export class UIManager {
 
       const valueEl = bar.querySelector('.chart-bar-value');
       if (valueEl) valueEl.textContent = String(count);
+    });
+  }
+
+  private updateFoodChain(stats: Record<AnimalType, number>): void {
+    const lines = this.foodChainSvg.querySelectorAll<SVGLineElement>('.food-chain-line');
+    lines.forEach((line) => {
+      const preyType = line.dataset.prey as AnimalType | undefined;
+      const depleted = preyType !== undefined && (stats[preyType] || 0) === 0;
+      line.classList.toggle('depleted', depleted);
     });
   }
 

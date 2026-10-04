@@ -12,6 +12,7 @@ export interface Animal {
   hunger: number;
   maxHunger: number;
   energy: number;
+  maxEnergy: number;
   color: string;
   size: number;
   isDying: boolean;
@@ -39,19 +40,25 @@ export interface AnimalConfig {
   color: string;
   size: number;
   hungerRate: number;
+  feedingRate: number;
   shape: 'ellipse' | 'diamond' | 'rect' | 'circle' | 'pentagon' | 'triangle' | 'trapezoid' | 'wave';
   name: string;
 }
 
+export const INITIAL_ENERGY = 60;
+export const MAX_ENERGY = 100;
+export const METABOLISM_RATE = 0.15;
+export const PREDATION_ENERGY_RATIO = 0.5;
+
 export const ANIMAL_CONFIG: Record<AnimalType, AnimalConfig> = {
-  rabbit: { diet: 'herbivore', color: '#ffffff', size: 12, hungerRate: 0.1, shape: 'ellipse', name: '兔子' },
-  sheep: { diet: 'herbivore', color: '#f5f5dc', size: 18, hungerRate: 0.08, shape: 'diamond', name: '羊' },
-  deer: { diet: 'herbivore', color: '#8b4513', size: 22, hungerRate: 0.06, shape: 'rect', name: '鹿' },
-  hamster: { diet: 'herbivore', color: '#ffa500', size: 8, hungerRate: 0.15, shape: 'circle', name: '仓鼠' },
-  squirrel: { diet: 'herbivore', color: '#a0522d', size: 10, hungerRate: 0.12, shape: 'pentagon', name: '松鼠' },
-  wolf: { diet: 'carnivore', color: '#808080', size: 20, hungerRate: 0.05, shape: 'triangle', name: '狼' },
-  eagle: { diet: 'carnivore', color: '#1e3a5f', size: 16, hungerRate: 0.07, shape: 'trapezoid', name: '鹰' },
-  snake: { diet: 'carnivore', color: '#228b22', size: 14, hungerRate: 0.09, shape: 'wave', name: '蛇' },
+  rabbit: { diet: 'herbivore', color: '#ffffff', size: 12, hungerRate: 0.1, feedingRate: 1.0, shape: 'ellipse', name: '兔子' },
+  sheep: { diet: 'herbivore', color: '#f5f5dc', size: 18, hungerRate: 0.08, feedingRate: 1.1, shape: 'diamond', name: '羊' },
+  deer: { diet: 'herbivore', color: '#8b4513', size: 22, hungerRate: 0.06, feedingRate: 1.2, shape: 'rect', name: '鹿' },
+  hamster: { diet: 'herbivore', color: '#ffa500', size: 8, hungerRate: 0.15, feedingRate: 0.8, shape: 'circle', name: '仓鼠' },
+  squirrel: { diet: 'herbivore', color: '#a0522d', size: 10, hungerRate: 0.12, feedingRate: 0.9, shape: 'pentagon', name: '松鼠' },
+  wolf: { diet: 'carnivore', color: '#808080', size: 20, hungerRate: 0.05, feedingRate: 0, shape: 'triangle', name: '狼' },
+  eagle: { diet: 'carnivore', color: '#1e3a5f', size: 16, hungerRate: 0.07, feedingRate: 0, shape: 'trapezoid', name: '鹰' },
+  snake: { diet: 'carnivore', color: '#228b22', size: 14, hungerRate: 0.09, feedingRate: 0, shape: 'wave', name: '蛇' },
 };
 
 export const PREDATION_MAP: Record<string, AnimalType[]> = {
