@@ -6,6 +6,8 @@ import {
   ANIMAL_CONFIG,
   PREDATION_MAP,
   ALL_ANIMALS,
+  ENERGY_TRANSFER_RATIO,
+  METABOLIC_DRAIN_SCALE,
 } from './types';
 
 const MAP_WIDTH = 800;
@@ -21,11 +23,12 @@ export class Ecosystem {
     light: 50,
     pollution: 10,
   };
+  private pendingParams: Partial<EnvironmentParams> = {};
   private nextId = 0;
-  private statsUpdateCounter = 0;
   private populationStats: Record<AnimalType, number> = {} as Record<AnimalType, number>;
   private grid: Map<string, Animal[]> = new Map();
   private audioContext: AudioContext | null = null;
+  autoRespawn: boolean = true;
 
   constructor(initialCount: number) {
     this.initAnimals(initialCount);
@@ -33,6 +36,7 @@ export class Ecosystem {
   }
 
   private initAudio(): void {
+    if (typeof window === 'undefined') return;
     try {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     } catch (e) {
@@ -52,7 +56,7 @@ export class Ecosystem {
     this.updatePopulationStats();
   }
 
-  private addAnimal(type: AnimalType): void {
+  addAnimal(type: AnimalType, x?: number, y?: number): Animal {
     const config = ANIMAL_CONFIG[type];
     const angle = Math.random() * Math.PI * 2;
     const speed = 2 + Math.random() * 2;
@@ -61,13 +65,14 @@ export class Ecosystem {
       id: this.nextId++,
       type,
       diet: config.diet,
-      x: Math.random() * (MAP_WIDTH - 40) + 20,
-      y: Math.random() * (MAP_HEIGHT - 40) + 20,
+      x: x ?? Math.random() * (MAP_WIDTH - 40) + 20,
+      y: y ?? Math.random() * (MAP_HEIGHT - 40) + 20,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       hunger: 20 + Math.random() * 30,
       maxHunger: 100,
-      energy: 50,
+      energy: config.maxEnergy * (0.5 + Math.random() * 0.3),
+      maxEnergy: config.maxEnergy,
       color: config.color,
       size: config.size,
       isDying: false,
@@ -75,6 +80,7 @@ export class Ecosystem {
     };
 
     this.animals.push(animal);
+    return animal;
   }
 
   playParamSound(paramType: string, value: number): void {
@@ -143,15 +149,22 @@ export class Ecosystem {
   }
 
   setParams(params: Partial<EnvironmentParams>): void {
-    this.params = { ...this.params, ...params };
+    this.pendingParams = { ...this.pendingParams, ...params };
   }
 
   getParams(): EnvironmentParams {
-    return { ...this.params };
+    return { ...this.params, ...this.pendingParams };
+  }
+
+  private applyPendingParams(): void {
+    if (Object.keys(this.pendingParams).length === 0) return;
+    this.params = { ...this.params, ...this.pendingParams };
+    this.pendingParams = {};
   }
 
   update(deltaTime: number): void {
     const dt = Math.min(deltaTime, 0.05);
+    this.applyPendingParams();
     const plantDensity = this.calculatePlantDensity();
 
     this.updateGrid();
@@ -164,17 +177,15 @@ export class Ecosystem {
 
       this.updateAnimalMovement(animal, dt);
       this.updateAnimalHunger(animal, dt, plantDensity);
+      if (!animal.isDying) {
+        this.updateAnimalEnergy(animal, dt, plantDensity);
+      }
     }
 
     this.checkPredation();
     this.updateFloatingTexts(dt);
     this.removeDeadAnimals();
-
-    this.statsUpdateCounter++;
-    if (this.statsUpdateCounter >= 10) {
-      this.statsUpdateCounter = 0;
-      this.updatePopulationStats();
-    }
+    this.updatePopulationStats();
   }
 
   private calculatePlantDensity(): number {
@@ -277,7 +288,28 @@ export class Ecosystem {
     }
   }
 
+  private updateAnimalEnergy(animal: Animal, dt: number, plantDensity: number): void {
+    const config = ANIMAL_CONFIG[animal.type];
+
+    animal.energy -= config.hungerRate * METABOLIC_DRAIN_SCALE * dt;
+
+    if (animal.diet === 'herbivore') {
+      animal.energy += plantDensity * config.feedingRate * dt;
+    }
+
+    if (animal.energy > animal.maxEnergy) {
+      animal.energy = animal.maxEnergy;
+    }
+
+    if (animal.energy <= 0) {
+      animal.energy = 0;
+      animal.isDying = true;
+      animal.deathAnimation = 0;
+    }
+  }
+
   private checkPredation(): void {
+    const consumedIds = new Set<number>();
     const predators = this.animals.filter(a => a.diet === 'carnivore' && !a.isDying);
 
     for (const predator of predators) {
@@ -287,7 +319,7 @@ export class Ecosystem {
       const preyTypes = PREDATION_MAP[predator.type] || [];
 
       for (const prey of nearby) {
-        if (prey.isDying) continue;
+        if (prey.isDying || consumedIds.has(prey.id)) continue;
         if (!preyTypes.includes(prey.type)) continue;
 
         const dist = Math.hypot(predator.x - prey.x, predator.y - prey.y);
@@ -295,21 +327,28 @@ export class Ecosystem {
 
         if (dist < collisionDist) {
           this.executePredation(predator, prey);
+          consumedIds.add(prey.id);
           break;
         }
       }
     }
+
+    if (consumedIds.size > 0) {
+      this.animals = this.animals.filter(a => !consumedIds.has(a.id));
+    }
   }
 
   private executePredation(predator: Animal, prey: Animal): void {
+    const energyGain = prey.energy * ENERGY_TRANSFER_RATIO;
+
+    predator.energy = Math.min(predator.maxEnergy, predator.energy + energyGain);
+    predator.hunger = Math.max(0, predator.hunger - energyGain);
+
     prey.isDying = true;
+    prey.energy = 0;
     prey.deathAnimation = 0;
 
-    const energyGain = Math.floor(20 + prey.size);
-    predator.hunger = Math.max(0, predator.hunger - energyGain * 0.5);
-    predator.energy += energyGain * 0.3;
-
-    this.addFloatingText(predator.x, predator.y - predator.size - 10, `+${energyGain}能量`, '#ffd700');
+    this.addFloatingText(predator.x, predator.y - predator.size - 10, `+${Math.round(energyGain)}能量`, '#ffd700');
     this.playPredationSound();
   }
 
@@ -335,7 +374,7 @@ export class Ecosystem {
   private removeDeadAnimals(): void {
     this.animals = this.animals.filter(a => !a.isDying || a.deathAnimation < 1);
 
-    if (this.animals.length < 20 && Math.random() < 0.02) {
+    if (this.autoRespawn && this.animals.length < 20 && Math.random() < 0.02) {
       const type = ALL_ANIMALS[Math.floor(Math.random() * ALL_ANIMALS.length)];
       this.addAnimal(type);
     }
@@ -378,6 +417,7 @@ export class Ecosystem {
 
   reset(initialCount: number): void {
     this.floatingTexts = [];
+    this.pendingParams = {};
     this.initAnimals(initialCount);
   }
 }

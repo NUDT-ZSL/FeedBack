@@ -82,6 +82,7 @@ interface Animal {
   hunger: number;        // 0-100，越高越饿
   maxHunger: number;
   energy: number;
+  maxEnergy: number;
   color: string;
   size: number;
   isDying: boolean;
@@ -103,24 +104,37 @@ const PREDATION_MAP: Record<AnimalType, AnimalType[]> = {
   snake: ['hamster', 'squirrel', 'rabbit'],
 };
 
-// 动物配置
-const ANIMAL_CONFIG: Record<AnimalType, { diet: Diet; color: string; size: number; hungerRate: number }> = {
-  rabbit: { diet: 'herbivore', color: '#ffffff', size: 12, hungerRate: 0.1 },
-  sheep: { diet: 'herbivore', color: '#f5f5dc', size: 18, hungerRate: 0.08 },
-  deer: { diet: 'herbivore', color: '#8b4513', size: 22, hungerRate: 0.06 },
-  hamster: { diet: 'herbivore', color: '#ffa500', size: 8, hungerRate: 0.15 },
-  squirrel: { diet: 'herbivore', color: '#a0522d', size: 10, hungerRate: 0.12 },
-  wolf: { diet: 'carnivore', color: '#808080', size: 20, hungerRate: 0.05 },
-  eagle: { diet: 'carnivore', color: '#1e3a5f', size: 16, hungerRate: 0.07 },
-  snake: { diet: 'carnivore', color: '#228b22', size: 14, hungerRate: 0.09 },
+// 动物配置：maxEnergy 为能量上限，feedingRate 为满植物密度下植食动物的取食速率
+const ANIMAL_CONFIG: Record<AnimalType, {
+  diet: Diet; color: string; size: number; hungerRate: number;
+  maxEnergy: number; feedingRate: number;
+}> = {
+  rabbit:   { diet: 'herbivore', color: '#ffffff', size: 12, hungerRate: 0.1,  maxEnergy: 80,  feedingRate: 8  },
+  sheep:    { diet: 'herbivore', color: '#f5f5dc', size: 18, hungerRate: 0.08, maxEnergy: 120, feedingRate: 7  },
+  deer:     { diet: 'herbivore', color: '#8b4513', size: 22, hungerRate: 0.06, maxEnergy: 150, feedingRate: 6  },
+  hamster:  { diet: 'herbivore', color: '#ffa500', size: 8,  hungerRate: 0.15, maxEnergy: 60,  feedingRate: 10 },
+  squirrel: { diet: 'herbivore', color: '#a0522d', size: 10, hungerRate: 0.12, maxEnergy: 70,  feedingRate: 9  },
+  wolf:     { diet: 'carnivore', color: '#808080', size: 20, hungerRate: 0.05, maxEnergy: 200, feedingRate: 0 },
+  eagle:    { diet: 'carnivore', color: '#1e3a5f', size: 16, hungerRate: 0.07, maxEnergy: 150, feedingRate: 0 },
+  snake:    { diet: 'carnivore', color: '#228b22', size: 14, hungerRate: 0.09, maxEnergy: 120, feedingRate: 0 },
 };
 ```
 
-### 4.2 数据流向
+### 4.2 能量收支
+
+- **代谢消耗**：每帧 `energy -= hungerRate * METABOLIC_DRAIN_SCALE * dt`，所有动物都消耗能量。
+- **植食取食**：每帧 `energy += 植物密度 * feedingRate * dt`，植物密度由温度、降水、光照、污染共同决定；能量不超过 `maxEnergy`。
+- **捕食转移**：捕食成功时捕食者获得被捕食者剩余能量的 `ENERGY_TRANSFER_RATIO`（0.5），被捕食者当帧立即退出模拟；同帧通过 `consumedIds` 保证一个猎物只被结算一次。
+- **死亡**：`energy <= 0` 或 `hunger >= maxHunger` 都进入死亡动画；动画期间个体不进入空间网格、不会被捕食者选中，也不计入存活统计。
+- **参数帧末生效**：`setParams()` 只写入 `pendingParams`，`update()` 开头统一应用，同帧多次修改时取食与捕食均按最终参数结算。
+- **存活统计**：每帧末尾重建 `populationStats`，只统计非死亡动画中的个体；食物链面板中存活为零的被捕食者对应连线降级为灰色虚线，种群柱状图高度与数值同步。
+- **离线验证**：`npm run verify` 运行 `verify/energy-verify.ts`（esbuild 打包后由 Node 执行），覆盖能量耗尽死亡、捕食能量转移、同帧重复结算、参数同帧多次修改与连续推进自洽性。
+
+### 4.3 数据流向
 
 1. **初始化**：用户配置初始动物数量 → ecosystem.ts 生成随机位置的动物数组
-2. **帧更新**：requestAnimationFrame 触发 → 每帧更新动物位置、饥饿度 → 碰撞检测 → 捕食逻辑
-3. **参数更新**：滑块事件 → ui.ts → ecosystem.updateParams() → 影响植物密度 → 影响植食动物饥饿度
+2. **帧更新**：requestAnimationFrame 触发 → 应用本帧最终参数 → 每帧更新位置、饥饿度与能量收支 → 捕食能量转移 → 存活统计
+3. **参数更新**：滑块事件 → ui.ts → ecosystem.setParams()（帧末生效）→ 影响植物密度 → 影响植食动物取食能量
 4. **渲染**：renderer.ts 从 ecosystem 获取状态 → Canvas 绘制背景、动物、动画、柱状图
 
 ## 5. 性能优化策略

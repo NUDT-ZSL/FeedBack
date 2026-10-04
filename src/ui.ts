@@ -17,6 +17,7 @@ export class UIManager {
   private chartContainer: HTMLElement;
   private isExpanded: boolean = false;
   private lastSoundTime: number = 0;
+  private foodChainLines: Array<{ line: SVGLineElement; prey: AnimalType }> = [];
 
   constructor(container: HTMLElement, ecosystem: Ecosystem) {
     this.ecosystem = ecosystem;
@@ -119,6 +120,7 @@ export class UIManager {
         line.setAttribute('marker-end', 'url(#arrowhead)');
         line.setAttribute('opacity', '0.6');
         svg.appendChild(line);
+        this.foodChainLines.push({ line, prey });
       }
     }
 
@@ -144,6 +146,8 @@ export class UIManager {
       text.textContent = config.name;
       svg.appendChild(text);
     }
+
+    this.updateFoodChain(this.ecosystem.getPopulationStats());
   }
 
   private initChartBars(): void {
@@ -153,12 +157,12 @@ export class UIManager {
     for (const type of ALL_ANIMALS) {
       const config = ANIMAL_CONFIG[type];
       const count = this.ecosystem.getPopulationStats()[type] || 0;
-      const heightPercent = maxPop > 0 ? (count / maxPop) * 100 : 0;
+      const heightPercent = count > 0 && maxPop > 0 ? (count / maxPop) * 100 : 0;
 
       const barWrapper = document.createElement('div');
       barWrapper.className = 'chart-bar';
       barWrapper.style.backgroundColor = config.color;
-      barWrapper.style.height = `${Math.max(heightPercent, 2)}%`;
+      barWrapper.style.height = `${heightPercent}%`;
       barWrapper.dataset.type = type;
 
       const barValue = document.createElement('div');
@@ -190,19 +194,37 @@ export class UIManager {
     const stats = this.ecosystem.getPopulationStats();
     const maxPop = this.ecosystem.getMaxPopulation();
 
+    this.updateFoodChain(stats);
+
     const bars = this.chartContainer.querySelectorAll<HTMLElement>('.chart-bar');
     bars.forEach((bar) => {
       const type = bar.dataset.type as AnimalType;
       if (!type) return;
 
       const count = stats[type] || 0;
-      const heightPercent = maxPop > 0 ? (count / maxPop) * 100 : 0;
+      const heightPercent = count > 0 && maxPop > 0 ? (count / maxPop) * 100 : 0;
 
-      bar.style.height = `${Math.max(heightPercent, 2)}%`;
+      bar.style.height = `${heightPercent}%`;
 
       const valueEl = bar.querySelector('.chart-bar-value');
       if (valueEl) valueEl.textContent = String(count);
     });
+  }
+
+  private updateFoodChain(stats: Record<AnimalType, number>): void {
+    for (const { line, prey } of this.foodChainLines) {
+      const degraded = (stats[prey] || 0) === 0;
+
+      if (degraded) {
+        line.setAttribute('stroke', '#5a5a5a');
+        line.setAttribute('stroke-dasharray', '4,4');
+        line.setAttribute('opacity', '0.3');
+      } else {
+        line.setAttribute('stroke', '#4caf50');
+        line.removeAttribute('stroke-dasharray');
+        line.setAttribute('opacity', '0.6');
+      }
+    }
   }
 
   updateFromEcosystemParams(): void {
