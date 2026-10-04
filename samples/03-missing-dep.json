@@ -1,0 +1,34 @@
+{
+  "name": "03-missing-dep",
+  "title": "依赖指向不存在的任务：保留冲突不静默跳过，裁决改指后重算",
+  "decls": [
+    { "id": "a", "dependsOn": ["ghost"], "duration": 2, "source": "mod-a/manifest.json:4" },
+    { "id": "b", "dependsOn": [], "duration": 2, "source": "mod-b/manifest.json:2" },
+    { "id": "c", "dependsOn": ["a", "b"], "duration": 1, "source": "build/pipeline.toml:6" }
+  ],
+  "expect": {
+    "order": ["a", "b", "c"],
+    "est": { "a": 0, "b": 0, "c": 2 },
+    "finish": { "a": 2, "b": 2, "c": 3 },
+    "criticalPath": ["a", "c"],
+    "makespan": 3,
+    "conflicts": [{ "type": "missing-dependency", "taskId": "a", "dep": "ghost" }],
+    "unscheduled": []
+  },
+  "steps": [
+    {
+      "title": "裁决：将 a → ghost 改指到 b",
+      "apply": [{ "kind": "retarget-dependency", "taskId": "a", "dep": "ghost", "to": "b" }],
+      "expectAffected": ["a", "c"],
+      "expect": {
+        "order": ["b", "a", "c"],
+        "est": { "b": 0, "a": 2, "c": 4 },
+        "finish": { "b": 2, "a": 4, "c": 5 },
+        "criticalPath": ["b", "a", "c"],
+        "makespan": 5,
+        "conflicts": [],
+        "unscheduled": []
+      }
+    }
+  ]
+}

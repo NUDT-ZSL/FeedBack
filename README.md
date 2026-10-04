@@ -1,57 +1,30 @@
-# React + TypeScript + Vite
+# 构建依赖推演工作台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+把散落在各模块的依赖关系与构建顺序推导收敛为一个可离线运行的推演工作台：输入一组带标识、依赖指向、耗时与来源说明的任务声明，推导出合法构建顺序、每项任务的最早可开始时刻与关键路径，并能解释某项任务为何排在当前位置。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev       # 浏览器工作台（加载样例、裁决冲突、查看顺序/时刻/依据）
+npm run samples   # 离线批量入口：运行 samples/ 下全部样例并断言结果
+npm run build     # 类型检查 + 构建
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 结构
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `src/engine/` 推演引擎（纯 TypeScript，无 UI 依赖）
+  - `types.ts` 任务声明、裁决、冲突、推导结果等类型
+  - `derive.ts` 声明合并与裁决应用、拓扑排序（字典序确定性）、最早开始时刻、关键路径、增量重推
+  - `explain.ts` 生成“某任务为何排在该位置”的可追溯依据
+  - `workbench.ts` 状态化工作台：整体重推 / 应用裁决后增量重推 / 审计日志
+- `samples/` 本地样例：正常、成环、依赖缺失、耗时冲突、局部修正后增量重推
+- `scripts/run-samples.ts` 批量运行入口，逐步断言增量重推与整体重推逐字段一致
+- `src/pages/Home.tsx` + `src/components/workbench/` 浏览器工作台界面
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 边界处理
+
+- 依赖指向不存在的任务：保留为冲突并展示来源，可裁决移除或改指，不静默跳过
+- 依赖成环：环成员及其传递下游不可调度，列出环内所有边供裁决断开
+- 多来源重复声明且耗时不一致：保留全部来源，裁决前时刻不定，不擅自择一
+- 局部修正后只重推受影响任务（裁决目标及其传递下游），结果与整体重推一致（批量入口逐步验证）

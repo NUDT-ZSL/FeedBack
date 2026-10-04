@@ -1,0 +1,34 @@
+{
+  "name": "04-duration-conflict",
+  "title": "同一任务多来源重复声明且耗时不一致：保留冲突，裁决后恢复时刻",
+  "decls": [
+    { "id": "a", "dependsOn": [], "duration": 3, "source": "mod-a/manifest.json:1" },
+    { "id": "a", "dependsOn": [], "duration": 5, "source": "mod-a/legacy-manifest.json:1" },
+    { "id": "b", "dependsOn": ["a"], "duration": 2, "source": "mod-b/manifest.json:3" }
+  ],
+  "expect": {
+    "order": ["a", "b"],
+    "est": { "a": 0 },
+    "finish": {},
+    "criticalPath": [],
+    "makespan": null,
+    "conflicts": [{ "type": "duration-conflict", "taskId": "a" }],
+    "unscheduled": []
+  },
+  "steps": [
+    {
+      "title": "裁决：采用 mod-a/manifest.json 声明的耗时 3",
+      "apply": [{ "kind": "pick-duration", "taskId": "a", "source": "mod-a/manifest.json:1" }],
+      "expectAffected": ["a", "b"],
+      "expect": {
+        "order": ["a", "b"],
+        "est": { "a": 0, "b": 3 },
+        "finish": { "a": 3, "b": 5 },
+        "criticalPath": ["a", "b"],
+        "makespan": 5,
+        "conflicts": [],
+        "unscheduled": []
+      }
+    }
+  ]
+}

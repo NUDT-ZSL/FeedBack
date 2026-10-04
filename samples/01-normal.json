@@ -1,0 +1,20 @@
+{
+  "name": "01-normal",
+  "title": "正常：菱形依赖 + 可选依赖 + 并列关键前驱",
+  "decls": [
+    { "id": "a", "dependsOn": [], "duration": 3, "source": "core/manifest.yaml:3" },
+    { "id": "b", "dependsOn": ["a"], "duration": 2, "source": "core/manifest.yaml:8" },
+    { "id": "c", "dependsOn": ["a"], "duration": 4, "source": "ui/manifest.yaml:5" },
+    { "id": "d", "dependsOn": ["b", "c"], "duration": 1, "source": "build/pipeline.toml:12", "optionalDeps": ["e"] },
+    { "id": "e", "dependsOn": [], "duration": 1, "source": "tools/tasks.json:2" }
+  ],
+  "expect": {
+    "order": ["a", "b", "c", "d", "e"],
+    "est": { "a": 0, "b": 3, "c": 3, "d": 7, "e": 0 },
+    "finish": { "a": 3, "b": 5, "c": 7, "d": 8, "e": 1 },
+    "criticalPath": ["a", "c", "d"],
+    "makespan": 8,
+    "conflicts": [],
+    "unscheduled": []
+  }
+}

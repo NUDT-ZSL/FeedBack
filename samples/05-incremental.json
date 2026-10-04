@@ -1,0 +1,53 @@
+{
+  "name": "05-incremental",
+  "title": "局部修正后增量重推：影响集合精确，且与整体重推逐字段一致",
+  "decls": [
+    { "id": "a", "dependsOn": [], "duration": 2, "source": "srv/a.ts" },
+    { "id": "b", "dependsOn": ["a"], "duration": 3, "source": "srv/b.ts" },
+    { "id": "c", "dependsOn": ["a"], "duration": 1, "source": "srv/c.ts" },
+    { "id": "d", "dependsOn": ["b"], "duration": 2, "source": "srv/d.ts" },
+    { "id": "e", "dependsOn": ["c"], "duration": 4, "source": "srv/e.ts" },
+    { "id": "f", "dependsOn": ["d", "e"], "duration": 1, "source": "build/pipeline.toml" },
+    { "id": "g", "dependsOn": [], "duration": 5, "source": "srv/g.ts" },
+    { "id": "h", "dependsOn": ["g"], "duration": 1, "source": "srv/h.ts" }
+  ],
+  "expect": {
+    "order": ["a", "b", "c", "d", "e", "f", "g", "h"],
+    "est": { "a": 0, "b": 2, "c": 2, "d": 5, "e": 3, "f": 7, "g": 0, "h": 5 },
+    "finish": { "a": 2, "b": 5, "c": 3, "d": 7, "e": 7, "f": 8, "g": 5, "h": 6 },
+    "criticalPath": ["a", "b", "d", "f"],
+    "makespan": 8,
+    "conflicts": [],
+    "unscheduled": []
+  },
+  "steps": [
+    {
+      "title": "移除依赖边 f → e：只影响 f 本身，结果不变",
+      "apply": [{ "kind": "remove-dependency", "taskId": "f", "dep": "e" }],
+      "expectAffected": ["f"],
+      "expect": {
+        "order": ["a", "b", "c", "d", "e", "f", "g", "h"],
+        "est": { "a": 0, "b": 2, "c": 2, "d": 5, "e": 3, "f": 7, "g": 0, "h": 5 },
+        "finish": { "a": 2, "b": 5, "c": 3, "d": 7, "e": 7, "f": 8, "g": 5, "h": 6 },
+        "criticalPath": ["a", "b", "d", "f"],
+        "makespan": 8,
+        "conflicts": [],
+        "unscheduled": []
+      }
+    },
+    {
+      "title": "修正 c 的耗时 1 → 6：因 f→e 已移除，只影响 c、e，f 不受影响",
+      "apply": [{ "kind": "set-duration", "taskId": "c", "duration": 6 }],
+      "expectAffected": ["c", "e"],
+      "expect": {
+        "order": ["a", "b", "c", "d", "e", "f", "g", "h"],
+        "est": { "a": 0, "b": 2, "c": 2, "d": 5, "e": 8, "f": 7, "g": 0, "h": 5 },
+        "finish": { "a": 2, "b": 5, "c": 8, "d": 7, "e": 12, "f": 8, "g": 5, "h": 6 },
+        "criticalPath": ["a", "c", "e"],
+        "makespan": 12,
+        "conflicts": [],
+        "unscheduled": []
+      }
+    }
+  ]
+}

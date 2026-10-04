@@ -1,0 +1,36 @@
+{
+  "name": "02-cycle",
+  "title": "成环：a→b→c→a，下游任务一并不可调度，裁决断边后恢复",
+  "decls": [
+    { "id": "a", "dependsOn": ["b"], "duration": 1, "source": "mod-a/manifest.json:1" },
+    { "id": "b", "dependsOn": ["c"], "duration": 1, "source": "mod-b/manifest.json:1" },
+    { "id": "c", "dependsOn": ["a"], "duration": 1, "source": "mod-c/manifest.json:1" },
+    { "id": "d", "dependsOn": ["a"], "duration": 1, "source": "mod-d/manifest.json:1" },
+    { "id": "e", "dependsOn": [], "duration": 2, "source": "mod-e/manifest.json:1" }
+  ],
+  "expect": {
+    "order": ["e"],
+    "est": { "e": 0 },
+    "finish": { "e": 2 },
+    "criticalPath": ["e"],
+    "makespan": 2,
+    "conflicts": [{ "type": "dependency-cycle", "members": ["a", "b", "c"] }],
+    "unscheduled": ["a", "b", "c", "d"]
+  },
+  "steps": [
+    {
+      "title": "裁决：断开依赖边 c → a",
+      "apply": [{ "kind": "remove-dependency", "taskId": "c", "dep": "a" }],
+      "expectAffected": ["a", "b", "c", "d"],
+      "expect": {
+        "order": ["c", "b", "a", "d", "e"],
+        "est": { "c": 0, "b": 1, "a": 2, "d": 3, "e": 0 },
+        "finish": { "c": 1, "b": 2, "a": 3, "d": 4, "e": 2 },
+        "criticalPath": ["c", "b", "a", "d"],
+        "makespan": 4,
+        "conflicts": [],
+        "unscheduled": []
+      }
+    }
+  ]
+}
