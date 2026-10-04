@@ -4,6 +4,18 @@ import { OrbitControls, Line, Sphere, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 import { soundEngine, ScaleType } from './SoundEngine'
 import NoteGrid from './NoteGrid'
+import {
+  quantizeBeat,
+  beatToMs,
+  msToBeat,
+  recordBeatPosition,
+  findNoteAt,
+  buildPlaybackSchedule,
+  applyLightUp,
+  applyLightDown,
+  isNoteLit,
+  PlaybackEvent,
+} from './melodyUtils'
 
 interface Note {
   id: string
@@ -166,8 +178,8 @@ const NoteTrailManager: React.FC<{
   maxPitch: number
   turns: number
   onNoteDoubleClick: (id: string) => void
-  playingNoteIds: Set<string>
-}> = ({ notes, maxBeats, maxPitch, turns, onNoteDoubleClick, playingNoteIds }) => {
+  playingNoteCounts: Map<string, number>
+}> = ({ notes, maxBeats, maxPitch, turns, onNoteDoubleClick, playingNoteCounts }) => {
   const trailsRef = useRef<Map<string, TrailPoint[]>>(new Map())
 
   useFrame(() => {
@@ -200,7 +212,7 @@ const NoteTrailManager: React.FC<{
           maxBeats={maxBeats}
           maxPitch={maxPitch}
           turns={turns}
-          isPlaying={playingNoteIds.has(note.id)}
+          isPlaying={isNoteLit(playingNoteCounts, note.id)}
           onDoubleClick={onNoteDoubleClick}
           trailPoints={trailsRef.current.get(note.id) || []}
         />
@@ -215,8 +227,8 @@ const Scene: React.FC<{
   maxBeats: number
   maxPitch: number
   onNoteDoubleClick: (id: string) => void
-  playingNoteIds: Set<string>
-}> = ({ notes, turns, maxBeats, maxPitch, onNoteDoubleClick, playingNoteIds }) => {
+  playingNoteCounts: Map<string, number>
+}> = ({ notes, turns, maxBeats, maxPitch, onNoteDoubleClick, playingNoteCounts }) => {
   return (
     <>
       <ambientLight intensity={0.2} />
@@ -229,7 +241,7 @@ const Scene: React.FC<{
         maxPitch={maxPitch}
         turns={turns}
         onNoteDoubleClick={onNoteDoubleClick}
-        playingNoteIds={playingNoteIds}
+        playingNoteCounts={playingNoteCounts}
       />
       <OrbitControls
         enablePan={false}
@@ -252,13 +264,18 @@ const MelodyEditor: React.FC = () => {
   const [maxBeats] = useState(16)
   const [maxPitch] = useState(8)
   const [currentBeat, setCurrentBeat] = useState(0)
-  const [playingNoteIds, setPlayingNoteIds] = useState<Set<string>>(new Set())
+  const [playingNoteCounts, setPlayingNoteCounts] = useState<Map<string, number>>(new Map())
   const [beatPulse, setBeatPulse] = useState(false)
 
   const recordingStartTime = useRef<number>(0)
   const playStartTime = useRef<number>(0)
   const playIntervalRef = useRef<number | null>(null)
   const recordedNotesRef = useRef<Note[]>([])
+  const notesRef = useRef<Note[]>([])
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
 
   useEffect(() => {
     soundEngine.init()
@@ -280,44 +297,52 @@ const MelodyEditor: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isPlaying, notes])
 
+  const lightUpNote = useCallback((noteId: string) => {
+    setPlayingNoteCounts(prev => applyLightUp(prev, noteId))
+    setTimeout(() => {
+      setPlayingNoteCounts(prev => applyLightDown(prev, noteId))
+    }, NOTE_LIGHT_DURATION)
+  }, [])
+
   const addNote = useCallback((pitchIndex: number, beatPosition?: number) => {
-    if (notes.length >= MAX_NOTES) return
+    if (notesRef.current.length >= MAX_NOTES) return
+
+    const rawBeatPosition = beatPosition ??
+      (isRecording
+        ? recordBeatPosition(Date.now() - recordingStartTime.current, bpm)
+        : (notesRef.current.length % maxBeats))
+    const actualBeatPosition = quantizeBeat(rawBeatPosition)
+
+    const existing = findNoteAt(
+      isRecording
+        ? [...notesRef.current, ...recordedNotesRef.current]
+        : notesRef.current,
+      pitchIndex,
+      actualBeatPosition
+    )
+    if (existing) {
+      soundEngine.playNote(pitchIndex, scale)
+      lightUpNote(existing.id)
+      return
+    }
 
     const now = Date.now()
-    const timestamp = isRecording ? now - recordingStartTime.current : now
-    const actualBeatPosition = beatPosition ?? (isRecording ? (timestamp / 1000) * (bpm / 60) : (notes.length % maxBeats))
-
     const newNote: Note = {
       id: `note-${now}-${Math.random().toString(36).substr(2, 9)}`,
       pitchIndex,
       beatPosition: actualBeatPosition,
-      timestamp,
+      timestamp: isRecording ? beatToMs(actualBeatPosition, bpm) : now,
       color: getNoteColor(pitchIndex, maxPitch),
     }
 
     soundEngine.playNote(pitchIndex, scale)
+    lightUpNote(newNote.id)
 
     if (isRecording) {
       recordedNotesRef.current.push(newNote)
     }
-
     setNotes(prev => [...prev, newNote])
-
-    if (!isRecording) {
-      lightUpNote(newNote.id)
-    }
-  }, [notes.length, isRecording, bpm, maxBeats, maxPitch, scale])
-
-  const lightUpNote = useCallback((noteId: string) => {
-    setPlayingNoteIds(prev => new Set(prev).add(noteId))
-    setTimeout(() => {
-      setPlayingNoteIds(prev => {
-        const next = new Set(prev)
-        next.delete(noteId)
-        return next
-      })
-    }, NOTE_LIGHT_DURATION)
-  }, [])
+  }, [isRecording, bpm, maxBeats, maxPitch, scale, lightUpNote])
 
   const deleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId))
@@ -351,29 +376,29 @@ const MelodyEditor: React.FC = () => {
     setIsRecording(false)
     playStartTime.current = Date.now()
 
-    const sortedNotes = [...notes].sort((a, b) => a.timestamp - b.timestamp)
+    const schedule = buildPlaybackSchedule(notes, bpm)
     let noteIndex = 0
 
-    const maxTimestamp = sortedNotes[sortedNotes.length - 1].timestamp + 1000
+    const maxTimestamp = schedule[schedule.length - 1].timeMs + 1000
 
     const tick = () => {
       const elapsed = Date.now() - playStartTime.current
-      const beat = (elapsed / 1000) * (bpm / 60)
+      const beat = msToBeat(elapsed, bpm)
       setCurrentBeat(beat % maxBeats)
 
-      if (Math.floor(beat) !== Math.floor((elapsed - 16) / 1000 * (bpm / 60))) {
+      if (Math.floor(beat) !== Math.floor(msToBeat(elapsed - 16, bpm))) {
         setBeatPulse(true)
         setTimeout(() => setBeatPulse(false), 200)
       }
 
-      while (noteIndex < sortedNotes.length && sortedNotes[noteIndex].timestamp <= elapsed) {
-        const note = sortedNotes[noteIndex]
-        soundEngine.playNote(note.pitchIndex, scale)
-        lightUpNote(note.id)
+      let due: PlaybackEvent<Note> | undefined
+      while ((due = schedule[noteIndex]) && due.timeMs <= elapsed) {
+        soundEngine.playNote(due.note.pitchIndex, scale)
+        lightUpNote(due.note.id)
         noteIndex++
       }
 
-      if (elapsed < maxTimestamp && noteIndex < sortedNotes.length) {
+      if (elapsed < maxTimestamp) {
         playIntervalRef.current = requestAnimationFrame(tick)
       } else {
         setIsPlaying(false)
@@ -387,7 +412,7 @@ const MelodyEditor: React.FC = () => {
   const stopPlayback = useCallback(() => {
     setIsPlaying(false)
     setCurrentBeat(0)
-    setPlayingNoteIds(new Set())
+    setPlayingNoteCounts(new Map())
     if (playIntervalRef.current) {
       cancelAnimationFrame(playIntervalRef.current)
       playIntervalRef.current = null
@@ -534,7 +559,7 @@ const MelodyEditor: React.FC = () => {
               maxBeats={maxBeats}
               maxPitch={maxPitch}
               onNoteDoubleClick={deleteNote}
-              playingNoteIds={playingNoteIds}
+              playingNoteCounts={playingNoteCounts}
             />
           </Canvas>
 
