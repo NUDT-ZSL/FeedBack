@@ -6,6 +6,26 @@ export enum VisualizationMode {
   PARTICLES = 'particles'
 }
 
+export interface SculptureFrame {
+  frequencyData: number[];
+  waveformData: number[];
+  delta: number;
+  isPlaying: boolean;
+  paused: boolean;
+}
+
+export interface SculptureStateSnapshot {
+  mode: VisualizationMode;
+  targetMode: VisualizationMode;
+  transitioning: boolean;
+  rotationY: number;
+  cubesVisible: boolean;
+  particlesVisible: boolean;
+  heights: number[];
+  colors: number[];
+  particlePositions: number[];
+}
+
 interface CubeState {
   targetHeight: number;
   currentHeight: number;
@@ -39,6 +59,7 @@ export class SculptureBuilder {
   private particleColors: Float32Array = new Float32Array();
   
   private currentMode: VisualizationMode = VisualizationMode.SPECTRUM;
+  private targetMode: VisualizationMode = VisualizationMode.SPECTRUM;
   private animationState: 'idle' | 'collapsing' | 'reforming' = 'idle';
   private animationProgress: number = 0;
   private animationDuration: number = 1;
@@ -265,27 +286,31 @@ export class SculptureBuilder {
     return color;
   }
 
-  update(frequencyData: number[], waveformData: number[], delta: number, isPlaying: boolean): void {
+  update(frame: SculptureFrame): void {
     if (this.animationState !== 'idle') {
-      this.updateTransition(delta);
+      this.updateTransition(frame.delta);
       return;
     }
 
-    this.sculptureGroup.rotation.y += this.ROTATION_SPEED * delta;
-    
+    this.sculptureGroup.rotation.y += this.ROTATION_SPEED * frame.delta;
+
     if (this.starField) {
-      this.starField.rotation.y += this.ROTATION_SPEED * 0.1 * delta;
+      this.starField.rotation.y += this.ROTATION_SPEED * 0.1 * frame.delta;
+    }
+
+    if (frame.paused) {
+      return;
     }
 
     switch (this.currentMode) {
       case VisualizationMode.SPECTRUM:
-        this.updateSpectrumMode(frequencyData, delta, isPlaying);
+        this.updateSpectrumMode(frame.frequencyData, frame.delta, frame.isPlaying);
         break;
       case VisualizationMode.WAVEFORM:
-        this.updateWaveformMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateWaveformMode(frame.frequencyData, frame.waveformData, frame.delta, frame.isPlaying);
         break;
       case VisualizationMode.PARTICLES:
-        this.updateParticlesMode(frequencyData, waveformData, delta, isPlaying);
+        this.updateParticlesMode(frame.frequencyData, frame.waveformData, frame.delta, frame.isPlaying);
         break;
     }
   }
@@ -448,6 +473,7 @@ export class SculptureBuilder {
       if (this.animationProgress >= 1) {
         this.animationState = 'reforming';
         this.animationProgress = 0;
+        this.currentMode = this.targetMode;
         this.updateModeVisibility();
       }
     } else if (this.animationState === 'reforming') {
@@ -607,19 +633,23 @@ export class SculptureBuilder {
   }
 
   async setMode(mode: VisualizationMode): Promise<void> {
-    if (mode === this.currentMode || this.animationState !== 'idle') return;
-    
+    if (mode === this.targetMode || this.animationState !== 'idle') return;
+
+    this.targetMode = mode;
     this.animationState = 'collapsing';
     this.animationProgress = 0;
     this.animationDuration = 0.5;
-    
+
     await new Promise<void>(resolve => {
+      const scheduleFrame: (cb: () => void) => number =
+        typeof requestAnimationFrame !== 'undefined'
+          ? requestAnimationFrame
+          : (cb) => setTimeout(cb, 16) as unknown as number;
       const checkComplete = () => {
         if (this.animationState === 'idle') {
-          this.currentMode = mode;
           resolve();
         } else {
-          requestAnimationFrame(checkComplete);
+          scheduleFrame(checkComplete);
         }
       };
       checkComplete();
@@ -630,8 +660,48 @@ export class SculptureBuilder {
     return this.currentMode;
   }
 
+  getTargetMode(): VisualizationMode {
+    return this.targetMode;
+  }
+
   isTransitioning(): boolean {
     return this.animationState !== 'idle';
+  }
+
+  getStateSnapshot(): SculptureStateSnapshot {
+    const heights: number[] = [];
+    const colors: number[] = [];
+
+    if (this.cubeStates.length > 0) {
+      for (let x = 0; x < this.GRID_X; x++) {
+        for (let z = 0; z < this.GRID_Z; z++) {
+          const state = this.cubeStates[x][z][this.GRID_Y - 1];
+          heights.push(state.currentHeight);
+          colors.push(state.currentColor.r, state.currentColor.g, state.currentColor.b);
+        }
+      }
+    }
+
+    const particlePositions: number[] = [];
+    if (this.particleGeometry) {
+      const positions = this.particleGeometry.attributes.position.array as Float32Array;
+      const sampleCount = Math.min(64, positions.length);
+      for (let i = 0; i < sampleCount; i++) {
+        particlePositions.push(positions[i]);
+      }
+    }
+
+    return {
+      mode: this.currentMode,
+      targetMode: this.targetMode,
+      transitioning: this.isTransitioning(),
+      rotationY: this.sculptureGroup.rotation.y,
+      cubesVisible: this.cubes.length > 0 ? this.cubes[0][0][0].visible : false,
+      particlesVisible: this.particleSystem ? this.particleSystem.visible : false,
+      heights,
+      colors,
+      particlePositions
+    };
   }
 
   rotate(angle: number): void {

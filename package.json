@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "tsx scripts/offlineBatch.ts"
   },
   "dependencies": {
     "three": "^0.160.0"
   },
   "devDependencies": {
     "@types/three": "^0.160.0",
+    "terser": "^5.51.2",
+    "tsx": "^4.23.15",
     "typescript": "^5.3.3",
     "vite": "^5.0.8"
   }
