@@ -1,5 +1,5 @@
 import { SequencerModule, INSTRUMENTS, PRESETS, Instrument, InstrumentParams, GridState, Preset } from './sequencer.js';
-import { RecorderModule } from './recorder.js';
+import { RecorderModule, RecordingData } from './recorder.js';
 
 export interface UIContainerRefs {
   topBar: HTMLElement;
@@ -27,6 +27,7 @@ export class UIModule {
   private pauseBtn: HTMLButtonElement | null = null;
   private recBtn: HTMLButtonElement | null = null;
   private playbackProgress: number = 0;
+  private selectedTracks: Set<string> = new Set(INSTRUMENTS.map(i => i.id));
 
   constructor(app: HTMLElement, sequencer: SequencerModule, recorder: RecorderModule) {
     this.app = app;
@@ -502,6 +503,89 @@ export class UIModule {
         display: flex;
         gap: 8px;
       }
+      .track-bar {
+        margin-top: 10px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .track-bar-label {
+        font-size: 11px;
+        color: #8888aa;
+        margin-right: 2px;
+      }
+      .track-chip {
+        padding: 4px 10px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.03);
+        color: #a0a0c0;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s ease-out;
+        user-select: none;
+      }
+      .track-chip:hover {
+        border-color: rgba(255,255,255,0.35);
+        color: #fff;
+      }
+      .track-chip.active {
+        background: rgba(255, 64, 129, 0.18);
+        border-color: var(--chip-color, #ff4081);
+        color: #fff;
+        box-shadow: 0 0 8px rgba(255, 64, 129, 0.25);
+      }
+      .track-list {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .track-row {
+        display: grid;
+        grid-template-columns: 110px 1fr 90px;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.02);
+        border-left: 3px solid var(--track-color, #666);
+      }
+      .track-row.silent {
+        opacity: 0.55;
+      }
+      .track-row-name {
+        font-size: 11px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .track-row-name .empty-badge {
+        font-size: 10px;
+        color: #8888aa;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        padding: 0 6px;
+        font-weight: 400;
+      }
+      .track-row canvas {
+        width: 100%;
+        height: 28px;
+        display: block;
+        border-radius: 4px;
+        background: rgba(0,0,0,0.2);
+      }
+      .track-row-meta {
+        font-size: 10px;
+        color: #8888aa;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -829,7 +913,102 @@ export class UIModule {
     ctrls.appendChild(stopBtn);
     container.appendChild(ctrls);
 
+    const trackBar = document.createElement('div');
+    trackBar.className = 'track-bar';
+    trackBar.id = 'track-bar';
+    container.appendChild(trackBar);
+    this.renderTrackBar(trackBar);
+
+    const trackList = document.createElement('div');
+    trackList.className = 'track-list';
+    trackList.id = 'track-list';
+    container.appendChild(trackList);
+
     return canvas;
+  }
+
+  private renderTrackBar(container: HTMLElement): void {
+    container.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.className = 'track-bar-label';
+    label.textContent = '回放声部';
+    container.appendChild(label);
+
+    const allChip = document.createElement('button');
+    allChip.className = 'track-chip' + (this.selectedTracks.size === INSTRUMENTS.length ? ' active' : '');
+    allChip.style.setProperty('--chip-color', '#ff4081');
+    allChip.textContent = '全部';
+    allChip.addEventListener('click', () => {
+      this.selectedTracks = new Set(INSTRUMENTS.map(i => i.id));
+      this.applyTrackSelection(container);
+    });
+    container.appendChild(allChip);
+
+    INSTRUMENTS.forEach((inst) => {
+      const chip = document.createElement('button');
+      chip.className = 'track-chip' + (this.selectedTracks.has(inst.id) ? ' active' : '');
+      chip.style.setProperty('--chip-color', inst.color);
+      chip.textContent = `${inst.icon} ${inst.name}`;
+      chip.dataset.trackId = inst.id;
+      chip.addEventListener('click', () => {
+        if (this.selectedTracks.has(inst.id)) {
+          this.selectedTracks.delete(inst.id);
+        } else {
+          this.selectedTracks.add(inst.id);
+        }
+        this.applyTrackSelection(container);
+      });
+      container.appendChild(chip);
+    });
+  }
+
+  private applyTrackSelection(bar: HTMLElement): void {
+    bar.querySelectorAll('.track-chip').forEach((el) => {
+      const chip = el as HTMLButtonElement;
+      const id = chip.dataset.trackId;
+      const active = id ? this.selectedTracks.has(id) : this.selectedTracks.size === INSTRUMENTS.length;
+      chip.classList.toggle('active', active);
+    });
+    this.recorder.setPlaybackTracks([...this.selectedTracks]);
+  }
+
+  private renderTrackList(recording: RecordingData): void {
+    const container = document.getElementById('track-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    recording.tracks.forEach((track) => {
+      const row = document.createElement('div');
+      row.className = 'track-row' + (track.silent ? ' silent' : '');
+      row.style.setProperty('--track-color', track.color);
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'track-row-name';
+      nameEl.style.color = track.color;
+      nameEl.innerHTML = `<span>${track.icon}</span><span>${track.name}</span>`;
+      if (track.silent) {
+        const badge = document.createElement('span');
+        badge.className = 'empty-badge';
+        badge.textContent = '空';
+        nameEl.appendChild(badge);
+      }
+      row.appendChild(nameEl);
+
+      const canvas = document.createElement('canvas');
+      row.appendChild(canvas);
+
+      const meta = document.createElement('div');
+      meta.className = 'track-row-meta';
+      meta.textContent = `${track.start.toFixed(2)}–${track.end.toFixed(2)}s · ${track.duration.toFixed(2)}s`;
+      row.appendChild(meta);
+
+      container.appendChild(row);
+
+      requestAnimationFrame(() => {
+        this.recorder.drawWaveform(canvas, track.waveform, 0);
+      });
+    });
   }
 
   private bindSequencerEvents(): void {
@@ -881,6 +1060,7 @@ export class UIModule {
       if (canvas) {
         this.recorder.drawWaveform(canvas, recording.waveform, 0);
       }
+      this.renderTrackList(recording);
     });
   }
 

@@ -130,6 +130,7 @@ export const PRESETS: Preset[] = [
 interface TrackAudio {
   gain: GainNode;
   pan: StereoPannerNode;
+  recDest: MediaStreamAudioDestinationNode;
 }
 
 export class SequencerModule extends EventEmitter {
@@ -170,9 +171,11 @@ export class SequencerModule extends EventEmitter {
       gain.gain.value = 0.6;
       const pan = ctx.createStereoPanner();
       pan.pan.value = 0;
+      const recDest = ctx.createMediaStreamDestination();
       gain.connect(pan);
       pan.connect(this.masterGain);
-      this.tracks.set(inst.id, { gain, pan });
+      pan.connect(recDest);
+      this.tracks.set(inst.id, { gain, pan, recDest });
 
       this.instrumentParams.set(inst.id, {
         volume: 60,
@@ -190,6 +193,14 @@ export class SequencerModule extends EventEmitter {
 
   getMediaStream(): MediaStream {
     return this.streamDest.stream;
+  }
+
+  getTrackMediaStreams(): Map<string, MediaStream> {
+    const map = new Map<string, MediaStream>();
+    for (const [id, track] of this.tracks) {
+      map.set(id, track.recDest.stream);
+    }
+    return map;
   }
 
   getGrid(): GridState {

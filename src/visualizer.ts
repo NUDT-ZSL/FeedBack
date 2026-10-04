@@ -20,7 +20,7 @@ export class VisualizerModule {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private analyser: AnalyserNode;
-  private frequencyData: Uint8Array;
+  private frequencyData: Uint8Array<ArrayBuffer>;
   private particles: Particle[] = [];
   private barStates: BarState[] = [];
   private running: boolean = false;
