@@ -4,13 +4,16 @@
 
 ```mermaid
 flowchart LR
-    A["用户交互层\n(DOM Events)"] --> B["主控制器\n(main.ts)"]
-    B --> C["词库管理模块\n(wordManager.ts)"]
-    B --> D["UI控制模块\n(uiController.ts)"]
-    D --> E["DOM渲染层\n(HTML/CSS)"]
-    D --> F["Canvas 折线图"]
-    D --> G["Web Audio API\n(键盘音效)"]
-    B --> H["本地状态存储\n(Memory + localStorage)"]
+    A["用户交互层\n(DOM Events)"] --> B["UI 适配层\n(main.ts)"]
+    B -->|事件 + 逻辑时间戳| C["推演引擎\n(gameEngine.ts)"]
+    C -->|状态快照| B
+    C --> D["词库管理模块\n(wordManager.ts)"]
+    C --> H["历史存储\n(historyStore.ts / localStorage)"]
+    B --> E["UI控制模块\n(uiController.ts)"]
+    E --> F["DOM渲染层\n(HTML/CSS)"]
+    E --> G["Canvas 折线图"]
+    E --> I["Web Audio API\n(键盘音效)"]
+    J["离线验证\n(tests/engine.verify.ts)"] -->|同一事件序列| C
 ```
 
 ## 2. 技术说明
@@ -34,10 +37,15 @@ auto8/
 ├── tsconfig.json             # TypeScript配置（严格模式）
 ├── index.html                # 入口HTML
 ├── style.css                 # 全局样式
-└── src/
-    ├── main.ts               # 游戏主循环与状态管理
-    ├── wordManager.ts        # 词库管理模块
-    └── uiController.ts       # UI控制与动画模块
+├── src/
+│   ├── gameEngine.ts         # 对局推演引擎（与界面无关，事件驱动的确定性状态机）
+│   ├── historyStore.ts       # 历史记录存储适配器（localStorage / 内存实现）
+│   ├── main.ts               # UI 适配层：把 DOM/定时器事件翻译为引擎事件并渲染引擎快照
+│   ├── wordManager.ts        # 词库管理模块
+│   └── uiController.ts       # UI控制与动画模块
+├── tests/
+│   └── engine.verify.ts      # 离线批量验证场景（npm run verify）
+└── tsconfig.verify.json      # 离线验证专用编译配置
 ```
 
 ## 5. 模块职责定义
@@ -62,12 +70,22 @@ auto8/
 - `clearHistory()` 清空记录
 - `fadeIn(element) / fadeOut(element)` 通用过渡动画
 
-### 5.3 main.ts
+### 5.3 gameEngine.ts（对局推演引擎，不依赖 DOM）
 - 游戏状态机管理（idle / wordPicking / hintRevealing / guessing / result / gameOver）
-- 轮次控制（5轮切换、玩家角色轮换）
-- 得分计算与历史记录数据维护
-- 调用 wordManager 和 uiController
-- localStorage 持久化历史记录
+- 事件驱动：startGame / selectWord / confirmWord / hintRevealed / submitGuess / tick / advance / clearHistory，所有事件携带逻辑时间戳，同一事件序列必然产生同一结果
+- 提示序列生成与逐条揭示进度、每条提示的作答窗口（3 秒）与倒计时对齐
+- 判定幂等：提交、超时、揭示未完成任意组合下只判定一次；猜对猜词方 +10，猜错/超时出词方 +10
+- 轮次控制（5轮切换、玩家角色轮换）与得分、历史记录维护
+- 通过 HistoryStore 接口落盘历史记录，内存与存储内容始终一致
+
+### 5.4 historyStore.ts
+- `createLocalStorageStore()` 浏览器 localStorage 适配器
+- `createMemoryHistoryStore()` 离线/测试用内存适配器
+
+### 5.5 main.ts（UI 适配层）
+- 把 DOM 事件与定时器回调翻译为引擎事件（携带 `Date.now()` 时间戳）
+- 订阅引擎状态快照驱动 uiController 渲染，不自行推算得分、进度或倒计时
+- 倒计时读数通过 `engine.getRemainingMs(now)` 从引擎查询
 
 ## 6. 数据模型
 
@@ -112,3 +130,7 @@ export interface GameState {
 - **倒计时精度**：使用 `performance.now()` 计算时间差校准，而非单纯依赖 setInterval 累加
 - **动画**：所有过渡使用 CSS 关键帧 + requestAnimationFrame 辅助，避免频繁重排
 - **内存**：及时清理定时器和动画引用，历史记录限制最大条数
+
+## 8. 离线验证
+
+`npm run verify` 将推演引擎与验证场景编译为 CommonJS 后在 Node 中批量执行，不依赖浏览器。覆盖：正常对局、超时、重复提交、提示揭示中途提交、提交与超时竞速、连续多局、历史清空与恢复、确定性重放。同一事件序列重复执行结果一致。

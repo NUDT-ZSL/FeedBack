@@ -312,6 +312,7 @@ export function createUIController(root: HTMLElement): UIController {
     input.maxLength = 10;
     input.addEventListener('input', () => {
       currentSelectedWord = input.value.trim() || null;
+      if (handlers) handlers.onSelectWord(currentSelectedWord ?? '');
       updateSelectedHint();
       highlightSelectedWord();
     });
@@ -643,6 +644,7 @@ export function createUIController(root: HTMLElement): UIController {
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const g: CanvasRenderingContext2D = ctx;
     ctx.scale(dpr, dpr);
 
     const w = rect.width;
@@ -688,48 +690,48 @@ export function createUIController(root: HTMLElement): UIController {
     }
 
     function drawLine(data: number[], color: string, shadow: string): void {
-      ctx.save();
-      ctx.strokeStyle = shadow;
-      ctx.lineWidth = 5;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = shadow;
-      ctx.beginPath();
+      g.save();
+      g.strokeStyle = shadow;
+      g.lineWidth = 5;
+      g.shadowBlur = 8;
+      g.shadowColor = shadow;
+      g.beginPath();
       data.forEach((v, i) => {
         const x = xFor(i);
         const y = yFor(v);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        if (i === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
       });
-      ctx.stroke();
-      ctx.restore();
+      g.stroke();
+      g.restore();
 
-      ctx.save();
-      const gradient = ctx.createLinearGradient(padL, 0, padL + plotW, 0);
+      g.save();
+      const gradient = g.createLinearGradient(padL, 0, padL + plotW, 0);
       gradient.addColorStop(0, color);
       gradient.addColorStop(1, shadow);
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = 2.5;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
+      g.strokeStyle = gradient;
+      g.lineWidth = 2.5;
+      g.lineJoin = 'round';
+      g.beginPath();
       data.forEach((v, i) => {
         const x = xFor(i);
         const y = yFor(v);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        if (i === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
       });
-      ctx.stroke();
-      ctx.restore();
+      g.stroke();
+      g.restore();
 
       data.forEach((v, i) => {
         const x = xFor(i);
         const y = yFor(v);
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#16213e';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = color;
-        ctx.stroke();
+        g.beginPath();
+        g.arc(x, y, 4, 0, Math.PI * 2);
+        g.fillStyle = '#16213e';
+        g.fill();
+        g.lineWidth = 2;
+        g.strokeStyle = color;
+        g.stroke();
       });
     }
 

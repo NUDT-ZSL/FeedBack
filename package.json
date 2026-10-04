@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "tsc -p tsconfig.verify.json && printf '{\"type\":\"commonjs\"}' > .verify-dist/package.json && node .verify-dist/tests/engine.verify.js"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
     "typescript": "^5.3.3",
     "vite": "^5.0.10"
   }

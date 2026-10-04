@@ -1,8 +1,12 @@
+import { getRandomWord } from './wordManager';
 import {
-  generateHints,
-  validateCustomWord,
-  getRandomWord
-} from './wordManager';
+  createGameEngine,
+  HINT_COUNTDOWN_MS,
+  type GameEngine,
+  type GameState,
+  type RoundRecord
+} from './gameEngine';
+import { createLocalStorageStore } from './historyStore';
 import {
   createUIController,
   typeTextAnimated,
@@ -12,77 +16,22 @@ import {
   type UIController
 } from './uiController';
 
-type GamePhase = 'idle' | 'wordPicking' | 'hintRevealing' | 'guessing' | 'result' | 'gameOver';
-type Player = 'A' | 'B';
+const HINT_REVEAL_DELAY_MS = 500;
+const RESULT_DELAY_MS = 1400;
+const TYPING_INTERVAL_MS = 80;
 
-interface RoundRecord {
-  round: number;
-  picker: Player;
-  word: string;
-  correct: boolean;
-  scoreA: number;
-  scoreB: number;
-  timestamp: number;
-}
-
-interface GameState {
-  phase: GamePhase;
-  currentRound: number;
-  totalRounds: number;
-  currentPicker: Player;
-  scoreA: number;
-  scoreB: number;
-  currentWord: string | null;
-  currentHints: string[];
-  currentHintIndex: number;
-  history: RoundRecord[];
-  selectedWord: string | null;
-  guessSubmitted: boolean;
-}
-
-const STORAGE_KEY = 'guess-word-duel-history-v1';
-const HINT_COUNTDOWN_MS = 3000;
-const TOTAL_ROUNDS = 5;
-
-const state: GameState = {
-  phase: 'idle',
-  currentRound: 0,
-  totalRounds: TOTAL_ROUNDS,
-  currentPicker: 'A',
-  scoreA: 0,
-  scoreB: 0,
-  currentWord: null,
-  currentHints: [],
-  currentHintIndex: 0,
-  history: [],
-  selectedWord: null,
-  guessSubmitted: false
-};
+const engine: GameEngine = createGameEngine({ store: createLocalStorageStore() });
 
 let ui: UIController;
+let prevPhase: GameState['phase'] = 'idle';
+let prevHistory: readonly RoundRecord[] = engine.getState().history;
 
-function loadHistory(): RoundRecord[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as RoundRecord[];
-    return [];
-  } catch {
-    return [];
-  }
+function now(): number {
+  return Date.now();
 }
 
-function saveHistory(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history.slice(-50)));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function mapHistoryForUI(): RoundRecordUI[] {
-  return state.history.map(r => ({
+function mapHistoryForUI(records: readonly RoundRecord[]): RoundRecordUI[] {
+  return records.map(r => ({
     round: r.round,
     picker: r.picker,
     word: r.word,
@@ -92,11 +41,7 @@ function mapHistoryForUI(): RoundRecordUI[] {
   }));
 }
 
-function getGuessPlayer(): Player {
-  return state.currentPicker === 'A' ? 'B' : 'A';
-}
-
-function updateStatusBar(): void {
+function renderStatus(state: GameState): void {
   ui.renderStatus(
     Math.max(1, state.currentRound),
     state.totalRounds,
@@ -106,176 +51,102 @@ function updateStatusBar(): void {
   );
 }
 
-function beginWordPicking(): void {
-  cancelAllTimers();
-  state.phase = 'wordPicking';
-  state.selectedWord = null;
-  state.currentWord = null;
-  state.currentHints = [];
-  state.currentHintIndex = 0;
-  state.guessSubmitted = false;
-  updateStatusBar();
-  ui.renderWordPicker(null);
-}
-
-function onSelectWord(word: string): void {
-  state.selectedWord = word;
-}
-
-function onConfirmWord(): void {
-  const word = state.selectedWord;
-  if (!word) return;
-  if (!validateCustomWord(word)) return;
-  state.currentWord = word;
-  state.phase = 'hintRevealing';
-  state.currentHints = generateHints(word);
-  state.currentHintIndex = 0;
-  ui.renderWaitingForHints();
-  setTimeout(() => {
-    beginHintSequence();
-  }, 500);
-}
-
-function beginHintSequence(): void {
-  if (state.phase !== 'hintRevealing') return;
-  state.currentHintIndex = 0;
-  ui.renderGuessPanel(state.currentHints, 0, '', true);
-  revealCurrentHint();
-}
-
-function revealCurrentHint(): void {
-  if (state.phase !== 'hintRevealing') return;
-  const idx = state.currentHintIndex;
-  if (idx >= state.currentHints.length) {
-    beginGuessingForLastHint();
-    return;
-  }
-  const hintText = state.currentHints[idx];
+function startTyping(hintIndex: number): void {
+  const state = engine.getState();
+  if (state.phase !== 'hintRevealing' || state.currentHintIndex !== hintIndex) return;
+  const hintText = state.currentHints[hintIndex];
+  if (hintText === undefined) return;
   typeTextAnimated(
     hintText,
     (typed) => {
-      ui.updateHintTyping(idx, typed, true);
+      ui.updateHintTyping(hintIndex, typed, true);
     },
     () => {
-      ui.updateHintTyping(idx, hintText, false);
-      beginCountdownForHint();
+      ui.updateHintTyping(hintIndex, hintText, false);
+      engine.dispatch({ type: 'hintRevealed', at: now() });
+      if (engine.getState().phase === 'guessing') {
+        beginCountdownUI();
+      }
     },
-    80
+    TYPING_INTERVAL_MS
   );
 }
 
-function beginCountdownForHint(): void {
-  if (state.phase !== 'hintRevealing') return;
-  state.phase = 'guessing';
-  state.guessSubmitted = false;
+function beginCountdownUI(): void {
   ui.focusGuessInput();
   startCountdown(
     HINT_COUNTDOWN_MS,
-    (remainingMs) => {
-      ui.setCountdown(remainingMs / 1000, HINT_COUNTDOWN_MS / 1000);
+    () => {
+      ui.setCountdown(engine.getRemainingMs(now()) / 1000, HINT_COUNTDOWN_MS / 1000);
     },
     () => {
-      if (state.guessSubmitted) return;
-      handleTimeout();
+      engine.dispatch({ type: 'tick', at: now() });
     }
   );
 }
 
-function beginGuessingForLastHint(): void {
-  beginCountdownForHint();
+function beginHintSequence(state: GameState): void {
+  const round = state.currentRound;
+  ui.renderWaitingForHints();
+  setTimeout(() => {
+    const current = engine.getState();
+    if (current.phase !== 'hintRevealing' || current.currentRound !== round) return;
+    ui.renderGuessPanel(current.currentHints, current.currentHintIndex, '', true);
+    startTyping(current.currentHintIndex);
+  }, HINT_REVEAL_DELAY_MS);
 }
 
-function onSubmitGuess(rawGuess: string): void {
-  if (state.phase !== 'guessing' || state.guessSubmitted) return;
-  const guess = rawGuess.trim();
-  if (!guess) return;
-  state.guessSubmitted = true;
+function handleResult(state: GameState): void {
   cancelAllTimers();
-  const target = state.currentWord ?? '';
-  const correct = guess === target;
-  processResult(correct);
+  const outcome = state.lastOutcome;
+  if (outcome) {
+    if (outcome.correct) ui.flashCorrect();
+    else ui.flashWrong();
+    ui.showFloatingScore(outcome.gained);
+  }
+  const round = state.currentRound;
+  setTimeout(() => {
+    const current = engine.getState();
+    if (current.phase !== 'result' || current.currentRound !== round) return;
+    engine.dispatch({ type: 'advance', at: now() });
+  }, RESULT_DELAY_MS);
 }
 
-function handleTimeout(): void {
-  if (state.guessSubmitted) return;
-  state.guessSubmitted = true;
-  processResult(false);
-}
+function handleState(state: GameState): void {
+  renderStatus(state);
 
-function processResult(correct: boolean): void {
-  state.phase = 'result';
-  cancelAllTimers();
-  const guessPlayer = getGuessPlayer();
-  let gained = 0;
-
-  if (correct) {
-    gained = 10;
-    if (guessPlayer === 'A') state.scoreA += gained;
-    else state.scoreB += gained;
-    ui.flashCorrect();
-    ui.showFloatingScore(gained);
-  } else {
-    gained = 10;
-    if (state.currentPicker === 'A') state.scoreA += gained;
-    else state.scoreB += gained;
-    ui.flashWrong();
-    ui.showFloatingScore(gained);
+  if (state.history !== prevHistory) {
+    prevHistory = state.history;
+    ui.renderHistory(mapHistoryForUI(state.history));
   }
 
-  const record: RoundRecord = {
-    round: state.currentRound,
-    picker: state.currentPicker,
-    word: state.currentWord ?? '',
-    correct,
-    scoreA: state.scoreA,
-    scoreB: state.scoreB,
-    timestamp: Date.now()
-  };
-  state.history.push(record);
-  saveHistory();
-  ui.renderHistory(mapHistoryForUI());
+  const entered = state.phase !== prevPhase;
+  const from = prevPhase;
+  prevPhase = state.phase;
+  if (!entered) return;
 
-  setTimeout(() => {
-    if (state.currentRound >= state.totalRounds) {
-      endGame();
-    } else {
-      nextRound();
-    }
-  }, 1400);
-}
-
-function nextRound(): void {
-  state.currentPicker = state.currentPicker === 'A' ? 'B' : 'A';
-  beginWordPicking();
-}
-
-function startGame(): void {
-  state.phase = 'wordPicking';
-  state.currentRound = 1;
-  state.scoreA = 0;
-  state.scoreB = 0;
-  state.currentPicker = 'A';
-  state.history = [];
-  saveHistory();
-  ui.renderHistory([]);
-  beginWordPicking();
-}
-
-function endGame(): void {
-  state.phase = 'gameOver';
-  updateStatusBar();
-  ui.renderGameOver(state.scoreA, state.scoreB);
-  ui.renderHistory(mapHistoryForUI());
-}
-
-function restart(): void {
-  startGame();
-}
-
-function clearHistory(): void {
-  state.history = [];
-  saveHistory();
-  ui.renderHistory([]);
+  switch (state.phase) {
+    case 'wordPicking':
+      cancelAllTimers();
+      ui.renderWordPicker(null);
+      break;
+    case 'hintRevealing':
+      if (from === 'wordPicking') {
+        beginHintSequence(state);
+      } else {
+        startTyping(state.currentHintIndex);
+      }
+      break;
+    case 'result':
+      handleResult(state);
+      break;
+    case 'gameOver':
+      cancelAllTimers();
+      ui.renderGameOver(state.scoreA, state.scoreB);
+      break;
+    default:
+      break;
+  }
 }
 
 function init(): void {
@@ -286,19 +157,16 @@ function init(): void {
   }
   ui = createUIController(root);
   ui.setHandlers({
-    onStartGame: startGame,
-    onSelectWord,
-    onConfirmWord,
-    onSubmitGuess,
-    onClearHistory: clearHistory,
-    onRestart: restart
+    onStartGame: () => engine.dispatch({ type: 'startGame', at: now() }),
+    onSelectWord: (word: string) => engine.dispatch({ type: 'selectWord', word }),
+    onConfirmWord: () => engine.dispatch({ type: 'confirmWord', at: now() }),
+    onSubmitGuess: (guess: string) => engine.dispatch({ type: 'submitGuess', guess, at: now() }),
+    onClearHistory: () => engine.dispatch({ type: 'clearHistory' }),
+    onRestart: () => engine.dispatch({ type: 'startGame', at: now() })
   });
   ui.init();
-  const saved = loadHistory();
-  if (saved.length > 0) {
-    state.history = saved;
-    ui.renderHistory(mapHistoryForUI());
-  }
+  engine.subscribe(handleState);
+  handleState(engine.getState());
 }
 
 if (typeof document !== 'undefined') {
@@ -310,6 +178,6 @@ if (typeof document !== 'undefined') {
 }
 
 export {
-  state,
+  engine,
   getRandomWord
 };
