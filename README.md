@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+> 白板元素链路（增删改 / 图层顺序 / 分组嵌套 / 撤销重做 / 协作合并）的离线自动化验证
+> 位于 `src/whiteboard/` 与 `tests/`，运行 `npm test` 即可离线重复执行。
+> 详见 [docs/whiteboard-verification.md](docs/whiteboard-verification.md)。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
