@@ -78,6 +78,24 @@ interface Prefab {
 }
 ```
 
+### 4.5 操作日志与离线重放
+
+所有改变世界状态的事件（world_state、block_place、block_break、player_join、player_leave、player_move）在 NetworkManager 内统一记录为带单调递增序号 `seq` 和来源标识 `source` 的 `Operation`，追加进同一条操作日志（mock 模式的初始地面、机器人移动、玩家加入/离开同样入日志）。
+
+```typescript
+type Operation =
+  | { seq: number; source: string; type: 'world_state'; blocks: BlockData[]; players: PlayerData[] }
+  | { seq: number; source: string; type: 'block_place'; x: number; y: number; color: string }
+  | { seq: number; source: string; type: 'block_break'; x: number; y: number }
+  | { seq: number; source: string; type: 'player_join'; player: PlayerData }
+  | { seq: number; source: string; type: 'player_leave'; playerId: string }
+  | { seq: number; source: string; type: 'player_move'; playerId: string; x: number; y: number };
+```
+
+- NetworkManager 对外接口：`getOperationLog()`、`getOperationsSince(seq)`、`getLastSeq()`、`getSnapshot()`（实时世界快照，含每个方块/玩家的来源归属）、`replayOperations(ops, options)`、`replayFromLog(sinceSeq)`。
+- 重放为纯本地纯函数（`src/network/OperationLog.ts`），不依赖在线服务；实时状态与重放共用同一个 `applyOperation`，保证两条路径结果逐项一致。
+- 重放语义：按 `seq` 排序应用；重复序号识别并跳过（记入 `skippedDuplicates`）；序号空洞报告为 `missingRanges: [{ from, to }]`；支持传入 `base` 快照与 `baseSeq` 做增量重放；同一日志重复执行结果完全一致。
+
 ## 5. 性能优化策略
 
 1. **对象池**：重复利用方块精灵和粒子对象，避免频繁创建销毁
