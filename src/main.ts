@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { Plant, PlantParams, GrowthStage } from './plant';
+import { Plant } from './plant';
+import {
+  PlantParams,
+  GrowthStage,
+  computeFloweringCountdown,
+  formatCountdown
+} from './simulation.js';
 import { PlantGUI } from './gui';
 
 class App {
@@ -355,14 +361,9 @@ class App {
 
     document.getElementById('stageName')!.textContent = this.stageNames[this.plant.currentStage];
 
-    const growthRate = 0.3 + 0.7 *
-      Math.sin((params.light / 100) * Math.PI) *
-      Math.sin((params.water / 100) * Math.PI) *
-      (params.temperature >= 10 && params.temperature <= 32 ? 1 : 0.3);
-
-    const timeToFlowering = Math.max(0, 30 - (this.plant as any).growthTime) / Math.max(0.1, growthRate);
+    const countdown = computeFloweringCountdown(this.plant.getGrowthTime(), params);
     document.getElementById('countdown')!.textContent =
-      this.plant.currentStage === 'flowering' ? '已开花 🌸' : `${Math.ceil(timeToFlowering)} 秒`;
+      formatCountdown(this.plant.currentStage, countdown);
   }
 
   private animate() {

@@ -1,12 +1,15 @@
 import * as THREE from 'three';
+import {
+  PlantParams,
+  GrowthStage,
+  computeGrowthRate,
+  getStageForTime,
+  isWiltCondition,
+  shouldKeepGrowing,
+  stepWiltProgress
+} from './simulation.js';
 
-export interface PlantParams {
-  light: number;
-  water: number;
-  temperature: number;
-}
-
-export type GrowthStage = 'seed' | 'sprout' | 'adult' | 'flowering';
+export type { PlantParams, GrowthStage };
 
 interface LeafData {
   mesh: THREE.Mesh;
@@ -380,16 +383,10 @@ export class Plant {
   }
 
   private checkWilting() {
-    const { light, water, temperature } = this.params;
-    const badConditions =
-      light < 15 || light > 90 ||
-      water < 15 || water > 90 ||
-      temperature < 5 || temperature > 35;
-
-    if (badConditions && !this.isWilting) {
+    if (isWiltCondition(this.params) && !this.isWilting) {
       this.isWilting = true;
       this.wiltParticles.visible = true;
-    } else if (!badConditions && this.isWilting) {
+    } else if (!isWiltCondition(this.params) && this.isWilting) {
       this.isWilting = false;
     }
   }
@@ -405,18 +402,23 @@ export class Plant {
   }
 
   private getGrowthRate(): number {
-    const { light, water } = this.params;
-    const lightFactor = Math.sin((light / 100) * Math.PI);
-    const waterFactor = Math.sin((water / 100) * Math.PI);
-    const tempFactor = this.params.temperature >= 10 && this.params.temperature <= 32 ? 1 : 0.3;
-    return 0.3 + 0.7 * lightFactor * waterFactor * tempFactor;
+    return computeGrowthRate(this.params);
   }
 
   public getStage(): GrowthStage {
-    if (this.growthTime < 5) return 'seed';
-    if (this.growthTime < 15) return 'sprout';
-    if (this.growthTime < 30) return 'adult';
-    return 'flowering';
+    return getStageForTime(this.growthTime);
+  }
+
+  public getGrowthTime(): number {
+    return this.growthTime;
+  }
+
+  public getWiltProgress(): number {
+    return this.wiltProgress;
+  }
+
+  public getIsWilting(): boolean {
+    return this.isWilting;
   }
 
   public getGrowthDays(): number {
@@ -540,13 +542,12 @@ export class Plant {
   public update(delta: number) {
     this.time += delta;
 
-    if (!this.isWilting || this.wiltProgress < 0.9) {
+    if (shouldKeepGrowing(this.isWilting, this.wiltProgress)) {
       this.growthTime += delta * this.getGrowthRate();
     }
     this.updateGrowth();
 
-    const targetWilt = this.isWilting ? 1 : 0;
-    this.wiltProgress += (targetWilt - this.wiltProgress) * delta * 2;
+    this.wiltProgress = stepWiltProgress(this.wiltProgress, this.isWilting, delta);
 
     if (this.stageTransitionStart > 0) {
       const t = (this.time - this.stageTransitionStart) / 0.5;
