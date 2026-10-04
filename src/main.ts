@@ -29,7 +29,12 @@ function init(): void {
 
   const ctx = ensureAudioContext();
   sequencer = new SequencerModule(ctx);
-  recorder = new RecorderModule(ctx, sequencer.getMediaStream());
+  recorder = new RecorderModule(
+    ctx,
+    sequencer.getMediaStream(),
+    sequencer.getStemStreams(),
+    sequencer.getMasterGainValue(),
+  );
   recorder.setBPM(sequencer.getBPM());
 
   ui = new UIModule(app, sequencer, recorder);

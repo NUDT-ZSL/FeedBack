@@ -130,6 +130,7 @@ export const PRESETS: Preset[] = [
 interface TrackAudio {
   gain: GainNode;
   pan: StereoPannerNode;
+  stemDest: MediaStreamAudioDestinationNode;
 }
 
 export class SequencerModule extends EventEmitter {
@@ -170,9 +171,12 @@ export class SequencerModule extends EventEmitter {
       gain.gain.value = 0.6;
       const pan = ctx.createStereoPanner();
       pan.pan.value = 0;
+      // 每个乐器保留一条独立的录音通路（post gain/pan，pre master）
+      const stemDest = ctx.createMediaStreamDestination();
       gain.connect(pan);
       pan.connect(this.masterGain);
-      this.tracks.set(inst.id, { gain, pan });
+      pan.connect(stemDest);
+      this.tracks.set(inst.id, { gain, pan, stemDest });
 
       this.instrumentParams.set(inst.id, {
         volume: 60,
@@ -190,6 +194,16 @@ export class SequencerModule extends EventEmitter {
 
   getMediaStream(): MediaStream {
     return this.streamDest.stream;
+  }
+
+  getStemStreams(): Map<string, MediaStream> {
+    const streams = new Map<string, MediaStream>();
+    this.tracks.forEach((t, id) => streams.set(id, t.stemDest.stream));
+    return streams;
+  }
+
+  getMasterGainValue(): number {
+    return this.masterGain.gain.value;
   }
 
   getGrid(): GridState {

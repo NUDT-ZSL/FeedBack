@@ -1,5 +1,5 @@
 import { SequencerModule, INSTRUMENTS, PRESETS, Instrument, InstrumentParams, GridState, Preset } from './sequencer.js';
-import { RecorderModule } from './recorder.js';
+import { RecorderModule, RecordingData } from './recorder.js';
 
 export interface UIContainerRefs {
   topBar: HTMLElement;
@@ -27,6 +27,7 @@ export class UIModule {
   private pauseBtn: HTMLButtonElement | null = null;
   private recBtn: HTMLButtonElement | null = null;
   private playbackProgress: number = 0;
+  private selectedStems: Set<string> = new Set();
 
   constructor(app: HTMLElement, sequencer: SequencerModule, recorder: RecorderModule) {
     this.app = app;
@@ -502,6 +503,54 @@ export class UIModule {
         display: flex;
         gap: 8px;
       }
+      .stem-list {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .stem-hint {
+        font-size: 11px;
+        color: #8888aa;
+        margin-right: 2px;
+      }
+      .stem-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.04);
+        color: #c0c0e0;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease-out;
+      }
+      .stem-chip:hover {
+        border-color: var(--stem-color, #ff4081);
+        color: #fff;
+        transform: scale(1.04);
+      }
+      .stem-chip.active {
+        background: rgba(255, 64, 129, 0.25);
+        border-color: #ff4081;
+        color: #fff;
+        box-shadow: 0 0 8px rgba(255, 64, 129, 0.35);
+      }
+      .stem-chip.empty {
+        opacity: 0.55;
+        border-style: dashed;
+      }
+      .stem-chip .stem-dur {
+        color: #8888aa;
+        font-variant-numeric: tabular-nums;
+      }
+      .stem-chip .stem-empty-tag {
+        color: #666;
+        font-size: 10px;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -829,7 +878,86 @@ export class UIModule {
     ctrls.appendChild(stopBtn);
     container.appendChild(ctrls);
 
+    const stemList = document.createElement('div');
+    stemList.className = 'stem-list';
+    stemList.id = 'stem-list';
+    container.appendChild(stemList);
+
     return canvas;
+  }
+
+  private renderStemList(rec: RecordingData): void {
+    const wrap = document.getElementById('stem-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    this.selectedStems.clear();
+    this.recorder.setActiveStems([]);
+
+    const hint = document.createElement('span');
+    hint.className = 'stem-hint';
+    hint.textContent = '声部拆分（不选默认整段混音）：';
+    wrap.appendChild(hint);
+
+    const mixChip = document.createElement('button');
+    mixChip.className = 'stem-chip mix active';
+    mixChip.innerHTML = '🎚️ 整段';
+    mixChip.title = '回放整段混音';
+    mixChip.addEventListener('click', () => {
+      this.selectedStems.clear();
+      this.recorder.setActiveStems([]);
+      this.refreshStemChips();
+    });
+    wrap.appendChild(mixChip);
+
+    const allChip = document.createElement('button');
+    allChip.className = 'stem-chip all';
+    allChip.innerHTML = '🎼 全部';
+    allChip.title = '选中全部声部叠加回放';
+    allChip.addEventListener('click', () => {
+      this.selectedStems = new Set(rec.stems.map(s => s.instrumentId));
+      this.recorder.setActiveStems([...this.selectedStems]);
+      this.refreshStemChips();
+    });
+    wrap.appendChild(allChip);
+
+    for (const stem of rec.stems) {
+      const chip = document.createElement('button');
+      chip.className = 'stem-chip' + (stem.hasNotes ? '' : ' empty');
+      chip.dataset.stemId = stem.instrumentId;
+      chip.style.setProperty('--stem-color', stem.color);
+      chip.title = `起止 ${stem.startTime.toFixed(2)}s ~ ${stem.endTime.toFixed(2)}s，时长 ${stem.duration.toFixed(2)}s`;
+
+      let html = `<span>${stem.icon}</span><span style="color:${stem.color}">${stem.name}</span>` +
+        `<span class="stem-dur">${stem.duration.toFixed(1)}s</span>`;
+      if (!stem.hasNotes) {
+        html += '<span class="stem-empty-tag">无音符</span>';
+      }
+      chip.innerHTML = html;
+
+      chip.addEventListener('click', () => {
+        if (this.selectedStems.has(stem.instrumentId)) {
+          this.selectedStems.delete(stem.instrumentId);
+        } else {
+          this.selectedStems.add(stem.instrumentId);
+        }
+        this.recorder.setActiveStems([...this.selectedStems]);
+        this.refreshStemChips();
+      });
+      wrap.appendChild(chip);
+    }
+  }
+
+  private refreshStemChips(): void {
+    const wrap = document.getElementById('stem-list');
+    if (!wrap) return;
+    wrap.querySelectorAll<HTMLButtonElement>('.stem-chip').forEach((chip) => {
+      if (chip.classList.contains('mix')) {
+        chip.classList.toggle('active', this.selectedStems.size === 0);
+      } else if (!chip.classList.contains('all')) {
+        const id = chip.dataset.stemId ?? '';
+        chip.classList.toggle('active', this.selectedStems.has(id));
+      }
+    });
   }
 
   private bindSequencerEvents(): void {
@@ -881,6 +1009,7 @@ export class UIModule {
       if (canvas) {
         this.recorder.drawWaveform(canvas, recording.waveform, 0);
       }
+      this.renderStemList(recording);
     });
   }
 

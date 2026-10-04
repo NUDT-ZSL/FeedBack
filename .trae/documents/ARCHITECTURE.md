@@ -89,6 +89,18 @@ interface Recording {
   waveform: number[];
   duration: number;
   bars: number;
+  stems: StemData[];   // 按乐器拆分的声部
+}
+
+// 声部（分乐器）录音片段
+interface StemData {
+  instrumentId: string;
+  blob: Blob;
+  waveform: number[];
+  startTime: number;  // 在整段时间轴上的起点（秒）
+  endTime: number;    // 终点（秒）
+  duration: number;
+  hasNotes: boolean;  // false 表示整段无音符（片段静音但仍在声部列表中）
 }
 ```
 
@@ -123,11 +135,13 @@ interface SequencerEvents {
 - 非激活状态微闪烁动画
 
 ### 5.3 recorder.ts - 录音回放
-- MediaStreamDestination捕获音频输出
-- MediaRecorder录制最多16小节（自动停止）
-- 离线分析录制音频生成波形数据（采样点）
-- Canvas绘制贝塞尔曲线波形图，绿到紫时间渐变
-- 回放时AudioBufferSourceNode播放，进度指示同步移动
+- 音序器为每个乐器在 pan 之后单独接一路 MediaStreamDestination（post 音量/声像，pre 主增益），主输出仍为整段混音流
+- 录音时 1 个混音 MediaRecorder + 8 个声部 MediaRecorder 同步启停（最多16小节自动停止）
+- 解码后统一时间轴：所有声部缓冲 zero-pad 到同一采样长度，时长一致且不短于实际录音长度；无音符声部产出静音片段并标记 hasNotes=false
+- 每个声部分别生成波形数据，并记录其在整段中的起止与时长
+- 回放分混音/声部组合两种模式：各声部共享同一 start 时间基准与整段时长（playbackRate 恒为 1），按原时间轴对齐叠加
+- setActiveStems 支持回放中平滑切换组合：新增声部按当前 offset 起播，移除声部短淡入淡出后断开，不残留旧节点
+- Canvas绘制贝塞尔曲线波形图，绿到紫时间渐变，进度指示以整段时长为统一时间基准
 
 ### 5.4 ui.ts - 用户界面
 - 动态生成网格DOM元素（8行×动态列）
