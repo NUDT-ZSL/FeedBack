@@ -687,7 +687,7 @@ export function createUIController(root: HTMLElement): UIController {
       return padT + plotH - (plotH * v) / maxScore;
     }
 
-    function drawLine(data: number[], color: string, shadow: string): void {
+    const drawLine = (data: number[], color: string, shadow: string): void => {
       ctx.save();
       ctx.strokeStyle = shadow;
       ctx.lineWidth = 5;
@@ -731,7 +731,7 @@ export function createUIController(root: HTMLElement): UIController {
         ctx.strokeStyle = color;
         ctx.stroke();
       });
-    }
+    };
 
     drawLine(dataA, '#64b5f6', 'rgba(100, 181, 246, 0.4)');
     drawLine(dataB, '#ffab91', 'rgba(255, 171, 145, 0.4)');

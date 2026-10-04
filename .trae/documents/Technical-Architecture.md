@@ -35,9 +35,12 @@ auto8/
 ├── index.html                # 入口HTML
 ├── style.css                 # 全局样式
 └── src/
-    ├── main.ts               # 游戏主循环与状态管理
+    ├── gameEngine.ts         # 对局推演引擎（与界面无关，可离线驱动）
+    ├── main.ts               # 界面适配层（引擎事件与UI渲染的接线）
     ├── wordManager.ts        # 词库管理模块
     └── uiController.ts       # UI控制与动画模块
+└── tests/
+    └── gameEngine.verify.ts  # 离线批量验证入口（npm run verify）
 ```
 
 ## 5. 模块职责定义
@@ -62,12 +65,18 @@ auto8/
 - `clearHistory()` 清空记录
 - `fadeIn(element) / fadeOut(element)` 通用过渡动画
 
-### 5.3 main.ts
+### 5.3 gameEngine.ts
 - 游戏状态机管理（idle / wordPicking / hintRevealing / guessing / result / gameOver）
 - 轮次控制（5轮切换、玩家角色轮换）
-- 得分计算与历史记录数据维护
-- 调用 wordManager 和 uiController
-- localStorage 持久化历史记录
+- 提示序列生成、揭示进度与作答倒计时对齐（倒计时起点由注入时钟决定）
+- 判定唯一性保证（揭示未完成 / 已提交 / 超时任意组合只结算一次）
+- 得分计算与历史记录数据维护，历史经存储适配器写穿透持久化
+- 不依赖 DOM，给定相同事件序列与时钟输入必得相同结果
+
+### 5.4 main.ts
+- 界面适配层：把 UI 事件翻译为引擎事件，订阅引擎快照驱动渲染
+- 打字机动画、倒计时动画等定时器仅作展示，到时后回派事件给引擎
+- 提供 localStorage 历史存储适配器
 
 ## 6. 数据模型
 

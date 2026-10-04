@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "node tests/gameEngine.verify.ts"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
