@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createNebula, updateNebula, disposeNebula, animateNebula, NebulaParams } from './nebula';
-import { createControls } from './controls';
+import type { NebulaParams } from './nebula/index.ts';
+import { NebulaRenderer } from './nebula/index.ts';
+import { createControls } from './controls.ts';
 
 const initialParams: NebulaParams = {
   particleCount: 5000,
@@ -14,7 +15,7 @@ let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
 let controls: OrbitControls;
-let nebula: THREE.Points;
+let nebula: NebulaRenderer;
 let clock: THREE.Clock;
 let autoRotateAngle = 0;
 let userInteracting = false;
@@ -67,8 +68,8 @@ function init(): void {
     autoRotateAngle = Math.atan2(camera.position.x, camera.position.z);
   });
 
-  nebula = createNebula(initialParams);
-  scene.add(nebula);
+  nebula = new NebulaRenderer(initialParams);
+  scene.add(nebula.points);
 
   clock = new THREE.Clock();
 
@@ -81,7 +82,7 @@ function init(): void {
 }
 
 function handleParamsChange(params: NebulaParams): void {
-  updateNebula(nebula, params);
+  nebula.applyParams(params);
 }
 
 function onWindowResize(): void {
@@ -121,7 +122,7 @@ function animate(): void {
     camera.lookAt(0, 0, 0);
   }
 
-  animateNebula(nebula, delta);
+  nebula.tick(delta);
 
   controls.update();
   renderer.render(scene, camera);
@@ -129,8 +130,8 @@ function animate(): void {
 
 window.addEventListener('beforeunload', () => {
   if (nebula) {
-    scene.remove(nebula);
-    disposeNebula(nebula);
+    scene.remove(nebula.points);
+    nebula.dispose();
   }
   renderer.dispose();
   controls.dispose();

@@ -28,8 +28,15 @@ graph TD
 | `tsconfig.json` | TypeScript严格模式，ESNext模块解析 |
 | `index.html` | 入口页面，全屏Canvas，深空渐变背景 |
 | `src/main.ts` | 场景/相机/渲染器初始化，渲染循环，相机自动旋转 |
-| `src/nebula.ts` | 粒子系统创建、参数更新、销毁函数 |
-| `src/controls.ts` | 右侧控制面板DOM创建，滑块事件监听 |
+| `src/nebula/params.ts` | 参数快照类型与增量 diff |
+| `src/nebula/seeds.ts` | 粒子随机种子（与参数解耦，可注入确定性随机源） |
+| `src/nebula/derive.ts` | 纯函数派生：位置/颜色/大小 = f(种子, 参数) |
+| `src/nebula/model.ts` | 粒子模型：持有种子与参数快照，输出派生数据 |
+| `src/nebula/animation.ts` | 动画状态（旋转角、时间），独立于参数快照 |
+| `src/nebula/renderer.ts` | Three.js 适配器：几何体复用、增量缓冲区写入、uniform 驱动动画 |
+| `src/nebula/scheduler.ts` | 参数更新调度：rAF 合帧 + flush，去重不丢更新 |
+| `src/controls.ts` | 右侧控制面板DOM创建，滑块事件经调度器提交 |
+| `tests/` | 离线验证（node:test，无需浏览器/GPU），`npm test` 运行 |
 
 ## 4. 核心模块API定义
 
@@ -42,9 +49,23 @@ export interface NebulaParams {
   rotationSpeed: number;    // 0-2弧度/秒
 }
 
-export function createNebula(params: NebulaParams): THREE.Points;
-export function updateNebula(points: THREE.Points, params: NebulaParams): void;
-export function disposeNebula(points: THREE.Points): void;
+export class NebulaModel {
+  setParams(next: NebulaParams): NebulaParamKey[];  // 返回变化的参数键
+  positionAt(index: number): Vec3;                  // 纯派生，顺序无关
+  colorAt(index: number): Vec3;
+}
+
+export class NebulaRenderer {
+  readonly points: THREE.Points;
+  applyParams(next: NebulaParams): void;  // 仅重写受影响缓冲区区间
+  tick(delta: number): void;              // 动画推进，只写 rotation/uTime uniform
+  dispose(): void;
+}
+
+export function createParamScheduler(
+  onCommit: (params: NebulaParams) => void,
+  schedule?: ScheduleFn
+): ParamScheduler;  // push() 合帧去重，flush() 保证最终值不丢失
 ```
 
 ### 4.2 Controls 模块
@@ -65,7 +86,8 @@ export function createControls(
 - **颜色映射**：根据粒子到中心的距离进行HSL插值，中心 `hsl(20, 100%, 60%)` → 外围 `hsl(250, 80%, 50%)`，叠加色相偏移
 - **透明度**：随机 `0.3-1.0`，存储在 `BufferAttribute`
 - **大小**：随机 `0.05-0.5` 单位，存储在 `BufferAttribute`
-- **更新策略**：参数变化时仅更新 `BufferAttribute` 数据，不重建几何体，保证平滑过渡和30fps+性能
+- **更新策略**：参数变化时仅增量更新受影响的 `BufferAttribute` 区间（位置/颜色由种子+参数纯派生，半径往返无漂移），不重建几何体，保证平滑过渡和30fps+性能
+- **动画策略**：透明度波动在顶点着色器中由 `uTime` uniform 计算，渲染循环不再每帧回写 alpha 缓冲区；动画状态（旋转角/时间）独立于参数快照
 
 ## 6. 性能优化策略
 1. **单个Points对象**：所有粒子使用单个BufferGeometry + PointsMaterial，减少Draw Call

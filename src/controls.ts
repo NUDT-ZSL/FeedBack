@@ -1,4 +1,5 @@
-import { NebulaParams } from './nebula';
+import type { NebulaParams } from './nebula/index.ts';
+import { createParamScheduler } from './nebula/index.ts';
 
 export type ControlChangeHandler = (params: NebulaParams) => void;
 
@@ -57,7 +58,7 @@ export function createControls(
   onChange: ControlChangeHandler
 ): void {
   const currentParams: NebulaParams = { ...initialParams };
-  let pendingUpdate = false;
+  const scheduler = createParamScheduler(onChange);
 
   const title = document.createElement('div');
   title.className = 'panel-title';
@@ -88,28 +89,21 @@ export function createControls(
     slider.step = config.step.toString();
     slider.value = (currentParams[config.key] as number).toString();
 
-    const triggerUpdate = () => {
-      if (!pendingUpdate) {
-        pendingUpdate = true;
-        requestAnimationFrame(() => {
-          onChange({ ...currentParams });
-          pendingUpdate = false;
-        });
-      }
+    const readValue = (e: Event) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      (currentParams[config.key] as number) = value;
+      valueDisplay.textContent = config.format(value) + config.unit;
     };
 
     slider.addEventListener('input', (e) => {
-      const value = parseFloat((e.target as HTMLInputElement).value);
-      (currentParams[config.key] as number) = value;
-      valueDisplay.textContent = config.format(value) + config.unit;
-      triggerUpdate();
+      readValue(e);
+      scheduler.push(currentParams);
     });
 
     slider.addEventListener('change', (e) => {
-      const value = parseFloat((e.target as HTMLInputElement).value);
-      (currentParams[config.key] as number) = value;
-      valueDisplay.textContent = config.format(value) + config.unit;
-      onChange({ ...currentParams });
+      readValue(e);
+      scheduler.push(currentParams);
+      scheduler.flush();
     });
 
     group.appendChild(labelRow);
