@@ -1,29 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { PrintRecord, PlacedCharacter } from './types';
-import { 
-  CELL_SIZE, 
-  CANVAS_PADDING, 
-  FONT_SIZE, 
-  LINE_HEIGHT,
+import type { PrintRecord } from './types';
+import {
+  CELL_SIZE,
+  CANVAS_PADDING,
+  FONT_SIZE,
   GRID_COLS,
   GRID_ROWS,
-  hasWhiteSpot,
-  getTextOpacity,
   formatTimestamp
 } from './utils/printUtils';
+import { renderPrintFrame } from './utils/printEngine';
 import { playRevealSound } from './utils/audio';
 
 interface PrintResultProps {
   record: PrintRecord | null;
-  characters: PlacedCharacter[];
-  inkLevel: number;
-  pressure: number;
 }
 
-const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel, pressure }) => {
+const PrintResult: React.FC<PrintResultProps> = ({ record }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showFallback, setShowFallback] = useState(false);
   const [revealed, setRevealed] = useState(false);
+
+  const frame = record ? renderPrintFrame(record) : null;
+  const characters = record?.characters ?? [];
 
   useEffect(() => {
     if (characters.length === 0) return;
@@ -35,10 +33,10 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [record]);
+  }, [record, characters.length]);
 
   useEffect(() => {
-    if (!record || characters.length === 0) return;
+    if (!record || !frame || characters.length === 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -56,7 +54,7 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
 
     const canvasWidth = CANVAS_PADDING * 2 + GRID_COLS * CELL_SIZE;
     const canvasHeight = CANVAS_PADDING * 2 + GRID_ROWS * CELL_SIZE;
-    
+
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
@@ -64,43 +62,24 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     ctx.globalAlpha = 0.05;
-    for (let i = 0; i < 500; i++) {
-      const x = Math.random() * canvasWidth;
-      const y = Math.random() * canvasHeight;
-      ctx.fillStyle = Math.random() > 0.5 ? '#8b7355' : '#d4c4a8';
-      ctx.fillRect(x, y, 1, 1);
-    }
+    frame.textureSpeckles.forEach(speckle => {
+      ctx.fillStyle = speckle.dark ? '#8b7355' : '#d4c4a8';
+      ctx.fillRect(speckle.x, speckle.y, 1, 1);
+    });
     ctx.globalAlpha = 1;
-
-    const offsetX = record.plateOffsetX;
-    const offsetY = record.plateOffsetY;
-    const opacity = getTextOpacity(pressure, inkLevel);
 
     ctx.font = `600 ${FONT_SIZE}px "Noto Serif SC", serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#222222';
 
-    const sortedChars = [...characters].sort((a, b) => {
-      if (a.row !== b.row) return a.row - b.row;
-      return a.col - b.col;
-    });
+    frame.glyphs.forEach(glyph => {
+      ctx.globalAlpha = glyph.opacity;
+      ctx.fillText(glyph.char, glyph.x, glyph.y);
 
-    sortedChars.forEach((char) => {
-      const x = CANVAS_PADDING + char.col * CELL_SIZE + CELL_SIZE / 2 + offsetX + char.offsetX;
-      const y = CANVAS_PADDING + char.row * CELL_SIZE + CELL_SIZE / 2 + offsetY + char.offsetY;
-
-      if (hasWhiteSpot(inkLevel)) {
-        ctx.globalAlpha = opacity * 0.3;
-      } else {
-        ctx.globalAlpha = opacity;
-      }
-
-      ctx.fillStyle = '#222222';
-      ctx.fillText(char.char, x, y);
-
-      if (pressure < 30) {
-        ctx.globalAlpha = opacity * 0.3;
-        ctx.fillText(char.char, x + 0.5, y + 0.5);
+      if (glyph.ghost) {
+        ctx.globalAlpha = frame.textOpacity * 0.3;
+        ctx.fillText(glyph.char, glyph.ghostX, glyph.ghostY);
       }
     });
 
@@ -112,9 +91,9 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
     if (elapsed > 50) {
       console.warn('Canvas rendering exceeded 50ms target');
     }
-  }, [record, characters, inkLevel, pressure]);
+  }, [record, frame, characters.length]);
 
-  if (!record || characters.length === 0) {
+  if (!record || !frame || characters.length === 0) {
     return (
       <div className="typeplate-container" style={{ textAlign: 'center', padding: '40px' }}>
         <p style={{ color: '#f5ebd4', fontSize: '1.1rem' }}>
@@ -125,8 +104,8 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
   }
 
   const renderFallback = () => (
-    <div 
-      style={{ 
+    <div
+      style={{
         padding: `${CANVAS_PADDING}px`,
         background: '#f5ebd4',
         fontFamily: '"Noto Serif SC", serif',
@@ -139,8 +118,8 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
       {Array.from({ length: GRID_ROWS * GRID_COLS }).map((_, idx) => {
         const row = Math.floor(idx / GRID_COLS);
         const col = idx % GRID_COLS;
-        const char = characters.find(c => c.row === row && c.col === col);
-        
+        const glyph = frame.glyphs.find(g => g.row === row && g.col === col);
+
         return (
           <div
             key={idx}
@@ -153,11 +132,13 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
               fontSize: `${FONT_SIZE * 0.6}px`,
               fontWeight: 600,
               color: '#222222',
-              opacity: char ? getTextOpacity(pressure, inkLevel) : 0,
-              transform: `translate(${record.plateOffsetX + (char?.offsetX || 0)}px, ${record.plateOffsetY + (char?.offsetY || 0)}px)`
+              opacity: glyph ? glyph.opacity : 0,
+              transform: glyph
+                ? `translate(${glyph.x - (CANVAS_PADDING + glyph.col * CELL_SIZE + CELL_SIZE / 2)}px, ${glyph.y - (CANVAS_PADDING + glyph.row * CELL_SIZE + CELL_SIZE / 2)}px)`
+                : undefined
             }}
           >
-            {char?.char || ''}
+            {glyph?.char || ''}
           </div>
         );
       })}
@@ -169,11 +150,11 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
       <h3 style={{ color: '#f5ebd4', marginBottom: '15px', textAlign: 'center' }}>
         印刷成品
       </h3>
-      
+
       <div className="print-result-container">
-        <div 
+        <div
           className="paper-canvas"
-          style={{ 
+          style={{
             opacity: revealed ? 1 : 0,
             transition: 'opacity 0.5s ease-in-out',
             transform: revealed ? 'translateY(0)' : 'translateY(10px)'
@@ -185,45 +166,45 @@ const PrintResult: React.FC<PrintResultProps> = ({ record, characters, inkLevel,
             <canvas ref={canvasRef} style={{ display: 'block', maxWidth: '100%', height: 'auto' }} />
           )}
         </div>
-        
+
         <div className="record-card">
           <h4 className="record-card-title">印刷记录卡</h4>
-          
+
           <div className="record-item">
             <span className="record-label">印刷时间</span>
             <span className="record-value">{formatTimestamp(record.timestamp)}</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">版心X偏移</span>
             <span className="record-value">{record.plateOffsetX.toFixed(1)} px</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">版心Y偏移</span>
             <span className="record-value">{record.plateOffsetY.toFixed(1)} px</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">墨色均匀度</span>
             <span className="record-value">{record.inkUniformity}%</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">用墨量</span>
             <span className="record-value">{record.inkLevel}%</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">压力值</span>
             <span className="record-value">{record.pressure}</span>
           </div>
-          
+
           <div className="record-item">
             <span className="record-label">活字数量</span>
             <span className="record-value">{record.characters.length} 个</span>
           </div>
-          
+
           <div className="record-seal">
             毕昇印
           </div>

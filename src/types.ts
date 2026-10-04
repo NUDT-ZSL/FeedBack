@@ -28,6 +28,11 @@ export interface PrintRecord {
   plateOffsetY: number;
   inkUniformity: number;
   characters: PlacedCharacter[];
+  /**
+   * 本次印刷的确定性种子，由版面内容（活字位置）与印刷参数（墨量、压力）
+   * 共同决定。相同版面、相同参数必定得到相同种子，渲染成品因此可复现。
+   */
+  seed: number;
 }
 
 export type WorkshopPhase = 'typesetting' | 'inking' | 'pressing' | 'revealing' | 'done';
