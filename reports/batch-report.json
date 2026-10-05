@@ -1,0 +1,535 @@
+{
+  "generatedBy": "scripts/run-scenarios.ts",
+  "source": "scenarios/sample-scenarios.json",
+  "scenarioReports": [
+    {
+      "scenarioId": "baseline",
+      "label": "基准方案",
+      "deterministic": true,
+      "checksum": "1d825c85",
+      "totals": {
+        "upstreamInflow": 1200,
+        "allocated": 1200,
+        "lifted": 1114.587,
+        "spilled": 85.413,
+        "evaporated": 468,
+        "fieldOverflow": 324.587024,
+        "deficitFieldCount": 0
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 120,
+          "threshold": 45,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 90,
+          "threshold": 35,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 110,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 80,
+          "threshold": 30,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 112,
+          "threshold": 50,
+          "deficit": false
+        }
+      ]
+    },
+    {
+      "scenarioId": "share-shift-east",
+      "label": "分流调整：东支渠 0.40→0.55，西支渠 0.25→0.10",
+      "deterministic": true,
+      "checksum": "c19e0e3d",
+      "totals": {
+        "upstreamInflow": 1200,
+        "allocated": 1200,
+        "lifted": 934.587,
+        "spilled": 265.413,
+        "evaporated": 468,
+        "fieldOverflow": 277.587024,
+        "deficitFieldCount": 2
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 120,
+          "threshold": 45,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 90,
+          "threshold": 35,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 110,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "deficitCount": 4,
+          "finalStorage": 37,
+          "threshold": 30,
+          "deficit": true
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "deficitCount": 7,
+          "finalStorage": 22,
+          "threshold": 50,
+          "deficit": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "drought-inflow",
+      "label": "来水偏枯：上游来水 100→55",
+      "deterministic": true,
+      "checksum": "a66dad98",
+      "totals": {
+        "upstreamInflow": 660,
+        "allocated": 660,
+        "lifted": 660,
+        "spilled": 0,
+        "evaporated": 468,
+        "fieldOverflow": 10,
+        "deficitFieldCount": 3
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 96,
+          "threshold": 45,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [
+            0
+          ],
+          "deficitCount": 1,
+          "finalStorage": 85.5,
+          "threshold": 35,
+          "deficit": true
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 86.5,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [
+            0
+          ],
+          "deficitCount": 1,
+          "finalStorage": 59.5,
+          "threshold": 30,
+          "deficit": true
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [
+            9,
+            10,
+            11
+          ],
+          "deficitCount": 3,
+          "finalStorage": 44.5,
+          "threshold": 50,
+          "deficit": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "capacity-shrunk",
+      "label": "田块容量调整：东上田 120→70，中上田 90→60",
+      "deterministic": true,
+      "checksum": "6bc5d291",
+      "totals": {
+        "upstreamInflow": 1200,
+        "allocated": 1200,
+        "lifted": 1114.587,
+        "spilled": 85.413,
+        "evaporated": 468,
+        "fieldOverflow": 404.587024,
+        "deficitFieldCount": 0
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 70,
+          "threshold": 45,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 60,
+          "threshold": 35,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 110,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 80,
+          "threshold": 30,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 112,
+          "threshold": 50,
+          "deficit": false
+        }
+      ]
+    },
+    {
+      "scenarioId": "threshold-raised",
+      "label": "作物阈值调整：东上田 45→70，西下田 50→75",
+      "deterministic": true,
+      "checksum": "4c7191a9",
+      "totals": {
+        "upstreamInflow": 1200,
+        "allocated": 1200,
+        "lifted": 1114.587,
+        "spilled": 85.413,
+        "evaporated": 468,
+        "fieldOverflow": 324.587024,
+        "deficitFieldCount": 2
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [
+            0
+          ],
+          "deficitCount": 1,
+          "finalStorage": 120,
+          "threshold": 70,
+          "deficit": true
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 90,
+          "threshold": 35,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 110,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 80,
+          "threshold": 30,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [
+            0
+          ],
+          "deficitCount": 1,
+          "finalStorage": 112,
+          "threshold": 75,
+          "deficit": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "wheel-boost",
+      "label": "水车工况：翻车开度 50→90，高转筒车风帆 60→80",
+      "deterministic": true,
+      "checksum": "359cec8e",
+      "totals": {
+        "upstreamInflow": 1200,
+        "allocated": 1200,
+        "lifted": 1187.2935,
+        "spilled": 12.7065,
+        "evaporated": 468,
+        "fieldOverflow": 397.293512,
+        "deficitFieldCount": 0
+      },
+      "fieldSummaries": [
+        {
+          "fieldId": "field-a1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 120,
+          "threshold": 45,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-a2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 100,
+          "threshold": 40,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 90,
+          "threshold": 35,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-b2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 110,
+          "threshold": 42,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c1",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 80,
+          "threshold": 30,
+          "deficit": false
+        },
+        {
+          "fieldId": "field-c2",
+          "deficitTicks": [],
+          "deficitCount": 0,
+          "finalStorage": 112,
+          "threshold": 50,
+          "deficit": false
+        }
+      ]
+    }
+  ],
+  "incrementalReports": [
+    {
+      "mutation": "渠道分流比例调整（东支渠 0.40→0.55，西支渠 0.25→0.10）",
+      "consistent": true,
+      "incrementalChecksum": "f285a187",
+      "fullChecksum": "f285a187",
+      "recomputedChannels": [
+        "channel-east",
+        "channel-west"
+      ],
+      "recomputedFields": [
+        "field-a1",
+        "field-a2",
+        "field-c1",
+        "field-c2"
+      ],
+      "reusedChannels": [
+        "channel-mid"
+      ],
+      "reusedFields": [
+        "field-b1",
+        "field-b2"
+      ]
+    },
+    {
+      "mutation": "上游来水量变化（100→55）",
+      "consistent": true,
+      "incrementalChecksum": "9e837161",
+      "fullChecksum": "9e837161",
+      "recomputedChannels": [
+        "channel-east",
+        "channel-mid",
+        "channel-west"
+      ],
+      "recomputedFields": [
+        "field-a1",
+        "field-a2",
+        "field-b1",
+        "field-b2",
+        "field-c1",
+        "field-c2"
+      ],
+      "reusedChannels": [],
+      "reusedFields": []
+    },
+    {
+      "mutation": "田块容量调整（东上田 120→70）",
+      "consistent": true,
+      "incrementalChecksum": "91b8949a",
+      "fullChecksum": "91b8949a",
+      "recomputedChannels": [],
+      "recomputedFields": [
+        "field-a1"
+      ],
+      "reusedChannels": [
+        "channel-east",
+        "channel-mid",
+        "channel-west"
+      ],
+      "reusedFields": [
+        "field-a2",
+        "field-b1",
+        "field-b2",
+        "field-c1",
+        "field-c2"
+      ]
+    },
+    {
+      "mutation": "作物需水阈值调整（西下田 50→75）",
+      "consistent": true,
+      "incrementalChecksum": "6fa25bd1",
+      "fullChecksum": "6fa25bd1",
+      "recomputedChannels": [],
+      "recomputedFields": [
+        "field-c2"
+      ],
+      "reusedChannels": [
+        "channel-east",
+        "channel-mid",
+        "channel-west"
+      ],
+      "reusedFields": [
+        "field-a1",
+        "field-a2",
+        "field-b1",
+        "field-b2",
+        "field-c1"
+      ]
+    },
+    {
+      "mutation": "水车工况变化（翻车开度 50→90）",
+      "consistent": true,
+      "incrementalChecksum": "3f844747",
+      "fullChecksum": "3f844747",
+      "recomputedChannels": [
+        "channel-east"
+      ],
+      "recomputedFields": [
+        "field-a1",
+        "field-a2"
+      ],
+      "reusedChannels": [
+        "channel-mid",
+        "channel-west"
+      ],
+      "reusedFields": [
+        "field-b1",
+        "field-b2",
+        "field-c1",
+        "field-c2"
+      ]
+    }
+  ],
+  "failures": 0
+}
