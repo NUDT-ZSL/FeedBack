@@ -7,6 +7,21 @@ import {
   RehabilitationAction,
   ParticleEffect
 } from './types';
+import {
+  AngleSource,
+  PlacementResult,
+  ReductionState,
+  FixationState,
+  FIXATION_PROTOCOL,
+  applyAngleAdjustment,
+  createFixationState,
+  createReductionState,
+  generateMisalignedAngle,
+  getFractureProtocol,
+  isFixationComplete,
+  placeMaterial as enginePlaceMaterial,
+  verifyConsistency
+} from './engine';
 
 interface GameState {
   gamePhase: GamePhase;
@@ -21,10 +36,14 @@ interface GameState {
   showXRay: boolean;
   currentRehabDay: number;
   particleEffects: ParticleEffect[];
+  /** 复位阶段引擎状态：生效角度 + 全部调整记录 + 当前评估结论 */
+  reductionState: ReductionState | null;
+  /** 固定阶段引擎状态：已放置集合 + 全部放置尝试（含拒绝原因） */
+  fixationState: FixationState;
   randomizeFracture: () => void;
-  updateBoneAngle: (jointId: string, angle: number) => void;
+  updateBoneAngle: (jointId: string, angle: number, source?: AngleSource) => void;
   checkResetSuccess: () => boolean;
-  placeMaterial: (materialId: string, position: string) => boolean;
+  placeMaterial: (materialId: string, position: string) => PlacementResult;
   completeRehabDay: (day: number, matchPercentage: number) => void;
   setGamePhase: (phase: GamePhase) => void;
   setShowXRay: (show: boolean) => void;
@@ -32,6 +51,16 @@ interface GameState {
   resetGame: () => void;
   addParticleEffect: (particle: ParticleEffect) => void;
   updateParticles: () => void;
+  /** 导出离线核对报告：各关节偏差、复位结论、放置顺序与拒绝原因 */
+  exportReport: () => {
+    fractureType: FractureType | null;
+    reductionAchieved: boolean;
+    joints: ReductionState['assessment']['joints'];
+    adjustments: ReductionState['adjustments'];
+    placedMaterials: FixationState['placed'];
+    placementAttempts: PlacementResult[];
+    consistencyCheck: { consistent: boolean; mismatches: string[] };
+  };
 }
 
 const initialBoneJoints: BoneJoint[] = [
@@ -61,44 +90,15 @@ const initialBoneJoints: BoneJoint[] = [
   }
 ];
 
-const initialFixationMaterials: FixationMaterial[] = [
-  {
-    id: 'cotton_pad',
-    name: '棉垫',
-    type: 'cotton_pad',
-    order: 1,
-    position: '',
-    placed: false,
-    correctPosition: 'fracture_site'
-  },
-  {
-    id: 'willow_splint',
-    name: '柳木夹板',
-    type: 'willow_splint',
-    order: 2,
-    position: '',
-    placed: false,
-    correctPosition: 'outer_side'
-  },
-  {
-    id: 'bamboo_splint',
-    name: '竹制夹板',
-    type: 'bamboo_splint',
-    order: 3,
-    position: '',
-    placed: false,
-    correctPosition: 'inner_side'
-  },
-  {
-    id: 'gauze',
-    name: '纱布绷带',
-    type: 'gauze',
-    order: 4,
-    position: '',
-    placed: false,
-    correctPosition: 'wrap'
-  }
-];
+const initialFixationMaterials: FixationMaterial[] = FIXATION_PROTOCOL.map(spec => ({
+  id: spec.id,
+  name: spec.name,
+  type: spec.id as FixationMaterial['type'],
+  order: spec.order,
+  position: '',
+  placed: false,
+  correctPosition: spec.correctPosition
+}));
 
 const initialRehabilitationActions: RehabilitationAction[] = [
   { day: 1, name: '手指伸展', trajectoryType: 'line', requiredMatch: 80, description: '缓慢伸展并弯曲手指，每次保持3秒' },
@@ -117,24 +117,6 @@ const initialRehabilitationActions: RehabilitationAction[] = [
   { day: 14, name: '恢复评估', trajectoryType: 'wave', requiredMatch: 80, description: '综合动作评估，检查恢复程度' }
 ];
 
-const generateMisalignedAngle = (targetAngle: number): number => {
-  const offset = (Math.random() - 0.5) * 40;
-  return targetAngle + offset;
-};
-
-const getFractureTargetAngles = (fractureType: FractureType): { [key: string]: number } => {
-  switch (fractureType) {
-    case FractureType.RADIAL_DISTAL:
-      return { upper_arm: 0, forearm: 15, palm: -10 };
-    case FractureType.HUMERAL_SHAFT:
-      return { upper_arm: -20, forearm: 5, palm: 0 };
-    case FractureType.OLECRANON:
-      return { upper_arm: 10, forearm: -15, palm: 5 };
-    default:
-      return { upper_arm: 0, forearm: 0, palm: 0 };
-  }
-};
-
 export const useGameStore = create<GameState>((set, get) => ({
   gamePhase: GamePhase.DIAGNOSIS,
   currentFracture: null,
@@ -148,41 +130,68 @@ export const useGameStore = create<GameState>((set, get) => ({
   showXRay: false,
   currentRehabDay: 1,
   particleEffects: [],
+  reductionState: null,
+  fixationState: createFixationState(false),
 
   randomizeFracture: () => {
     const fractureTypes = Object.values(FractureType);
     const randomFracture = fractureTypes[Math.floor(Math.random() * fractureTypes.length)];
-    const targetAngles = getFractureTargetAngles(randomFracture);
+    const protocol = getFractureProtocol(randomFracture);
 
-    const updatedJoints = get().boneJoints.map(joint => ({
-      ...joint,
-      targetAngle: targetAngles[joint.id] || 0,
-      currentAngle: generateMisalignedAngle(targetAngles[joint.id] || 0)
-    }));
+    let reduction = createReductionState(
+      initialBoneJoints.map(j => ({ id: j.id, name: j.name })),
+      protocol.targetAngles,
+      protocol.tolerance
+    );
+    for (const joint of reduction.joints) {
+      reduction = applyAngleAdjustment(
+        reduction,
+        joint.id,
+        generateMisalignedAngle(joint.targetAngle),
+        'random'
+      );
+    }
+
+    const updatedJoints = get().boneJoints.map(joint => {
+      const engineJoint = reduction.joints.find(j => j.id === joint.id);
+      return {
+        ...joint,
+        targetAngle: engineJoint?.targetAngle ?? 0,
+        currentAngle: engineJoint?.currentAngle ?? 0
+      };
+    });
 
     set({
       currentFracture: randomFracture,
       boneJoints: updatedJoints,
+      reductionState: reduction,
+      fixationState: createFixationState(reduction.assessment.allWithinTolerance),
       gamePhase: GamePhase.REDUCTION,
       timeRemaining: 60,
-      resetSuccess: false
+      resetSuccess: reduction.assessment.allWithinTolerance
     });
   },
 
-  updateBoneAngle: (jointId: string, angle: number) => {
+  updateBoneAngle: (jointId: string, angle: number, source: AngleSource = 'manual') => {
+    const { reductionState } = get();
+    if (!reductionState) return;
+
+    const nextReduction = applyAngleAdjustment(reductionState, jointId, angle, source);
+    const achieved = nextReduction.assessment.allWithinTolerance;
+
     set(state => ({
+      reductionState: nextReduction,
       boneJoints: state.boneJoints.map(joint =>
         joint.id === jointId ? { ...joint, currentAngle: angle } : joint
-      )
+      ),
+      resetSuccess: achieved,
+      fixationState: { ...state.fixationState, reductionAchieved: achieved }
     }));
   },
 
   checkResetSuccess: (): boolean => {
-    const { boneJoints } = get();
-    const allInRange = boneJoints.every(joint => {
-      const diff = Math.abs(joint.currentAngle - joint.targetAngle);
-      return diff <= 5;
-    });
+    const { reductionState } = get();
+    const allInRange = reductionState?.assessment.allWithinTolerance ?? false;
 
     if (allInRange) {
       set({ resetSuccess: true, gamePhase: GamePhase.FIXATION });
@@ -191,33 +200,29 @@ export const useGameStore = create<GameState>((set, get) => ({
     return allInRange;
   },
 
-  placeMaterial: (materialId: string, position: string): boolean => {
-    const { fixationMaterials } = get();
-    const material = fixationMaterials.find(m => m.id === materialId);
+  placeMaterial: (materialId: string, position: string): PlacementResult => {
+    const { fixationState, fixationMaterials } = get();
 
-    if (!material || material.placed) return false;
+    const outcome = enginePlaceMaterial(fixationState, FIXATION_PROTOCOL, materialId, position);
+    const { result } = outcome;
 
-    const placedMaterials = fixationMaterials.filter(m => m.placed);
-    const nextOrder = placedMaterials.length + 1;
-
-    if (material.order !== nextOrder) return false;
-
-    const isCorrect = position === material.correctPosition;
-
-    if (isCorrect) {
-      const updatedMaterials = fixationMaterials.map(m =>
-        m.id === materialId ? { ...m, placed: true, position } : m
-      );
-
-      const allPlaced = updatedMaterials.every(m => m.placed);
-
-      set({
-        fixationMaterials: updatedMaterials,
-        gamePhase: allPlaced ? GamePhase.REHABILITATION : GamePhase.FIXATION
-      });
+    if (!result.accepted) {
+      set({ fixationState: outcome.state });
+      return result;
     }
 
-    return isCorrect;
+    const updatedMaterials = fixationMaterials.map(m =>
+      m.id === materialId ? { ...m, placed: true, position } : m
+    );
+    const allPlaced = isFixationComplete(outcome.state, FIXATION_PROTOCOL);
+
+    set({
+      fixationMaterials: updatedMaterials,
+      fixationState: outcome.state,
+      gamePhase: allPlaced ? GamePhase.REHABILITATION : GamePhase.FIXATION
+    });
+
+    return result;
   },
 
   completeRehabDay: (day: number, matchPercentage: number) => {
@@ -268,7 +273,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       resetSuccess: false,
       showXRay: false,
       currentRehabDay: 1,
-      particleEffects: []
+      particleEffects: [],
+      reductionState: null,
+      fixationState: createFixationState(false)
     });
   },
 
@@ -289,5 +296,21 @@ export const useGameStore = create<GameState>((set, get) => ({
         }))
         .filter(p => p.life > 0)
     }));
+  },
+
+  exportReport: () => {
+    const { currentFracture, reductionState, fixationState } = get();
+    const consistencyCheck = reductionState
+      ? verifyConsistency(reductionState)
+      : { consistent: true, mismatches: [] };
+    return {
+      fractureType: currentFracture,
+      reductionAchieved: reductionState?.assessment.allWithinTolerance ?? false,
+      joints: reductionState?.assessment.joints ?? [],
+      adjustments: reductionState?.adjustments ?? [],
+      placedMaterials: fixationState.placed,
+      placementAttempts: fixationState.attempts,
+      consistencyCheck
+    };
   }
 }));
