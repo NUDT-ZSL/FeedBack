@@ -1,57 +1,48 @@
-# React + TypeScript + Vite
+# 古代造纸作坊互动应用
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+明代宣纸作坊的交互式 Web 应用（React + TypeScript + Vite + Zustand）。
 
-Currently, two official plugins are available:
+## 结构
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- `src/PaperWorkshop.tsx` — 场景与交互组件（动画、拖拽、点击）
+- `src/store.ts` — Zustand 状态层，只做交互守卫与状态搬运，判定一律委托推演层
+- `src/simulation/` — 与 UI/计时/随机数完全解耦的纯逻辑推演层
+  - `engine.ts` — 浓度、均匀度、压榨力度、干燥进度、检验得分的纯函数与操作推演
+  - `types.ts` — 推演状态、操作、轨迹、越界标记类型
+  - `history.ts` — 历史记录容错解析（兼容旧数据）
+  - `index.ts` — 统一导出
+- `scripts/simulate.ts` — 离线批量推演入口
 
-## Expanding the ESLint configuration
+## 离线批量推演
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm run simulate            # 人类可读输出：逐步中间量 + 越界标记 + 最终评级
+npm run simulate -- --json  # JSON 输出，便于接入其他工具
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+固定输入序列覆盖：正常流程、配料总量越界、压榨力度越界（过高/过低）、
+干燥未完成即检验、检验点超上限、非法工序顺序；末尾附重复推演一致性与
+旧记录解析自检。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 推演层设计
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- **纯函数、确定性**：引擎不调用 `Math.random()`、`Date.now()` 或任何计时器；
+  随机因素以 `rng: () => number` 的形式外部注入。批量推演使用固定 seed 的
+  `createSeededRng(seed)`（mulberry32），同一输入重复推演结果完全一致。
+  UI 层在 `store.ts` 中注入 `Math.random`，交互体验不变。
+- **可观察的边界结论**：每步操作产生一条 `SimTraceEntry`，含 `applied`、
+  `violations` 与操作后的完整状态快照。越界不会静默跳过：
+  - `MATERIAL_OUT_OF_RANGE` / `CONCENTRATION_OUT_OF_RANGE`：配料单项或总量越界，按边界值计并标记
+  - `PRESS_OUT_OF_RANGE`：压榨力度超出 [70, 90]，工序继续但评分反映
+  - `INSPECT_BEFORE_DRIED`：干燥未达 100% 即检验，点计入但标记，得分按实际干燥度
+  - `INSPECTION_LIMIT_EXCEEDED`：检验点超过 10 个上限，本次拒绝并标记
+  - `INVALID_SEQUENCE` / `NO_PAPER`：非法工序顺序或缺纸坯，拒绝并留痕
+- **历史兼容**：`parseHistoryRecords` 容错解析 localStorage 旧数据，缺失字段
+  补默认值、坏记录跳过、损坏 JSON 返回空列表，已有记录可继续展示。
+
+## 开发
+
+```bash
+npm install
+npm run dev
 ```

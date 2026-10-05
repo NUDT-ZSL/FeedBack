@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { WorkshopState, WorkshopActions, MaterialType, PaperState } from './types';
-import { calculateConcentration, calculateUniformity, calculateQualityScore, generateId, clamp } from './utils';
+import { calculateConcentration, calculateQualityScore, generateId, clamp } from './utils';
+import { calculateUniformity, calculatePressLevel } from './simulation/engine';
+import { parseHistoryRecords } from './simulation/history';
 
 const HISTORY_KEY = 'paper-workshop-history';
 const MAX_HISTORY = 10;
@@ -36,7 +38,7 @@ export const useWorkshopStore = create<WorkshopState & WorkshopActions>((set, ge
     try {
       const saved = localStorage.getItem(HISTORY_KEY);
       if (saved) {
-        const history = JSON.parse(saved);
+        const history = parseHistoryRecords(saved);
         set({ history });
       }
     } catch {
@@ -64,7 +66,7 @@ export const useWorkshopStore = create<WorkshopState & WorkshopActions>((set, ge
     const { isAnimating, currentStep, pulp } = get();
     if (isAnimating || currentStep !== 0) return;
 
-    const uniformity = calculateUniformity(pulp.concentration);
+    const uniformity = calculateUniformity(pulp.concentration, Math.random);
     const newPaper: PaperState = {
       id: generateId(),
       stage: 'scooping',
@@ -120,7 +122,7 @@ export const useWorkshopStore = create<WorkshopState & WorkshopActions>((set, ge
     const { currentPaper } = get();
     if (!currentPaper) return;
 
-    const pressLevel = 70 + Math.random() * 25;
+    const pressLevel = calculatePressLevel(Math.random);
 
     setTimeout(() => {
       get().hideWaterStain();
