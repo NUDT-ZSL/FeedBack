@@ -1,0 +1,24 @@
+{
+  "name": "依赖成环：识别为不可达并给出明确受阻原因",
+  "description": "ring_a 与 ring_b 互相依赖成环，连同依赖它们的 core 均不可达；独立部件 normal 不受影响。",
+  "parts": [
+    { "id": "ring_a", "name": "甲环", "layer": "六合仪", "dependsOn": ["ring_b"] },
+    { "id": "ring_b", "name": "乙环", "layer": "六合仪", "dependsOn": ["ring_a"] },
+    { "id": "core", "name": "内球", "layer": "四游仪", "dependsOn": ["ring_a"] },
+    { "id": "normal", "name": "独立环", "layer": "三辰仪", "dependsOn": [] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "ring_a", "expect": { "ok": false, "reason": "dependency-cycle" } },
+    { "type": "disassemble", "partId": "ring_b", "expect": { "ok": false, "reason": "dependency-cycle" } },
+    { "type": "disassemble", "partId": "core", "expect": { "ok": false, "reason": "dependency-cycle" } },
+    { "type": "disassemble", "partId": "normal", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "normal", "expect": { "ok": true } }
+  ],
+  "expectProgress": {
+    "phase": "disassembly",
+    "disassembled": 1,
+    "assembled": 1,
+    "complete": false,
+    "unreachable": ["core", "ring_a", "ring_b"]
+  }
+}

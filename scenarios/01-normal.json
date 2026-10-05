@@ -1,0 +1,30 @@
+{
+  "name": "标准流程：从外到内拆解，逆向装回",
+  "description": "七个部件按六合仪->三辰仪->四游仪拆下，再逆向装回，全部操作有效，最终完成。",
+  "parts": [
+    { "id": "liuhe_outer", "name": "六合仪外环（子午环）", "layer": "六合仪", "dependsOn": [] },
+    { "id": "liuhe_inner_east", "name": "六合仪东赤道环", "layer": "六合仪", "dependsOn": ["liuhe_outer"] },
+    { "id": "liuhe_inner_west", "name": "六合仪西赤道环", "layer": "六合仪", "dependsOn": ["liuhe_outer"] },
+    { "id": "sanchen_mid_a", "name": "三辰仪中环（黄道环）", "layer": "三辰仪", "dependsOn": ["liuhe_inner_east", "liuhe_inner_west"] },
+    { "id": "sanchen_mid_b", "name": "三辰仪中环（白道环）", "layer": "三辰仪", "dependsOn": ["liuhe_inner_east", "liuhe_inner_west"] },
+    { "id": "sanchen_core", "name": "三辰仪内球（天球）", "layer": "三辰仪", "dependsOn": ["sanchen_mid_a", "sanchen_mid_b"] },
+    { "id": "siyou_double", "name": "四游仪双环", "layer": "四游仪", "dependsOn": ["sanchen_core"] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "liuhe_outer", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "liuhe_inner_east", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "liuhe_inner_west", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "sanchen_mid_a", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "sanchen_mid_b", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "sanchen_core", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "siyou_double", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "siyou_double", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "sanchen_core", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "sanchen_mid_b", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "sanchen_mid_a", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "liuhe_inner_west", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "liuhe_inner_east", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "liuhe_outer", "expect": { "ok": true } }
+  ],
+  "expectProgress": { "phase": "complete", "disassembled": 7, "assembled": 7, "complete": true }
+}

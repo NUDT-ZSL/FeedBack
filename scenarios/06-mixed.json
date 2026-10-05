@@ -1,0 +1,24 @@
+{
+  "name": "混合乱序：有效与无效操作交错，结论保持稳定",
+  "description": "乱序 + 重复 + 未知部件交错出现，验证每次操作后的步骤状态与进度结论确定且可复现。",
+  "parts": [
+    { "id": "a", "name": "外环", "layer": "六合仪", "dependsOn": [] },
+    { "id": "b", "name": "中环", "layer": "三辰仪", "dependsOn": ["a"] },
+    { "id": "c", "name": "内球", "layer": "四游仪", "dependsOn": ["b"] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "c", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "disassemble", "partId": "a", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "a", "expect": { "ok": false, "reason": "already-removed" } },
+    { "type": "assemble", "partId": "a", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "disassemble", "partId": "b", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "c", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "b", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "assemble", "partId": "c", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "c", "expect": { "ok": false, "reason": "already-assembled" } },
+    { "type": "assemble", "partId": "b", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "a", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "nobody", "expect": { "ok": false, "reason": "unknown-part" } }
+  ],
+  "expectProgress": { "phase": "complete", "disassembled": 3, "assembled": 3, "complete": true }
+}

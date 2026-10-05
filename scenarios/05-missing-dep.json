@@ -1,0 +1,23 @@
+{
+  "name": "缺失依赖：指向不存在部件被识别为不可达",
+  "description": "ring 依赖未定义的 ghost，被标记为 missing-dependency 不可达；操作不存在部件本身判 unknown-part。",
+  "parts": [
+    { "id": "ring", "name": "外环", "layer": "六合仪", "dependsOn": ["ghost"] },
+    { "id": "core", "name": "内球", "layer": "四游仪", "dependsOn": ["ring"] },
+    { "id": "free", "name": "独立环", "layer": "三辰仪", "dependsOn": [] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "ring", "expect": { "ok": false, "reason": "missing-dependency" } },
+    { "type": "disassemble", "partId": "core", "expect": { "ok": false, "reason": "missing-dependency" } },
+    { "type": "disassemble", "partId": "ghost", "expect": { "ok": false, "reason": "unknown-part" } },
+    { "type": "disassemble", "partId": "free", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "free", "expect": { "ok": true } }
+  ],
+  "expectProgress": {
+    "phase": "disassembly",
+    "disassembled": 1,
+    "assembled": 1,
+    "complete": false,
+    "unreachable": ["core", "ring"]
+  }
+}

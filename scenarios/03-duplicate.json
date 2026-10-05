@@ -1,0 +1,19 @@
+{
+  "name": "重复操作：重复拆下/装回判无效且不改进度",
+  "description": "同一部件重复拆下、重复装回均被识别为无效操作，进度结论与操作前一致。",
+  "parts": [
+    { "id": "outer", "name": "外环", "layer": "六合仪", "dependsOn": [] },
+    { "id": "inner", "name": "内球", "layer": "四游仪", "dependsOn": ["outer"] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "outer", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "outer", "expect": { "ok": false, "reason": "already-removed" } },
+    { "type": "disassemble", "partId": "inner", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "inner", "expect": { "ok": false, "reason": "already-removed" } },
+    { "type": "assemble", "partId": "inner", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "inner", "expect": { "ok": false, "reason": "already-assembled" } },
+    { "type": "assemble", "partId": "outer", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "outer", "expect": { "ok": false, "reason": "already-assembled" } }
+  ],
+  "expectProgress": { "phase": "complete", "disassembled": 2, "assembled": 2, "complete": true }
+}

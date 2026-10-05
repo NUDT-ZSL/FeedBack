@@ -1,0 +1,22 @@
+{
+  "name": "乱序操作：依赖未满足被阻止，满足后放行",
+  "description": "先拆内层被依赖校验阻止并给出受阻原因；先补拆外层后同一操作转为可执行。",
+  "parts": [
+    { "id": "outer", "name": "外环", "layer": "六合仪", "dependsOn": [] },
+    { "id": "mid", "name": "中环", "layer": "三辰仪", "dependsOn": ["outer"] },
+    { "id": "inner", "name": "内球", "layer": "四游仪", "dependsOn": ["mid"] }
+  ],
+  "operations": [
+    { "type": "disassemble", "partId": "inner", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "disassemble", "partId": "mid", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "assemble", "partId": "mid", "expect": { "ok": false, "reason": "not-yet-disassembled" } },
+    { "type": "disassemble", "partId": "outer", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "mid", "expect": { "ok": true } },
+    { "type": "disassemble", "partId": "inner", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "outer", "expect": { "ok": false, "reason": "waiting-dependency" } },
+    { "type": "assemble", "partId": "inner", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "mid", "expect": { "ok": true } },
+    { "type": "assemble", "partId": "outer", "expect": { "ok": true } }
+  ],
+  "expectProgress": { "phase": "complete", "disassembled": 3, "assembled": 3, "complete": true }
+}
