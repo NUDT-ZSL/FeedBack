@@ -7,6 +7,15 @@ import {
   RehabilitationAction,
   ParticleEffect
 } from './types';
+import {
+  AngleSource,
+  FixationAttempt,
+  JointAdjustment,
+  ReductionReport
+} from './pipeline/types';
+import { deriveReductionPlan, evaluateReduction, reevaluateJoint } from './pipeline/reduction';
+import { attemptPlacement, createFixationState } from './pipeline/fixation';
+import type { FixationState } from './pipeline/types';
 
 interface GameState {
   gamePhase: GamePhase;
@@ -21,8 +30,11 @@ interface GameState {
   showXRay: boolean;
   currentRehabDay: number;
   particleEffects: ParticleEffect[];
+  angleAdjustments: JointAdjustment[];
+  reductionReport: ReductionReport | null;
+  lastFixationAttempt: FixationAttempt | null;
   randomizeFracture: () => void;
-  updateBoneAngle: (jointId: string, angle: number) => void;
+  updateBoneAngle: (jointId: string, angle: number, source?: AngleSource) => void;
   checkResetSuccess: () => boolean;
   placeMaterial: (materialId: string, position: string) => boolean;
   completeRehabDay: (day: number, matchPercentage: number) => void;
@@ -122,18 +134,26 @@ const generateMisalignedAngle = (targetAngle: number): number => {
   return targetAngle + offset;
 };
 
-const getFractureTargetAngles = (fractureType: FractureType): { [key: string]: number } => {
-  switch (fractureType) {
-    case FractureType.RADIAL_DISTAL:
-      return { upper_arm: 0, forearm: 15, palm: -10 };
-    case FractureType.HUMERAL_SHAFT:
-      return { upper_arm: -20, forearm: 5, palm: 0 };
-    case FractureType.OLECRANON:
-      return { upper_arm: 10, forearm: -15, palm: 5 };
-    default:
-      return { upper_arm: 0, forearm: 0, palm: 0 };
-  }
-};
+const toFixationState = (materials: FixationMaterial[]): FixationState =>
+  createFixationState(
+    materials.map(material => ({
+      id: material.id,
+      name: material.name,
+      type: material.type,
+      order: material.order,
+      correctPosition: material.correctPosition
+    }))
+  );
+
+const applyFixationState = (
+  materials: FixationMaterial[],
+  state: FixationState
+): FixationMaterial[] =>
+  materials.map(material => ({
+    ...material,
+    placed: state.placedOrder.includes(material.id),
+    position: state.positions[material.id] ?? ''
+  }));
 
 export const useGameStore = create<GameState>((set, get) => ({
   gamePhase: GamePhase.DIAGNOSIS,
@@ -148,76 +168,124 @@ export const useGameStore = create<GameState>((set, get) => ({
   showXRay: false,
   currentRehabDay: 1,
   particleEffects: [],
+  angleAdjustments: [],
+  reductionReport: null,
+  lastFixationAttempt: null,
 
   randomizeFracture: () => {
     const fractureTypes = Object.values(FractureType);
     const randomFracture = fractureTypes[Math.floor(Math.random() * fractureTypes.length)];
-    const targetAngles = getFractureTargetAngles(randomFracture);
+    const plan = deriveReductionPlan(
+      randomFracture,
+      get().boneJoints.map(joint => joint.id)
+    );
 
-    const updatedJoints = get().boneJoints.map(joint => ({
-      ...joint,
-      targetAngle: targetAngles[joint.id] || 0,
-      currentAngle: generateMisalignedAngle(targetAngles[joint.id] || 0)
-    }));
+    let sequence = 0;
+    const adjustments: JointAdjustment[] = [];
+    const updatedJoints = get().boneJoints.map(joint => {
+      const jointPlan = plan.joints.find(entry => entry.jointId === joint.id);
+      const targetAngle = jointPlan?.targetAngle ?? 0;
+      const currentAngle = generateMisalignedAngle(targetAngle);
+      sequence += 1;
+      adjustments.push({
+        sequence,
+        jointId: joint.id,
+        angle: currentAngle,
+        source: 'random'
+      });
+      return { ...joint, targetAngle, currentAngle };
+    });
+
+    const report = evaluateReduction(
+      Object.fromEntries(updatedJoints.map(joint => [joint.id, joint.currentAngle])),
+      plan
+    );
 
     set({
       currentFracture: randomFracture,
       boneJoints: updatedJoints,
+      angleAdjustments: adjustments,
+      reductionReport: report,
       gamePhase: GamePhase.REDUCTION,
       timeRemaining: 60,
-      resetSuccess: false
+      resetSuccess: false,
+      lastFixationAttempt: null
     });
   },
 
-  updateBoneAngle: (jointId: string, angle: number) => {
-    set(state => ({
-      boneJoints: state.boneJoints.map(joint =>
-        joint.id === jointId ? { ...joint, currentAngle: angle } : joint
-      )
-    }));
+  updateBoneAngle: (jointId: string, angle: number, source: AngleSource = 'manual') => {
+    set(state => {
+      if (!state.currentFracture || !state.reductionReport) {
+        return {
+          boneJoints: state.boneJoints.map(joint =>
+            joint.id === jointId ? { ...joint, currentAngle: angle } : joint
+          )
+        };
+      }
+
+      const plan = deriveReductionPlan(
+        state.currentFracture,
+        state.boneJoints.map(joint => joint.id)
+      );
+      const adjustment: JointAdjustment = {
+        sequence: state.angleAdjustments.length + 1,
+        jointId,
+        angle,
+        source
+      };
+      const report = reevaluateJoint(state.reductionReport, plan, jointId, angle);
+
+      return {
+        boneJoints: state.boneJoints.map(joint =>
+          joint.id === jointId ? { ...joint, currentAngle: angle } : joint
+        ),
+        angleAdjustments: [...state.angleAdjustments, adjustment],
+        reductionReport: report
+      };
+    });
   },
 
   checkResetSuccess: (): boolean => {
-    const { boneJoints } = get();
-    const allInRange = boneJoints.every(joint => {
-      const diff = Math.abs(joint.currentAngle - joint.targetAngle);
-      return diff <= 5;
-    });
+    const { currentFracture, boneJoints } = get();
+    if (!currentFracture) return false;
 
-    if (allInRange) {
-      set({ resetSuccess: true, gamePhase: GamePhase.FIXATION });
+    const plan = deriveReductionPlan(
+      currentFracture,
+      boneJoints.map(joint => joint.id)
+    );
+    const report = evaluateReduction(
+      Object.fromEntries(boneJoints.map(joint => [joint.id, joint.currentAngle])),
+      plan
+    );
+
+    if (report.allWithinTolerance) {
+      set({ reductionReport: report, resetSuccess: true, gamePhase: GamePhase.FIXATION });
+    } else {
+      set({ reductionReport: report, resetSuccess: false });
     }
 
-    return allInRange;
+    return report.allWithinTolerance;
   },
 
   placeMaterial: (materialId: string, position: string): boolean => {
-    const { fixationMaterials } = get();
-    const material = fixationMaterials.find(m => m.id === materialId);
+    const { fixationMaterials, resetSuccess } = get();
 
-    if (!material || material.placed) return false;
+    const { state, attempt } = attemptPlacement(
+      toFixationState(fixationMaterials),
+      materialId,
+      position,
+      resetSuccess
+    );
+    const updatedMaterials = applyFixationState(fixationMaterials, state);
+    const allPlaced = updatedMaterials.every(material => material.placed);
 
-    const placedMaterials = fixationMaterials.filter(m => m.placed);
-    const nextOrder = placedMaterials.length + 1;
+    set({
+      fixationMaterials: updatedMaterials,
+      lastFixationAttempt: attempt,
+      gamePhase: attempt.accepted && allPlaced ? GamePhase.REHABILITATION : get().gamePhase
+    });
 
-    if (material.order !== nextOrder) return false;
-
-    const isCorrect = position === material.correctPosition;
-
-    if (isCorrect) {
-      const updatedMaterials = fixationMaterials.map(m =>
-        m.id === materialId ? { ...m, placed: true, position } : m
-      );
-
-      const allPlaced = updatedMaterials.every(m => m.placed);
-
-      set({
-        fixationMaterials: updatedMaterials,
-        gamePhase: allPlaced ? GamePhase.REHABILITATION : GamePhase.FIXATION
-      });
-    }
-
-    return isCorrect;
+    return attempt.accepted;
   },
 
   completeRehabDay: (day: number, matchPercentage: number) => {
@@ -268,7 +336,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       resetSuccess: false,
       showXRay: false,
       currentRehabDay: 1,
-      particleEffects: []
+      particleEffects: [],
+      angleAdjustments: [],
+      reductionReport: null,
+      lastFixationAttempt: null
     });
   },
 
