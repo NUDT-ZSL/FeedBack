@@ -1,12 +1,19 @@
-import { hexToHsl, hslToHex } from './utils/colorUtils';
+import { hexToHsl, hslToHex } from './utils/colorUtils.ts';
+
+export function clampCount(count: number | undefined, fallback: number): number {
+  if (typeof count !== 'number' || !Number.isFinite(count)) return fallback;
+  return Math.max(1, Math.floor(count));
+}
 
 export function monochromatic(colors: string[], count: number = 5): string[] {
   if (colors.length === 0) return [];
   const base = colors[0];
   const { h, s } = hexToHsl(base);
+  const total = clampCount(count, 5);
+  if (total === 1) return [hslToHex(h, s, 50)];
   const result: string[] = [];
-  const step = 80 / (count - 1 || 1);
-  for (let i = 0; i < count; i++) {
+  const step = 80 / (total - 1);
+  for (let i = 0; i < total; i++) {
     const l = 10 + i * step;
     result.push(hslToHex(h, s, l));
   }
@@ -55,6 +62,14 @@ export function analogous(colors: string[]): string[] {
 }
 
 export type PresetRuleName = 'monochromatic' | 'complementary' | 'triadic' | 'tetradic' | 'analogous';
+
+export const PRESET_RULE_NAMES: PresetRuleName[] = [
+  'monochromatic',
+  'complementary',
+  'triadic',
+  'tetradic',
+  'analogous'
+];
 
 export function applyPreset(ruleName: PresetRuleName, colors: string[], count?: number): string[] {
   switch (ruleName) {
