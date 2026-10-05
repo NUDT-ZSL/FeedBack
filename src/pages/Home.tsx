@@ -1,3 +1,5 @@
+import AlignmentPage from '@/components/alignment/AlignmentPage';
+
 export default function Home() {
-  return <div></div>;
+  return <AlignmentPage />;
 }
