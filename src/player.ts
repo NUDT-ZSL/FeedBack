@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { SurfaceType } from './level';
+import { SimEvent } from './simulation';
 import { JoystickOutput } from './ui';
 
 export interface Particle {
@@ -22,11 +23,9 @@ export class Player {
   onSand: boolean = false;
   onIce: boolean = false;
 
-  lives: number = 5;
-  starsCollected: Set<number> = new Set();
-  score: number = 0;
+  /** 当前固定步 tick，由 Game 在每次物理步进前写入 */
+  currentTick: number = 0;
   burning: boolean = false;
-  burnTimer: number = 0;
 
   scene: THREE.Scene;
   world: CANNON.World;
@@ -39,11 +38,9 @@ export class Player {
 
   iceGlow?: THREE.PointLight;
 
-  onLifeLost?: () => void;
-  onStarCollected?: (index: number) => void;
-  onScoreAdd?: (points: number) => void;
-  onGoal?: (hiddenPath: boolean) => void;
-  onSurfaceChange?: (surface: SurfaceType) => void;
+  /** 碰撞只产生事件，由 Simulation 统一结算 */
+  onCollisionEvent?: (event: SimEvent) => void;
+  onFall?: () => void;
 
   audioCtx?: AudioContext;
 
@@ -117,64 +114,64 @@ export class Player {
     this.joystickInput = input;
   }
 
+  /** 碰撞回调：只生成带 tick 的事件，不做任何状态改写 */
   handleCollision(e: { body: CANNON.Body }): void {
     const other = e.body;
+    const data = other.userData as { type?: string } | null;
+    if (!data || !data.type) return;
 
-    if (other.userData) {
-      const data = other.userData as any;
+    const tick = this.currentTick;
 
-      if (data.type === 'surface') {
-        this.setSurface(data.surface as SurfaceType);
+    switch (data.type) {
+      case 'surface':
+        this.emit({
+          tick,
+          type: 'surface',
+          surface: (data as { surface: SurfaceType }).surface
+        });
+        break;
+
+      case 'hammer': {
+        const hammerData = data as { id: number };
+        this.emit({
+          tick,
+          type: 'hammer',
+          id: hammerData.id,
+          dirX: this.body.position.x - other.position.x,
+          dirZ: this.body.position.z - other.position.z
+        });
+        break;
       }
 
-      if (data.type === 'hammer') {
-        this.triggerShockwave();
-        const dir = new CANNON.Vec3(
-          this.body.position.x - other.position.x,
-          0.5,
-          this.body.position.z - other.position.z
-        );
-        dir.normalize();
-        this.body.velocity.set(dir.x * 12, dir.y * 8, dir.z * 12);
-        this.playSound(300, 0.15, 'square');
-      }
+      case 'fire':
+        this.emit({ tick, type: 'fire', id: (data as { id: number }).id });
+        break;
 
-      if (data.type === 'fire' && data.active && !this.burning) {
-        this.takeDamage();
-      }
+      case 'star':
+        this.emit({ tick, type: 'star', id: (data as { index: number }).index });
+        break;
 
-      if (data.type === 'star') {
-        const idx = data.index as number;
-        if (!this.starsCollected.has(idx)) {
-          this.starsCollected.add(idx);
-          this.onStarCollected?.(idx);
-          this.addScore(100);
-          this.playSound(880, 0.2, 'sine');
-          if (data.mesh) {
-            this.scene.remove(data.mesh);
-          }
-        }
-      }
+      case 'goal':
+        this.emit({
+          tick,
+          type: 'goal',
+          hiddenPath: !!(data as { hiddenPath?: boolean }).hiddenPath
+        });
+        break;
 
-      if (data.type === 'goal') {
-        this.onGoal?.(!!data.hiddenPath);
-        if (data.hiddenPath) {
-          this.addScore(500);
-        } else {
-          this.addScore(200);
-        }
-      }
-
-      if (data.type === 'hiddenPath') {
-        this.addScore(10);
-      }
+      case 'hiddenPath':
+        this.emit({ tick, type: 'hiddenPath' });
+        break;
     }
   }
 
-  setSurface(surface: SurfaceType): void {
+  private emit(event: SimEvent): void {
+    this.onCollisionEvent?.(event);
+  }
+
+  applySurface(surface: SurfaceType): void {
     if (this.currentSurface !== surface) {
       this.currentSurface = surface;
-      this.onSurfaceChange?.(surface);
     }
     this.onSand = surface === 'sand';
     this.onIce = surface === 'ice';
@@ -193,16 +190,17 @@ export class Player {
     }
   }
 
-  takeDamage(): void {
-    this.lives = Math.max(0, this.lives - 1);
-    this.burning = true;
-    this.burnTimer = 1;
-    this.onLifeLost?.();
-    this.playSound(150, 0.3, 'sawtooth');
-
+  /** 燃烧视觉状态由 Simulation 驱动，玩家自身不持有伤害逻辑 */
+  setBurning(on: boolean): void {
+    if (this.burning === on) return;
+    this.burning = on;
     const mat = this.mesh.material as THREE.MeshStandardMaterial;
-    mat.emissive = new THREE.Color(0xff4400);
-    mat.emissiveIntensity = 0.8;
+    if (on) {
+      mat.emissive = new THREE.Color(0xff4400);
+      mat.emissiveIntensity = 0.8;
+    } else {
+      this.applySurface(this.currentSurface);
+    }
   }
 
   triggerShockwave(): void {
@@ -264,11 +262,6 @@ export class Player {
       life: type === 'fire' ? 0.6 : 0.8,
       maxLife: type === 'fire' ? 0.6 : 0.8
     });
-  }
-
-  addScore(points: number): void {
-    this.score += points;
-    this.onScoreAdd?.(points);
   }
 
   playSound(freq: number, duration: number, type: OscillatorType = 'sine'): void {
@@ -350,22 +343,8 @@ export class Player {
       }
     }
 
-    if (this.burning) {
-      this.burnTimer -= dt;
-      if (Math.random() < 0.5) {
-        this.spawnParticle('fire');
-      }
-      if (this.burnTimer <= 0) {
-        this.burning = false;
-        const mat = this.mesh.material as THREE.MeshStandardMaterial;
-        if (this.onIce) {
-          mat.emissive = new THREE.Color(0x4488cc);
-          mat.emissiveIntensity = 0.3;
-        } else {
-          mat.emissive = new THREE.Color(0x000000);
-          mat.emissiveIntensity = 0;
-        }
-      }
+    if (this.burning && Math.random() < 0.5) {
+      this.spawnParticle('fire');
     }
 
     if (this.shockwaveActive) {
@@ -405,7 +384,7 @@ export class Player {
   }
 
   respawn(): void {
-    this.takeDamage();
+    this.onFall?.();
     this.body.position.set(0, 3, 0);
     this.body.velocity.set(0, 0, 0);
     this.body.angularVelocity.set(0, 0, 0);

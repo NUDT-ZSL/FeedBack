@@ -1,0 +1,14 @@
+{
+  "config": {
+    "fireColumns": [],
+    "elevators": [{ "baseY": 0, "minHeight": -1, "maxHeight": 1.5, "speed": 0.8 }]
+  },
+  "ticks": 400,
+  "events": [
+    { "tick": 10, "type": "star", "id": 0 },
+    { "tick": 20, "type": "star", "id": 1 },
+    { "tick": 30, "type": "star", "id": 2 },
+    { "tick": 30, "type": "star", "id": 2 },
+    { "tick": 50, "type": "goal", "hiddenPath": true }
+  ]
+}

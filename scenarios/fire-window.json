@@ -1,0 +1,13 @@
+{
+  "config": {
+    "fireColumns": [{ "interval": 2 }],
+    "elevators": []
+  },
+  "ticks": 300,
+  "events": [
+    { "tick": 119, "type": "fire", "id": 0 },
+    { "tick": 120, "type": "fire", "id": 0 },
+    { "tick": 167, "type": "fire", "id": 0 },
+    { "tick": 240, "type": "fire", "id": 0 }
+  ]
+}
