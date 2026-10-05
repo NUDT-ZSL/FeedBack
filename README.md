@@ -1,57 +1,29 @@
-# React + TypeScript + Vite
+# 离线事件流背压调节
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+离线事件流处理 + 背压调节链路的状态一致性实现：积压推算、背压触发决策与处置结论始终基于同一份事件集合；参数或事件修正后只重推受影响的时间区间，且结果与整体重推逐点一致。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev    # 打开界面：积压曲线、当前积压、决策依据、冲突裁决、参数调整
+npm test       # 离线可重复验证（vitest，28 个用例）
+npm run check  # 类型检查
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 核心设计（src/engine/）
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `eventStore.ts` — 事件集合是唯一事实来源。同一来源同一时刻出现多条事件时双方全部保留并标记待裁决（内容一致为 duplicate、不一致为 conflict），绝不静默丢弃；任何摄入/裁决/修正都推进事件版本号。
+- `engine.ts` — 时间轴按 事件时刻 ∪ 参数生效时刻 切分为区间，单区间推算是 (区间输入, 进入状态) 的纯函数：
+  - 增量路径 `compute()`：复用输入指纹与进入状态均未变化的区间，只重推受影响区间；
+  - 整体路径 `fullRecompute()`：从零重推，作为验收对照；
+  - 两条路径共用同一纯函数，结果必然逐点一致。
+- 待裁决区间暂缓给出背压结论（withheld），其到达量不计入积压；裁决后自该区间起重推。
+- 每条决策（触发/解除/突发越限）携带解释（哪个区间、哪条阈值、当时积压多少）与血缘版本（事件v/参数v），结论变化可追溯到新依据。
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 验证（src/engine/__tests__/）
+
+- `equivalence.test.ts` — 同一事件样本分别走增量与整体两条路径，积压曲线、触发时刻、处置结论完全一致；未受影响区间逐点不变。
+- `conflicts.test.ts` — 重复/冲突双方保留、待裁决区间不参与结论、裁决/修正后依据版本同步更新。
+- `boundaries.test.ts` — 参数边界：消费速率等于/高于到达速率、速率为零、阈值为零/极大、突发上限为零。
+- `incremental.test.ts` — 未变更区间全部复用缓存；影响消退后恢复复用；多轮混合调整后的端到端一致性回归。
