@@ -1,57 +1,41 @@
-# React + TypeScript + Vite
+# 离线事件流 · 背压调节状态一致性台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+积压推算、背压触发决策与处置结论始终基于同一份事件集合；参数或事件修正后仅重推受影响的时间区间，且与整体重推逐点一致。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev        # 界面：积压曲线 / 参数 / 事件裁决 / 处置结论与依据
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 离线验证（不依赖在线服务）
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm run verify     # vitest：32 个用例
+npm run check      # 类型检查
+npm run build      # 生产构建
 ```
+
+验证覆盖：
+
+- **逐区间重推 ≡ 整体重推**：同一批事件样本（突发 / 重复冲突 / 速率持平）分别走两条路径，积压曲线、触发时刻、处置结论逐点比对（`derivationsEqual`）。
+- **重复/冲突**：同一来源同一时刻的重复与冲突事件全部保留并标记待裁决，裁决前该区间不参与背压结论；裁决后仅重推受影响区间，结论依据版本同步更新。
+- **参数边界**：消费速率等于/高于到达速率、消费速率为 0、触发阈值为 0、解除阈值为 0、阈值极大、突发上限顺延与总量守恒。
+- **未受影响区间逐点一致**：仅阈值调整时曲线零重推；单事件修正时受影响区间之前的曲线逐点不变。
+
+## 结构
+
+- `src/engine/types.ts` — 事件、冲突组、参数、曲线点、决策（含依据版本）类型
+- `src/engine/events.ts` — 事件集合构建、重复/冲突检测、裁决、准入计算
+- `src/engine/derive.ts` — 积压递推、背压状态机、整体重推 / 逐区间重推、一致性比对
+- `src/engine/samples.ts` — 三个确定性样本（突发 / 重复冲突 / 速率持平）
+- `src/engine/__tests__/engine.test.ts` — 全部离线验证用例
+- `src/state/store.ts` — zustand：每次变更走增量重推，并实时与整体重推比对
+- `src/components/*` — 积压曲线图、参数面板、事件裁决表、处置结论列表
+
+## 一致性语义
+
+- 积压递推：`B[t+1] = max(0, B[t] + min(到达量+顺延, 突发上限) - 消费速率)`，状态仅为标量，边界状态重合后后缀可安全复用。
+- 触发：区间末积压 `> highThreshold`；解除：`<= lowThreshold`（含），待裁决区间不产出结论。
+- 决策是「曲线 + 阈值」的纯函数，复用区间的处置结论天然与整体重推一致；每条结论携带 `basis: {eventsVersion, paramsVersion}` 保证可追溯。
