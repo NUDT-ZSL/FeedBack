@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { FurnitureManager, FurnitureItem } from './furniture';
+import { FurnitureManager, FurnitureItem, SelectionInfo } from './furniture';
 import { UIManager } from './ui';
 
 const ROOM_SIZE = 10;
@@ -67,11 +67,13 @@ class App {
     this.uiManager = new UIManager('toolbar', {
       onAddFurniture: (type: string) => this.addFurniture(type),
       onRotate: () => this.rotateFurniture(),
-      onDelete: () => this.deleteFurniture()
+      onDelete: () => this.deleteFurniture(),
+      onGroup: () => this.groupFurniture(),
+      onUngroup: () => this.ungroupFurniture()
     });
 
-    this.furnitureManager.setOnSelectChange((item: FurnitureItem | null) => {
-      this.uiManager.setSelectedItem(item);
+    this.furnitureManager.setOnSelectChange((info: SelectionInfo) => {
+      this.uiManager.setSelection(info);
     });
 
     this.setupEventListeners();
@@ -199,6 +201,10 @@ class App {
         
         const item = obj.userData.furnitureItem as FurnitureItem | undefined;
         if (item) {
+          if (e.shiftKey) {
+            this.furnitureManager.selectItem(item, true);
+            return;
+          }
           this.furnitureManager.selectItem(item);
           this.controls.enabled = false;
           this.furnitureManager.startDrag(item, this.mouse, this.camera);
@@ -226,7 +232,7 @@ class App {
     }
   }
 
-  private onMouseUp(): void {
+  private onMouseUp(_e?: MouseEvent): void {
     if (this.furnitureManager.isDraggingActive()) {
       this.furnitureManager.endDrag();
     }
@@ -251,6 +257,14 @@ class App {
 
   private deleteFurniture(): void {
     this.furnitureManager.deleteSelected();
+  }
+
+  private groupFurniture(): void {
+    this.furnitureManager.createGroupFromSelection();
+  }
+
+  private ungroupFurniture(): void {
+    this.furnitureManager.ungroupSelected();
   }
 
   private animate(): void {

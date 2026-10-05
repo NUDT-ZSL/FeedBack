@@ -105,6 +105,37 @@
       text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
     
+    .toolbar-btn.action-btn {
+      background: linear-gradient(145deg, #C9B896, #A98F68);
+    }
+    
+    .toolbar-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    
+    #selection-info {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 20px;
+      background: rgba(255, 248, 231, 0.9);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 20px;
+      border: 1px solid rgba(212, 165, 116, 0.4);
+      font-size: 13px;
+      font-weight: 500;
+      color: #8B7355;
+      z-index: 100;
+      user-select: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+    
     #hint {
       position: absolute;
       bottom: 24px;
@@ -139,7 +170,7 @@
     <div id="canvas-container"></div>
     <div id="toolbar"></div>
     <div id="hint">
-      拖拽移动 | <kbd>R</kbd> 旋转 | <kbd>Delete</kbd> 删除 | 鼠标左键旋转视角 | 滚轮缩放
+      拖拽移动 | <kbd>R</kbd> 旋转 | <kbd>G</kbd> 分组 | <kbd>Delete</kbd> 删除 | <kbd>Shift</kbd>+点击 多选 | 滚轮缩放
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
