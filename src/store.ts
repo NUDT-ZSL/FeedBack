@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { StoreType, Document, LogEntry, MovingHorse } from './types';
 import { generateStations, generateHorses, getEffectiveDuration, getStationIndex, generateDocumentCode } from './utils';
+import { now } from './clock';
 
 const useStore = create<StoreType>((set, get) => ({
   stations: generateStations(),
@@ -39,6 +40,8 @@ const useStore = create<StoreType>((set, get) => ({
     if (soldier.stamina <= 0) return;
 
     const station = stations.find(s => s.id === selectedStation);
+    const horse = state.horses.find(h => h.id === selectedHorse);
+    if (!horse || !horse.available) return;
     const doc = station?.documents.find(d => d.id === selectedDocument);
     if (!station || !doc || doc.status !== 'pending') return;
 
@@ -47,33 +50,34 @@ const useStore = create<StoreType>((set, get) => ({
     const stationCount = Math.abs(toIdx - fromIdx);
     const duration = getEffectiveDuration(doc.urgency, soldier.stamina, stationCount) * 1000;
 
-    const now = Date.now();
+    const currentNow = now();
     const newDocCode = generateDocumentCode(documentCounter);
 
     const updatedDoc: Document = {
       ...doc,
       status: 'in-transit',
-      dispatchTime: now,
+      dispatchTime: currentNow,
       code: newDocCode,
     };
 
     const movingHorse: MovingHorse = {
-      id: `moving-${Date.now()}`,
+      id: `moving-${doc.id}`,
+      horseId: selectedHorse,
       documentId: doc.id,
       fromStation: selectedStation,
       toStation: doc.toStation,
-      startTime: now,
+      startTime: currentNow,
       duration,
       progress: 0,
     };
 
     const logEntry: LogEntry = {
-      id: `log-${Date.now()}`,
+      id: `log-${doc.id}`,
       documentId: doc.id,
       documentCode: newDocCode,
       fromStation: station.name,
       toStation: stations.find(s => s.id === doc.toStation)?.name || '',
-      dispatchTime: now,
+      dispatchTime: currentNow,
       status: 'in-transit',
     };
 
@@ -103,7 +107,7 @@ const useStore = create<StoreType>((set, get) => ({
       soldier: {
         ...state.soldier,
         isResting: true,
-        restEndTime: Date.now() + 5000,
+        restEndTime: now() + 5000,
       },
     });
   },
@@ -129,6 +133,7 @@ const useStore = create<StoreType>((set, get) => ({
     const { movingHorses, stations, logs } = state;
 
     const updatedMovingHorses: MovingHorse[] = [];
+    const releasedHorseIds: string[] = [];
     let stationUpdates = [...stations];
     let logUpdates = [...logs];
 
@@ -162,21 +167,22 @@ const useStore = create<StoreType>((set, get) => ({
             : l
         );
 
-        set(state => ({
-          horses: state.horses.map(h =>
-            h.id === state.selectedHorse ? { ...h, available: true } : h
-          ),
-        }));
+        releasedHorseIds.push(mh.horseId);
       } else {
         updatedMovingHorses.push({ ...mh, progress });
       }
     }
 
-    set({
+    set(state => ({
       movingHorses: updatedMovingHorses,
       stations: stationUpdates,
       logs: logUpdates,
-    });
+      horses: releasedHorseIds.length > 0
+        ? state.horses.map(h =>
+            releasedHorseIds.includes(h.id) ? { ...h, available: true } : h
+          )
+        : state.horses,
+    }));
   },
 
   addParticle: (x: number, y: number, currentTime: number) => {
@@ -240,18 +246,32 @@ const useStore = create<StoreType>((set, get) => ({
       return l;
     });
 
-    const updatedMovingHorses = movingHorses.filter(mh => {
-      const doc = stations
-        .flatMap(s => s.documents)
-        .find(d => d.id === mh.documentId);
-      return doc?.status !== 'delayed';
-    });
+    const delayedDocIds = new Set(
+      updatedStations.flatMap(s => s.documents)
+        .filter(d => d.status === 'delayed')
+        .map(d => d.id)
+    );
+
+    const updatedMovingHorses = movingHorses.filter(
+      mh => !delayedDocIds.has(mh.documentId)
+    );
+
+    const timeoutHorseIds = movingHorses
+      .filter(mh => delayedDocIds.has(mh.documentId))
+      .map(mh => mh.horseId);
+
+    const updatedHorses = timeoutHorseIds.length > 0
+      ? state.horses.map(h =>
+          timeoutHorseIds.includes(h.id) ? { ...h, available: true } : h
+        )
+      : state.horses;
 
     if (hasTimeout) {
       set({
         stations: updatedStations,
         logs: updatedLogs,
         movingHorses: updatedMovingHorses,
+        horses: updatedHorses,
         alertMessage: `警告：文书 ${timeoutDocCode} 已延误！`,
       });
     } else {
@@ -259,6 +279,7 @@ const useStore = create<StoreType>((set, get) => ({
         stations: updatedStations,
         logs: updatedLogs,
         movingHorses: updatedMovingHorses,
+        horses: updatedHorses,
       });
     }
   },
