@@ -37,3 +37,6 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 验证套件编译产物
+verification/dist/

@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "verify": "tsc -p tsconfig.verify.json && node verification/postcompile.cjs && node verification/dist/verification/run.js",
+    "verify:update": "tsc -p tsconfig.verify.json && node verification/postcompile.cjs && node verification/dist/verification/run.js --update",
+    "eclipses:list": "tsc -p tsconfig.verify.json && node verification/postcompile.cjs && node verification/dist/verification/run.js --list"
   },
   "dependencies": {
     "@react-three/drei": "^9.92.0",

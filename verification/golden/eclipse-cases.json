@@ -1,0 +1,348 @@
+[
+  {
+    "id": "solar-total-visible",
+    "note": "日全食-观测者位于全食带内且太阳在地平线上",
+    "input": {
+      "year": 1286,
+      "month": 11,
+      "day": 24,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 10,
+        "longitudeDeg": -160,
+        "timezoneOffsetHours": -11
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "total",
+      "typeLabel": "日全食",
+      "magnitude": 1.0092282083307735,
+      "phases": {
+        "first": 2191090.090758091,
+        "second": 2191090.1479683137,
+        "max": 2191090.148774408,
+        "third": 2191090.1495783217,
+        "fourth": 2191090.19812477
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "solar-total-below-horizon",
+    "note": "日全食-食分>=1但观测点太阳在地平线下(物理一致的不可见)",
+    "input": {
+      "year": 1286,
+      "month": 11,
+      "day": 24,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 10,
+        "longitudeDeg": -180,
+        "timezoneOffsetHours": -12
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "total",
+      "typeLabel": "日全食",
+      "magnitude": 1.0092282083307735,
+      "phases": {
+        "first": 2191090.090758091,
+        "second": 2191090.1479683137,
+        "max": 2191090.148774408,
+        "third": 2191090.1495783217,
+        "fourth": 2191090.19812477
+      },
+      "visible": false,
+      "visibilityReason": "below_horizon"
+    }
+  },
+  {
+    "id": "solar-annular-cross-day",
+    "note": "日环食-本地日期较UTC提前一天(跨日)",
+    "input": {
+      "year": 1294,
+      "month": 1,
+      "day": 5,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 20,
+        "longitudeDeg": -160,
+        "timezoneOffsetHours": -11
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "annular",
+      "typeLabel": "日环食",
+      "magnitude": 0.9307169342918512,
+      "phases": {
+        "first": 2193688.501019543,
+        "second": 2193688.5301567595,
+        "max": 2193688.531320624,
+        "third": 2193688.5324848583,
+        "fourth": 2193688.561914877
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "solar-partial-dadu",
+    "note": "日偏食-大都观测,食分0.76",
+    "input": {
+      "year": 1290,
+      "month": 9,
+      "day": 12,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "partial",
+      "typeLabel": "日偏食",
+      "magnitude": 0.7612546653590277,
+      "phases": {
+        "first": 2192477.6659610337,
+        "max": 2192477.703995103,
+        "fourth": 2192477.744943332
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "solar-near-zero-visible",
+    "note": "日偏食-食分接近零(0.035)的临界可见案例",
+    "input": {
+      "year": 1283,
+      "month": 8,
+      "day": 1,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": -5,
+        "longitudeDeg": -150,
+        "timezoneOffsetHours": -10
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "partial",
+      "typeLabel": "日偏食",
+      "magnitude": 0.03529254105051939,
+      "phases": {
+        "first": 2189879.1774076205,
+        "max": 2189879.1892935224,
+        "fourth": 2189879.200831902
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "solar-none-dadu",
+    "note": "无日食-朔时刻日月角距大于视半径和",
+    "input": {
+      "year": 1300,
+      "month": 1,
+      "day": 10,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "none",
+      "typeLabel": "无日食",
+      "magnitude": 0,
+      "phases": {
+        "max": 2195874.7235200815
+      },
+      "visible": false,
+      "visibilityReason": "no_eclipse"
+    }
+  },
+  {
+    "id": "solar-cross-day-dadu",
+    "note": "日偏食-食甚UTC 23:15,大都本地时间为次日07:15(跨日)",
+    "input": {
+      "year": 1304,
+      "month": 12,
+      "day": 5,
+      "kind": "solar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "solar",
+      "type": "partial",
+      "typeLabel": "日偏食",
+      "magnitude": 0.7412883355712045,
+      "phases": {
+        "first": 2197675.4402729943,
+        "max": 2197675.469175268,
+        "fourth": 2197675.497884131
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "lunar-total-dadu",
+    "note": "月全食-大都可见,含全部七个阶段",
+    "input": {
+      "year": 1284,
+      "month": 1,
+      "day": 11,
+      "kind": "lunar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "lunar",
+      "type": "total",
+      "typeLabel": "月全食",
+      "magnitude": 1.578410211264187,
+      "phases": {
+        "penumbralFirst": 2190041.9050959214,
+        "umbralFirst": 2190041.9448168823,
+        "umbralSecond": 2190041.9863670813,
+        "max": 2190042.0190618914,
+        "umbralThird": 2190042.0517567014,
+        "umbralFourth": 2190042.0933069005,
+        "penumbralFourth": 2190042.1330278614
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "lunar-partial-cross-day-dadu",
+    "note": "月偏食-食甚本地时间为次日凌晨(跨日)",
+    "input": {
+      "year": 1282,
+      "month": 3,
+      "day": 2,
+      "kind": "lunar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "lunar",
+      "type": "partial",
+      "typeLabel": "月偏食",
+      "magnitude": 0.23500495982463881,
+      "phases": {
+        "penumbralFirst": 2189362.3013295867,
+        "umbralFirst": 2189362.36500446,
+        "max": 2189362.402449088,
+        "umbralFourth": 2189362.4398937165,
+        "penumbralFourth": 2189362.5035685897
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "lunar-partial-penumbral-visible",
+    "note": "月偏食-本影阶段月亮在地平线下,但半影阶段升起,按全阶段口径判定可见",
+    "input": {
+      "year": 1281,
+      "month": 3,
+      "day": 14,
+      "kind": "lunar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "lunar",
+      "type": "partial",
+      "typeLabel": "月偏食",
+      "magnitude": 0.7332619093159549,
+      "phases": {
+        "penumbralFirst": 2189008.405732949,
+        "umbralFirst": 2189008.4588165446,
+        "max": 2189008.520732196,
+        "umbralFourth": 2189008.5826478475,
+        "penumbralFourth": 2189008.6357314433
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "lunar-penumbral-dadu",
+    "note": "半影月食-本影食分为零但半影食分大于零且可见",
+    "input": {
+      "year": 1283,
+      "month": 1,
+      "day": 21,
+      "kind": "lunar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "lunar",
+      "type": "penumbral",
+      "typeLabel": "半影月食",
+      "magnitude": 0,
+      "phases": {
+        "penumbralFirst": 2189687.1962489164,
+        "max": 2189687.2413720246,
+        "penumbralFourth": 2189687.286495133
+      },
+      "visible": true,
+      "visibilityReason": "above_horizon"
+    }
+  },
+  {
+    "id": "lunar-none",
+    "note": "无月食-望时刻月球距地影过远",
+    "input": {
+      "year": 1305,
+      "month": 2,
+      "day": 14,
+      "kind": "lunar",
+      "observer": {
+        "latitudeDeg": 39.9,
+        "longitudeDeg": 116.4,
+        "timezoneOffsetHours": 8
+      }
+    },
+    "expected": {
+      "kind": "lunar",
+      "type": "none",
+      "typeLabel": "无月食",
+      "magnitude": 0,
+      "phases": {
+        "max": 2197750.176706532
+      },
+      "visible": false,
+      "visibilityReason": "no_eclipse"
+    }
+  }
+]

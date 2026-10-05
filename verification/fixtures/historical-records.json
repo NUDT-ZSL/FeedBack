@@ -1,0 +1,92 @@
+{
+  "records": [
+    {
+      "id": "rec-yuan-001",
+      "source": "元史·历志(授时历)",
+      "year": 1284, "month": 1, "day": 11,
+      "kind": "lunar",
+      "typeLabel": "月全食",
+      "shichen": "戌",
+      "magnitude": 1.5,
+      "note": "至元二十年腊月望,月食既,食分约十五分"
+    },
+    {
+      "id": "rec-yuan-002",
+      "source": "元史·历志(授时历)",
+      "year": 1290, "month": 9, "day": 12,
+      "kind": "solar",
+      "typeLabel": "日偏食",
+      "shichen": "午",
+      "magnitude": 0.8,
+      "note": "至元二十七年九月朔,日有食之,食八分"
+    },
+    {
+      "id": "rec-yuan-003",
+      "source": "元史·天文志",
+      "year": 1282, "month": 3, "day": 3,
+      "kind": "lunar",
+      "typeLabel": "月偏食",
+      "shichen": "午",
+      "magnitude": 0.2,
+      "note": "至元十九年三月望,月食(时刻存疑,或系传抄之误)"
+    },
+    {
+      "id": "rec-yuan-004",
+      "source": "元史·天文志",
+      "year": 1284, "month": 7, "day": 6,
+      "kind": "lunar",
+      "typeLabel": "月偏食",
+      "shichen": "申",
+      "magnitude": 0.5,
+      "note": "至元二十一年六月望,月食五分(食分与推演不合)"
+    }
+  ],
+  "cases": [
+    {
+      "id": "rec-match-lunar-total",
+      "note": "月全食推演与授时历记录吻合(时刻食分均在容差内)",
+      "input": { "year": 1284, "month": 1, "day": 11, "kind": "lunar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "match",
+      "expectedRecordId": "rec-yuan-001"
+    },
+    {
+      "id": "rec-match-solar-partial",
+      "note": "日偏食推演与记录吻合",
+      "input": { "year": 1290, "month": 9, "day": 12, "kind": "solar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "match",
+      "expectedRecordId": "rec-yuan-002"
+    },
+    {
+      "id": "rec-deviation-time",
+      "note": "月偏食推演食甚在寅时,记录为午时,时间偏差超阈",
+      "input": { "year": 1282, "month": 3, "day": 2, "kind": "lunar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "deviation",
+      "expectedRecordId": "rec-yuan-003"
+    },
+    {
+      "id": "rec-deviation-magnitude",
+      "note": "月全食推演食分1.56,记录食分0.5,食分偏差超阈",
+      "input": { "year": 1284, "month": 7, "day": 6, "kind": "lunar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "deviation",
+      "expectedRecordId": "rec-yuan-004"
+    },
+    {
+      "id": "rec-none-no-record",
+      "note": "无食日期不应命中任何历史记录",
+      "input": { "year": 1300, "month": 1, "day": 10, "kind": "solar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "no_record"
+    },
+    {
+      "id": "rec-eclipse-no-record",
+      "note": "有食但记录库中无对应条目时结论为无记录",
+      "input": { "year": 1310, "month": 6, "day": 15, "kind": "solar",
+        "observer": { "latitudeDeg": 39.9, "longitudeDeg": 116.4, "timezoneOffsetHours": 8 } },
+      "expectedVerdict": "no_record"
+    }
+  ]
+}

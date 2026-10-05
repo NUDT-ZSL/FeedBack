@@ -1,3 +1,12 @@
+# 古代天文台 · 日月食推演
+
+推演逻辑集中在 `src/lib/astronomy/`（无 DOM 依赖的纯函数引擎），页面层与验证层共用同一份推导。
+
+- 离线批量验证：`npm run verify`（详见 [verification/README.md](verification/README.md)）
+- 固化基准更新：`npm run verify:update`；食象枚举：`npm run eclipses:list`
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
