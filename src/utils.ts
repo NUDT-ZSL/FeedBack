@@ -1,4 +1,4 @@
-import type { UrgencyLevel, Point, PostStation, Horse, Document } from './types';
+import type { UrgencyLevel, Point, PostStation, Horse, Document } from './types.ts';
 
 export const SPEED_MAP: Record<UrgencyLevel, number> = {
   normal: 1.0,

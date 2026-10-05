@@ -41,6 +41,7 @@ export interface Soldier {
 
 export interface MovingHorse {
   id: string;
+  horseId: string;
   documentId: string;
   fromStation: string;
   toStation: string;
