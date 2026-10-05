@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { MoleculeData, AtomData } from './moleculeData';
+import { buildMoleculeSpec } from './core/moleculeGeometry';
+import { easeOutCubic } from './core/easing';
 
 export interface MoleculeObject {
   group: THREE.Group;
@@ -13,6 +15,7 @@ export class SceneManager {
   private scene: THREE.Scene;
   private currentMolecule: MoleculeObject | null = null;
   private targetMolecule: MoleculeObject | null = null;
+  private transitionGeneration = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -106,23 +109,22 @@ export class SceneManager {
     const bonds: THREE.Mesh[] = [];
     const electronClouds: THREE.Points[] = [];
     const atomDataMap = new Map<THREE.Mesh, AtomData>();
+    const spec = buildMoleculeSpec(moleculeData);
 
-    moleculeData.atoms.forEach((atomData, index) => {
-      const atomMesh = this.createAtomMesh(atomData);
+    spec.atoms.forEach(({ data, index }) => {
+      const atomMesh = this.createAtomMesh(data);
       atomMesh.userData.atomIndex = index;
       atoms.push(atomMesh);
-      atomDataMap.set(atomMesh, atomData);
+      atomDataMap.set(atomMesh, data);
       group.add(atomMesh);
 
-      const cloud = this.createElectronCloud(atomData);
+      const cloud = this.createElectronCloud(data);
       electronClouds.push(cloud);
       group.add(cloud);
     });
 
-    moleculeData.bonds.forEach(bond => {
-      const atom1 = moleculeData.atoms[bond.atom1];
-      const atom2 = moleculeData.atoms[bond.atom2];
-      const bondMesh = this.createBondMesh(atom1.position, atom2.position);
+    spec.bonds.forEach(bondSpec => {
+      const bondMesh = this.createBondMesh(bondSpec.start, bondSpec.end);
       bonds.push(bondMesh);
       group.add(bondMesh);
     });
@@ -142,22 +144,36 @@ export class SceneManager {
   }
 
   async loadMolecule(moleculeData: MoleculeData): Promise<void> {
+    const generation = ++this.transitionGeneration;
+
+    if (this.targetMolecule) {
+      this.disposeMolecule(this.targetMolecule);
+      this.targetMolecule = null;
+    }
+
+    const outgoing = this.currentMolecule;
     return new Promise((resolve) => {
-      this.targetMolecule = this.buildMolecule(moleculeData);
-      this.scene.add(this.targetMolecule.group);
+      const incoming = this.buildMolecule(moleculeData);
+      this.targetMolecule = incoming;
+      this.scene.add(incoming.group);
 
       const startTime = performance.now();
       const duration = 400;
 
       const animate = () => {
+        if (generation !== this.transitionGeneration) {
+          resolve();
+          return;
+        }
+
         const elapsed = performance.now() - startTime;
         const t = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = easeOutCubic(t);
 
-        if (this.currentMolecule) {
+        if (outgoing) {
           const outScale = 1 - eased;
-          this.currentMolecule.group.scale.set(outScale, outScale, outScale);
-          this.currentMolecule.group.traverse(obj => {
+          outgoing.group.scale.set(outScale, outScale, outScale);
+          outgoing.group.traverse(obj => {
             if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
               const anyObj = obj as any;
               if (anyObj.material && 'opacity' in anyObj.material) {
@@ -167,10 +183,10 @@ export class SceneManager {
           });
         }
 
-        if (this.targetMolecule) {
+        if (incoming === this.targetMolecule) {
           const inScale = eased;
-          this.targetMolecule.group.scale.set(inScale, inScale, inScale);
-          this.targetMolecule.group.traverse(obj => {
+          incoming.group.scale.set(inScale, inScale, inScale);
+          incoming.group.traverse(obj => {
             if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
               const anyObj = obj as any;
               if (anyObj.material && 'opacity' in anyObj.material) {
@@ -185,11 +201,13 @@ export class SceneManager {
         if (t < 1) {
           requestAnimationFrame(animate);
         } else {
-          if (this.currentMolecule) {
-            this.disposeMolecule(this.currentMolecule);
+          if (outgoing) {
+            this.disposeMolecule(outgoing);
           }
-          this.currentMolecule = this.targetMolecule;
-          this.targetMolecule = null;
+          this.currentMolecule = incoming;
+          if (this.targetMolecule === incoming) {
+            this.targetMolecule = null;
+          }
           resolve();
         }
       };
@@ -199,17 +217,29 @@ export class SceneManager {
   }
 
   async unloadMolecule(): Promise<void> {
-    if (!this.currentMolecule) return;
+    const generation = ++this.transitionGeneration;
+
+    if (this.targetMolecule) {
+      this.disposeMolecule(this.targetMolecule);
+      this.targetMolecule = null;
+    }
+
+    const molecule = this.currentMolecule;
+    if (!molecule) return;
 
     return new Promise((resolve) => {
       const startTime = performance.now();
       const duration = 400;
-      const molecule = this.currentMolecule;
 
       const animate = () => {
+        if (generation !== this.transitionGeneration) {
+          resolve();
+          return;
+        }
+
         const elapsed = performance.now() - startTime;
         const t = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = easeOutCubic(t);
 
         if (molecule) {
           const scale = 1 - eased;
@@ -229,10 +259,10 @@ export class SceneManager {
         if (t < 1) {
           requestAnimationFrame(animate);
         } else {
-          if (molecule) {
-            this.disposeMolecule(molecule);
+          this.disposeMolecule(molecule);
+          if (this.currentMolecule === molecule) {
+            this.currentMolecule = null;
           }
-          this.currentMolecule = null;
           resolve();
         }
       };

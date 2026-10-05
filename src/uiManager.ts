@@ -1,5 +1,5 @@
-import * as THREE from 'three';
 import type { MoleculeData, AtomData } from './moleculeData';
+import { LABEL_OFFSET_Y } from './core/projection';
 
 export interface UIManagerCallbacks {
   onMoleculeSelect: (moleculeId: string) => void;
@@ -151,7 +151,7 @@ export class UIManager {
     `;
 
     this.atomLabel.style.left = `${screenX}px`;
-    this.atomLabel.style.top = `${screenY - 70}px`;
+    this.atomLabel.style.top = `${screenY - LABEL_OFFSET_Y}px`;
 
     document.getElementById('app')!.appendChild(this.atomLabel);
 
@@ -175,24 +175,11 @@ export class UIManager {
   updateAtomLabelPosition(screenX: number, screenY: number): void {
     if (this.atomLabel && this.atomLabel.classList.contains('visible')) {
       this.atomLabel.style.left = `${screenX}px`;
-      this.atomLabel.style.top = `${screenY - 70}px`;
+      this.atomLabel.style.top = `${screenY - LABEL_OFFSET_Y}px`;
     }
   }
 
   updateFPS(fps: number): void {
     this.fpsCounter.textContent = `${fps.toFixed(0)} FPS`;
-  }
-
-  getScreenPosition(
-    worldPos: THREE.Vector3,
-    camera: THREE.Camera,
-    renderer: THREE.WebGLRenderer
-  ): { x: number; y: number } {
-    const vector = worldPos.clone().project(camera);
-    const rect = renderer.domElement.getBoundingClientRect();
-    return {
-      x: (vector.x * 0.5 + 0.5) * rect.width + rect.left,
-      y: (-vector.y * 0.5 + 0.5) * rect.height + rect.top
-    };
   }
 }

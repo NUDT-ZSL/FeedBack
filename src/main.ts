@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SceneManager } from './sceneManager';
 import { UIManager } from './uiManager';
-import { getMoleculeById, type MoleculeData } from './moleculeData';
+import { getMoleculeById } from './moleculeData';
+import { ViewerCore, DEFAULT_CAMERA_POSITION, DEFAULT_CAMERA_TARGET } from './core/viewerCore';
 
 class MoleculeViewerApp {
   private scene: THREE.Scene;
@@ -11,18 +12,7 @@ class MoleculeViewerApp {
   private controls: OrbitControls;
   private sceneManager: SceneManager;
   private uiManager: UIManager;
-  private raycaster: THREE.Raycaster;
-  private mouse: THREE.Vector2;
-  private selectedAtom: THREE.Mesh | null = null;
-  private hoveredAtom: THREE.Mesh | null = null;
-  private currentMoleculeData: MoleculeData | null = null;
-  private isViewTweening: boolean = false;
-  private tweenStartPos: THREE.Vector3 = new THREE.Vector3();
-  private tweenEndPos: THREE.Vector3 = new THREE.Vector3();
-  private tweenStartTarget: THREE.Vector3 = new THREE.Vector3();
-  private tweenEndTarget: THREE.Vector3 = new THREE.Vector3();
-  private tweenProgress: number = 0;
-  private tweenDuration: number = 2000;
+  private core: ViewerCore;
   private lastFrameTime: number = 0;
   private frameCount: number = 0;
   private fpsUpdateTime: number = 0;
@@ -80,10 +70,14 @@ class MoleculeViewerApp {
       onToggleView: () => this.handleToggleView()
     });
 
-    this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
+    this.core = new ViewerCore(this.readViewport());
 
     this.bindEvents();
+  }
+
+  private readViewport(): { left: number; top: number; width: number; height: number } {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   }
 
   private setupLights(): void {
@@ -121,73 +115,34 @@ class MoleculeViewerApp {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.core.setViewport(this.readViewport());
   }
 
   private handleClick(event: MouseEvent): void {
-    if (!this.currentMoleculeData) return;
+    const outcome = this.core.clickAt(event.clientX, event.clientY, this.camera);
 
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const atomMeshes = this.sceneManager.getAtomMeshes();
-    const intersects = this.raycaster.intersectObjects(atomMeshes, false);
-
-    if (intersects.length > 0) {
-      const mesh = intersects[0].object as THREE.Mesh;
+    if (outcome.kind === 'select') {
+      const mesh = this.sceneManager.getAtomMeshes()[outcome.atomIndex];
       const atomData = this.sceneManager.getAtomData(mesh);
-      const atomIndex = mesh.userData.atomIndex;
-
-      if (atomData) {
-        if (this.selectedAtom === mesh) {
-          this.selectedAtom = null;
-          this.sceneManager.highlightAtom(null);
-          this.uiManager.hideAtomLabel();
-        } else {
-          this.selectedAtom = mesh;
-          this.sceneManager.highlightAtom(mesh);
-          const pos = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
-          const screenPos = this.uiManager.getScreenPosition(pos, this.camera, this.renderer);
-          this.uiManager.showAtomLabel(atomData, screenPos.x, screenPos.y, atomIndex);
+      if (mesh && atomData) {
+        this.sceneManager.highlightAtom(mesh);
+        const screenPos = this.core.atomScreenPosition(outcome.atomIndex, this.camera);
+        if (screenPos) {
+          this.uiManager.showAtomLabel(atomData, screenPos.x, screenPos.y, outcome.atomIndex);
         }
       }
-    } else {
-      if (this.selectedAtom) {
-        this.selectedAtom = null;
-        this.sceneManager.highlightAtom(null);
-        this.uiManager.hideAtomLabel();
-      }
+    } else if (outcome.kind === 'deselect' || outcome.kind === 'clear') {
+      this.sceneManager.highlightAtom(null);
+      this.uiManager.hideAtomLabel();
     }
   }
 
   private handleMouseMove(event: MouseEvent): void {
-    if (!this.currentMoleculeData) return;
+    const hovered = this.core.hoverAt(event.clientX, event.clientY, this.camera);
+    this.renderer.domElement.style.cursor = hovered !== null ? 'pointer' : 'default';
 
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const atomMeshes = this.sceneManager.getAtomMeshes();
-    const intersects = this.raycaster.intersectObjects(atomMeshes, false);
-
-    if (intersects.length > 0) {
-      const mesh = intersects[0].object as THREE.Mesh;
-      if (this.hoveredAtom !== mesh) {
-        this.hoveredAtom = mesh;
-        this.renderer.domElement.style.cursor = 'pointer';
-      }
-    } else {
-      if (this.hoveredAtom) {
-        this.hoveredAtom = null;
-        this.renderer.domElement.style.cursor = 'default';
-      }
-    }
-
-    if (this.selectedAtom) {
-      const pos = new THREE.Vector3().setFromMatrixPosition(this.selectedAtom.matrixWorld);
-      const screenPos = this.uiManager.getScreenPosition(pos, this.camera, this.renderer);
+    const screenPos = this.core.selectedAtomScreenPosition(this.camera);
+    if (screenPos) {
       this.uiManager.updateAtomLabelPosition(screenPos.x, screenPos.y);
     }
   }
@@ -196,57 +151,24 @@ class MoleculeViewerApp {
     const moleculeData = getMoleculeById(moleculeId);
     if (!moleculeData) return;
 
-    this.currentMoleculeData = moleculeData;
+    this.core.selectMolecule(moleculeData);
     this.uiManager.showMoleculeView(moleculeData);
 
     await this.sceneManager.loadMolecule(moleculeData);
 
-    this.camera.position.set(0, 0, 8);
-    this.controls.target.set(0, 0, 0);
+    this.camera.position.set(...DEFAULT_CAMERA_POSITION);
+    this.controls.target.set(...DEFAULT_CAMERA_TARGET);
     this.controls.update();
-
-    this.selectedAtom = null;
-    this.hoveredAtom = null;
   }
 
   private async handleBack(): Promise<void> {
+    this.core.back();
     this.uiManager.hideMoleculeView();
-    this.selectedAtom = null;
-    this.hoveredAtom = null;
-    this.currentMoleculeData = null;
     await this.sceneManager.unloadMolecule();
   }
 
   private handleToggleView(): void {
-    if (!this.currentMoleculeData || this.isViewTweening) return;
-
-    const bestAngle = this.currentMoleculeData.bestViewAngle;
-    this.tweenStartPos.copy(this.camera.position);
-    this.tweenEndPos.set(bestAngle[0], bestAngle[1], bestAngle[2]);
-    this.tweenStartTarget.copy(this.controls.target);
-    this.tweenEndTarget.set(0, 0, 0);
-    this.tweenProgress = 0;
-    this.isViewTweening = true;
-  }
-
-  private easeInOutCubic(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  }
-
-  private updateViewTween(deltaTime: number): void {
-    if (!this.isViewTweening) return;
-
-    this.tweenProgress += deltaTime;
-    const t = Math.min(this.tweenProgress / this.tweenDuration, 1);
-    const eased = this.easeInOutCubic(t);
-
-    this.camera.position.lerpVectors(this.tweenStartPos, this.tweenEndPos, eased);
-    this.controls.target.lerpVectors(this.tweenStartTarget, this.tweenEndTarget, eased);
-    this.controls.update();
-
-    if (t >= 1) {
-      this.isViewTweening = false;
-    }
+    this.core.toggleView(this.camera.position, this.controls.target);
   }
 
   private updateFPS(deltaTime: number): void {
@@ -267,11 +189,16 @@ class MoleculeViewerApp {
     const deltaTime = this.lastFrameTime > 0 ? currentTime - this.lastFrameTime : 16;
     this.lastFrameTime = currentTime;
 
-    if (!this.isViewTweening) {
+    if (!this.core.isTweening) {
       this.controls.update();
     }
 
-    this.updateViewTween(deltaTime);
+    const tweenSample = this.core.tick(deltaTime);
+    if (tweenSample) {
+      this.camera.position.copy(tweenSample.position);
+      this.controls.target.copy(tweenSample.target);
+      this.controls.update();
+    }
 
     const time = currentTime * 0.001;
     this.sceneManager.animateElectronClouds(time);
