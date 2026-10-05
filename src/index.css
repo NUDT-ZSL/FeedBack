@@ -1,0 +1,171 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #bdc3c7;
+  font-family: 'Noto Serif SC', serif;
+  height: 100%;
+  color: #3e2723;
+}
+
+html,
+#root {
+  height: 100%;
+}
+
+.app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.title {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 32px;
+  color: #3e2723;
+  z-index: 10;
+  pointer-events: none;
+  letter-spacing: 4px;
+}
+
+canvas {
+  display: block;
+}
+
+.info-panel {
+  position: absolute;
+  top: 64px;
+  right: 16px;
+  width: 260px;
+  min-height: 200px;
+  background: #3a2416cc;
+  border: 1px solid #5d4037;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #f5e6d3;
+  font-size: 12px;
+  z-index: 20;
+}
+
+.panel-handle {
+  cursor: move;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #5d4037;
+  padding-bottom: 6px;
+}
+
+.info-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.info-panel li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.light {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.part-name {
+  white-space: nowrap;
+}
+
+.part-status {
+  color: #cbb298;
+  font-size: 11px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.progress {
+  margin-top: 8px;
+  border-top: 1px solid #5d4037;
+  padding-top: 8px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #1f120b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #e67e22;
+  transition: width 300ms ease-out;
+}
+
+.progress-text {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.unreachable {
+  margin-top: 6px;
+  color: #e74c3c;
+  font-size: 11px;
+}
+
+.tools {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 12px;
+  z-index: 20;
+}
+
+.tool-button {
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 300ms ease-out;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.tool-button:hover {
+  transform: scale(1.1);
+}
+
+.warning {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #e67e22;
+  font-size: 20px;
+  font-weight: 700;
+  z-index: 30;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 900px) {
+  .info-panel {
+    width: 200px;
+  }
+}

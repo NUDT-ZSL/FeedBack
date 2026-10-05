@@ -1,0 +1,30 @@
+{
+  "name": "乱序终态一致性：多种操作次序到达同一终态，结论必须相同",
+  "configRef": "armillary",
+  "operations": [
+    { "kind": "detach", "part": "liuhe-ziwu" },
+    { "kind": "detach", "part": "liuhe-east" },
+    { "kind": "detach", "part": "liuhe-west" }
+  ],
+  "equivalentSequences": [
+    [
+      { "kind": "detach", "part": "liuhe-ziwu" },
+      { "kind": "detach", "part": "liuhe-west" },
+      { "kind": "detach", "part": "liuhe-east" }
+    ],
+    [
+      { "kind": "detach", "part": "liuhe-ziwu" },
+      { "kind": "detach", "part": "liuhe-east" },
+      { "kind": "detach", "part": "liuhe-west" },
+      { "kind": "attach", "part": "liuhe-west" },
+      { "kind": "detach", "part": "liuhe-west" }
+    ]
+  ],
+  "expect": {
+    "finalPhase": "disassembling",
+    "finalPercent": 43,
+    "appliedCount": 3,
+    "invalidCount": 0,
+    "blockedCount": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "依赖指向缺失部件：被识别为不可达并给出缺失清单",
+  "config": {
+    "parts": [
+      { "id": "outer", "name": "外环", "layer": "测试", "detachAfter": [] },
+      { "id": "mid", "name": "中环", "layer": "测试", "detachAfter": ["outer", "lost-ring"] },
+      { "id": "inner", "name": "内环", "layer": "测试", "detachAfter": ["mid"] }
+    ]
+  },
+  "operations": [
+    { "kind": "detach", "part": "outer" },
+    { "kind": "detach", "part": "mid" },
+    { "kind": "detach", "part": "inner" }
+  ],
+  "expect": {
+    "finalPhase": "disassembling",
+    "finalPercent": 33,
+    "appliedCount": 1,
+    "invalidCount": 0,
+    "blockedCount": 2,
+    "unreachableParts": ["mid", "inner"]
+  }
+}

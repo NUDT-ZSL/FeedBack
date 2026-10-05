@@ -1,0 +1,26 @@
+{
+  "name": "依赖成环：环上部件及其下游均不可达",
+  "config": {
+    "parts": [
+      { "id": "ring-a", "name": "环甲", "layer": "测试", "detachAfter": ["ring-c"] },
+      { "id": "ring-b", "name": "环乙", "layer": "测试", "detachAfter": ["ring-a"] },
+      { "id": "ring-c", "name": "环丙", "layer": "测试", "detachAfter": ["ring-b"] },
+      { "id": "ring-d", "name": "环丁", "layer": "测试", "detachAfter": ["ring-c"] },
+      { "id": "ring-e", "name": "环戊", "layer": "测试", "detachAfter": [] }
+    ]
+  },
+  "operations": [
+    { "kind": "detach", "part": "ring-a" },
+    { "kind": "detach", "part": "ring-d" },
+    { "kind": "detach", "part": "ring-e" },
+    { "kind": "attach", "part": "ring-e" }
+  ],
+  "expect": {
+    "finalPhase": "assembled",
+    "finalPercent": 0,
+    "appliedCount": 2,
+    "invalidCount": 0,
+    "blockedCount": 2,
+    "unreachableParts": ["ring-a", "ring-b", "ring-c", "ring-d"]
+  }
+}

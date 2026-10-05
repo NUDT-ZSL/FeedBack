@@ -1,0 +1,69 @@
+{
+  "name": "乱序操作 + 重复拆下/装回应被判无效",
+  "configRef": "armillary",
+  "operations": [
+    {
+      "kind": "detach",
+      "part": "sanchen-globe"
+    },
+    {
+      "kind": "detach",
+      "part": "liuhe-ziwu"
+    },
+    {
+      "kind": "detach",
+      "part": "liuhe-ziwu"
+    },
+    {
+      "kind": "attach",
+      "part": "liuhe-ziwu"
+    },
+    {
+      "kind": "attach",
+      "part": "liuhe-ziwu"
+    },
+    {
+      "kind": "detach",
+      "part": "liuhe-ziwu"
+    },
+    {
+      "kind": "detach",
+      "part": "liuhe-east"
+    },
+    {
+      "kind": "detach",
+      "part": "liuhe-west"
+    },
+    {
+      "kind": "detach",
+      "part": "sanchen-chijing"
+    },
+    {
+      "kind": "detach",
+      "part": "sanchen-huangjing"
+    },
+    {
+      "kind": "detach",
+      "part": "sanchen-globe"
+    },
+    {
+      "kind": "detach",
+      "part": "siyou-shuanghuan"
+    },
+    {
+      "kind": "detach",
+      "part": "siyou-shuanghuan"
+    },
+    {
+      "kind": "attach",
+      "part": "ghost-part"
+    }
+  ],
+  "expect": {
+    "finalPhase": "disassembled",
+    "finalPercent": 100,
+    "appliedCount": 9,
+    "invalidCount": 4,
+    "blockedCount": 1
+  }
+}

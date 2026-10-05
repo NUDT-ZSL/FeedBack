@@ -1,0 +1,27 @@
+{
+  "name": "标准浑仪：按序全拆后按序装回",
+  "configRef": "armillary",
+  "operations": [
+    { "kind": "detach", "part": "liuhe-ziwu" },
+    { "kind": "detach", "part": "liuhe-east" },
+    { "kind": "detach", "part": "liuhe-west" },
+    { "kind": "detach", "part": "sanchen-chijing" },
+    { "kind": "detach", "part": "sanchen-huangjing" },
+    { "kind": "detach", "part": "sanchen-globe" },
+    { "kind": "detach", "part": "siyou-shuanghuan" },
+    { "kind": "attach", "part": "siyou-shuanghuan" },
+    { "kind": "attach", "part": "sanchen-globe" },
+    { "kind": "attach", "part": "sanchen-huangjing" },
+    { "kind": "attach", "part": "sanchen-chijing" },
+    { "kind": "attach", "part": "liuhe-west" },
+    { "kind": "attach", "part": "liuhe-east" },
+    { "kind": "attach", "part": "liuhe-ziwu" }
+  ],
+  "expect": {
+    "finalPhase": "assembled",
+    "finalPercent": 0,
+    "appliedCount": 14,
+    "invalidCount": 0,
+    "blockedCount": 0
+  }
+}
