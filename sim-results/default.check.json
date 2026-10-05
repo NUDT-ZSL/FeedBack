@@ -1,0 +1,116 @@
+{
+  "allPassed": true,
+  "caseCount": 11,
+  "cases": [
+    {
+      "name": "wave-1-enemyCount+1",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        109200
+      ]
+    },
+    {
+      "name": "wave-1-spawnInterval-200",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        109200
+      ]
+    },
+    {
+      "name": "wave-1-armorChance",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        109200
+      ]
+    },
+    {
+      "name": "wave-2-enemyCount+1",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        104400
+      ]
+    },
+    {
+      "name": "wave-2-spawnInterval-200",
+      "pass": true,
+      "affectedFromMs": 30000,
+      "reusedUntilMs": 30000,
+      "recomputedRangeMs": [
+        30000,
+        103200
+      ]
+    },
+    {
+      "name": "wave-2-armorChance",
+      "pass": true,
+      "affectedFromMs": 30000,
+      "reusedUntilMs": 30000,
+      "recomputedRangeMs": [
+        30000,
+        99600
+      ]
+    },
+    {
+      "name": "wave-3-enemyCount+1",
+      "pass": true,
+      "affectedFromMs": 30000,
+      "reusedUntilMs": 30000,
+      "recomputedRangeMs": [
+        30000,
+        109200
+      ]
+    },
+    {
+      "name": "wave-3-spawnInterval-200",
+      "pass": true,
+      "affectedFromMs": 66000,
+      "reusedUntilMs": 65000,
+      "recomputedRangeMs": [
+        65000,
+        103200
+      ]
+    },
+    {
+      "name": "wave-3-armorChance",
+      "pass": true,
+      "affectedFromMs": 66000,
+      "reusedUntilMs": 65000,
+      "recomputedRangeMs": [
+        65000,
+        106800
+      ]
+    },
+    {
+      "name": "global-maxEnergy-10",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        102000
+      ]
+    },
+    {
+      "name": "global-killInterval-half",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        99000
+      ]
+    }
+  ]
+}

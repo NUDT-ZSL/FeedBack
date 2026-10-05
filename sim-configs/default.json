@@ -1,0 +1,24 @@
+{
+  "seed": 20260608,
+  "tickMs": 50,
+  "maxWaves": 3,
+  "gameWidth": 800,
+  "gameHeight": 600,
+  "maxEnergy": 100,
+  "berserkThreshold": 5,
+  "fireIntervalMs": 800,
+  "bulletSpeed": 140,
+  "armorFromWave": 2,
+  "bulletLifetimeMs": 8000,
+  "kinds": {
+    "normal": { "hp": 1, "speed": 80, "score": 10, "energy": 5 },
+    "armor": { "hp": 3, "speed": 50, "score": 30, "energy": 15 }
+  },
+  "waves": [
+    { "durationMs": 30000, "enemyCount": 15, "spawnIntervalMs": 1500, "armorChance": 0, "bulletColor": "#f0e68c" },
+    { "durationMs": 30000, "enemyCount": 20, "spawnIntervalMs": 1500, "armorChance": 0.3, "bulletColor": "#ff6347" },
+    { "durationMs": 30000, "enemyCount": 25, "spawnIntervalMs": 1500, "armorChance": 0.3, "bulletColor": "#ee82ee" }
+  ],
+  "killPolicy": { "type": "interval", "everyMs": 1200 },
+  "nukePolicy": { "type": "auto" }
+}

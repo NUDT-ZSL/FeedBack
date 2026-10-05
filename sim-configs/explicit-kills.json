@@ -1,0 +1,37 @@
+{
+  "seed": 7,
+  "tickMs": 50,
+  "maxWaves": 2,
+  "gameWidth": 800,
+  "gameHeight": 600,
+  "maxEnergy": 30,
+  "berserkThreshold": 5,
+  "fireIntervalMs": 800,
+  "bulletSpeed": 140,
+  "armorFromWave": 2,
+  "bulletLifetimeMs": 8000,
+  "kinds": {
+    "normal": { "hp": 1, "speed": 80, "score": 10, "energy": 5 },
+    "armor": { "hp": 3, "speed": 50, "score": 30, "energy": 15 }
+  },
+  "waves": [
+    { "durationMs": 20000, "enemyCount": 10, "spawnIntervalMs": 1000, "armorChance": 0, "bulletColor": "#f0e68c" },
+    { "durationMs": 20000, "enemyCount": 12, "spawnIntervalMs": 1000, "armorChance": 0.5, "bulletColor": "#ff6347" }
+  ],
+  "killPolicy": {
+    "type": "explicit",
+    "kills": [
+      { "timeMs": 3000, "enemyId": "w1-e1" },
+      { "timeMs": 5000, "enemyId": "w1-e2" },
+      { "timeMs": 7000, "enemyId": "w1-e3" },
+      { "timeMs": 9000, "enemyId": "w1-e4" },
+      { "timeMs": 11000, "enemyId": "w1-e5" },
+      { "timeMs": 13000, "enemyId": "w1-e6" },
+      { "timeMs": 15000, "enemyId": "w1-e7" },
+      { "timeMs": 17000, "enemyId": "w1-e8" },
+      { "timeMs": 19000, "enemyId": "w1-e9" },
+      { "timeMs": 21000, "enemyId": "w1-e10" }
+    ]
+  },
+  "nukePolicy": { "type": "at", "timesMs": [22000] }
+}

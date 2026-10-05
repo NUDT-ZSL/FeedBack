@@ -1,0 +1,76 @@
+{
+  "allPassed": true,
+  "caseCount": 7,
+  "cases": [
+    {
+      "name": "wave-1-enemyCount+1",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        45450
+      ]
+    },
+    {
+      "name": "wave-1-spawnInterval-200",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        41450
+      ]
+    },
+    {
+      "name": "wave-1-armorChance",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        45450
+      ]
+    },
+    {
+      "name": "wave-2-enemyCount+1",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        46450
+      ]
+    },
+    {
+      "name": "wave-2-spawnInterval-200",
+      "pass": true,
+      "affectedFromMs": 20000,
+      "reusedUntilMs": 20000,
+      "recomputedRangeMs": [
+        20000,
+        43050
+      ]
+    },
+    {
+      "name": "wave-2-armorChance",
+      "pass": true,
+      "affectedFromMs": 20000,
+      "reusedUntilMs": 20000,
+      "recomputedRangeMs": [
+        20000,
+        40400
+      ]
+    },
+    {
+      "name": "global-maxEnergy-10",
+      "pass": true,
+      "affectedFromMs": 0,
+      "reusedUntilMs": 0,
+      "recomputedRangeMs": [
+        0,
+        45450
+      ]
+    }
+  ]
+}

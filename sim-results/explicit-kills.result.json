@@ -1,0 +1,7928 @@
+{
+  "meta": {
+    "seed": 7,
+    "tickMs": 50,
+    "durationMs": 45450,
+    "waves": 2,
+    "eventCount": 221,
+    "configHash": "0d62c886debb"
+  },
+  "totals": {
+    "score": 80,
+    "kills": 8,
+    "escaped": 14,
+    "nukeCount": 1,
+    "maxEnergyObserved": 30,
+    "finalEnergy": 5,
+    "firesByPattern": {
+      "fan": 37,
+      "spiral": 55,
+      "grid": 51
+    }
+  },
+  "waves": [
+    {
+      "wave": 1,
+      "startMs": 0,
+      "endMs": 20000,
+      "spawned": 10,
+      "killedByPlayer": 7,
+      "killedByNuke": 0,
+      "escaped": 3,
+      "berserkCount": 10,
+      "scoreGained": 70,
+      "energyGained": 30,
+      "firesByPattern": {
+        "fan": 19,
+        "spiral": 23,
+        "grid": 20
+      }
+    },
+    {
+      "wave": 2,
+      "startMs": 20000,
+      "endMs": 45450,
+      "spawned": 12,
+      "killedByPlayer": 0,
+      "killedByNuke": 1,
+      "escaped": 11,
+      "berserkCount": 8,
+      "scoreGained": 10,
+      "energyGained": 5,
+      "firesByPattern": {
+        "fan": 18,
+        "spiral": 32,
+        "grid": 31
+      }
+    }
+  ],
+  "nukes": [
+    {
+      "t": 22000,
+      "energyBefore": 30,
+      "clearedEnemyIds": [
+        "w2-e1"
+      ],
+      "scoreByEnemy": {
+        "w2-e1": 10
+      },
+      "scoreGained": 10,
+      "energyAfter": 5,
+      "bulletsCleared": 107
+    }
+  ],
+  "energyLedger": [
+    {
+      "t": 3000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e1",
+        "via": "player"
+      },
+      "energyAfter": 5
+    },
+    {
+      "t": 5000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e2",
+        "via": "player"
+      },
+      "energyAfter": 10
+    },
+    {
+      "t": 7000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e3",
+        "via": "player"
+      },
+      "energyAfter": 15
+    },
+    {
+      "t": 9000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e4",
+        "via": "player"
+      },
+      "energyAfter": 20
+    },
+    {
+      "t": 11000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e5",
+        "via": "player"
+      },
+      "energyAfter": 25
+    },
+    {
+      "t": 13000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e6",
+        "via": "player"
+      },
+      "energyAfter": 30
+    },
+    {
+      "t": 15000,
+      "delta": 0,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e7",
+        "via": "player"
+      },
+      "energyAfter": 30
+    },
+    {
+      "t": 22000,
+      "delta": -30,
+      "source": {
+        "type": "nuke-reset"
+      },
+      "energyAfter": 0
+    },
+    {
+      "t": 22000,
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w2-e1",
+        "via": "nuke"
+      },
+      "energyAfter": 5
+    }
+  ],
+  "energyCurve": [
+    {
+      "t": 50,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 100,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 150,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 200,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 250,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 300,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 350,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 400,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 450,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 500,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 550,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 600,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 650,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 700,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 750,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 800,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 850,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 900,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 950,
+      "energy": 0,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 1000,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1050,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1100,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1150,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1200,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1250,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1300,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1350,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1400,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1450,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1500,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1550,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1600,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1650,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1700,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1750,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1800,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1850,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1900,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 1950,
+      "energy": 0,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 2000,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2050,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2100,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2150,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2200,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2250,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2300,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2350,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2400,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2450,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2500,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2550,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2600,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2650,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2700,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2750,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2800,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2850,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2900,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 2950,
+      "energy": 0,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3000,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3050,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3100,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3150,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3200,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3250,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3300,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3350,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3400,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3450,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3500,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3550,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3600,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3650,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3700,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3750,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3800,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3850,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3900,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 3950,
+      "energy": 5,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 4000,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4050,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4100,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4150,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4200,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4250,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4300,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4350,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4400,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4450,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4500,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4550,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4600,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4650,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4700,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4750,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4800,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4850,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4900,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 4950,
+      "energy": 5,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5000,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5050,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5100,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5150,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5200,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5250,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5300,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5350,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5400,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5450,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5500,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5550,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5600,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5650,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5700,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5750,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5800,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5850,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5900,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 5950,
+      "energy": 10,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 6000,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6050,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6100,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6150,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6200,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6250,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6300,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6350,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6400,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6450,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6500,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6550,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6600,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6650,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6700,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6750,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6800,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6850,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6900,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 6950,
+      "energy": 10,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7000,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7050,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7100,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7150,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7200,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7250,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7300,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7350,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7400,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7450,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7500,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7550,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7600,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7650,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7700,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7750,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7800,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7850,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7900,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 7950,
+      "energy": 15,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 8000,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8050,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8100,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8150,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8200,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8250,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8300,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8350,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8400,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8450,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8500,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8550,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8600,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8650,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8700,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8750,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8800,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8850,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8900,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 8950,
+      "energy": 15,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9000,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9050,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9100,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9150,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9200,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9250,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9300,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9350,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9400,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9450,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9500,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9550,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9600,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9650,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9700,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9750,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9800,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9850,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9900,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 9950,
+      "energy": 20,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 10000,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10050,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10100,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10150,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10200,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10250,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10300,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10350,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10400,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10450,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10500,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10550,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10600,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10650,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10700,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10750,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10800,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10850,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10900,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 10950,
+      "energy": 20,
+      "alive": 6,
+      "wave": 1
+    },
+    {
+      "t": 11000,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11050,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11100,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11150,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11200,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11250,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11300,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11350,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11400,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11450,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11500,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11550,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11600,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11650,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11700,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11750,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11800,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11850,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11900,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 11950,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12000,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12050,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12100,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12150,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12200,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12250,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12300,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12350,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12400,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12450,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12500,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12550,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12600,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12650,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12700,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12750,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12800,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12850,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12900,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 12950,
+      "energy": 25,
+      "alive": 5,
+      "wave": 1
+    },
+    {
+      "t": 13000,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13050,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13100,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13150,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13200,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13250,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13300,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13350,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13400,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13450,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13500,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13550,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13600,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13650,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13700,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13750,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13800,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13850,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13900,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 13950,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14000,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14050,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14100,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14150,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14200,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14250,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14300,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14350,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14400,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14450,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14500,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14550,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14600,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14650,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14700,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14750,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14800,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14850,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14900,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 14950,
+      "energy": 30,
+      "alive": 4,
+      "wave": 1
+    },
+    {
+      "t": 15000,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15050,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15100,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15150,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15200,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15250,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15300,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15350,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15400,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15450,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15500,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15550,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15600,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15650,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15700,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15750,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15800,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15850,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15900,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 15950,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16000,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16050,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16100,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16150,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16200,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16250,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16300,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16350,
+      "energy": 30,
+      "alive": 3,
+      "wave": 1
+    },
+    {
+      "t": 16400,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16450,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16500,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16550,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16600,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16650,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16700,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16750,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16800,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16850,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16900,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 16950,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17000,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17050,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17100,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17150,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17200,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17250,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17300,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17350,
+      "energy": 30,
+      "alive": 2,
+      "wave": 1
+    },
+    {
+      "t": 17400,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17450,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17500,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17550,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17600,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17650,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17700,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17750,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17800,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17850,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17900,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 17950,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18000,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18050,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18100,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18150,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18200,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18250,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18300,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18350,
+      "energy": 30,
+      "alive": 1,
+      "wave": 1
+    },
+    {
+      "t": 18400,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18450,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18500,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18550,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18600,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18650,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18700,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18750,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18800,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18850,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18900,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 18950,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19000,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19050,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19100,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19150,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19200,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19250,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19300,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19350,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19400,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19450,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19500,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19550,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19600,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19650,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19700,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19750,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19800,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19850,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19900,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 19950,
+      "energy": 30,
+      "alive": 0,
+      "wave": 1
+    },
+    {
+      "t": 20000,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20050,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20100,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20150,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20200,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20250,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20300,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20350,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20400,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20450,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20500,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20550,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20600,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20650,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20700,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20750,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20800,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20850,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20900,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 20950,
+      "energy": 30,
+      "alive": 0,
+      "wave": 2
+    },
+    {
+      "t": 21000,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21050,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21100,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21150,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21200,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21250,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21300,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21350,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21400,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21450,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21500,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21550,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21600,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21650,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21700,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21750,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21800,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21850,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21900,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 21950,
+      "energy": 30,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22000,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22050,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22100,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22150,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22200,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22250,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22300,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22350,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22400,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22450,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22500,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22550,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22600,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22650,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22700,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22750,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22800,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22850,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22900,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 22950,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 23000,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23050,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23100,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23150,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23200,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23250,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23300,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23350,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23400,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23450,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23500,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23550,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23600,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23650,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23700,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23750,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23800,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23850,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23900,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 23950,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 24000,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24050,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24100,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24150,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24200,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24250,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24300,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24350,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24400,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24450,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24500,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24550,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24600,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24650,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24700,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24750,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24800,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24850,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24900,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 24950,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 25000,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25050,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25100,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25150,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25200,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25250,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25300,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25350,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25400,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25450,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25500,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25550,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25600,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25650,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25700,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25750,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25800,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25850,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25900,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 25950,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 26000,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26050,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26100,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26150,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26200,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26250,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26300,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26350,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26400,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26450,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26500,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26550,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26600,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26650,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26700,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26750,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26800,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26850,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26900,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 26950,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 27000,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27050,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27100,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27150,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27200,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27250,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27300,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27350,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27400,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27450,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27500,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27550,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27600,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27650,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27700,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27750,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27800,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27850,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27900,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 27950,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 28000,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28050,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28100,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28150,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28200,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28250,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28300,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28350,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28400,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28450,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28500,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28550,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28600,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28650,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28700,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28750,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28800,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28850,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28900,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 28950,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 29000,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29050,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29100,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29150,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29200,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29250,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29300,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29350,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29400,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29450,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29500,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29550,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29600,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29650,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29700,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29750,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29800,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29850,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29900,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 29950,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 30000,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30050,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30100,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30150,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30200,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30250,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30300,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30350,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30400,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30450,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30500,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30550,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30600,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30650,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30700,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30750,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30800,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30850,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30900,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 30950,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31000,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31050,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31100,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31150,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31200,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31250,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31300,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31350,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 31400,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31450,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31500,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31550,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31600,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31650,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31700,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31750,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31800,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31850,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31900,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 31950,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 32000,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32050,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32100,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32150,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32200,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32250,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32300,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32350,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32400,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32450,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32500,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32550,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32600,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32650,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32700,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32750,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32800,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32850,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32900,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 32950,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33000,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33050,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33100,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33150,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33200,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33250,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33300,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33350,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33400,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33450,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33500,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33550,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33600,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33650,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33700,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33750,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33800,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33850,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33900,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 33950,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34000,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34050,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34100,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34150,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34200,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34250,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34300,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34350,
+      "energy": 5,
+      "alive": 10,
+      "wave": 2
+    },
+    {
+      "t": 34400,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34450,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34500,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34550,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34600,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34650,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34700,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34750,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34800,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34850,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34900,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 34950,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35000,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35050,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35100,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35150,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35200,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35250,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35300,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35350,
+      "energy": 5,
+      "alive": 9,
+      "wave": 2
+    },
+    {
+      "t": 35400,
+      "energy": 5,
+      "alive": 8,
+      "wave": 2
+    },
+    {
+      "t": 35450,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35500,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35550,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35600,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35650,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35700,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35750,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35800,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35850,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35900,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 35950,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36000,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36050,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36100,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36150,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36200,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36250,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36300,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36350,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36400,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36450,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36500,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36550,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36600,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36650,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36700,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36750,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36800,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36850,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36900,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 36950,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37000,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37050,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37100,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37150,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37200,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37250,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37300,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37350,
+      "energy": 5,
+      "alive": 7,
+      "wave": 2
+    },
+    {
+      "t": 37400,
+      "energy": 5,
+      "alive": 6,
+      "wave": 2
+    },
+    {
+      "t": 37450,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37500,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37550,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37600,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37650,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37700,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37750,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37800,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37850,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37900,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 37950,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38000,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38050,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38100,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38150,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38200,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38250,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38300,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38350,
+      "energy": 5,
+      "alive": 5,
+      "wave": 2
+    },
+    {
+      "t": 38400,
+      "energy": 5,
+      "alive": 4,
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38500,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38550,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38600,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38650,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38700,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38750,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38800,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38850,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38900,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 38950,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39000,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39050,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39100,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39150,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39200,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39250,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39300,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39350,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39400,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39450,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39500,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39550,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39600,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39650,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39700,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39750,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39800,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39850,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39900,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 39950,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40000,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40050,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40100,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40150,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40200,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40250,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40300,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40350,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40400,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40450,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40500,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40550,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40600,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40650,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40700,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40750,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40800,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40850,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40900,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 40950,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41000,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41050,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41100,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41150,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41200,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41250,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41300,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41350,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41400,
+      "energy": 5,
+      "alive": 3,
+      "wave": 2
+    },
+    {
+      "t": 41450,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41500,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41550,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41600,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41650,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41700,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41750,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41800,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41850,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41900,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 41950,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42000,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42050,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42100,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42150,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42200,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42250,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42300,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42350,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42400,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42450,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42500,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42550,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42600,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42650,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42700,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42750,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42800,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42850,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42900,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 42950,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43000,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43050,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43100,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43150,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43200,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43250,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43300,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43350,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43400,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43450,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43500,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43550,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43600,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43650,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43700,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43750,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43800,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43850,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43900,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 43950,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44000,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44050,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44100,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44150,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44200,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44250,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44300,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44350,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44400,
+      "energy": 5,
+      "alive": 2,
+      "wave": 2
+    },
+    {
+      "t": 44450,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44500,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44550,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44600,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44650,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44700,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44750,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44800,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44850,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44900,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 44950,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45000,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45050,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45100,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45150,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45200,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45250,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45300,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45350,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45400,
+      "energy": 5,
+      "alive": 1,
+      "wave": 2
+    },
+    {
+      "t": 45450,
+      "energy": 5,
+      "alive": 0,
+      "wave": 2
+    }
+  ],
+  "events": [
+    {
+      "t": 0,
+      "type": "wave-start",
+      "wave": 1,
+      "enemyCount": 10
+    },
+    {
+      "t": 1000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e1",
+      "wave": 1,
+      "kind": "normal",
+      "x": 48.427422270178795
+    },
+    {
+      "t": 1050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e1",
+      "wave": 1
+    },
+    {
+      "t": 1050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e1",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 78.05707504105173,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 1900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e1",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 46.29399170316235,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 2000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "kind": "normal",
+      "x": 543.3006681129336
+    },
+    {
+      "t": 2050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e2",
+      "wave": 1
+    },
+    {
+      "t": 2050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 511.0829532280171,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 2750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e1",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 22.339492667967626,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 2900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 591.3668888747578,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 3000,
+      "type": "enemy-death",
+      "enemyId": "w1-e1",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 10
+    },
+    {
+      "t": 3000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e1",
+        "via": "player"
+      },
+      "energyAfter": 5
+    },
+    {
+      "t": 3000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "kind": "normal",
+      "x": 212.74613386020064
+    },
+    {
+      "t": 3050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e3",
+      "wave": 1
+    },
+    {
+      "t": 3050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 250.77270948965045,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 3750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 495.72331006035256,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 3900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 163.07680991780848,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 4000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "kind": "normal",
+      "x": 152.28282203897834
+    },
+    {
+      "t": 4050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e4",
+      "wave": 1
+    },
+    {
+      "t": 4050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 202.0227850667565,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 4600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 574.2179558485033,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 4750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 257.17595409300304,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 4900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 108.15584747867993,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 5000,
+      "type": "enemy-death",
+      "enemyId": "w1-e2",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 20
+    },
+    {
+      "t": 5000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e2",
+        "via": "player"
+      },
+      "energyAfter": 10
+    },
+    {
+      "t": 5000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "kind": "normal",
+      "x": 251.13808330148458
+    },
+    {
+      "t": 5050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e5",
+      "wave": 1
+    },
+    {
+      "t": 5050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 274.2364357492372,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 5600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 188.6571990943867,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 5750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 175.79836147722096,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 5900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 207.2348109297886,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 6000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "kind": "normal",
+      "x": 672.00130879879
+    },
+    {
+      "t": 6050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e6",
+      "wave": 1
+    },
+    {
+      "t": 6050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 699.6874239009495,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 6450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 208.3065245522273,
+      "y": 256,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 6600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 157.37148331192355,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 6750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 300.92386373477416,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 6900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 672.2395515363505,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 7000,
+      "type": "enemy-death",
+      "enemyId": "w1-e3",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 30
+    },
+    {
+      "t": 7000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e3",
+        "via": "player"
+      },
+      "energyAfter": 15
+    },
+    {
+      "t": 7000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "kind": "normal",
+      "x": 588.5490604490042
+    },
+    {
+      "t": 7050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e7",
+      "wave": 1
+    },
+    {
+      "t": 7050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 576.2905768173987,
+      "y": -16,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 7450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 120.31956004229025,
+      "y": 256,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 7600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 212.3916295669874,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 7750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 643.919685243518,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 7900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 625.7574238355987,
+      "y": 52,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 8000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e8",
+      "wave": 1,
+      "kind": "normal",
+      "x": 735.5125867202878
+    },
+    {
+      "t": 8300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 200.25659800203437,
+      "y": 324,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 8450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 265.67556466848976,
+      "y": 256,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 8600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 718.3815678756258,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 8750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 539.0376769418905,
+      "y": 120,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 9000,
+      "type": "enemy-death",
+      "enemyId": "w1-e4",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 40
+    },
+    {
+      "t": 9000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e4",
+        "via": "player"
+      },
+      "energyAfter": 20
+    },
+    {
+      "t": 9000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "kind": "normal",
+      "x": 165.95791382715106
+    },
+    {
+      "t": 9300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 265.7507614317843,
+      "y": 324,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 9450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 623.0867363303557,
+      "y": 256,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 9600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 633.5348948913429,
+      "y": 188,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 10000,
+      "type": "enemy-spawn",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "kind": "normal",
+      "x": 103.43648938462138
+    },
+    {
+      "t": 10150,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 212.34199165186024,
+      "y": 392,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 10300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 706.8244773258407,
+      "y": 324,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 10450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 563.3791421273786,
+      "y": 256,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 11000,
+      "type": "enemy-fire",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 300.9310712253457,
+      "y": 460,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 11000,
+      "type": "enemy-death",
+      "enemyId": "w1-e5",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 50
+    },
+    {
+      "t": 11000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e5",
+        "via": "player"
+      },
+      "energyAfter": 25
+    },
+    {
+      "t": 11150,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 663.1056929792834,
+      "y": 392,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 11300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 585.3479853755596,
+      "y": 324,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 12000,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 651.9458149898909,
+      "y": 460,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 12150,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 619.0331061331616,
+      "y": 392,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 12850,
+      "type": "enemy-fire",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 714.1911916922263,
+      "y": 528,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13000,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 541.1433557456348,
+      "y": 460,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13000,
+      "type": "enemy-death",
+      "enemyId": "w1-e6",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 60
+    },
+    {
+      "t": 13000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e6",
+        "via": "player"
+      },
+      "energyAfter": 30
+    },
+    {
+      "t": 13000,
+      "type": "nuke-ready"
+    },
+    {
+      "t": 13050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e8",
+      "wave": 1
+    },
+    {
+      "t": 13050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e8",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 710.9303599029039,
+      "y": 384,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e9",
+      "wave": 1
+    },
+    {
+      "t": 13050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 213.2989761303916,
+      "y": 304,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13050,
+      "type": "enemy-berserk",
+      "enemyId": "w1-e10",
+      "wave": 1
+    },
+    {
+      "t": 13050,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 69.00539035637416,
+      "y": 224,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13850,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 636.7635603235442,
+      "y": 528,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e8",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 731.6357138555722,
+      "y": 452,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 135.6343146632142,
+      "y": 372,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 13900,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 111.79674950988105,
+      "y": 292,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 14700,
+      "type": "enemy-fire",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 555.9135330114533,
+      "y": 596,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 14750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e8",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 766.5308375917012,
+      "y": 520,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 14750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 168.95727289807354,
+      "y": 440,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 14750,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 123.98866146795291,
+      "y": 360,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 15000,
+      "type": "enemy-death",
+      "enemyId": "w1-e7",
+      "wave": 1,
+      "kind": "normal",
+      "via": "player",
+      "scoreGained": 10,
+      "scoreAfter": 70
+    },
+    {
+      "t": 15000,
+      "type": "energy",
+      "delta": 0,
+      "source": {
+        "type": "kill",
+        "enemyId": "w1-e7",
+        "via": "player"
+      },
+      "energyAfter": 30
+    },
+    {
+      "t": 15600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e8",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 687.8958419997439,
+      "y": 588,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 15600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 191.30225579056986,
+      "y": 508,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 15600,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 60.95742307029766,
+      "y": 428,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 16400,
+      "type": "enemy-escape",
+      "enemyId": "w1-e8",
+      "wave": 1
+    },
+    {
+      "t": 16450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 120.8842334663365,
+      "y": 576,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 16450,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 153.40411563668144,
+      "y": 496,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 17300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e9",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 215.44070732284553,
+      "y": 644,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 17300,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 62.96394606327559,
+      "y": 564,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 17400,
+      "type": "enemy-escape",
+      "enemyId": "w1-e9",
+      "wave": 1
+    },
+    {
+      "t": 18150,
+      "type": "enemy-fire",
+      "enemyId": "w1-e10",
+      "wave": 1,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 120.65761846024904,
+      "y": 632,
+      "color": "#f0e68c"
+    },
+    {
+      "t": 18400,
+      "type": "enemy-escape",
+      "enemyId": "w1-e10",
+      "wave": 1
+    },
+    {
+      "t": 20000,
+      "type": "wave-end",
+      "wave": 1
+    },
+    {
+      "t": 20000,
+      "type": "wave-start",
+      "wave": 2,
+      "enemyCount": 12
+    },
+    {
+      "t": 21000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e1",
+      "wave": 2,
+      "kind": "normal",
+      "x": 467.848898563534
+    },
+    {
+      "t": 21050,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e1",
+      "wave": 2
+    },
+    {
+      "t": 21050,
+      "type": "enemy-fire",
+      "enemyId": "w2-e1",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 418.18550049501295,
+      "y": -16,
+      "color": "#ff6347"
+    },
+    {
+      "t": 21900,
+      "type": "enemy-fire",
+      "enemyId": "w2-e1",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 512.3022638979902,
+      "y": 52,
+      "color": "#ff6347"
+    },
+    {
+      "t": 22000,
+      "type": "energy",
+      "delta": -30,
+      "source": {
+        "type": "nuke-reset"
+      },
+      "energyAfter": 0
+    },
+    {
+      "t": 22000,
+      "type": "enemy-death",
+      "enemyId": "w2-e1",
+      "wave": 2,
+      "kind": "normal",
+      "via": "nuke",
+      "scoreGained": 10,
+      "scoreAfter": 80
+    },
+    {
+      "t": 22000,
+      "type": "energy",
+      "delta": 5,
+      "source": {
+        "type": "kill",
+        "enemyId": "w2-e1",
+        "via": "nuke"
+      },
+      "energyAfter": 5
+    },
+    {
+      "t": 22000,
+      "type": "nuke",
+      "clearedEnemyIds": [
+        "w2-e1"
+      ],
+      "scoreByEnemy": {
+        "w2-e1": 10
+      },
+      "scoreGained": 10,
+      "energyBefore": 30,
+      "energyAfter": 5,
+      "bulletsCleared": 107
+    },
+    {
+      "t": 22000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "kind": "armor",
+      "x": 629.33295276016
+    },
+    {
+      "t": 22050,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e2",
+      "wave": 2
+    },
+    {
+      "t": 22050,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 637.3059819247756,
+      "y": -17.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 22900,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 650.2422998011743,
+      "y": 25,
+      "color": "#ff6347"
+    },
+    {
+      "t": 23000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "kind": "normal",
+      "x": 561.4755482412875
+    },
+    {
+      "t": 23050,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e3",
+      "wave": 2
+    },
+    {
+      "t": 23050,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 536.6997033560754,
+      "y": -16,
+      "color": "#ff6347"
+    },
+    {
+      "t": 23750,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 586.6481687338362,
+      "y": 67.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 23900,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 606.2609822769803,
+      "y": 52,
+      "color": "#ff6347"
+    },
+    {
+      "t": 24000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "kind": "armor",
+      "x": 632.6748302951455
+    },
+    {
+      "t": 24050,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e4",
+      "wave": 2
+    },
+    {
+      "t": 24050,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 642.2926585819648,
+      "y": -17.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 24600,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 679.2849174827496,
+      "y": 110,
+      "color": "#ff6347"
+    },
+    {
+      "t": 24750,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 511.90277742975826,
+      "y": 120,
+      "color": "#ff6347"
+    },
+    {
+      "t": 24900,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 652.054969407398,
+      "y": 25,
+      "color": "#ff6347"
+    },
+    {
+      "t": 25000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "kind": "armor",
+      "x": 210.52132865414023
+    },
+    {
+      "t": 25050,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e5",
+      "wave": 2
+    },
+    {
+      "t": 25050,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 249.2607181180215,
+      "y": -17.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 25450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 589.0921269666223,
+      "y": 152.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 25600,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 598.9862215326252,
+      "y": 188,
+      "color": "#ff6347"
+    },
+    {
+      "t": 25750,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 590.8838960413751,
+      "y": 67.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 25900,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 160.7365828240629,
+      "y": 25,
+      "color": "#ff6347"
+    },
+    {
+      "t": 26000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e6",
+      "wave": 2,
+      "kind": "normal",
+      "x": 485.60517001897097
+    },
+    {
+      "t": 26300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 646.1850674589913,
+      "y": 195,
+      "color": "#ff6347"
+    },
+    {
+      "t": 26450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 548.77658510376,
+      "y": 256,
+      "color": "#ff6347"
+    },
+    {
+      "t": 26600,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 682.6721166191427,
+      "y": 110,
+      "color": "#ff6347"
+    },
+    {
+      "t": 26750,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 254.42994774434433,
+      "y": 67.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 27000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e7",
+      "wave": 2,
+      "kind": "normal",
+      "x": 507.97918079420924
+    },
+    {
+      "t": 27150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 641.5974637897884,
+      "y": 237.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 27300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 545.0465134422025,
+      "y": 324,
+      "color": "#ff6347"
+    },
+    {
+      "t": 27450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 591.4649160181128,
+      "y": 152.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 27600,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 187.41306547797612,
+      "y": 110,
+      "color": "#ff6347"
+    },
+    {
+      "t": 28000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 592.1204365851794,
+      "y": 280,
+      "color": "#ff6347"
+    },
+    {
+      "t": 28000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e8",
+      "wave": 2,
+      "kind": "armor",
+      "x": 448.16073823720217
+    },
+    {
+      "t": 28150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 601.4484682097807,
+      "y": 392,
+      "color": "#ff6347"
+    },
+    {
+      "t": 28300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 651.0904140359311,
+      "y": 195,
+      "color": "#ff6347"
+    },
+    {
+      "t": 28450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 204.97490064897798,
+      "y": 152.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 28850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 678.8452029426124,
+      "y": 322.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 29000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 511.54525597332747,
+      "y": 460,
+      "color": "#ff6347"
+    },
+    {
+      "t": 29000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e9",
+      "wave": 2,
+      "kind": "normal",
+      "x": 514.0877448581159
+    },
+    {
+      "t": 29150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 643.3129037972593,
+      "y": 237.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 29300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 242.83725617752964,
+      "y": 195,
+      "color": "#ff6347"
+    },
+    {
+      "t": 29700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 584.3498323323496,
+      "y": 365,
+      "color": "#ff6347"
+    },
+    {
+      "t": 29850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 604.3922594974903,
+      "y": 528,
+      "color": "#ff6347"
+    },
+    {
+      "t": 30000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 596.5989055173163,
+      "y": 280,
+      "color": "#ff6347"
+    },
+    {
+      "t": 30000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e10",
+      "wave": 2,
+      "kind": "normal",
+      "x": 460.4855468310416
+    },
+    {
+      "t": 30150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 162.41985688891347,
+      "y": 237.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 30550,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 654.4974988517389,
+      "y": 407.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 30700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e3",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 540.1595047114865,
+      "y": 596,
+      "color": "#ff6347"
+    },
+    {
+      "t": 30850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 681.9266545904658,
+      "y": 322.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 31000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 258.0589945082383,
+      "y": 280,
+      "color": "#ff6347"
+    },
+    {
+      "t": 31000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "kind": "armor",
+      "x": 169.74823961034417
+    },
+    {
+      "t": 31400,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 632.5402322961606,
+      "y": 450,
+      "color": "#ff6347"
+    },
+    {
+      "t": 31400,
+      "type": "enemy-escape",
+      "enemyId": "w2-e3",
+      "wave": 2
+    },
+    {
+      "t": 31700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 586.9874533267456,
+      "y": 365,
+      "color": "#ff6347"
+    },
+    {
+      "t": 31850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 179.70518522131752,
+      "y": 322.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 32000,
+      "type": "enemy-spawn",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "kind": "armor",
+      "x": 42.3119449801743
+    },
+    {
+      "t": 32250,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 598.843979233891,
+      "y": 492.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 32550,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 659.2689435363146,
+      "y": 407.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 32700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 214.1417603975028,
+      "y": 365,
+      "color": "#ff6347"
+    },
+    {
+      "t": 33100,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 676.7406337465046,
+      "y": 535,
+      "color": "#ff6347"
+    },
+    {
+      "t": 33400,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 634.2131318389887,
+      "y": 450,
+      "color": "#ff6347"
+    },
+    {
+      "t": 33550,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 235.32716775165127,
+      "y": 407.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 33950,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 581.1200998863912,
+      "y": 577.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 34250,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 603.5269717845264,
+      "y": 492.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 34400,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 165.72054803604738,
+      "y": 450,
+      "color": "#ff6347"
+    },
+    {
+      "t": 34400,
+      "type": "enemy-escape",
+      "enemyId": "w2-e6",
+      "wave": 2
+    },
+    {
+      "t": 34800,
+      "type": "enemy-fire",
+      "enemyId": "w2-e2",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 661.9637697171106,
+      "y": 620,
+      "color": "#ff6347"
+    },
+    {
+      "t": 35100,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 679.5250947538532,
+      "y": 535,
+      "color": "#ff6347"
+    },
+    {
+      "t": 35250,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 260.08958222332035,
+      "y": 492.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 35400,
+      "type": "enemy-escape",
+      "enemyId": "w2-e7",
+      "wave": 2
+    },
+    {
+      "t": 35450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e2",
+      "wave": 2
+    },
+    {
+      "t": 35950,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 584.046233524454,
+      "y": 577.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 36100,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 173.03350105116556,
+      "y": 535,
+      "color": "#ff6347"
+    },
+    {
+      "t": 36800,
+      "type": "enemy-fire",
+      "enemyId": "w2-e4",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 666.5532431625193,
+      "y": 620,
+      "color": "#ff6347"
+    },
+    {
+      "t": 36950,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 223.18688274523535,
+      "y": 577.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 37400,
+      "type": "enemy-escape",
+      "enemyId": "w2-e9",
+      "wave": 2
+    },
+    {
+      "t": 37450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e4",
+      "wave": 2
+    },
+    {
+      "t": 37800,
+      "type": "enemy-fire",
+      "enemyId": "w2-e5",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 226.9829803590614,
+      "y": 620,
+      "color": "#ff6347"
+    },
+    {
+      "t": 38400,
+      "type": "enemy-escape",
+      "enemyId": "w2-e10",
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e5",
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e8",
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e8",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 400.34553203097096,
+      "y": 502.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 38450,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e11",
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 125.52702775787242,
+      "y": 352.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 38450,
+      "type": "enemy-berserk",
+      "enemyId": "w2-e12",
+      "wave": 2
+    },
+    {
+      "t": 38450,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 82.19971603800076,
+      "y": 302.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 39300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e8",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 479.6973146025547,
+      "y": 545,
+      "color": "#ff6347"
+    },
+    {
+      "t": 39300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 219.46731065453713,
+      "y": 395,
+      "color": "#ff6347"
+    },
+    {
+      "t": 39300,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 26.01659854343249,
+      "y": 345,
+      "color": "#ff6347"
+    },
+    {
+      "t": 40150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e8",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 443.6218510408808,
+      "y": 587.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 40150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 131.43047008512877,
+      "y": 437.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 40150,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 29.476193757748586,
+      "y": 387.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 41000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e8",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 424.1592005985305,
+      "y": 630,
+      "color": "#ff6347"
+    },
+    {
+      "t": 41000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 183.64076867961805,
+      "y": 480,
+      "color": "#ff6347"
+    },
+    {
+      "t": 41000,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 79.916012776065,
+      "y": 430,
+      "color": "#ff6347"
+    },
+    {
+      "t": 41450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e8",
+      "wave": 2
+    },
+    {
+      "t": 41850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "fan",
+      "bulletCount": 7,
+      "x": 185.00292340094202,
+      "y": 522.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 41850,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": -7.279082623807938,
+      "y": 472.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 42700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 130.53130212250812,
+      "y": 565,
+      "color": "#ff6347"
+    },
+    {
+      "t": 42700,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 87.03429274154944,
+      "y": 515,
+      "color": "#ff6347"
+    },
+    {
+      "t": 43550,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 219.59787102550018,
+      "y": 607.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 43550,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "grid",
+      "bulletCount": 5,
+      "x": 17.659086857459137,
+      "y": 557.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 44400,
+      "type": "enemy-fire",
+      "enemyId": "w2-e11",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 126.20945152553386,
+      "y": 650,
+      "color": "#ff6347"
+    },
+    {
+      "t": 44400,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 38.51598129562295,
+      "y": 600,
+      "color": "#ff6347"
+    },
+    {
+      "t": 44450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e11",
+      "wave": 2
+    },
+    {
+      "t": 45250,
+      "type": "enemy-fire",
+      "enemyId": "w2-e12",
+      "wave": 2,
+      "berserk": true,
+      "pattern": "spiral",
+      "bulletCount": 12,
+      "x": 73.2665092548622,
+      "y": 642.5,
+      "color": "#ff6347"
+    },
+    {
+      "t": 45450,
+      "type": "enemy-escape",
+      "enemyId": "w2-e12",
+      "wave": 2
+    },
+    {
+      "t": 45450,
+      "type": "wave-end",
+      "wave": 2
+    },
+    {
+      "t": 45450,
+      "type": "sim-end",
+      "reason": "waves-complete"
+    }
+  ]
+}
