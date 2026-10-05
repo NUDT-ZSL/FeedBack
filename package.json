@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "simulate": "node scripts/simulate.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

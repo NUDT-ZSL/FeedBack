@@ -1,61 +1,18 @@
-import type { PulpState, QualityGrade } from './types';
+import type { QualityGrade } from './types';
 
-export const calculateUniformity = (concentration: number): number => {
-  const optimalConcentration = 50;
-  const deviation = Math.abs(concentration - optimalConcentration);
-  const baseScore = Math.max(0, 100 - deviation * 1.5);
-  const randomFactor = Math.random() * 10 - 5;
-  return Math.max(0, Math.min(100, baseScore + randomFactor));
-};
-
-export const calculateDryingTime = (pressLevel: number): number => {
-  const baseTime = 4000;
-  const reduction = pressLevel * 20;
-  return Math.max(2000, baseTime - reduction);
-};
-
-export const calculateBreakProbability = (uniformity: number, dryness: number): number => {
-  const uniformityFactor = (100 - uniformity) * 0.3;
-  const drynessFactor = dryness > 90 ? (dryness - 90) * 2 : 0;
-  return Math.min(30, uniformityFactor + drynessFactor);
-};
-
-export const calculateQualityScore = (
-  concentration: number,
-  uniformity: number,
-  dryness: number,
-  pressLevel: number,
-  inspectionPoints: number
-): { score: number; grade: QualityGrade } => {
-  const concentrationScore = 100 - Math.abs(concentration - 50) * 1.2;
-  const uniformityScore = uniformity;
-  const drynessScore = dryness >= 95 ? 100 : dryness * 1.05;
-  const pressScore = pressLevel >= 70 && pressLevel <= 90 ? 100 : 100 - Math.abs(pressLevel - 80) * 1.5;
-  const inspectionBonus = inspectionPoints * 2;
-
-  const totalScore = (
-    concentrationScore * 0.25 +
-    uniformityScore * 0.3 +
-    drynessScore * 0.2 +
-    pressScore * 0.15 +
-    inspectionBonus
-  );
-
-  const finalScore = Math.max(0, Math.min(100, Math.round(totalScore)));
-
-  let grade: QualityGrade;
-  if (finalScore >= 90) {
-    grade = 'excellent';
-  } else if (finalScore >= 70) {
-    grade = 'good';
-  } else if (finalScore >= 50) {
-    grade = 'medium';
-  } else {
-    grade = 'poor';
-  }
-
-  return { score: finalScore, grade };
-};
+// 判定与计算逻辑统一由纯推演层提供，此处 re-export 以保持既有引用不变。
+export {
+  clamp,
+  calculateConcentration,
+  calculateUniformity,
+  calculateDryingTime,
+  calculateBreakProbability,
+  calculateQualityScore,
+  createSeededRandom,
+  drawPressLevel,
+  gradeForScore,
+} from './simulation/engine';
+export type { RandomSource } from './simulation/engine';
 
 export const getGradeColor = (grade: QualityGrade): string => {
   switch (grade) {
@@ -98,15 +55,6 @@ export const getMaterialLabel = (material: string): string => {
 
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
-
-export const clamp = (value: number, min: number, max: number): number => {
-  return Math.max(min, Math.min(max, value));
-};
-
-export const calculateConcentration = (materials: PulpState['materials']): number => {
-  const total = materials.chuPi + materials.sangPi + materials.maXianWei;
-  return clamp(total, 0, 100);
 };
 
 export const formatTimestamp = (timestamp: number): string => {
