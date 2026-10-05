@@ -1,57 +1,36 @@
-# React + TypeScript + Vite
+# 临安书坊 · 经营推演
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+宋代书坊经营推演应用：录入书籍与销售流水，自动推导库存变化、售罄时点、动销情况，
+并按类别与渠道汇总营收利润；陈列位换位带生效时刻，归属歧义可裁决并局部重算。
+全部数据存于浏览器本地（localStorage），支持 JSON 导入导出，完全离线可跑。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev      # 开发
+npm run build    # 生产构建（tsc + vite）
+npm run check    # 仅类型检查
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+首次打开自动载入内置样例（开宝三年三月十五一日经营），覆盖：成交价≠当前售价、
+超卖、无货退货、换位与销售同时刻归属歧义、同位同时段冲突五类边界。
+「数据」页可导出/导入 JSON、清空、载入样例，并运行「局部重算 vs 整体重算」一致性校验。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 推演规则（src/engine/compute.ts）
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+- **库存**：按流水时序逐笔扣减（数量为负即退货）；库存为负标记「超卖」，退货后库存
+  超过初始库存标记「无货退货」，均只标记不吞掉。
+- **售罄时点**：库存首次降到 0 的成交时刻。
+- **营收/利润**：一律按流水上的成交价计算；利润 = 营收 − 净销量 × 进价（退货负结转）。
+- **陈列归属**：换位记录生效时刻，构成每本书的陈列位阶梯时间线；销售按成交时刻
+  落在对应区间归位。换位与销售同一时刻时归属不清，保留「换位前/换位后」两个候选
+  待裁决；裁决只重算受影响的销售行与「陈列位×时段」聚合，并与整体重算自动核对。
+- **时段**：自然日 + 时辰（2 小时一段，23 点起为子时）。
+- **同位冲突**：同一陈列位同一时刻有多条占位记录时标记异常，后录入记录优先。
+
+## 结构
+
+- `src/engine/` 纯函数推演引擎（types / compute / sample），无 UI 依赖，可单测
+- `src/store/useStore.ts` Zustand 状态层，数据变更即全量重算，裁决走局部重算+校验
+- `src/pages/` 书籍、陈列位、销售流水、经营结论、数据五个页面
