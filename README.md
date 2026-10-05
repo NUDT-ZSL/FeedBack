@@ -1,57 +1,51 @@
-# React + TypeScript + Vite
+# 宋代水力石磨坊
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+虚拟古代磨坊模拟应用：调节水轮阀门与磨盘间隙，磨盘实时产出精白面 / 中筋面 / 麸皮，
+可打包成袋并追溯每一袋的产出依据。纯前端 + localStorage 离线持久化，不依赖任何网络或后端。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev        # 打开界面
+npm run simulate   # 离线确定性仿真（见下）
+npm run check      # 类型检查
+npm run build      # 构建
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 账目与磨盘状态的联动模型
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+核心在 `src/MillCore.ts`（纯函数、无副作用），UI（`src/millReducer.ts`）与
+离线仿真（`src/simulation.ts`）共用同一套引擎，口径完全一致：
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- **段落式台账**：工况（间隙、阀门）不变期间的连续产出归为一个"工况段"，
+  段落记录该期间的间隙、阀门、转速、负载、产出比例与三种粉的实际产出。
+- **每袋按产出期间结算**：打包时，袋重与成色 = 各未打包段落中本品类贡献之和，
+  而不是打包瞬间的快照。批次记录里冻结全部段落的工况作为"历史依据"，
+  之后无论如何调整磨盘，已打包批次都不再变化。
+- **调整即重核算**：调整间隙/阀门只影响之后的新产出（另起新段）；
+  未打包累计量始终等于各段实际产出之和，界面上的桶重随状态变化自动按新口径归集。
+- **打包是原子事件**：只结算打包时刻之前已累积的段落；同一时刻"调整 + 打包"时，
+  该袋按变化前结算，变化后的产出归下一袋。打包只清空本品类（对应清空本桶），
+  其余品类继续累积；打包后剩余段落封账，后续产出另起新段，
+  保证每段时长与其贡献严格对应。
+- **连续打包独立成条**：批次编号来自单调计数器（`batch-N`），同一时刻连打多袋
+  各自独立；动画袋与批次记录共用同一 id，界面上一一对应。
+- **极端值安全**：间隙钳制在 0.5–3mm、阀门 0–100%、单步时长 ≤ 1s，
+  负载公式无除零、无负值、无 NaN；负载 > 85% 触发过载保护停机，期间无产出。
+- **刷新不丢账**：批次记录写入 localStorage（`ancient-mill:batches:v1`），
+  读取时做结构校验，脏数据自动丢弃。
+
+## 离线确定性验证
+
+```bash
+npm run simulate
 ```
+
+用 `src/simulation.ts` 中的预设事件序列（含中途调参、同一时刻连打三袋、
+阀门归零、间隙/阀门极端值、过载停机、空打包等边界）驱动推演，固定步长、
+注入时钟、计数器编号，因此**同一序列重复运行结果逐字节一致**（脚本自动校验）。
+
+输出包括：事件时间线、每条批次的袋重与全部工况段依据（间隙/阀门/转速/负载/
+产出比例/该段贡献），并校验：袋重 = 各段贡献之和、比例之和恒为 1、负载在
+[0,100]、无重复编号、无零时长段落。任一校验失败即非零退出。
