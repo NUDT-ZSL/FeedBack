@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+> 日月食推演链路的自动化验证见 [VERIFYING.md](./VERIFYING.md)：`npm run verify` 一键离线复核。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

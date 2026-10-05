@@ -1,0 +1,495 @@
+{
+  "description": "日月食推演链路黄金基线：由 scripts/generate-golden.ts 生成，tests/golden.test.ts 校验",
+  "cases": {
+    "solar-total-1311": {
+      "input": {
+        "dateISO": "1311-07-24T18:00:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-total",
+          "magnitude": 1.020384,
+          "maximumISO": "1311-07-24T17:58:57.471Z",
+          "jdAtMaximum": 2200097.24927628,
+          "minimumSeparationDeg": 0.002974,
+          "phases": {
+            "firstContactISO": "1311-07-24T17:03:41.008Z",
+            "maximumISO": "1311-07-24T17:58:57.471Z",
+            "lastContactISO": "1311-07-24T18:54:13.216Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1311-ri",
+          "magnitudeDelta": -0.009616,
+          "timeDeltaMinutes": -6.042,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "solar-partial-deep-1282": {
+      "input": {
+        "dateISO": "1282-08-12T03:37:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-partial",
+          "magnitude": 0.962301,
+          "maximumISO": "1282-08-12T03:37:14.782Z",
+          "jdAtMaximum": 2189524.65086553,
+          "minimumSeparationDeg": 0.018416,
+          "phases": {
+            "firstContactISO": "1282-08-12T02:37:15.289Z",
+            "maximumISO": "1282-08-12T03:37:14.782Z",
+            "lastContactISO": "1282-08-12T04:37:15.996Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1282-ri",
+          "magnitudeDelta": 0.002301,
+          "timeDeltaMinutes": -2.754,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "solar-grazing-1319": {
+      "input": {
+        "dateISO": "1319-03-01T00:40:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-partial",
+          "magnitude": 0.008668,
+          "maximumISO": "1319-03-01T00:40:02.529Z",
+          "jdAtMaximum": 2202873.52780705,
+          "minimumSeparationDeg": 0.51635,
+          "phases": {
+            "firstContactISO": "1319-03-01T00:31:26.268Z",
+            "maximumISO": "1319-03-01T00:40:02.529Z",
+            "lastContactISO": "1319-03-01T00:48:40.034Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1319-ri",
+          "magnitudeDelta": -0.001332,
+          "timeDeltaMinutes": -4.958,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "solar-grazing-1326": {
+      "input": {
+        "dateISO": "1326-10-04T22:45:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-partial",
+          "magnitude": 0.055183,
+          "maximumISO": "1326-10-04T22:45:00.249Z",
+          "jdAtMaximum": 2205648.44791954,
+          "minimumSeparationDeg": 0.486309,
+          "phases": {
+            "firstContactISO": "1326-10-04T22:22:51.604Z",
+            "maximumISO": "1326-10-04T22:45:00.249Z",
+            "lastContactISO": "1326-10-04T23:07:08.151Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1326-ri",
+          "magnitudeDelta": -0.964817,
+          "timeDeltaMinutes": -4.996,
+          "typeMatches": false,
+          "conclusion": "type-mismatch"
+        }
+      }
+    },
+    "solar-none-1335": {
+      "input": {
+        "dateISO": "1335-07-15T00:00:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "none",
+          "magnitude": 0,
+          "maximumISO": "1335-07-28T17:52:57.217Z",
+          "jdAtMaximum": 2208867.24510667,
+          "minimumSeparationDeg": 4.687097,
+          "phases": null,
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": null,
+          "magnitudeDelta": null,
+          "timeDeltaMinutes": null,
+          "typeMatches": false,
+          "conclusion": "none-event"
+        }
+      }
+    },
+    "solar-visible-dadu-1311": {
+      "input": {
+        "dateISO": "1311-07-24T18:00:00.000Z",
+        "kind": "solar",
+        "observer": {
+          "latitudeDeg": 39.9,
+          "longitudeDeg": 116.4,
+          "utcOffsetHours": 8
+        }
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-total",
+          "magnitude": 1.020384,
+          "maximumISO": "1311-07-24T17:58:57.471Z",
+          "jdAtMaximum": 2200097.24927628,
+          "minimumSeparationDeg": 0.002974,
+          "phases": {
+            "firstContactISO": "1311-07-24T17:03:41.008Z",
+            "maximumISO": "1311-07-24T17:58:57.471Z",
+            "lastContactISO": "1311-07-24T18:54:13.216Z"
+          },
+          "visibility": {
+            "visible": false,
+            "maxAltitudeDeg": -20.0098,
+            "altitudeAtMaximumDeg": -25.6833,
+            "reason": "below-horizon"
+          }
+        },
+        "comparison": {
+          "recordId": "ss-1311-ri",
+          "magnitudeDelta": -0.009616,
+          "timeDeltaMinutes": -6.042,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "solar-polar-summer-1311": {
+      "input": {
+        "dateISO": "1311-07-24T18:00:00.000Z",
+        "kind": "solar",
+        "observer": {
+          "latitudeDeg": 85,
+          "longitudeDeg": 0,
+          "utcOffsetHours": 0
+        }
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-total",
+          "magnitude": 1.020384,
+          "maximumISO": "1311-07-24T17:58:57.471Z",
+          "jdAtMaximum": 2200097.24927628,
+          "minimumSeparationDeg": 0.002974,
+          "phases": {
+            "firstContactISO": "1311-07-24T17:03:41.008Z",
+            "maximumISO": "1311-07-24T17:58:57.471Z",
+            "lastContactISO": "1311-07-24T18:54:13.216Z"
+          },
+          "visibility": {
+            "visible": true,
+            "maxAltitudeDeg": 21.3315,
+            "altitudeAtMaximumDeg": 20.1301,
+            "reason": "above-horizon"
+          }
+        },
+        "comparison": {
+          "recordId": "ss-1311-ri",
+          "magnitudeDelta": -0.009616,
+          "timeDeltaMinutes": -6.042,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "solar-polar-winter-1319": {
+      "input": {
+        "dateISO": "1319-03-01T00:40:00.000Z",
+        "kind": "solar",
+        "observer": {
+          "latitudeDeg": -85,
+          "longitudeDeg": 0,
+          "utcOffsetHours": 0
+        }
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-partial",
+          "magnitude": 0.008668,
+          "maximumISO": "1319-03-01T00:40:02.529Z",
+          "jdAtMaximum": 2202873.52780705,
+          "minimumSeparationDeg": 0.51635,
+          "phases": {
+            "firstContactISO": "1319-03-01T00:31:26.268Z",
+            "maximumISO": "1319-03-01T00:40:02.529Z",
+            "lastContactISO": "1319-03-01T00:48:40.034Z"
+          },
+          "visibility": {
+            "visible": true,
+            "maxAltitudeDeg": 2.9406,
+            "altitudeAtMaximumDeg": 2.9178,
+            "reason": "above-horizon"
+          }
+        },
+        "comparison": {
+          "recordId": "ss-1319-ri",
+          "magnitudeDelta": -0.001332,
+          "timeDeltaMinutes": -4.958,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-total-1284": {
+      "input": {
+        "dateISO": "1284-01-11T12:34:00.000Z",
+        "kind": "lunar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-total",
+          "magnitude": 1.684925,
+          "maximumISO": "1284-01-11T12:34:52.868Z",
+          "jdAtMaximum": 2190042.024223,
+          "minimumSeparationDeg": 0.09453,
+          "phases": {
+            "firstContactISO": "1284-01-11T09:55:39.086Z",
+            "maximumISO": "1284-01-11T12:34:52.868Z",
+            "lastContactISO": "1284-01-11T15:14:06.695Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1284-yue",
+          "magnitudeDelta": 0.004925,
+          "timeDeltaMinutes": 4.881,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-partial-deep-1299": {
+      "input": {
+        "dateISO": "1299-09-18T10:52:00.000Z",
+        "kind": "lunar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-partial",
+          "magnitude": 0.986052,
+          "maximumISO": "1299-09-18T10:52:56.658Z",
+          "jdAtMaximum": 2195770.95343354,
+          "minimumSeparationDeg": 0.480913,
+          "phases": {
+            "firstContactISO": "1299-09-18T08:20:13.961Z",
+            "maximumISO": "1299-09-18T10:52:56.658Z",
+            "lastContactISO": "1299-09-18T13:25:38.128Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1299-yue",
+          "magnitudeDelta": -0.003948,
+          "timeDeltaMinutes": -2.056,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-grazing-1286": {
+      "input": {
+        "dateISO": "1286-11-09T22:30:00.000Z",
+        "kind": "lunar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-partial",
+          "magnitude": 0.008982,
+          "maximumISO": "1286-11-09T22:30:01.475Z",
+          "jdAtMaximum": 2191075.43751707,
+          "minimumSeparationDeg": 0.873176,
+          "phases": {
+            "firstContactISO": "1286-11-09T20:01:55.025Z",
+            "maximumISO": "1286-11-09T22:30:01.475Z",
+            "lastContactISO": "1286-11-10T00:58:08.255Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1286-yue",
+          "magnitudeDelta": -0.001018,
+          "timeDeltaMinutes": -4.975,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-none-1335": {
+      "input": {
+        "dateISO": "1335-07-15T00:00:00.000Z",
+        "kind": "lunar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "none",
+          "magnitude": 0,
+          "maximumISO": "1335-07-14T18:21:08.303Z",
+          "jdAtMaximum": 2208853.26467943,
+          "minimumSeparationDeg": 4.971091,
+          "phases": null,
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": null,
+          "magnitudeDelta": null,
+          "timeDeltaMinutes": null,
+          "typeMatches": false,
+          "conclusion": "none-event"
+        }
+      }
+    },
+    "lunar-visible-dadu-1284": {
+      "input": {
+        "dateISO": "1284-01-11T12:34:00.000Z",
+        "kind": "lunar",
+        "observer": {
+          "latitudeDeg": 39.9,
+          "longitudeDeg": 116.4,
+          "utcOffsetHours": 8
+        }
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-total",
+          "magnitude": 1.684925,
+          "maximumISO": "1284-01-11T12:34:52.868Z",
+          "jdAtMaximum": 2190042.024223,
+          "minimumSeparationDeg": 0.09453,
+          "phases": {
+            "firstContactISO": "1284-01-11T09:55:39.086Z",
+            "maximumISO": "1284-01-11T12:34:52.868Z",
+            "lastContactISO": "1284-01-11T15:14:06.695Z"
+          },
+          "visibility": {
+            "visible": true,
+            "maxAltitudeDeg": 65.3931,
+            "altitudeAtMaximumDeg": 38.5691,
+            "reason": "above-horizon"
+          }
+        },
+        "comparison": {
+          "recordId": "ss-1284-yue",
+          "magnitudeDelta": 0.004925,
+          "timeDeltaMinutes": 4.881,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-polar-1284": {
+      "input": {
+        "dateISO": "1284-01-11T12:34:00.000Z",
+        "kind": "lunar",
+        "observer": {
+          "latitudeDeg": 85,
+          "longitudeDeg": 135,
+          "utcOffsetHours": 9
+        }
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-total",
+          "magnitude": 1.684925,
+          "maximumISO": "1284-01-11T12:34:52.868Z",
+          "jdAtMaximum": 2190042.024223,
+          "minimumSeparationDeg": 0.09453,
+          "phases": {
+            "firstContactISO": "1284-01-11T09:55:39.086Z",
+            "maximumISO": "1284-01-11T12:34:52.868Z",
+            "lastContactISO": "1284-01-11T15:14:06.695Z"
+          },
+          "visibility": {
+            "visible": true,
+            "maxAltitudeDeg": 26.5199,
+            "altitudeAtMaximumDeg": 25.7698,
+            "reason": "above-horizon"
+          }
+        },
+        "comparison": {
+          "recordId": "ss-1284-yue",
+          "magnitudeDelta": 0.004925,
+          "timeDeltaMinutes": 4.881,
+          "typeMatches": true,
+          "conclusion": "record-match"
+        }
+      }
+    },
+    "lunar-deviation-1285": {
+      "input": {
+        "dateISO": "1285-06-25T14:35:00.000Z",
+        "kind": "lunar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "lunar-partial",
+          "magnitude": 0.019253,
+          "maximumISO": "1285-06-25T14:35:16.395Z",
+          "jdAtMaximum": 2190573.10782864,
+          "minimumSeparationDeg": 0.931486,
+          "phases": {
+            "firstContactISO": "1285-06-25T12:20:37.575Z",
+            "maximumISO": "1285-06-25T14:35:16.395Z",
+            "lastContactISO": "1285-06-25T16:49:50.779Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": "ss-1285-yue",
+          "magnitudeDelta": -0.330747,
+          "timeDeltaMinutes": -4.727,
+          "typeMatches": true,
+          "conclusion": "magnitude-deviation"
+        }
+      }
+    },
+    "solar-no-record-1365": {
+      "input": {
+        "dateISO": "1365-03-01T12:00:00.000Z",
+        "kind": "solar"
+      },
+      "expected": {
+        "prediction": {
+          "type": "solar-partial",
+          "magnitude": 0.712589,
+          "maximumISO": "1365-03-01T12:02:29.480Z",
+          "jdAtMaximum": 2219676.00173009,
+          "minimumSeparationDeg": 0.131376,
+          "phases": {
+            "firstContactISO": "1365-03-01T10:56:53.339Z",
+            "maximumISO": "1365-03-01T12:02:29.480Z",
+            "lastContactISO": "1365-03-01T13:08:05.938Z"
+          },
+          "visibility": null
+        },
+        "comparison": {
+          "recordId": null,
+          "magnitudeDelta": null,
+          "timeDeltaMinutes": null,
+          "typeMatches": false,
+          "conclusion": "no-record"
+        }
+      }
+    }
+  }
+}
