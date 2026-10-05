@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/engine.test.ts tests/replay.test.ts",
+    "sim:replay": "node scripts/replay.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",

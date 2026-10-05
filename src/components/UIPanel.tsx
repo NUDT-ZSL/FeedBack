@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import styled from '@emotion/styled'
 import { useGameStore } from '../store/gameStore'
+import { getNavigationStatusLabel } from '../simulation/statusLabels.ts'
 
 const PanelContainer = styled.div`
   position: absolute;
@@ -617,8 +618,7 @@ function UIPanel() {
             <InfoRow>
               <InfoLabel>🚦 通航状态</InfoLabel>
               <StatusBadge status={selectedShip.navigationStatus}>
-                {selectedShip.navigationStatus === 'normal' ? '正常通行' : 
-                 selectedShip.navigationStatus === 'warning' ? '谨慎通过' : '危险停航'}
+                {getNavigationStatusLabel(selectedShip.navigationStatus)}
               </StatusBadge>
             </InfoRow>
           </InfoPanel>

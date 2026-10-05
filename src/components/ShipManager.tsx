@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore, ShipData, ShipType } from '../store/gameStore'
+import { advanceProgress, clampProgress, computeEffectiveDraft } from '../simulation/engine.ts'
 
 interface ShipManagerProps {
   riverLength: number
@@ -53,10 +54,8 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
   useFrame((state, delta) => {
     if (!shipGroupRef.current) return
 
-    localProgressRef.current += ship.speed * 0.003 * delta * 60
-    if (localProgressRef.current > 1.1) {
-      localProgressRef.current = -0.1
-    }
+    // 进度推进与越界重置统一走 simulation 引擎
+    localProgressRef.current = advanceProgress(localProgressRef.current, ship.speed, delta)
 
     const progress = localProgressRef.current
     const x = (progress - 0.5) * riverLength
@@ -196,7 +195,7 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
   }
 
   const waterLineY = waterLevel * 0.1 - 0.5
-  const effectiveDraft = ship.draft + (5 - waterLevel) * 0.1
+  const effectiveDraft = computeEffectiveDraft(ship.draft, waterLevel)
 
   return (
     <group ref={shipGroupRef}>
@@ -283,7 +282,7 @@ function ShipManager({ riverLength, riverWidth, waterLevel, windSpeed }: ShipMan
         if (transform && transform !== 'none') {
           const matrix = new DOMMatrix(transform)
           const x = matrix.m41 / riverLength + 0.5
-          updateShip(ship.id, { progress: Math.max(0, Math.min(1, x)) })
+          updateShip(ship.id, { progress: clampProgress(x) })
         }
       }
     })

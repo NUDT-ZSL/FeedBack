@@ -4,6 +4,7 @@ import { OrbitControls, Html, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import ShipManager from './ShipManager'
 import { useGameStore } from '../store/gameStore'
+import { evaluateFleet } from '../simulation/engine.ts'
 
 const RIVER_LENGTH = 80
 const RIVER_WIDTH = 18
@@ -415,23 +416,19 @@ function CameraController() {
 }
 
 function SceneContent() {
-  const { waterLevel, windSpeed, ships, setAlertActive, updateShip } = useGameStore()
+  const { waterLevel, windSpeed, ships, alertActive, setAlertActive, updateShip } = useGameStore()
 
   useFrame(() => {
-    let hasWarning = false
-    ships.forEach(ship => {
-      const effectiveDraft = ship.draft + (5 - waterLevel) * 0.1
-      const diff = waterLevel * 0.1 - effectiveDraft * 0.3
-      if (diff < 0.5) {
-        hasWarning = true
-        updateShip(ship.id, { navigationStatus: 'warning' })
-      } else if (windSpeed >= 7) {
-        updateShip(ship.id, { navigationStatus: 'danger' })
-      } else {
-        updateShip(ship.id, { navigationStatus: 'normal' })
+    // 推演判定统一走 simulation 引擎，渲染帧只负责把结论写回 store
+    const fleet = evaluateFleet(ships, waterLevel, windSpeed)
+    fleet.evaluations.forEach((evaluation, index) => {
+      if (ships[index].navigationStatus !== evaluation.status) {
+        updateShip(ships[index].id, { navigationStatus: evaluation.status })
       }
     })
-    setAlertActive(hasWarning)
+    if (alertActive !== fleet.alertActive) {
+      setAlertActive(fleet.alertActive)
+    }
   })
 
   return (
