@@ -1,19 +1,13 @@
 import React, { useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import DataViz, { DataPoint } from './DataViz';
+import DataViz from './DataViz';
+import type { Direction, SlideData } from './state/storyState';
 
-export interface SlideData {
-  id: string;
-  title: string;
-  chartType: 'bar' | 'line';
-  data: DataPoint[];
-  note: string;
-  noteFontSize: number;
-}
+export type { SlideData } from './state/storyState';
 
 interface SlideProps {
   slide: SlideData;
-  direction: 'forward' | 'backward';
+  direction: Direction;
   isActive: boolean;
   isPresentation: boolean;
   onUpdate: (updates: Partial<SlideData>) => void;

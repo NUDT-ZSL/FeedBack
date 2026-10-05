@@ -1,168 +1,101 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useReducer, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import Slide, { SlideData } from './Slide';
-
-const generateId = (): string => Math.random().toString(36).substring(2, 10);
-
-const createInitialSlides = (): SlideData[] => [
-  {
-    id: generateId(),
-    title: '2024年度销售额概览',
-    chartType: 'bar',
-    data: [
-      { label: 'Q1', value: 128000 },
-      { label: 'Q2', value: 156000 },
-      { label: 'Q3', value: 189000 },
-      { label: 'Q4', value: 234000 },
-      { label: 'Q1', value: 278000 },
-      { label: 'Q2', value: 312000 }
-    ],
-    note: '<b>关键洞察：</b>年度销售额呈现持续增长态势。<br/><br/><i>主要驱动因素：</i><ul><li>新产品线贡献显著</li><li>东南亚市场快速扩张</li><li>品牌溢价策略生效</li></ul>',
-    noteFontSize: 16
-  },
-  {
-    id: generateId(),
-    title: '用户增长趋势分析',
-    chartType: 'line',
-    data: [
-      { label: '1月', value: 12500 },
-      { label: '2月', value: 15800 },
-      { label: '3月', value: 19200 },
-      { label: '4月', value: 24600 },
-      { label: '5月', value: 31200 },
-      { label: '6月', value: 38900 }
-    ],
-    note: '<b>月活用户突破 38K</b>，环比增长 24.7%。<br/><br/><i>增长亮点：</i><ul><li>病毒式传播活动效果显著</li><li>产品体验优化降低流失率</li><li>付费转化率提升至 4.2%</li></ul>',
-    noteFontSize: 16
-  },
-  {
-    id: generateId(),
-    title: '产品品类销售分布',
-    chartType: 'bar',
-    data: [
-      { label: 'A类', value: 45600 },
-      { label: 'B类', value: 32100 },
-      { label: 'C类', value: 28700 },
-      { label: 'D类', value: 19800 },
-      { label: 'E类', value: 15400 },
-      { label: 'F类', value: 8200 }
-    ],
-    note: '<b>A类产品</b>贡献最大销售额，占比约 32%。<br/><br/><i>策略建议：</i><ul><li>加大A类产品投入</li><li>优化D/F类产品结构</li><li>探索品类交叉销售机会</li></ul>',
-    noteFontSize: 16
-  }
-];
+import Slide from './Slide';
+import {
+  StoryState,
+  StoryAction,
+  StoryStore,
+  SlideData,
+  createInitialState,
+  storyReducer,
+  actionForKey,
+  MAX_SLIDES
+} from './state/storyState';
+import {
+  togglePresentation as togglePresentationService,
+  domFullscreenPort
+} from './state/presentation';
 
 const App: React.FC = () => {
-  const [slides, setSlides] = useState<SlideData[]>(createInitialSlides);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
-  const [isPresentation, setIsPresentation] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [story, dispatch] = useReducer(
+    (state: StoryState, action: StoryAction) => storyReducer(state, action),
+    undefined,
+    () => createInitialState()
+  );
+  const { slides, currentIndex, direction, isPresentation } = story;
+
+  // 供副作用回调读取最新状态（避免闭包过期）
+  const storyRef = useRef(story);
+  storyRef.current = story;
+
+  // 与 DOM 无关的 Store 适配器，供演示模式服务驱动同一状态机
+  const storeRef = useRef<StoryStore>({
+    getState: () => storyRef.current,
+    dispatch: (action: StoryAction) => {
+      dispatch(action);
+      return storyRef.current;
+    }
+  });
 
   const goToSlide = useCallback((newIndex: number) => {
-    if (newIndex < 0 || newIndex >= slides.length || newIndex === currentIndex) return;
-    setDirection(newIndex > currentIndex ? 'forward' : 'backward');
-    setCurrentIndex(newIndex);
-  }, [currentIndex, slides.length]);
-
-  const goNext = useCallback(() => {
-    if (currentIndex < slides.length - 1) {
-      setDirection('forward');
-      setCurrentIndex(prev => prev + 1);
-    }
-  }, [currentIndex, slides.length]);
-
-  const goPrev = useCallback(() => {
-    if (currentIndex > 0) {
-      setDirection('backward');
-      setCurrentIndex(prev => prev - 1);
-    }
-  }, [currentIndex]);
-
-  const addSlide = useCallback(() => {
-    if (slides.length >= 10) return;
-    const newSlide: SlideData = {
-      id: generateId(),
-      title: `新幻灯片 ${slides.length + 1}`,
-      chartType: 'bar',
-      data: [
-        { label: 'A', value: Math.floor(Math.random() * 50000) + 10000 },
-        { label: 'B', value: Math.floor(Math.random() * 50000) + 10000 },
-        { label: 'C', value: Math.floor(Math.random() * 50000) + 10000 },
-        { label: 'D', value: Math.floor(Math.random() * 50000) + 10000 },
-        { label: 'E', value: Math.floor(Math.random() * 50000) + 10000 },
-        { label: 'F', value: Math.floor(Math.random() * 50000) + 10000 }
-      ],
-      note: '',
-      noteFontSize: 16
-    };
-    setSlides(prev => [...prev, newSlide]);
-    setDirection('forward');
-    setCurrentIndex(slides.length);
-  }, [slides.length]);
-
-  const updateSlide = useCallback((id: string, updates: Partial<SlideData>) => {
-    setSlides(prev => prev.map(slide =>
-      slide.id === id ? { ...slide, ...updates } : slide
-    ));
+    dispatch({ type: 'goToSlide', index: newIndex });
   }, []);
 
-  const togglePresentation = useCallback(async () => {
-    if (!isPresentation) {
-      try {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-        }
-        setIsPresentation(true);
-      } catch {
-        setIsPresentation(true);
-      }
-    } else {
-      try {
-        if (document.fullscreenElement) {
-          await document.exitFullscreen();
-        }
-      } catch { /* ignore */ }
-      setIsPresentation(false);
-    }
-  }, [isPresentation]);
+  const goNext = useCallback(() => {
+    dispatch({ type: 'goNext' });
+  }, []);
+
+  const goPrev = useCallback(() => {
+    dispatch({ type: 'goPrev' });
+  }, []);
+
+  const addSlide = useCallback(() => {
+    dispatch({ type: 'addSlide' });
+  }, []);
+
+  const deleteSlide = useCallback((id: string) => {
+    dispatch({ type: 'deleteSlide', id });
+  }, []);
+
+  const updateSlide = useCallback((id: string, updates: Partial<SlideData>) => {
+    dispatch({ type: 'updateSlide', id, updates });
+  }, []);
+
+  const togglePresentation = useCallback(() => {
+    void togglePresentationService(storeRef.current, domFullscreenPort);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isPresentation) {
-        if (e.key === 'Escape' || e.key === ' ') {
-          e.preventDefault();
-          togglePresentation();
-          return;
-        }
-      }
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        goNext();
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        goPrev();
+      const action = actionForKey(e.key, storyRef.current);
+      if (!action) return;
+      e.preventDefault();
+      if (action.type === 'setPresentation') {
+        // 演示模式下的 ESC / 空格：走服务以同步处理全屏退出
+        togglePresentation();
+      } else {
+        dispatch(action);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentation, goNext, goPrev, togglePresentation]);
+  }, [togglePresentation]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && isPresentation) {
-        setIsPresentation(false);
+      if (!document.fullscreenElement && storyRef.current.isPresentation) {
+        dispatch({ type: 'setPresentation', value: false });
       }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [isPresentation]);
+  }, []);
 
   const currentSlide = slides[currentIndex];
 
   return (
-    <div className="app-container" ref={containerRef}>
+    <div className="app-container">
       <div className="app-header">
         <div className="app-logo">
           <span className="app-logo-dot" />
@@ -181,6 +114,18 @@ const App: React.FC = () => {
             </svg>
             演示模式
           </button>
+          <button
+            className="toolbar-btn"
+            onClick={() => currentSlide && deleteSlide(currentSlide.id)}
+            disabled={!currentSlide}
+            title="删除当前幻灯片"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            删除当前页
+          </button>
         </div>
       )}
 
@@ -198,6 +143,9 @@ const App: React.FC = () => {
               />
             )}
           </AnimatePresence>
+          {!currentSlide && (
+            <div className="empty-stage">暂无幻灯片，点击下方 + 新建</div>
+          )}
         </div>
       </div>
 
@@ -206,7 +154,7 @@ const App: React.FC = () => {
           <button
             className="nav-btn"
             onClick={goPrev}
-            disabled={currentIndex === 0}
+            disabled={currentIndex <= 0}
             title="上一张 (←)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -241,8 +189,8 @@ const App: React.FC = () => {
             <button
               className="add-slide-btn"
               onClick={addSlide}
-              disabled={slides.length >= 10}
-              title={`新增幻灯片 (${slides.length}/10)`}
+              disabled={slides.length >= MAX_SLIDES}
+              title={`新增幻灯片 (${slides.length}/${MAX_SLIDES})`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -258,7 +206,7 @@ const App: React.FC = () => {
           <button
             className="nav-btn"
             onClick={goNext}
-            disabled={currentIndex === slides.length - 1}
+            disabled={currentIndex >= slides.length - 1}
             title="下一张 (→)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
