@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/Empty.tsx","./src/engine/dyeEngine.ts","./src/engine/dyeSession.ts","./src/hooks/useTheme.ts","./src/lib/utils.ts","./src/pages/Home.tsx"],"version":"5.8.3"}

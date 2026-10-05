@@ -147,3 +147,23 @@ interface ColorStage {
 
 - 基础React插件配置
 - 端口：默认5173
+
+## 8. 推演模块（单一事实来源）
+
+所有"参数 -> 推演结果"的计算收敛在 `src/engine/`，界面组件只读快照、不做任何推算。
+
+```
+src/
+├── engine/
+│   ├── dyeEngine.ts    # 纯函数推演：DyeParams -> DyeDerivation
+│   │                   # （氧化进度/染液浓度变化/着色深度/浸染次数/色值）
+│   │                   # deriveAll 全量推演；deriveAffected 增量重算（字段级依赖表，
+│   │                   # 与全量结果逐字段一致）；sanitizeParams 归一化极端输入
+│   └── dyeSession.ts   # 会话层：dip(opId, atMs) 幂等去重 + 氧化窗口拦截连点；
+│                       # setParams 增量重算；revertTo 历史回退；replay 离线回放
+└── pages/Home.tsx      # 仅展示 DyeSession.snapshot() 并触发操作
+```
+
+- 数据流向：UI 事件 -> DyeSession -> dyeEngine 推演 -> UI 只读快照。
+- 离线验证：`npm run verify`（`scripts/verify-engine.mjs`，无第三方依赖）覆盖
+  确定性、入口一致性、增量==全量、幂等去重、回放一致、极端取值六类不变量。
