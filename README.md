@@ -1,57 +1,46 @@
-# React + TypeScript + Vite
+# 古代水车灌溉推演台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+古代水车灌溉系统的水力推演与可视化应用。核心计算（水车转速、渠道分流、
+田块蓄水、作物缺水判定）全部收敛在一条与渲染解耦的推演路径上，界面只负责
+展示与交互，所有数值均可离线复算、批量验证。
 
-Currently, two official plugins are available:
+## 推演引擎（`src/simulation/`）
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+纯函数、确定性实现：不读取时钟、随机数、网络或任何外部状态，同一份输入
+必然得到同一份输出。
 
-## Expanding the ESLint configuration
+- `types.ts` — 推演输入/输出模型（来水量、分流比例、田块容量、作物需水阈值等）
+- `engine.ts` — 全量推演：转速 → 总来流 → 渠道分流 → 田块蓄水 → 缺水判定
+- `incremental.ts` — 增量推演：按依赖关系只重算受影响的渠道与田块，
+  未受影响部分复用缓存；重算路径与全量使用同一套纯函数，结果严格一致
+- `verify.ts` — 稳定序列化、结果指纹（FNV-1a）与等价性比较
+- `scenarios.ts` — 本地样例参数与批量验证场景（离线内置，无在线服务）
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 界面（`src/pages/Home.tsx` + `src/components/simulation/`）
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- 左侧参数面板：上游来水、闸门开度、风帆角度、渠道分流比例、田块容量/阈值/耗水
+- 右侧结果面板：转速与来流统计、渠道分流条、田块蓄水率轨迹、缺水判定与可追溯依据
+- 每次参数修改同时执行增量推演（展示）与整体重算（比对），面板实时显示
+  “增量 ≡ 整体”一致性结论与结果指纹
+- `src/store/simulationStore.ts` 是界面与引擎之间唯一的桥，界面不自行计算水利数值
+
+## 离线批量复算
+
+```bash
+npm run simulate              # 人类可读报告
+node scripts/run-simulation.ts --json   # 机器可读 JSON
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+批量入口覆盖：同一输入重复推演的稳定性、多组参数场景（来水/分流/容量/阈值/
+水车）复算、局部增量与整体重算一致性、连续局部调整链路一致性。
+任一校验失败进程以非零码退出，可直接接入 CI。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 常用命令
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev        # 启动界面
+npm run simulate   # 离线批量复算
+npm run check      # 类型检查
+npm run build      # 构建
 ```
