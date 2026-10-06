@@ -1,0 +1,657 @@
+{
+  "generatedAt": "2026-10-06T03:16:57.070Z",
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "categories": [
+    {
+      "category": "baseline",
+      "total": 1,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    {
+      "category": "conflict-adjudication",
+      "total": 1,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    {
+      "category": "end-to-end",
+      "total": 1,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    {
+      "category": "event-association",
+      "total": 1,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    {
+      "category": "import-invariance",
+      "total": 1,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    {
+      "category": "link-integrity",
+      "total": 2,
+      "failed": 0,
+      "verdict": "PASS"
+    }
+  ],
+  "results": [
+    {
+      "id": "baseline-replay",
+      "title": "无异常样例：导入干净、回放推进与事件影响范围正确",
+      "category": "baseline",
+      "file": "01-baseline-replay.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "无异常归属",
+          "passed": true
+        },
+        {
+          "name": "无未裁决矛盾",
+          "passed": true
+        },
+        {
+          "name": "对象 A 时间线",
+          "passed": true
+        },
+        {
+          "name": "t=4 时 A 保持 t=1 状态",
+          "passed": true
+        },
+        {
+          "name": "t=6 时 A 推进到 t=5 状态",
+          "passed": true
+        },
+        {
+          "name": "t=0 时 A 尚无记录",
+          "passed": true
+        },
+        {
+          "name": "未知对象",
+          "passed": true
+        },
+        {
+          "name": "e-move 沿关联推导影响记录",
+          "passed": true
+        },
+        {
+          "name": "e-move 影响对象",
+          "passed": true
+        },
+        {
+          "name": "e-move 影响时间区间",
+          "passed": true
+        },
+        {
+          "name": "e-pos 沿记录链回溯",
+          "passed": true
+        },
+        {
+          "name": "e-pos 影响时间区间",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "link-anomaly-attribution",
+      "title": "关联缺失/自引用/成环：逐条归属到具体记录或事件",
+      "category": "link-integrity",
+      "file": "02-link-anomaly-attribution.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "缺失指向归属到记录 r-miss",
+          "passed": true
+        },
+        {
+          "name": "r-miss 异常指向幽灵记录",
+          "passed": true
+        },
+        {
+          "name": "缺失指向归属到事件 e-miss",
+          "passed": true
+        },
+        {
+          "name": "自引用归属到 r-self",
+          "passed": true
+        },
+        {
+          "name": "成环归属到 r-c1",
+          "passed": true
+        },
+        {
+          "name": "r-c1 的成环节点集合",
+          "passed": true
+        },
+        {
+          "name": "成环归属到 r-c2",
+          "passed": true
+        },
+        {
+          "name": "r-c2 的成环节点集合",
+          "passed": true
+        },
+        {
+          "name": "成环归属到 r-c3",
+          "passed": true
+        },
+        {
+          "name": "r-c3 的成环节点集合",
+          "passed": true
+        },
+        {
+          "name": "异常类别均为 link-integrity",
+          "passed": true
+        },
+        {
+          "name": "异常总数（2 缺失 + 1 自引用 + 3 成环）",
+          "passed": true
+        },
+        {
+          "name": "r-miss 坏边已剔除",
+          "passed": true
+        },
+        {
+          "name": "r-miss 记录未被静默丢弃",
+          "passed": true
+        },
+        {
+          "name": "r-self 记录未被静默丢弃",
+          "passed": true
+        },
+        {
+          "name": "成环事件影响范围有限且确定",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "conflict-adjudication",
+      "title": "矛盾记录：裁决前双方保留，裁决后局部重推与整体重推一致",
+      "category": "conflict-adjudication",
+      "file": "03-conflict-adjudication.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "裁决前矛盾清单",
+          "passed": true
+        },
+        {
+          "name": "裁决前回放推进到矛盾时刻返回双方候选",
+          "passed": true
+        },
+        {
+          "name": "受影响对象仅为 A",
+          "passed": true
+        },
+        {
+          "name": "受影响时间区间止于下一条干净记录前",
+          "passed": true
+        },
+        {
+          "name": "受影响事件仅 e-move",
+          "passed": true
+        },
+        {
+          "name": "裁决后回放推进到胜方状态",
+          "passed": true
+        },
+        {
+          "name": "裁决后矛盾清单清空",
+          "passed": true
+        },
+        {
+          "name": "未受影响对象 B 时间线未被改动（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "未受影响对象 C 时间线未被改动（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "未受影响事件 e-b 未被改动（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "局部重推结果与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "会话报告与独立全量推导一致",
+          "passed": true
+        },
+        {
+          "name": "胜方必须是矛盾双方之一",
+          "passed": true
+        },
+        {
+          "name": "无矛盾时刻不可裁决",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "event-revise-withdraw",
+      "title": "事件关联修正与撤回：影响范围精确更新，其余部分不动",
+      "category": "event-association",
+      "file": "04-event-revise-withdraw.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "修正后 e1 影响记录",
+          "passed": true
+        },
+        {
+          "name": "修正后 e1 影响对象",
+          "passed": true
+        },
+        {
+          "name": "修正后 e1 影响区间",
+          "passed": true
+        },
+        {
+          "name": "修正前 e1 影响对象（审计留痕）",
+          "passed": true
+        },
+        {
+          "name": "时间线不受事件修正影响（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "e2 未被改动（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "e3 未被改动（引用不变）",
+          "passed": true
+        },
+        {
+          "name": "修正后局部结果与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "坏关联下 e1 影响范围为空",
+          "passed": true
+        },
+        {
+          "name": "缺失指向归属到事件 e1",
+          "passed": true
+        },
+        {
+          "name": "异常详情指向幽灵记录",
+          "passed": true
+        },
+        {
+          "name": "异常归属后仍与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "撤回前 e3 影响对象（审计留痕）",
+          "passed": true
+        },
+        {
+          "name": "撤回后 e3 影响记录清空",
+          "passed": true
+        },
+        {
+          "name": "撤回后 e3 影响区间清空",
+          "passed": true
+        },
+        {
+          "name": "撤回后 e3 状态",
+          "passed": true
+        },
+        {
+          "name": "撤回后仍与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "修正未知事件报错",
+          "passed": true
+        },
+        {
+          "name": "撤回未知事件报错",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "import-order-invariance",
+      "title": "导入顺序与批次切分不变性：结论指纹跨排列一致",
+      "category": "import-invariance",
+      "file": "05-import-order-invariance.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "baseline 样例 seed=1 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=1 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=1 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=1 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=7 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=7 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=7 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=7 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=42 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=42 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=42 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=42 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=2026 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=2026 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=2026 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "baseline 样例 seed=2026 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=1 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=1 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=1 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=1 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=7 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=7 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=7 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=7 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=42 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=42 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=42 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=42 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=2026 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=2026 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=2026 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "anomaly 样例 seed=2026 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=1 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=1 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=1 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=1 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=7 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=7 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=7 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=7 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=42 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=42 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=42 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=42 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=2026 批次=1 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=2026 批次=2 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=2026 批次=3 结论一致",
+          "passed": true
+        },
+        {
+          "name": "conflict 样例 seed=2026 批次=5 结论一致",
+          "passed": true
+        },
+        {
+          "name": "裁决后结论 seed=3 与参考一致",
+          "passed": true
+        },
+        {
+          "name": "裁决后结论 seed=99 与参考一致",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "duplicate-payload-attribution",
+      "title": "重复 ID 内容不一致：归属异常，保留版本与导入顺序无关",
+      "category": "link-integrity",
+      "file": "06-duplicate-payload-attribution.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "先 a 后 b：归属 duplicate 异常",
+          "passed": true
+        },
+        {
+          "name": "先 a 后 b：异常归属到 r-dup",
+          "passed": true
+        },
+        {
+          "name": "先 a 后 b：异常类别",
+          "passed": true
+        },
+        {
+          "name": "先 a 后 b：记录两个版本的载荷指纹",
+          "passed": true
+        },
+        {
+          "name": "先 b 后 a：归属 duplicate 异常",
+          "passed": true
+        },
+        {
+          "name": "先 b 后 a：异常归属到 r-dup",
+          "passed": true
+        },
+        {
+          "name": "先 b 后 a：异常类别",
+          "passed": true
+        },
+        {
+          "name": "先 b 后 a：记录两个版本的载荷指纹",
+          "passed": true
+        },
+        {
+          "name": "两种导入顺序保留版本一致",
+          "passed": true
+        },
+        {
+          "name": "异常台账与导入顺序无关",
+          "passed": true
+        },
+        {
+          "name": "全量推导结论与导入顺序无关",
+          "passed": true
+        },
+        {
+          "name": "同内容重复导入无异常",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    },
+    {
+      "id": "end-to-end-chain",
+      "title": "全链路衔接：异常台账、裁决局部重推、事件撤回逐段一致",
+      "category": "end-to-end",
+      "file": "07-end-to-end-chain.mjs",
+      "passed": true,
+      "checks": [
+        {
+          "name": "导入无异常",
+          "passed": true
+        },
+        {
+          "name": "裁决前 A@4 双方保留",
+          "passed": true
+        },
+        {
+          "name": "事件 e-a 沿关联推导至 A、B",
+          "passed": true
+        },
+        {
+          "name": "事件 e-a 影响记录",
+          "passed": true
+        },
+        {
+          "name": "裁决局部重推对象",
+          "passed": true
+        },
+        {
+          "name": "裁决局部重推区间（开口到末尾）",
+          "passed": true
+        },
+        {
+          "name": "裁决后 e-a 状态指纹随胜方状态更新",
+          "passed": true
+        },
+        {
+          "name": "每次局部重推后均与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "撤回事件不影响时间线",
+          "passed": true
+        },
+        {
+          "name": "撤回后 e-c 无影响对象",
+          "passed": true
+        },
+        {
+          "name": "撤回后仍与整体重推一致",
+          "passed": true
+        },
+        {
+          "name": "局部重推审计日志",
+          "passed": true
+        }
+      ],
+      "fatal": null
+    }
+  ],
+  "verdict": "PASS"
+}

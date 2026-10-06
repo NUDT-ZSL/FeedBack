@@ -55,3 +55,13 @@ export default tseslint.config({
   },
 })
 ```
+
+## 离线批量验证
+
+判定链路（导入 / 回放推进 / 事件关联推导 / 矛盾裁决 / 局部重推）的自动化验证位于 `verification/`，核心实现位于 `src/replay/`。运行：
+
+```bash
+npm run verify
+```
+
+零网络依赖，退出码 0 表示全部通过；失败时按风险类别（link-integrity / conflict-adjudication / event-association / import-invariance 等）定位不一致项，详见 `verification/README.md`。
