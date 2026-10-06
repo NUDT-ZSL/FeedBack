@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Film, X } from 'lucide-react';
+import { Film, X, Upload } from 'lucide-react';
 import { SearchBar } from '../components/SearchBar';
 import { FilterPanel } from '../components/FilterPanel';
 import { MovieList } from '../components/MovieList';
+import { ImportPanel } from '../components/ImportPanel';
 import { useMovies } from '../context/MovieContext';
 import type { Movie } from '../types';
 
 export const HomePage: React.FC = () => {
   const { movies, updateMovie } = useMovies();
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
+  const [showImport, setShowImport] = useState(false);
   const [editRating, setEditRating] = useState<number>(0);
   const [editDate, setEditDate] = useState<string>('');
   const [editWatched, setEditWatched] = useState(false);
@@ -39,6 +41,9 @@ export const HomePage: React.FC = () => {
             <span className="logo-text">CineVault</span>
           </div>
           <SearchBar />
+          <button className="import-open-btn" onClick={() => setShowImport(true)} title="批量导入片单">
+            <Upload size={16} /> 导入片单
+          </button>
           <div className="collection-count">
             <span className="count-num">{movies.length}</span>
             <span className="count-label">部电影</span>
@@ -50,6 +55,8 @@ export const HomePage: React.FC = () => {
         <FilterPanel />
         <MovieList onEdit={handleEdit} />
       </main>
+
+      {showImport && <ImportPanel onClose={() => setShowImport(false)} />}
 
       {editingMovie && (
         <div className="modal-backdrop" onClick={() => setEditingMovie(null)}>

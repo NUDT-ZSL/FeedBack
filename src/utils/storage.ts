@@ -1,7 +1,8 @@
-import type { Movie, FilterState } from '../types';
+import type { Movie, FilterState, ImportHistoryEntry } from '../types';
 
 const MOVIES_KEY = 'movie_collection_movies';
 const FILTER_KEY = 'movie_collection_filter';
+const IMPORT_HISTORY_KEY = 'movie_collection_import_history';
 
 export const storage = {
   getMovies(): Movie[] {
@@ -56,5 +57,20 @@ export const storage = {
 
   saveFilter(filter: FilterState): void {
     localStorage.setItem(FILTER_KEY, JSON.stringify(filter));
+  },
+
+  getImportHistory(): ImportHistoryEntry[] {
+    try {
+      const data = localStorage.getItem(IMPORT_HISTORY_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  addImportHistory(entry: ImportHistoryEntry): void {
+    const history = this.getImportHistory().filter((h) => h.hash !== entry.hash);
+    history.unshift(entry);
+    localStorage.setItem(IMPORT_HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
   },
 };

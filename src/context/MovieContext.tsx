@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import type { Movie, FilterState } from '../types';
+import type { Movie, FilterState, ImportReport } from '../types';
 import { storage } from '../utils/storage';
+import { parseImportText, mergeImport } from '../utils/importer';
 
 interface MovieContextType {
   movies: Movie[];
@@ -11,6 +12,7 @@ interface MovieContextType {
   deleteMovie: (id: string) => void;
   setFilter: (filter: FilterState) => void;
   getFilteredMovies: () => Movie[];
+  importMovies: (text: string) => { report: ImportReport; history: { repeat: boolean } } | null;
 }
 
 const MovieContext = createContext<MovieContextType | undefined>(undefined);
@@ -64,6 +66,32 @@ export function MovieProvider({ children }: { children: React.ReactNode }) {
     storage.saveFilter(next);
   }, []);
 
+  const importMovies = useCallback((text: string) => {
+    let raws;
+    try {
+      raws = parseImportText(text);
+    } catch {
+      return null;
+    }
+    if (raws.length === 0) return null;
+    const { movies: next, report } = mergeImport(
+      storage.getMovies(),
+      raws,
+      text,
+    );
+    const history = storage.getImportHistory();
+    const repeat = history.some((h) => h.hash === report.fileHash);
+    storage.saveMovies(next);
+    storage.addImportHistory({
+      hash: report.fileHash,
+      importedAt: new Date().toISOString(),
+      total: report.total,
+      added: report.added,
+    });
+    setMovies(next);
+    return { report, history: { repeat } };
+  }, []);
+
   const getFilteredMovies = useCallback(() => {
     let result = [...movies];
     if (filter.year !== null) {
@@ -94,7 +122,7 @@ export function MovieProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MovieContext.Provider
-      value={{ movies, filter, loading, addMovie, updateMovie, deleteMovie, setFilter, getFilteredMovies }}
+      value={{ movies, filter, loading, addMovie, updateMovie, deleteMovie, setFilter, getFilteredMovies, importMovies }}
     >
       {children}
     </MovieContext.Provider>

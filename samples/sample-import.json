@@ -1,0 +1,74 @@
+[
+  {
+    "id": "tt0133093",
+    "title": "The Matrix",
+    "year": "1999",
+    "rating": "1.0",
+    "status": "unwatched",
+    "genre": "Sci-Fi",
+    "director": "Wachowskis"
+  },
+  {
+    "title": "the dark knight",
+    "year": "2008",
+    "rating": "8",
+    "status": "watched",
+    "genre": "Action, Crime"
+  },
+  {
+    "title": "Inception",
+    "year": "2010",
+    "genre": "Sci-Fi, Thriller",
+    "director": "Christopher Nolan",
+    "plot": "A thief who steals corporate secrets through dream-sharing technology."
+  },
+  {
+    "title": "Spirited Away",
+    "year": "2001",
+    "rating": "9.3",
+    "status": "已看",
+    "genre": "动画/奇幻",
+    "director": "宫崎骏",
+    "watchDate": "2023/06/15"
+  },
+  {
+    "title": "The   Matrix",
+    "year": "1999",
+    "rating": "1.0",
+    "status": "unwatched",
+    "genre": "Sci-Fi",
+    "director": "Wachowskis"
+  },
+  {
+    "title": "Unknown Flick",
+    "year": "not-a-year",
+    "rating": "99",
+    "status": "maybe",
+    "genre": ""
+  },
+  {
+    "year": "2005",
+    "rating": "7"
+  },
+  {
+    "id": "tt0111161",
+    "title": "The Shawshank Redemption",
+    "year": "1994",
+    "rating": "10",
+    "status": "watched",
+    "genre": "Drama",
+    "watchDate": "2019-11-02"
+  },
+  {
+    "title": "Interstellar",
+    "year": "2014",
+    "genre": "Sci-Fi",
+    "director": "Christopher Nolan"
+  },
+  {
+    "title": "Interstellar",
+    "year": "2014",
+    "genre": "Adventure",
+    "director": "C. Nolan"
+  }
+]
