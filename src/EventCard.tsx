@@ -6,6 +6,7 @@ interface EventCardProps {
   x: number;
   y: number;
   isBranch: boolean;
+  hasIssue?: boolean;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onDragStart: (id: string, e: React.MouseEvent) => void;
@@ -16,6 +17,7 @@ const EventCard: React.FC<EventCardProps> = ({
   x,
   y,
   isBranch,
+  hasIssue,
   isSelected,
   onSelect,
   onDragStart,
@@ -47,7 +49,7 @@ const EventCard: React.FC<EventCardProps> = ({
       onMouseLeave={() => setShowTooltip(false)}
     >
       <div
-        className={`event-node ${isSelected ? 'is-selected' : ''} ${event.isDeleting ? 'deleting' : ''}`}
+        className={`event-node ${isSelected ? 'is-selected' : ''} ${event.isDeleting ? 'deleting' : ''} ${hasIssue ? 'has-issue' : ''}`}
         style={{
           width: nodeSize,
           height: nodeSize,
@@ -77,6 +79,9 @@ const EventCard: React.FC<EventCardProps> = ({
         <div className="tooltip-date">
           {CATEGORY_LABELS[event.category]} · {formatDate(event.date)}
         </div>
+        {hasIssue && (
+          <div className="tooltip-issue">⚠ 该事件涉及依赖冲突或悬空约束</div>
+        )}
         {event.description && (
           <div className="tooltip-description">{event.description}</div>
         )}

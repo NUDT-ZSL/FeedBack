@@ -334,6 +334,186 @@ body {
   z-index: 50;
 }
 
+.dependency-layer {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 5;
+}
+
+.dependency-link {
+  stroke: #8fa8c0;
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.85;
+}
+
+.dependency-link.is-invalid {
+  stroke: #e74c3c;
+  stroke-dasharray: 5 4;
+}
+
+.dependency-arrowhead {
+  fill: #8fa8c0;
+}
+
+.dependency-arrowhead.is-invalid {
+  fill: #e74c3c;
+}
+
+.event-node.has-issue {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.55), 0 2px 6px rgba(0, 0, 0, 0.15);
+  animation: issue-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes issue-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.55), 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(231, 76, 60, 0.25), 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.tooltip-issue {
+  font-size: 12px;
+  color: #e74c3c;
+  margin-top: 4px;
+}
+
+.issue-panel {
+  background: #fff8f6;
+  border-bottom: 1px solid #f5d5ce;
+  padding: 8px 24px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.issue-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c0392b;
+  margin-bottom: 6px;
+}
+
+.issue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #7b3f35;
+  flex-wrap: wrap;
+}
+
+.issue-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.issue-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.issue-locate-btn,
+.issue-remove-btn {
+  border: 1px solid #e0b4ac;
+  background: #fff;
+  color: #c0392b;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+  font-family: inherit;
+}
+
+.issue-locate-btn:hover {
+  background: #fdecea;
+}
+
+.issue-remove-btn {
+  border-color: #c0392b;
+}
+
+.issue-remove-btn:hover {
+  background: #c0392b;
+  color: #fff;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
+}
+
+.offset-mode-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.offset-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+}
+
+.offset-input {
+  width: 80px;
+  text-align: center;
+}
+
+.mode-switch-btn {
+  padding: 6px 12px;
+  background: #ecf0f1;
+  color: #2c3e50;
+  border: 1px solid #d5dbdb;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+  font-family: inherit;
+}
+
+.mode-switch-btn:hover {
+  background: #e0e6e8;
+}
+
+.dep-item.is-invalid {
+  border: 1px solid #e74c3c;
+  background: #fdf0ee;
+}
+
+.dep-invalid-tag {
+  font-style: normal;
+  font-size: 11px;
+  color: #e74c3c;
+  margin-left: 6px;
+}
+
+.dep-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dep-add-btn {
+  margin-top: 0;
+}
+
+.branch-count-tag {
+  font-style: normal;
+  font-size: 11px;
+  color: #999;
+  margin-left: 8px;
+}
+
 .editor-section {
   width: 300px;
   background: #fff;

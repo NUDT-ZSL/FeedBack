@@ -8,6 +8,12 @@ export interface TimelineEvent {
   category: EventCategory;
   branchId?: string;
   parentId?: string;
+  /**
+   * 分支事件相对主事件的偏移天数。
+   * 为 number 时处于“偏移模式”，日期由主事件日期 + offsetDays 推导；
+   * 为 null/undefined 时处于“手动模式”，使用自身 date，不随主事件重排。
+   */
+  offsetDays?: number | null;
   createdAt: number;
   isNew?: boolean;
   isDeleting?: boolean;
@@ -17,6 +23,16 @@ export interface TimelineBranch {
   id: string;
   name: string;
   parentEventId: string;
+}
+
+/**
+ * 分支事件之间的先后依赖（有向约束）：
+ * toId 必须晚于 fromId（至少晚 1 天）。
+ */
+export interface EventDependency {
+  id: string;
+  fromId: string;
+  toId: string;
 }
 
 export interface ViewportState {

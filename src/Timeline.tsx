@@ -1,10 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import EventCard from './EventCard';
-import { TimelineEvent, TimelineBranch, ViewportState } from './types';
+import { TimelineEvent, TimelineBranch, EventDependency, ViewportState } from './types';
 
 interface TimelineProps {
   events: TimelineEvent[];
   branches: TimelineBranch[];
+  dependencies: EventDependency[];
+  invalidDependencyIds: Set<string>;
+  issueEventIds: Set<string>;
   viewport: ViewportState;
   onViewportChange: (viewport: ViewportState) => void;
   selectedEventId: string | null;
@@ -22,6 +25,9 @@ const MONTH_WIDTH_BASE = 80;
 const Timeline: React.FC<TimelineProps> = ({
   events,
   branches,
+  dependencies,
+  invalidDependencyIds,
+  issueEventIds,
   viewport,
   onViewportChange,
   selectedEventId,
@@ -295,6 +301,41 @@ const Timeline: React.FC<TimelineProps> = ({
     ? dateToX(events.find((e) => e.id === draggingEventId)?.date || '') + dragOffset
     : null;
 
+  const eventYById = useMemo(() => {
+    const map = new Map<string, number>();
+    events.forEach((e) => {
+      if (!e.branchId) {
+        map.set(e.id, MAIN_TIMELINE_Y);
+      } else {
+        const pos = branchPositions.get(e.branchId);
+        if (pos) map.set(e.id, pos.y);
+      }
+    });
+    return map;
+  }, [events, branchPositions]);
+
+  const renderDependencyLink = (dep: EventDependency) => {
+    const from = events.find((e) => e.id === dep.fromId);
+    const to = events.find((e) => e.id === dep.toId);
+    if (!from || !to) return null; // 悬空依赖不绘制，由问题面板定位
+    const x1 = dateToX(from.date);
+    const y1 = eventYById.get(from.id);
+    const x2 = dateToX(to.date);
+    const y2 = eventYById.get(to.id);
+    if (y1 == null || y2 == null) return null;
+    const isInvalid = invalidDependencyIds.has(dep.id);
+    const midX = (x1 + x2) / 2;
+    const path = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+    return (
+      <path
+        key={`dep-${dep.id}`}
+        d={path}
+        className={`dependency-link ${isInvalid ? 'is-invalid' : ''}`}
+        markerEnd={`url(#${isInvalid ? 'dep-arrow-invalid' : 'dep-arrow'})`}
+      />
+    );
+  };
+
   return (
     <div
       ref={containerRef}
@@ -334,6 +375,21 @@ const Timeline: React.FC<TimelineProps> = ({
           ))}
         </div>
 
+        <svg
+          className="dependency-layer"
+          style={{ left: 0, top: 0, width: totalWidth, height: totalHeight }}
+        >
+          <defs>
+            <marker id="dep-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M 0 0 L 8 4 L 0 8 z" className="dependency-arrowhead" />
+            </marker>
+            <marker id="dep-arrow-invalid" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M 0 0 L 8 4 L 0 8 z" className="dependency-arrowhead is-invalid" />
+            </marker>
+          </defs>
+          {dependencies.map(renderDependencyLink)}
+        </svg>
+
         {branches.map((branch) => {
           const pos = branchPositions.get(branch.id);
           if (!pos) return null;
@@ -362,6 +418,7 @@ const Timeline: React.FC<TimelineProps> = ({
                 x={x}
                 y={MAIN_TIMELINE_Y}
                 isBranch={false}
+                hasIssue={issueEventIds.has(event.id)}
                 isSelected={selectedEventId === event.id}
                 onSelect={onSelectEvent}
                 onDragStart={handleEventDragStart}
@@ -382,6 +439,7 @@ const Timeline: React.FC<TimelineProps> = ({
                   x={x}
                   y={pos.y}
                   isBranch={true}
+                  hasIssue={issueEventIds.has(event.id)}
                   isSelected={selectedEventId === event.id}
                   onSelect={onSelectEvent}
                   onDragStart={handleEventDragStart}
