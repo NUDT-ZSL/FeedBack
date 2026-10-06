@@ -23,7 +23,7 @@ interface Sparkle {
 interface PaperCanvasProps {
   template: Template | null
   onProgressChange: (progress: number) => void
-  onComplete: () => void
+  onCompletionChange: (completed: boolean) => void
   scale: number
   onUndoAvailable: (available: boolean) => void
 }
@@ -38,7 +38,7 @@ export interface PaperCanvasRef {
 const PaperCanvas = forwardRef<PaperCanvasRef, PaperCanvasProps>(({
   template,
   onProgressChange,
-  onComplete,
+  onCompletionChange,
   scale,
   onUndoAvailable
 }, ref) => {
@@ -53,13 +53,13 @@ const PaperCanvas = forwardRef<PaperCanvasRef, PaperCanvasProps>(({
   const [templateLoaded, setTemplateLoaded] = useState(false)
   const templateImageRef = useRef<HTMLImageElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const prevCompletedRef = useRef(false)
 
   useImperativeHandle(ref, () => ({
     undo: () => {
       const success = cutLogicRef.current.undo()
       onUndoAvailable(cutLogicRef.current.canUndo())
       if (success) {
-        setIsCompleted(false)
         render()
       }
       return success
@@ -68,6 +68,7 @@ const PaperCanvas = forwardRef<PaperCanvasRef, PaperCanvasProps>(({
       cutLogicRef.current.reset()
       particlesRef.current = []
       sparklesRef.current = []
+      prevCompletedRef.current = false
       setIsCompleted(false)
       onUndoAvailable(false)
       onProgressChange(0)
@@ -353,6 +354,7 @@ const PaperCanvas = forwardRef<PaperCanvasRef, PaperCanvasProps>(({
       img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`
       
       cutLogicRef.current.reset()
+      prevCompletedRef.current = false
       setIsCompleted(false)
       onProgressChange(0)
       onUndoAvailable(false)
@@ -362,14 +364,15 @@ const PaperCanvas = forwardRef<PaperCanvasRef, PaperCanvasProps>(({
   useEffect(() => {
     cutLogicRef.current.setCompletionCallback((progress, completed) => {
       onProgressChange(progress)
-      if (completed) {
-        setIsCompleted(true)
+      setIsCompleted(completed)
+      onCompletionChange(completed)
+      if (completed && !prevCompletedRef.current) {
         createSparkles()
         playGuzhengSound()
-        onComplete()
       }
+      prevCompletedRef.current = completed
     })
-  }, [onProgressChange, onComplete, createSparkles, playGuzhengSound])
+  }, [onProgressChange, onCompletionChange, createSparkles, playGuzhengSound])
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!
