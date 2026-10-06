@@ -1,0 +1,67 @@
+{
+  "name": "shared-node-separation",
+  "description": "同名共享节点在同一 trace 的不同路径下贡献必须分别归因",
+  "samples": [
+    {
+      "traceId": "t",
+      "nodes": [
+        {
+          "id": "r",
+          "name": "root",
+          "parentId": null,
+          "durationMs": 100
+        },
+        {
+          "id": "o",
+          "name": "order",
+          "parentId": "r",
+          "durationMs": 60
+        },
+        {
+          "id": "p",
+          "name": "pay",
+          "parentId": "r",
+          "durationMs": 40
+        },
+        {
+          "id": "c1",
+          "name": "call",
+          "parentId": "o",
+          "durationMs": 20
+        },
+        {
+          "id": "c2",
+          "name": "call",
+          "parentId": "p",
+          "durationMs": 10
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "order-invariance"
+    },
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 2,
+        "anomalies": [],
+        "pathTotals": {
+          "t:root>order>call": 60,
+          "t:root>pay>call": 40
+        },
+        "sharedSelfTimes": {
+          "root": {
+            "t:root>order>call": 0,
+            "t:root>pay>call": 0
+          },
+          "call": {
+            "t:root>order>call": 20,
+            "t:root>pay>call": 10
+          }
+        }
+      }
+    }
+  ]
+}

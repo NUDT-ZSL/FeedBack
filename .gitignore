@@ -37,3 +37,6 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 离线验证产生的可追溯证据（本地运行生成物）
+verification/evidence/

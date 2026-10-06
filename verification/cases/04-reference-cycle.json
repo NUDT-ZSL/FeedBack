@@ -1,0 +1,34 @@
+{
+  "name": "reference-cycle",
+  "description": "父引用成环时不静默跳过：记录异常、按确定性规则断环后继续归因",
+  "samples": [
+    {
+      "traceId": "t",
+      "nodes": [
+        { "id": "a", "name": "alpha", "parentId": "b", "durationMs": 70 },
+        { "id": "b", "name": "beta", "parentId": "a", "durationMs": 40 },
+        { "id": "c", "name": "gamma", "parentId": "b", "durationMs": 10 }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "order-invariance"
+    },
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 1,
+        "anomalies": ["cycle@t@a"],
+        "pathTotals": {
+          "t:alpha>beta>gamma": 70
+        },
+        "selfTimes": {
+          "t:alpha>beta>gamma :: a": 30,
+          "t:alpha>beta>gamma :: b": 30,
+          "t:alpha>beta>gamma :: c": 10
+        }
+      }
+    }
+  ]
+}

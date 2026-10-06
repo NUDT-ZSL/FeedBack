@@ -1,0 +1,30 @@
+{
+  "name": "missing-parent",
+  "description": "父引用指向不存在节点时不静默跳过：记录异常并将节点提升为根继续归因",
+  "samples": [
+    {
+      "traceId": "t",
+      "nodes": [
+        { "id": "x", "name": "orphan", "parentId": "ghost", "durationMs": 50 },
+        { "id": "r", "name": "root", "parentId": null, "durationMs": 80 },
+        { "id": "k", "name": "worker", "parentId": "r", "durationMs": 30 }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "order-invariance"
+    },
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 2,
+        "anomalies": ["missing-parent@t@x"],
+        "pathTotals": {
+          "t:orphan": 50,
+          "t:root>worker": 80
+        }
+      }
+    }
+  ]
+}

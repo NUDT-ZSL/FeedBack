@@ -1,0 +1,79 @@
+{
+  "name": "order-invariance-basic",
+  "description": "多 trace 样本在不同导入顺序下的归因一致性，含跨 trace 的同名共享节点",
+  "samples": [
+    {
+      "traceId": "t1",
+      "nodes": [
+        {
+          "id": "a",
+          "name": "api",
+          "parentId": null,
+          "durationMs": 100
+        },
+        {
+          "id": "b",
+          "name": "auth",
+          "parentId": "a",
+          "durationMs": 30
+        },
+        {
+          "id": "c",
+          "name": "cache",
+          "parentId": "b",
+          "durationMs": 10
+        },
+        {
+          "id": "d",
+          "name": "db",
+          "parentId": "a",
+          "durationMs": 50
+        }
+      ]
+    },
+    {
+      "traceId": "t2",
+      "nodes": [
+        {
+          "id": "s",
+          "name": "svc",
+          "parentId": null,
+          "durationMs": 60
+        },
+        {
+          "id": "q",
+          "name": "db",
+          "parentId": "s",
+          "durationMs": 40
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "order-invariance"
+    },
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 3,
+        "anomalies": [],
+        "pathTotals": {
+          "t1:api>auth>cache": 50,
+          "t1:api>db": 70,
+          "t2:svc>db": 60
+        },
+        "sharedSelfTimes": {
+          "api": {
+            "t1:api>auth>cache": 20,
+            "t1:api>db": 20
+          },
+          "db": {
+            "t1:api>db": 50,
+            "t2:svc>db": 40
+          }
+        }
+      }
+    }
+  ]
+}

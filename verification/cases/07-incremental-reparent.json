@@ -1,0 +1,76 @@
+{
+  "name": "incremental-reparent",
+  "description": "修正父引用（含修复缺失父节点）后只重算受影响路径，且增量结果与全量重算一致",
+  "samples": [
+    {
+      "traceId": "t1",
+      "nodes": [
+        {
+          "id": "a",
+          "name": "api",
+          "parentId": null,
+          "durationMs": 100
+        },
+        {
+          "id": "b",
+          "name": "auth",
+          "parentId": "a",
+          "durationMs": 30
+        },
+        {
+          "id": "d",
+          "name": "db",
+          "parentId": "a",
+          "durationMs": 50
+        },
+        {
+          "id": "x",
+          "name": "orphan",
+          "parentId": "ghost",
+          "durationMs": 20
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 3,
+        "anomalies": [
+          "missing-parent@t1@x"
+        ],
+        "pathTotals": {
+          "t1:api>auth": 50,
+          "t1:api>db": 70,
+          "t1:orphan": 20
+        }
+      }
+    },
+    {
+      "type": "incremental",
+      "corrections": [
+        {
+          "traceId": "t1",
+          "nodeId": "x",
+          "set": {
+            "parentId": "b"
+          }
+        }
+      ],
+      "expect": {
+        "affectedPaths": {
+          "t1:api>auth": "removed",
+          "t1:api>auth>orphan": "added",
+          "t1:orphan": "removed"
+        },
+        "pathCount": 2,
+        "anomalies": [],
+        "pathTotals": {
+          "t1:api>auth>orphan": 50,
+          "t1:api>db": 70
+        }
+      }
+    }
+  ]
+}

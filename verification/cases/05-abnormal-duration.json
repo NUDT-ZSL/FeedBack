@@ -1,0 +1,69 @@
+{
+  "name": "abnormal-duration",
+  "description": "耗时字段缺失/非法/为负及子节点耗时超过父节点时均可观察且不中断归因",
+  "samples": [
+    {
+      "traceId": "t",
+      "nodes": [
+        {
+          "id": "r",
+          "name": "root",
+          "parentId": null,
+          "durationMs": 100
+        },
+        {
+          "id": "n",
+          "name": "neg",
+          "parentId": "r",
+          "durationMs": -5
+        },
+        {
+          "id": "s",
+          "name": "str",
+          "parentId": "r",
+          "durationMs": "fast"
+        },
+        {
+          "id": "m",
+          "name": "missing",
+          "parentId": "r"
+        },
+        {
+          "id": "o",
+          "name": "over",
+          "parentId": "r",
+          "durationMs": 30
+        },
+        {
+          "id": "o1",
+          "name": "over-child",
+          "parentId": "o",
+          "durationMs": 40
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "order-invariance"
+    },
+    {
+      "type": "attribution",
+      "expect": {
+        "pathCount": 4,
+        "anomalies": [
+          "invalid-duration@t@m",
+          "invalid-duration@t@s",
+          "negative-duration@t@n",
+          "negative-self-time@t@o"
+        ],
+        "pathTotals": {
+          "t:root>missing": 70,
+          "t:root>neg": 70,
+          "t:root>over>over-child": 110,
+          "t:root>str": 70
+        }
+      }
+    }
+  ]
+}

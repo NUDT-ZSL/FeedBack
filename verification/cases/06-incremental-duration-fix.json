@@ -1,0 +1,85 @@
+{
+  "name": "incremental-duration-fix",
+  "description": "修正节点耗时后只重算受影响路径，且增量结果与全量重算一致",
+  "samples": [
+    {
+      "traceId": "t1",
+      "nodes": [
+        {
+          "id": "a",
+          "name": "api",
+          "parentId": null,
+          "durationMs": 100
+        },
+        {
+          "id": "b",
+          "name": "auth",
+          "parentId": "a",
+          "durationMs": 30
+        },
+        {
+          "id": "c",
+          "name": "cache",
+          "parentId": "b",
+          "durationMs": 10
+        },
+        {
+          "id": "d",
+          "name": "db",
+          "parentId": "a",
+          "durationMs": 50
+        }
+      ]
+    },
+    {
+      "traceId": "t2",
+      "nodes": [
+        {
+          "id": "s",
+          "name": "svc",
+          "parentId": null,
+          "durationMs": 60
+        },
+        {
+          "id": "q",
+          "name": "db",
+          "parentId": "s",
+          "durationMs": 40
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "incremental",
+      "corrections": [
+        {
+          "traceId": "t1",
+          "nodeId": "d",
+          "set": {
+            "durationMs": 80
+          }
+        }
+      ],
+      "expect": {
+        "affectedPaths": {
+          "t1:api>auth>cache": "updated",
+          "t1:api>db": "updated"
+        },
+        "pathTotals": {
+          "t1:api>auth>cache": 30,
+          "t1:api>db": 80,
+          "t2:svc>db": 60
+        },
+        "selfTimes": {
+          "t1:api>auth>cache :: a": 0,
+          "t1:api>db :: a": 0,
+          "t1:api>db :: d": 80
+        },
+        "anomalies": [
+          "negative-self-time@t1@a"
+        ]
+      }
+    }
+  ]
+}
