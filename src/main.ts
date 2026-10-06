@@ -2,6 +2,9 @@ import { ElementBall, ElementType } from './elements';
 import { Cauldron, SynthesisLog } from './cauldron';
 import { ParticleSystem } from './particles';
 import { UIManager } from './ui';
+import { RuleSet, createDefaultRules } from './rules';
+import { SnapshotStore } from './snapshots';
+import { RulePanel } from './panel';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -10,9 +13,13 @@ class Game {
   private height: number = 0;
 
   private particles: ParticleSystem;
-  private cauldron: Cauldron;
+  private cauldron!: Cauldron;
   private balls: ElementBall[] = [];
   private ui: UIManager;
+
+  private rules: RuleSet;
+  private snapshotStore: SnapshotStore;
+  private panel!: RulePanel;
 
   private draggingBall: ElementBall | null = null;
 
@@ -31,6 +38,8 @@ class Game {
 
     this.particles = new ParticleSystem();
     this.ui = new UIManager(window.innerWidth, window.innerHeight);
+    this.rules = createDefaultRules();
+    this.snapshotStore = new SnapshotStore();
 
     this.resize();
     this.initBalls();
@@ -38,9 +47,30 @@ class Game {
       this.width / 2,
       this.height / 2 + 30,
       130,
-      this.particles
+      this.particles,
+      this.rules
     );
     this.cauldron.setOnSynthesis((log: SynthesisLog) => this.ui.addLog(log));
+    this.cauldron.setOnCompositionChange(() => {
+      this.ensureRackStock();
+      this.panel.refresh();
+    });
+    this.cauldron.setOnBallsConsumed((consumed: ElementBall[]) => {
+      this.balls = this.balls.filter(ball => !consumed.includes(ball));
+      this.ensureRackStock();
+    });
+
+    this.panel = new RulePanel(
+      {
+        getRules: () => this.rules,
+        applyRules: (rules: RuleSet) => {
+          this.rules = rules;
+          this.cauldron.setRules(rules);
+        },
+        getCounts: () => this.cauldron.getCounts()
+      },
+      this.snapshotStore
+    );
 
     this.bindEvents();
     this.lastTime = performance.now();
@@ -64,18 +94,32 @@ class Game {
     this.balls = slots.map(slot => new ElementBall(slot.elementType, slot.x, slot.y));
   }
 
+  private ensureRackStock(): void {
+    const slots = this.ui.getSlotPositions();
+    for (const slot of slots) {
+      const hasFree = this.balls.some(
+        ball => ball.type === slot.elementType && !ball.inCauldron && !ball.isDragging
+      );
+      if (!hasFree) {
+        this.balls.push(new ElementBall(slot.elementType, slot.x, slot.y));
+      }
+    }
+  }
+
   private bindEvents(): void {
     window.addEventListener('resize', () => {
       this.resize();
       const slots = this.ui.getSlotPositions();
-      slots.forEach((slot, i) => {
-        if (!this.balls[i].inCauldron && !this.balls[i].isDragging) {
-          this.balls[i].homeX = slot.x;
-          this.balls[i].homeY = slot.y;
-          this.balls[i].x = slot.x;
-          this.balls[i].y = slot.y;
+      for (const ball of this.balls) {
+        if (ball.inCauldron || ball.isDragging) continue;
+        const slot = slots.find(s => s.elementType === ball.type);
+        if (slot) {
+          ball.homeX = slot.x;
+          ball.homeY = slot.y;
+          ball.x = slot.x;
+          ball.y = slot.y;
         }
-      });
+      }
       this.cauldron.x = this.width / 2;
       this.cauldron.y = this.height / 2 + 30;
     });

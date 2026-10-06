@@ -1,5 +1,7 @@
-import { ElementBall, ElementType } from './elements';
+import { ElementBall, ElementType, ELEMENT_CONFIGS } from './elements';
 import { ParticleSystem } from './particles';
+import { RuleSet, ConflictPair, pairKey } from './rules';
+import { Counts, ResolvedReaction, countElements, emptyCounts, resolveNextReaction } from './deduction';
 
 export interface SynthesisLog {
   id: string;
@@ -7,49 +9,72 @@ export interface SynthesisLog {
   elements: ElementType[];
   result: string;
   color: string;
+  ruleId: string;
+  ruleLabel: string;
 }
 
-interface ConflictPair {
-  a: ElementType;
-  b: ElementType;
-  reaction: string;
-  color: string;
-}
-
-const CONFLICT_PAIRS: ConflictPair[] = [
-  { a: 'water', b: 'fire', reaction: '水与火碰撞，产生浓密的蒸汽云', color: '#ffffff' },
-  { a: 'wind', b: 'earth', reaction: '风与土交汇，卷起漫天沙尘暴', color: '#d4a54a' },
-  { a: 'light', b: 'dark', reaction: '光与暗交融，形成黑洞漩涡', color: '#9932cc' }
-];
-
-const FUSION_RESULTS: Record<ElementType, { result: string; color: string }> = {
-  fire: { result: '三火合一，召唤出火焰精灵！', color: '#ff6600' },
-  water: { result: '三水凝结，生成璀璨冰晶！', color: '#88ddff' },
-  wind: { result: '三风凝聚，形成旋风风暴！', color: '#3cb371' },
-  earth: { result: '三土聚合，凝聚成坚硬巨石！', color: '#8b5a2b' },
-  light: { result: '三光合聚，绽放神圣光芒！', color: '#fffacd' },
-  dark: { result: '三暗融合，诞生幽暗深渊！', color: '#8a2be2' }
+const CN_NUMERALS: Record<number, string> = { 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八' };
+const ELEMENT_CHARS: Record<ElementType, string> = {
+  fire: '火', water: '水', wind: '风', earth: '土', light: '光', dark: '暗'
 };
+const FUSION_SUFFIX: Record<ElementType, string> = {
+  fire: '合一，召唤出火焰精灵！',
+  water: '凝结，生成璀璨冰晶！',
+  wind: '凝聚，形成旋风风暴！',
+  earth: '聚合，凝聚成坚硬巨石！',
+  light: '合聚，绽放神圣光芒！',
+  dark: '融合，诞生幽暗深渊！'
+};
+
+export function fusionResultText(element: ElementType, threshold: number): string {
+  const num = CN_NUMERALS[threshold] ?? String(threshold);
+  return `${num}${ELEMENT_CHARS[element]}${FUSION_SUFFIX[element]}`;
+}
 
 export class Cauldron {
   x: number;
   y: number;
   radius: number;
   balls: ElementBall[] = [];
+  private rules: RuleSet;
   private breathePhase: number = 0;
   private breatheSpeed: number = 0.8;
   private particles: ParticleSystem;
   private onSynthesisCallback: ((log: SynthesisLog) => void) | null = null;
+  private onCompositionCallback: (() => void) | null = null;
+  private onBallsConsumedCallback: ((balls: ElementBall[]) => void) | null = null;
 
-  constructor(x: number, y: number, radius: number, particles: ParticleSystem) {
+  constructor(x: number, y: number, radius: number, particles: ParticleSystem, rules: RuleSet) {
     this.x = x;
     this.y = y;
     this.radius = radius;
     this.particles = particles;
+    this.rules = rules;
+  }
+
+  getRules(): RuleSet {
+    return this.rules;
+  }
+
+  setRules(rules: RuleSet): void {
+    this.rules = rules;
   }
 
   setOnSynthesis(callback: (log: SynthesisLog) => void): void {
     this.onSynthesisCallback = callback;
+  }
+
+  setOnCompositionChange(callback: () => void): void {
+    this.onCompositionCallback = callback;
+  }
+
+  setOnBallsConsumed(callback: (balls: ElementBall[]) => void): void {
+    this.onBallsConsumedCallback = callback;
+  }
+
+  getCounts(): Counts {
+    if (this.balls.length === 0) return emptyCounts();
+    return countElements(this.balls.map(ball => ball.type));
   }
 
   update(deltaTime: number): void {
@@ -76,41 +101,44 @@ export class Cauldron {
     this.balls.push(ball);
 
     this.particles.createSplash(ball.x, ball.y, ball.config.colorEnd);
+    this.notifyComposition();
 
     setTimeout(() => this.checkReactions(), 100);
   }
 
+  private notifyComposition(): void {
+    if (this.onCompositionCallback) this.onCompositionCallback();
+  }
+
   private checkReactions(): void {
-    if (this.balls.length < 2) return;
+    if (this.balls.length === 0) return;
 
-    const typeCounts = new Map<ElementType, ElementBall[]>();
-    for (const ball of this.balls) {
-      if (!typeCounts.has(ball.type)) typeCounts.set(ball.type, []);
-      typeCounts.get(ball.type)!.push(ball);
-    }
+    const resolution = resolveNextReaction(this.getCounts(), this.rules);
+    if (!resolution.reaction) return;
 
-    for (const [type, balls] of typeCounts) {
-      if (balls.length >= 3) {
-        this.triggerFusion(type, balls.slice(0, 3));
-        return;
-      }
-    }
-
-    for (const pair of CONFLICT_PAIRS) {
-      const ballsA = typeCounts.get(pair.a);
-      const ballsB = typeCounts.get(pair.b);
-      if (ballsA && ballsA.length > 0 && ballsB && ballsB.length > 0) {
-        this.triggerConflict(pair, ballsA[0], ballsB[0]);
-        return;
-      }
+    const reaction = resolution.reaction;
+    if (reaction.kind === 'fusion' && reaction.element) {
+      this.triggerFusion(reaction, reaction.element);
+    } else if (reaction.kind === 'conflict' && reaction.pair) {
+      this.triggerConflict(reaction, reaction.pair);
     }
   }
 
-  private triggerFusion(type: ElementType, balls: ElementBall[]): void {
-    const info = FUSION_RESULTS[type];
-    this.particles.createFusionAura(this.x, this.y, info.color);
+  private takeBallsOfType(type: ElementType, count: number): ElementBall[] {
+    return this.balls.filter(ball => ball.type === type).slice(0, count);
+  }
 
-    switch (type) {
+  private triggerFusion(reaction: ResolvedReaction, element: ElementType): void {
+    const threshold = this.rules.fusionThreshold;
+    const balls = this.takeBallsOfType(element, threshold);
+    if (balls.length < threshold) return;
+
+    const info = ELEMENT_CONFIGS[element];
+    const text = fusionResultText(element, threshold);
+
+    this.particles.createFusionAura(this.x, this.y, info.colorEnd);
+
+    switch (element) {
       case 'fire':
         this.particles.createFireSpirit(this.x, this.y);
         break;
@@ -126,34 +154,44 @@ export class Cauldron {
       case 'light':
         this.particles.createFireSpirit(this.x, this.y);
         break;
-      case 'dark':
+      case 'dark': {
         const posBalls = balls.map(b => ({ x: b.x, y: b.y }));
         this.particles.createBlackhole(this.x, this.y, posBalls);
         break;
+      }
     }
 
     this.removeBalls(balls);
-    this.addLog(balls.map(b => b.type), info.result, info.color);
+    this.addLog(balls.map(b => b.type), text, info.colorEnd, reaction);
   }
 
-  private triggerConflict(pair: ConflictPair, ballA: ElementBall, ballB: ElementBall): void {
-    if (pair.a === 'water' && pair.b === 'fire') {
+  private triggerConflict(reaction: ResolvedReaction, pair: ConflictPair): void {
+    const ballsA = this.takeBallsOfType(pair.a, pair.a === pair.b ? 2 : 1);
+    if (pair.a !== pair.b && ballsA.length === 0) return;
+    let ballsB: ElementBall[] = [];
+    if (pair.a === pair.b) {
+      if (ballsA.length < 2) return;
+    } else {
+      ballsB = this.takeBallsOfType(pair.b, 1);
+      if (ballsB.length === 0) return;
+    }
+    const consumed = [...ballsA, ...ballsB];
+
+    const key = pairKey(pair.a, pair.b);
+    if (key === pairKey('water', 'fire')) {
       this.particles.createSteam(this.x, this.y);
-    } else if (pair.a === 'wind' && pair.b === 'earth') {
+    } else if (key === pairKey('wind', 'earth')) {
       this.particles.createSandstorm(this.x, this.y);
-    } else if (pair.a === 'light' && pair.b === 'dark') {
-      const posBalls = this.balls.map(b => ({ x: b.x, y: b.y }));
+    } else if (key === pairKey('light', 'dark')) {
+      const posBalls = consumed.map(b => ({ x: b.x, y: b.y }));
       this.particles.createBlackhole(this.x, this.y, posBalls);
-      this.balls.forEach(b => {
-        setTimeout(() => b.reset(), 2000);
-      });
-      this.balls = [];
-      this.addLog([pair.a, pair.b], pair.reaction, pair.color);
-      return;
+    } else {
+      this.particles.createFusionAura(this.x, this.y, pair.color);
+      this.particles.createSteam(this.x, this.y);
     }
 
-    this.removeBalls([ballA, ballB]);
-    this.addLog([pair.a, pair.b], pair.reaction, pair.color);
+    this.removeBalls(consumed);
+    this.addLog(consumed.map(b => b.type), pair.reaction, pair.color, reaction);
   }
 
   private removeBalls(balls: ElementBall[]): void {
@@ -161,19 +199,22 @@ export class Cauldron {
       const idx = this.balls.indexOf(ball);
       if (idx >= 0) {
         this.balls.splice(idx, 1);
-        setTimeout(() => ball.reset(), 50);
       }
     }
+    if (this.onBallsConsumedCallback) this.onBallsConsumedCallback(balls);
+    this.notifyComposition();
   }
 
-  private addLog(elements: ElementType[], result: string, color: string): void {
+  private addLog(elements: ElementType[], result: string, color: string, reaction: ResolvedReaction): void {
     if (this.onSynthesisCallback) {
       this.onSynthesisCallback({
         id: Math.random().toString(36).slice(2),
         timestamp: Date.now(),
         elements,
         result,
-        color
+        color,
+        ruleId: reaction.id,
+        ruleLabel: reaction.label
       });
     }
   }

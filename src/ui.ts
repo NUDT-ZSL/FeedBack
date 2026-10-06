@@ -220,15 +220,15 @@ export class UIManager {
 
     const timestamp = new Date(log.timestamp);
     const timeStr = `${timestamp.getHours().toString().padStart(2, '0')}:${timestamp.getMinutes().toString().padStart(2, '0')}:${timestamp.getSeconds().toString().padStart(2, '0')}`;
+    const maxTextWidth = w - 40;
     ctx.fillStyle = '#a08870';
     ctx.font = '11px "Consolas", monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(timeStr, x + 30, y + 6);
+    ctx.fillText(this.truncateText(ctx, `${timeStr} · ${log.ruleLabel}`, maxTextWidth), x + 30, y + 6);
 
     ctx.fillStyle = '#e8dcc8';
     ctx.font = '12px "Georgia", serif';
-    const maxTextWidth = w - 40;
     const text = this.truncateText(ctx, log.result, maxTextWidth);
     ctx.fillText(text, x + 30, y + 24);
 
