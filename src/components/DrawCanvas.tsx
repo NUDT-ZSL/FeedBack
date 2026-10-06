@@ -19,7 +19,6 @@ export function DrawCanvas({ muralRect }: Props) {
   const drawingLayers = useDrawingLayers();
   const selectedColor = useSelectedColor();
   const addDrawingLayer = useStore((state) => state.addDrawingLayer);
-  const updateDrawingLayer = useStore((state) => state.updateDrawingLayer);
 
   const isInDamagedArea = useCallback((x: number, y: number) => {
     if (!muralRect) return false;
@@ -96,7 +95,7 @@ export function DrawCanvas({ muralRect }: Props) {
       cx: point.x,
       cy: point.y,
       r: 10,
-      progress: 0,
+      progress: 1,
     };
     
     addDrawingLayer(newLayer);
@@ -110,11 +109,6 @@ export function DrawCanvas({ muralRect }: Props) {
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easedProgress = 1 - Math.pow(1 - progress, 3);
-      
-      updateDrawingLayer(newLayer.id, {
-        progress: easedProgress,
-        r: lerp(0, 10, easedProgress),
-      });
       
       setAnimatingFills((prev) => {
         const next = new Map(prev);
@@ -134,13 +128,20 @@ export function DrawCanvas({ muralRect }: Props) {
     };
     
     requestAnimationFrame(animate);
-  }, [isDrawing, selectedColor, isInDamagedArea, addDrawingLayer, updateDrawingLayer]);
+  }, [isDrawing, selectedColor, isInDamagedArea, addDrawingLayer]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        useStore.getState().undoDrawing();
+        if (e.shiftKey) {
+          useStore.getState().redoDrawing();
+        } else {
+          useStore.getState().undoDrawing();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        useStore.getState().redoDrawing();
       }
     };
     
@@ -173,8 +174,11 @@ export function DrawCanvas({ muralRect }: Props) {
             />
           );
         } else if (layer.type === 'fill') {
-          const r = layer.r || 0;
-          const progress = layer.progress ?? 1;
+          const animProgress = animatingFills.get(layer.id);
+          const progress = animProgress ?? layer.progress ?? 1;
+          const r = animProgress !== undefined
+            ? lerp(0, layer.r ?? 10, animProgress)
+            : layer.r || 0;
           return (
             <motion.circle
               key={layer.id}

@@ -33,15 +33,14 @@ export interface ReferenceState {
 export interface StoreState {
   lightSource: LightSource;
   selectedColor: string;
-  drawingLayers: DrawingPath[];
   history: DrawingPath[][];
   historyIndex: number;
   reference: ReferenceState;
   setLightSource: (source: Partial<LightSource>) => void;
   setSelectedColor: (color: string) => void;
   addDrawingLayer: (layer: DrawingPath) => void;
-  updateDrawingLayer: (id: string, updates: Partial<DrawingPath>) => void;
   undoDrawing: () => void;
+  redoDrawing: () => void;
   setReferencePosition: (pos: { x: number; y: number }) => void;
   setReferenceOpacity: (opacity: number) => void;
   setReferenceSnapped: (snapped: boolean) => void;

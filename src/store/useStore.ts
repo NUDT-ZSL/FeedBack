@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import type { StoreState, DrawingPath, LightSource, ReferenceState } from '@/types';
-import { COLORS, LIGHT_CONSTRAINTS, clamp } from '@/utils/curveInterpolation';
+import { COLORS, LIGHT_CONSTRAINTS } from '@/types';
+import { clamp } from '@/utils/curveInterpolation';
 
 const MAX_HISTORY = 10;
+const EMPTY_LAYERS: DrawingPath[] = [];
 
 const initialLightSource: LightSource = {
   x: 0,
@@ -19,10 +21,9 @@ const initialReference: ReferenceState = {
   isPlaced: false,
 };
 
-export const useStore = create<StoreState>((set, get) => ({
+export const useStore = create<StoreState>((set) => ({
   lightSource: initialLightSource,
   selectedColor: COLORS.OCHER,
-  drawingLayers: [],
   history: [[]],
   historyIndex: 0,
   reference: initialReference,
@@ -46,37 +47,31 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addDrawingLayer: (layer) =>
     set((state) => {
-      const newLayers = [...state.drawingLayers, layer];
-      const newHistory = state.history.slice(0, state.historyIndex + 1);
-      newHistory.push(newLayers);
-      
-      if (newHistory.length > MAX_HISTORY + 1) {
-        newHistory.shift();
+      const currentLayers = state.history[state.historyIndex] ?? EMPTY_LAYERS;
+      const nextLayers = [...currentLayers, layer];
+      let nextHistory = state.history.slice(0, state.historyIndex + 1);
+      nextHistory.push(nextLayers);
+
+      if (nextHistory.length > MAX_HISTORY + 1) {
+        nextHistory = nextHistory.slice(nextHistory.length - (MAX_HISTORY + 1));
       }
-      
+
       return {
-        drawingLayers: newLayers,
-        history: newHistory,
-        historyIndex: newHistory.length - 1,
+        history: nextHistory,
+        historyIndex: nextHistory.length - 1,
       };
     }),
-
-  updateDrawingLayer: (id, updates) =>
-    set((state) => ({
-      drawingLayers: state.drawingLayers.map((layer) =>
-        layer.id === id ? { ...layer, ...updates } : layer
-      ),
-    })),
 
   undoDrawing: () =>
     set((state) => {
       if (state.historyIndex <= 0) return state;
-      
-      const newIndex = state.historyIndex - 1;
-      return {
-        drawingLayers: state.history[newIndex] || [],
-        historyIndex: newIndex,
-      };
+      return { historyIndex: state.historyIndex - 1 };
+    }),
+
+  redoDrawing: () =>
+    set((state) => {
+      if (state.historyIndex >= state.history.length - 1) return state;
+      return { historyIndex: state.historyIndex + 1 };
     }),
 
   setReferencePosition: (pos) =>
@@ -107,6 +102,9 @@ export const useStore = create<StoreState>((set, get) => ({
 
 export const useLightSource = () => useStore((state) => state.lightSource);
 export const useSelectedColor = () => useStore((state) => state.selectedColor);
-export const useDrawingLayers = () => useStore((state) => state.drawingLayers);
+export const useDrawingLayers = () =>
+  useStore((state) => state.history[state.historyIndex] ?? EMPTY_LAYERS);
 export const useReference = () => useStore((state) => state.reference);
 export const useCanUndo = () => useStore((state) => state.historyIndex > 0);
+export const useCanRedo = () =>
+  useStore((state) => state.historyIndex < state.history.length - 1);
