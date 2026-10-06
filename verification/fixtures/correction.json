@@ -1,0 +1,4 @@
+{
+  "correctionRecord": { "id": "r9", "objectId": "mirror-C", "at": 12, "key": "position", "value": "shelf-4", "corrects": "r7" },
+  "note": "对 base-dataset 中 r7 的修正：mirror-C 的 position 由 shelf-3 改为 shelf-4"
+}

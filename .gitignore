@@ -37,3 +37,6 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 验证产物（确定性报告，可重新生成）
+verification/report/

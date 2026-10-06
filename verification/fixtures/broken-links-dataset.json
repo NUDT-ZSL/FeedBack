@@ -1,0 +1,13 @@
+{
+  "records": [
+    { "id": "b1", "objectId": "mirror-X", "at": 5, "key": "position", "value": "shelf-9" },
+    { "id": "b2", "objectId": "mirror-Y", "at": 8, "key": "temperature", "value": 300 }
+  ],
+  "events": [
+    { "id": "x1", "objectId": "mirror-X", "at": 5, "window": [5, 9], "dependsOn": ["x9"] },
+    { "id": "x2", "objectId": "mirror-X", "at": 6, "window": [6, 10], "dependsOn": ["x3"] },
+    { "id": "x3", "objectId": "mirror-Y", "at": 7, "window": [7, 11], "dependsOn": ["x2"] },
+    { "id": "x4", "objectId": "mirror-Y", "at": 8, "window": [8, 12], "dependsOn": [] }
+  ],
+  "adjudications": []
+}

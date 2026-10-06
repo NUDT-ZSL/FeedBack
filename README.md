@@ -55,3 +55,9 @@ export default tseslint.config({
   },
 })
 ```
+
+## 判定链路离线验证
+
+`npm run verify` 可离线批量运行回放判定链路的自动化验证（导入顺序不敏感、
+矛盾裁决的受影响范围重推、事件依赖缺失/成环可见、记录修正的一致性）。
+详见 [`verification/README.md`](verification/README.md)。

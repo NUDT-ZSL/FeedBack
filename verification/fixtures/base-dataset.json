@@ -1,0 +1,21 @@
+{
+  "records": [
+    { "id": "r1", "objectId": "mirror-A", "at": 10, "key": "position", "value": "shelf-1" },
+    { "id": "r2", "objectId": "mirror-A", "at": 20, "key": "temperature", "value": 320 },
+    { "id": "r3", "objectId": "mirror-A", "at": 20, "key": "temperature", "value": 340 },
+    { "id": "r4", "objectId": "mirror-B", "at": 15, "key": "position", "value": "kiln-2" },
+    { "id": "r5", "objectId": "mirror-B", "at": 25, "key": "humidity", "value": 41 },
+    { "id": "r6", "objectId": "mirror-B", "at": 25, "key": "humidity", "value": 44 },
+    { "id": "r7", "objectId": "mirror-C", "at": 12, "key": "position", "value": "shelf-3" },
+    { "id": "r8", "objectId": "mirror-A", "at": 30, "key": "position", "value": "shelf-2" }
+  ],
+  "events": [
+    { "id": "e1", "objectId": "mirror-A", "at": 10, "window": [10, 20], "dependsOn": [] },
+    { "id": "e2", "objectId": "mirror-B", "at": 15, "window": [15, 25], "dependsOn": ["e1"] },
+    { "id": "e3", "objectId": "mirror-C", "at": 12, "window": [12, 30], "dependsOn": ["e2"] }
+  ],
+  "adjudications": [
+    { "conflictId": "mirror-A|20|temperature", "winnerRecordId": "r3", "reason": "校准后读数优先" },
+    { "conflictId": "mirror-B|25|humidity", "winnerRecordId": "r5", "reason": "保留先到的原始记录" }
+  ]
+}
