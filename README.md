@@ -1,5 +1,18 @@
 # React + TypeScript + Vite
 
+## 研磨逻辑离线验证
+
+研磨/抛光的状态演进已抽离为纯逻辑链路（`src/logic/grindingEngine.ts`），
+不依赖组件渲染，可用固定种子离线重放并断言：
+
+```bash
+npm run verify:grinding
+```
+
+该入口（`scripts/verify-grinding.ts`）覆盖：粗磨产生划痕并触发受损、
+受损后经精磨/抛光修复、抛光提升反射率、同一输入序列不同帧率喂入结果一致，
+以及力度越界、目数为空、重复停止等边界情形。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -92,7 +92,7 @@ const App: React.FC = () => {
               }}
               whileHover={{ scale: 1.02, boxShadow: '0 6px 16px rgba(139,69,19,0.5)' }}
               whileTap={{ scale: 0.98 }}
-              onClick={reset}
+              onClick={() => reset()}
             >
               重新开始
             </motion.button>

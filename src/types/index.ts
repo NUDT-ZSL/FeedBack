@@ -26,15 +26,18 @@ export interface GrindingState {
   polishProgress: number;
 
   startGrinding: (grit: GritType) => void;
-  updateGrinding: (force: number, direction: number) => void;
+  updateGrinding: (
+    force: number,
+    direction: number,
+    time?: number,
+    position?: { x: number; y: number }
+  ) => void;
   stopGrinding: () => void;
   startPolishing: () => void;
-  updatePolishing: (force: number) => void;
+  updatePolishing: (force: number, time?: number) => void;
   stopPolishing: () => void;
   setLightPosition: (position: LightPosition) => void;
-  addScratch: (scratch: Omit<Scratch, 'id'>) => void;
-  fixScratch: () => void;
-  reset: () => void;
+  reset: (seed?: number) => void;
 }
 
 export const PATTERN_CLARITY_LEVELS: Array<{ min: number; max: number; description: string }> = [
