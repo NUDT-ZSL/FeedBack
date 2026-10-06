@@ -1,5 +1,15 @@
 # React + TypeScript + Vite
 
+## 离线验证
+
+工坊核心链路（纹样合成、库存扣减、订单状态流转、撤销历史）的领域逻辑位于 `src/domain/`，不依赖网络与外部账号，配套用例位于 `tests/`（含本地夹具 `tests/fixtures/workshop.ts`）。
+
+```bash
+npm run verify
+```
+
+一次性跑完全部一致性用例：合成/扣减任一步失败整体回滚、相同纹样重复提交不重复扣料、撤销恢复到提交前、订单待制作→制作中流转不产生单边结果。任一环节被篡改时对应用例会明确失败。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
