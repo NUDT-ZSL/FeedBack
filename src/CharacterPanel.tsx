@@ -1,6 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore, CHARACTER_NAMES, CHARACTER_COLORS, ActionType, ActionItem } from './useStore';
+import {
+  useStore,
+  CHARACTER_NAMES,
+  CHARACTER_COLORS,
+  ActionType,
+  ActionItem,
+  getActionProgress,
+  getActionEnd,
+  MIN_ACTION_DURATION,
+  MAX_ACTION_DURATION,
+} from './useStore';
 
 interface CharacterPanelProps {
   currentTime: number;
@@ -23,10 +33,12 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
     addAction,
     removeAction,
     reorderActions,
+    updateActionTiming,
   } = useStore();
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const dragOverIndex = useRef<number | null>(null);
+  const [timingEditing, setTimingEditing] = useState(false);
 
   const handleCharacterSelect = (index: number) => {
     if (selectedCharacter === index) {
@@ -82,28 +94,24 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
     dragOverIndex.current = null;
   };
 
-  const getActionProgress = (action: ActionItem): number => {
-    const queueDuration = actionQueue.length * 2000;
-    if (queueDuration === 0) return 0;
-
-    const actionStartTime = actionQueue.indexOf(action) * 2000;
-    let relativeTime = currentTime % queueDuration;
-    if (relativeTime < 0) relativeTime += queueDuration;
-
-    const actionEndTime = actionStartTime + 2000;
-    if (relativeTime >= actionStartTime && relativeTime < actionEndTime) {
-      return (relativeTime - actionStartTime) / 2000;
-    }
-    return 0;
-  };
+  const getProgress = (action: ActionItem): number => getActionProgress(action, currentTime);
 
   const getRemainingTime = (action: ActionItem): number => {
-    const progress = getActionProgress(action);
-    return Math.max(0, Math.ceil((1 - progress) * 2));
+    const progress = getProgress(action);
+    return Math.max(0, ((1 - progress) * action.duration) / 1000);
   };
 
   const isActionActive = (action: ActionItem): boolean => {
-    return getActionProgress(action) > 0;
+    return getProgress(action) > 0;
+  };
+
+  const handleTimingChange = (
+    action: ActionItem,
+    field: 'startTime' | 'duration',
+    value: number
+  ) => {
+    if (!Number.isFinite(value)) return;
+    updateActionTiming(action.id, { [field]: value * 1000 });
   };
 
   return (
@@ -403,6 +411,17 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
 
       <div
         style={{
+          fontSize: '11px',
+          color: '#8d6e63',
+          marginBottom: '10px',
+          lineHeight: 1.5,
+        }}
+      >
+        同一角色动作重叠时：位移与旋转叠加、缩放相乘、翻转取最大；各角色互不干扰。
+      </div>
+
+      <div
+        style={{
           flex: 1,
           overflowY: 'auto',
           display: 'flex',
@@ -431,7 +450,7 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
           <AnimatePresence>
             {actionQueue.map((action, index) => {
               const active = isActionActive(action);
-              const progress = getActionProgress(action);
+              const progress = getProgress(action);
 
               return (
                 <motion.div
@@ -445,13 +464,14 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
                   }}
                   exit={{ opacity: 0, x: 50, transition: { duration: 0.2 } }}
                   transition={{ delay: 0 }}
-                  draggable
+                  draggable={!timingEditing}
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
                     padding: '10px 12px',
                     background: index % 2 === 0 ? '#4e342e' : '#5d4037',
                     borderRadius: '6px',
@@ -479,84 +499,152 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
                     />
                   )}
 
-                  <div
-                    style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      background: CHARACTER_COLORS[action.characterIndex],
-                      flexShrink: 0,
-                      marginRight: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      color: '#fff',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                      zIndex: 1,
-                    }}
-                  >
-                    {CHARACTER_NAMES[action.characterIndex][0]}
-                  </div>
-
-                  <div style={{ flex: 1, zIndex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', zIndex: 1 }}>
                     <div
                       style={{
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: active ? '#ffd700' : '#f5f0e6',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: CHARACTER_COLORS[action.characterIndex],
+                        flexShrink: 0,
+                        marginRight: '10px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
+                        justifyContent: 'center',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        color: '#fff',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                       }}
                     >
-                      {CHARACTER_NAMES[action.characterIndex]}
-                      <span style={{ color: '#8d6e63', fontWeight: 400 }}>·</span>
-                      {actionLabels[action.type]}
+                      {CHARACTER_NAMES[action.characterIndex][0]}
                     </div>
-                    <div
+
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: active ? '#ffd700' : '#f5f0e6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        {CHARACTER_NAMES[action.characterIndex]}
+                        <span style={{ color: '#8d6e63', fontWeight: 400 }}>·</span>
+                        {actionLabels[action.type]}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: active ? '#ffd700' : '#a1887f',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {active
+                          ? `播放中 ${Math.ceil(progress * 100)}% · 剩余 ${getRemainingTime(action).toFixed(1)} 秒`
+                          : `时长 ${(action.duration / 1000).toFixed(1)} 秒`}
+                      </div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.2, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAction(action.id);
+                      }}
                       style={{
-                        fontSize: '11px',
-                        color: active ? '#ffd700' : '#a1887f',
-                        marginTop: '2px',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: '#c62828',
+                        border: 'none',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                        padding: 0,
+                        lineHeight: 1,
                       }}
                     >
-                      {active
-                        ? `播放中 ${Math.ceil(progress * 100)}%`
-                        : `剩余 ${getRemainingTime(action)} 秒`}
-                    </div>
+                      ×
+                    </motion.button>
                   </div>
 
-                  <motion.button
-                    whileHover={{ scale: 1.2, rotate: 90 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeAction(action.id);
-                    }}
+                  <div
                     style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      background: '#c62828',
-                      border: 'none',
-                      color: '#fff',
-                      fontSize: '16px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                      gap: '8px',
+                      marginTop: '6px',
                       zIndex: 1,
-                      padding: 0,
-                      lineHeight: 1,
+                      fontSize: '11px',
+                      color: '#a1887f',
                     }}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
-                    ×
-                  </motion.button>
+                    <span>
+                      {(action.startTime / 1000).toFixed(1)}s → {(getActionEnd(action) / 1000).toFixed(1)}s
+                    </span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      开始
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={+(action.startTime / 1000).toFixed(2)}
+                        onFocus={() => setTimingEditing(true)}
+                        onBlur={() => setTimingEditing(false)}
+                        onChange={(e) =>
+                          handleTimingChange(action, 'startTime', parseFloat(e.target.value))
+                        }
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                          width: '56px',
+                          background: '#3e2723',
+                          border: '1px solid #6d4c41',
+                          borderRadius: '4px',
+                          color: '#f5f0e6',
+                          fontSize: '11px',
+                          padding: '2px 4px',
+                        }}
+                      />
+                      s
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      时长
+                      <input
+                        type="number"
+                        min={MIN_ACTION_DURATION / 1000}
+                        max={MAX_ACTION_DURATION / 1000}
+                        step={0.1}
+                        value={+(action.duration / 1000).toFixed(2)}
+                        onFocus={() => setTimingEditing(true)}
+                        onBlur={() => setTimingEditing(false)}
+                        onChange={(e) =>
+                          handleTimingChange(action, 'duration', parseFloat(e.target.value))
+                        }
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                          width: '56px',
+                          background: '#3e2723',
+                          border: '1px solid #6d4c41',
+                          borderRadius: '4px',
+                          color: '#f5f0e6',
+                          fontSize: '11px',
+                          padding: '2px 4px',
+                        }}
+                      />
+                      s
+                    </label>
+                  </div>
                 </motion.div>
               );
             })}

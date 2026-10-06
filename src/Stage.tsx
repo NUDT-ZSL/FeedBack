@@ -39,11 +39,14 @@ const Stage: React.FC<StageProps> = ({ stageWidth, stageHeight }) => {
   const {
     lightSource,
     characters,
+    animPoses,
     selectedCharacter,
     setLightSource,
     setSelectedCharacter,
     setCharacterPosition,
   } = useStore();
+
+  const displayCharacters = characters.map((char, index) => animPoses[index] ?? char);
 
   const drawBambooTexture = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
     ctx.fillStyle = '#5d3a1a';
@@ -222,8 +225,8 @@ const Stage: React.FC<StageProps> = ({ stageWidth, stageHeight }) => {
 
     drawCurtainTexture(ctx, curtainW, curtainH);
 
-    for (let i = 0; i < characters.length; i++) {
-      const char = characters[i];
+    for (let i = 0; i < displayCharacters.length; i++) {
+      const char = displayCharacters[i];
       if (char.x !== 0 || char.y !== 0 || char.scale !== 1.0 || selectedCharacter === i) {
         drawPuppetShadow(
           ctx, i, char,
@@ -241,7 +244,7 @@ const Stage: React.FC<StageProps> = ({ stageWidth, stageHeight }) => {
     ctx.strokeRect(curtainLeft, curtainTop, curtainW, curtainH);
 
     drawLightSource(ctx, lightSource.x, lightSource.y);
-  }, [stageWidth, stageHeight, lightSource, characters, selectedCharacter, drawBambooTexture, drawCurtainTexture, drawPuppetShadow, drawLightSource]);
+  }, [stageWidth, stageHeight, lightSource, displayCharacters, selectedCharacter, drawBambooTexture, drawCurtainTexture, drawPuppetShadow, drawLightSource]);
 
   useEffect(() => {
     const animate = () => {
