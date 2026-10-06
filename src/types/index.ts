@@ -1,15 +1,16 @@
 export interface Movie {
   id: string;
   title: string;
-  year: number;
+  year: number | null;
   director: string;
   plot: string;
   poster: string;
   genre: string;
   personalRating: number | null;
   watchDate: string | null;
-  watched: boolean;
+  watched: boolean | null;
   addedAt: string;
+  source?: string;
 }
 
 export interface SearchResult {

@@ -1,16 +1,23 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { Movie, FilterState } from '../types';
 import { storage } from '../utils/storage';
+import { normalizeAll } from '../utils/import/normalize';
+import { computeBatchId, runImport } from '../utils/import/mergeImport';
+import type { ImportReport, PendingDecision } from '../utils/import/types';
+import { applyFilter } from '../utils/filterMovies';
 
 interface MovieContextType {
   movies: Movie[];
   filter: FilterState;
   loading: boolean;
+  lastImport: ImportReport | null;
   addMovie: (movie: Movie) => void;
   updateMovie: (id: string, updates: Partial<Movie>) => void;
   deleteMovie: (id: string) => void;
   setFilter: (filter: FilterState) => void;
   getFilteredMovies: () => Movie[];
+  importMovies: (rawRecords: unknown[]) => ImportReport;
+  decidePending: (clusterKey: string, decision: PendingDecision) => ImportReport | null;
 }
 
 const MovieContext = createContext<MovieContextType | undefined>(undefined);
@@ -25,14 +32,45 @@ export function MovieProvider({ children }: { children: React.ReactNode }) {
     sortOrder: 'desc',
   });
   const [loading, setLoading] = useState(true);
+  const [lastImport, setLastImport] = useState<ImportReport | null>(null);
+  const lastRawRef = useRef<{ batchId: string; raw: unknown[] } | null>(null);
 
   useEffect(() => {
     const loadedMovies = storage.getMovies();
     const loadedFilter = storage.getFilter();
     setMovies(loadedMovies);
     setFilterState(loadedFilter);
+    setLastImport(storage.getLastImportReport());
     setTimeout(() => setLoading(false), 600);
   }, []);
+
+  const runBatch = useCallback((raw: unknown[]) => {
+    const batchId = computeBatchId(raw);
+    const decisions = storage.getImportDecisions(batchId);
+    const records = normalizeAll(raw);
+    const result = runImport({ existing: storage.getMovies(), records, batchId, decisions });
+    storage.saveMovies(result.movies);
+    storage.saveLastImportReport(result.report);
+    setMovies(result.movies);
+    setLastImport(result.report);
+    lastRawRef.current = { batchId, raw };
+    return result.report;
+  }, []);
+
+  const importMovies = useCallback(
+    (rawRecords: unknown[]) => runBatch(rawRecords),
+    [runBatch],
+  );
+
+  const decidePending = useCallback(
+    (clusterKey: string, decision: PendingDecision) => {
+      const last = lastRawRef.current;
+      if (!last) return null;
+      storage.saveImportDecision(last.batchId, clusterKey, decision);
+      return runBatch(last.raw);
+    },
+    [runBatch],
+  );
 
   const addMovie = useCallback((movie: Movie) => {
     setMovies((prev) => {
@@ -65,36 +103,12 @@ export function MovieProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getFilteredMovies = useCallback(() => {
-    let result = [...movies];
-    if (filter.year !== null) {
-      result = result.filter((m) => m.year === filter.year);
-    }
-    if (filter.minRating !== null) {
-      result = result.filter((m) => (m.personalRating ?? 0) >= filter.minRating!);
-    }
-    if (filter.watched !== null) {
-      result = result.filter((m) => m.watched === filter.watched);
-    }
-    result.sort((a, b) => {
-      let av: number | string = 0;
-      let bv: number | string = 0;
-      if (filter.sortBy === 'rating') {
-        av = a.personalRating ?? -1;
-        bv = b.personalRating ?? -1;
-      } else {
-        av = a.addedAt;
-        bv = b.addedAt;
-      }
-      if (av < bv) return filter.sortOrder === 'asc' ? -1 : 1;
-      if (av > bv) return filter.sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return result;
+    return applyFilter(movies, filter);
   }, [movies, filter]);
 
   return (
     <MovieContext.Provider
-      value={{ movies, filter, loading, addMovie, updateMovie, deleteMovie, setFilter, getFilteredMovies }}
+      value={{ movies, filter, loading, lastImport, addMovie, updateMovie, deleteMovie, setFilter, getFilteredMovies, importMovies, decidePending }}
     >
       {children}
     </MovieContext.Provider>

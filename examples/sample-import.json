@@ -1,0 +1,100 @@
+[
+  {
+    "id": "tt0110912",
+    "title": "Pulp Fiction",
+    "year": 1994,
+    "rating": 3,
+    "watched": "未看",
+    "watchDate": "2020-05-05",
+    "source": "豆荚导出"
+  },
+  {
+    "title": "pulp   fiction",
+    "Year": "1994",
+    "rating": 8,
+    "source": "备份清单"
+  },
+  {
+    "imdbID": "tt0468569",
+    "Title": "The Dark Knight",
+    "year": 2008,
+    "genre": "Action|Crime|Drama",
+    "rating": 9,
+    "watched": "已看",
+    "watchDate": "2023/11/02",
+    "source": "豆荚导出"
+  },
+  {
+    "id": "tt0468569",
+    "title": "The Dark Knight ",
+    "year": 2008,
+    "rating": 10
+  },
+  {
+    "id": "tt1375666",
+    "title": "Inception",
+    "year": "2010",
+    "rating": "8.5/10",
+    "watched": "yes",
+    "genre": ["Sci-Fi", "Action"],
+    "source": "豆瓣导出"
+  },
+  {
+    "title": "Inception",
+    "year": 2010
+  },
+  {
+    "title": "Mystery Movie",
+    "year": "not-a-year",
+    "rating": 99,
+    "watched": "maybe",
+    "genre": "",
+    "director": ""
+  },
+  {
+    "title": "Lost Identifier Film",
+    "year": 2001
+  },
+  {
+    "id": "tt9999999",
+    "title": "The Godfather",
+    "year": 1972,
+    "rating": 7,
+    "source": "来源不明"
+  },
+  {
+    "id": "tt0109830",
+    "title": "Forrest Gump",
+    "year": 1994,
+    "rating": "9",
+    "watched": "true",
+    "watchDate": "2022-13-45",
+    "genre": "剧情,爱情"
+  },
+  {
+    "year": 2000,
+    "rating": 5
+  },
+  "这不是一条有效记录",
+  {
+    "id": "tt0816692",
+    "title": "Interstellar",
+    "year": 2014,
+    "rating": 8.8,
+    "watched": "1",
+    "genre": "sci-fi/drama"
+  },
+  {
+    "id": "tt0816692",
+    "title": "Interstellar",
+    "year": 2014
+  },
+  {
+    "title": "The Matrix",
+    "year": 1999,
+    "watched": "已看",
+    "watchDate": "2024-06-01",
+    "director": "The Wachowskis",
+    "source": "旧账本"
+  }
+]

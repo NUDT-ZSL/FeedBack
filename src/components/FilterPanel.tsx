@@ -6,7 +6,7 @@ export const FilterPanel: React.FC = () => {
   const { filter, setFilter, movies } = useMovies();
 
   const availableYears = useMemo(() => {
-    const years = new Set(movies.map((m) => m.year).filter(Boolean));
+    const years = new Set(movies.map((m) => m.year).filter((y): y is number => y !== null));
     return Array.from(years).sort((a, b) => b - a);
   }, [movies]);
 

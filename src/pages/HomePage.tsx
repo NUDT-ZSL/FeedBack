@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Film, X } from 'lucide-react';
+import { Film, X, Upload } from 'lucide-react';
 import { SearchBar } from '../components/SearchBar';
 import { FilterPanel } from '../components/FilterPanel';
 import { MovieList } from '../components/MovieList';
+import { ImportDialog } from '../components/ImportDialog';
 import { useMovies } from '../context/MovieContext';
 import type { Movie } from '../types';
 
@@ -12,12 +13,13 @@ export const HomePage: React.FC = () => {
   const [editRating, setEditRating] = useState<number>(0);
   const [editDate, setEditDate] = useState<string>('');
   const [editWatched, setEditWatched] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const handleEdit = (movie: Movie) => {
     setEditingMovie(movie);
     setEditRating(movie.personalRating ?? 0);
     setEditDate(movie.watchDate ?? '');
-    setEditWatched(movie.watched);
+    setEditWatched(movie.watched ?? false);
   };
 
   const handleSaveEdit = () => {
@@ -39,6 +41,10 @@ export const HomePage: React.FC = () => {
             <span className="logo-text">CineVault</span>
           </div>
           <SearchBar />
+          <button className="import-btn" onClick={() => setShowImport(true)} title="导入外部片单">
+            <Upload size={18} />
+            <span>导入片单</span>
+          </button>
           <div className="collection-count">
             <span className="count-num">{movies.length}</span>
             <span className="count-label">部电影</span>
@@ -106,6 +112,7 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       )}
+      {showImport && <ImportDialog onClose={() => setShowImport(false)} />}
     </div>
   );
 };
