@@ -9,7 +9,9 @@
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "verify": "node verify/run.ts",
+    "verify:json": "node verify/run.ts --json"
   },
   "dependencies": {
     "react": "^18.3.1",

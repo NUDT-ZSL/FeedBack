@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+> 本仓库附带「三维时序回放判定链路」离线批量验证能力，见 `verify/README.md`，运行 `npm run verify`。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
