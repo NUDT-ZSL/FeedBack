@@ -1,8 +1,9 @@
-import { useRef, useMemo, useEffect, useCallback } from 'react'
+import { useRef, useMemo, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore, ShipData, ShipType } from '../store/gameStore'
+import { computeEffectiveDraft } from '../simulation'
 
 interface ShipManagerProps {
   riverLength: number
@@ -25,7 +26,6 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
   const shipGroupRef = useRef<THREE.Group>(null)
   const bodyRef = useRef<THREE.Mesh>(null)
   const oscillationRef = useRef(Math.random() * Math.PI * 2)
-  const localProgressRef = useRef(ship.progress)
   const laneOffset = useMemo(() => {
     const laneIndex = parseInt(ship.id.replace('ship', '')) % 4
     return (laneIndex - 1.5) * 2.5
@@ -53,12 +53,8 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
   useFrame((state, delta) => {
     if (!shipGroupRef.current) return
 
-    localProgressRef.current += ship.speed * 0.003 * delta * 60
-    if (localProgressRef.current > 1.1) {
-      localProgressRef.current = -0.1
-    }
-
-    const progress = localProgressRef.current
+    // 进度由 simulation 引擎推进，渲染层只读取，不再自行推演或回写
+    const progress = ship.progress
     const x = (progress - 0.5) * riverLength
     const waterY = waterLevel * 0.1 - 0.5
     const draftOffset = (5 - waterLevel) * 0.08
@@ -196,7 +192,7 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
   }
 
   const waterLineY = waterLevel * 0.1 - 0.5
-  const effectiveDraft = ship.draft + (5 - waterLevel) * 0.1
+  const effectiveDraft = computeEffectiveDraft(ship.draft, waterLevel)
 
   return (
     <group ref={shipGroupRef}>
@@ -268,26 +264,13 @@ function ShipMesh({ ship, riverLength, riverWidth, waterLevel, windSpeed, onClic
 }
 
 function ShipManager({ riverLength, riverWidth, waterLevel, windSpeed }: ShipManagerProps) {
-  const { ships, selectedShipId, setSelectedShipId, updateShip } = useGameStore()
+  const ships = useGameStore((s) => s.ships)
+  const selectedShipId = useGameStore((s) => s.selectedShipId)
+  const toggleSelection = useGameStore((s) => s.toggleShipSelection)
 
   const handleShipClick = useCallback((id: string) => {
-    setSelectedShipId(selectedShipId === id ? null : id)
-  }, [selectedShipId, setSelectedShipId])
-
-  useFrame(() => {
-    ships.forEach(ship => {
-      const shipElement = document.querySelector(`[data-ship-id="${ship.id}"]`)
-      if (shipElement) {
-        const style = window.getComputedStyle(shipElement)
-        const transform = style.transform
-        if (transform && transform !== 'none') {
-          const matrix = new DOMMatrix(transform)
-          const x = matrix.m41 / riverLength + 0.5
-          updateShip(ship.id, { progress: Math.max(0, Math.min(1, x)) })
-        }
-      }
-    })
-  })
+    toggleSelection(id)
+  }, [toggleSelection])
 
   return (
     <group>

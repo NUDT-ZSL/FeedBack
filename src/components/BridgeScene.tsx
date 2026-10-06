@@ -415,23 +415,14 @@ function CameraController() {
 }
 
 function SceneContent() {
-  const { waterLevel, windSpeed, ships, setAlertActive, updateShip } = useGameStore()
+  const waterLevel = useGameStore((s) => s.waterLevel)
+  const windSpeed = useGameStore((s) => s.windSpeed)
+  const advance = useGameStore((s) => s.advance)
 
-  useFrame(() => {
-    let hasWarning = false
-    ships.forEach(ship => {
-      const effectiveDraft = ship.draft + (5 - waterLevel) * 0.1
-      const diff = waterLevel * 0.1 - effectiveDraft * 0.3
-      if (diff < 0.5) {
-        hasWarning = true
-        updateShip(ship.id, { navigationStatus: 'warning' })
-      } else if (windSpeed >= 7) {
-        updateShip(ship.id, { navigationStatus: 'danger' })
-      } else {
-        updateShip(ship.id, { navigationStatus: 'normal' })
-      }
-    })
-    setAlertActive(hasWarning)
+  // 推演推进已下沉到 simulation 引擎：渲染帧只负责按帧长驱动 tick，
+  // 吃水换算、风险判定与告警结论全部由引擎整体重算得出。
+  useFrame((_, delta) => {
+    advance(delta)
   })
 
   return (

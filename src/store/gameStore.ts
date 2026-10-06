@@ -1,51 +1,45 @@
 import { create } from 'zustand'
+import {
+  applyEnvironment,
+  createSimulation,
+  initialShips,
+  selectShip,
+  SimulationState,
+  stepSimulation,
+  toggleShipSelection,
+} from '../simulation'
 
-export type ShipType = 'cargo' | 'passenger' | 'fishing' | 'pleasure'
+export type { ShipData, ShipType } from '../simulation'
+import type { ShipData } from '../simulation'
 
-export interface ShipData {
-  id: string
-  name: string
-  type: ShipType
-  color: string
-  cargo: string
-  cargoWeight: number
-  draft: number
-  speed: number
-  progress: number
-  navigationStatus: 'normal' | 'warning' | 'danger'
-}
-
-interface GameState {
-  waterLevel: number
-  windSpeed: number
-  selectedShipId: string | null
-  ships: ShipData[]
-  alertActive: boolean
+interface GameState extends SimulationState {
   setWaterLevel: (level: number) => void
   setWindSpeed: (speed: number) => void
   setSelectedShipId: (id: string | null) => void
+  toggleShipSelection: (id: string) => void
   updateShip: (id: string, data: Partial<ShipData>) => void
   setAlertActive: (active: boolean) => void
+  advance: (delta: number) => void
 }
 
-const initialShips: ShipData[] = [
-  { id: 'ship1', name: '太平号', type: 'cargo', color: '#c4a35a', cargo: '江南稻米', cargoWeight: 120, draft: 2.8, speed: 1.2, progress: 0.1, navigationStatus: 'normal' },
-  { id: 'ship2', name: '春风号', type: 'passenger', color: '#e07b3a', cargo: '商旅旅客', cargoWeight: 45, draft: 1.8, speed: 1.8, progress: 0.3, navigationStatus: 'normal' },
-  { id: 'ship3', name: '渔家乐', type: 'fishing', color: '#6b8e6b', cargo: '鲜活水产', cargoWeight: 25, draft: 1.2, speed: 2.2, progress: 0.5, navigationStatus: 'normal' },
-  { id: 'ship4', name: '锦绣舫', type: 'pleasure', color: '#c41e3a', cargo: '文人雅集', cargoWeight: 15, draft: 1.5, speed: 0.8, progress: 0.7, navigationStatus: 'normal' },
-  { id: 'ship5', name: '广济号', type: 'cargo', color: '#b8956b', cargo: '青瓷瓷器', cargoWeight: 95, draft: 2.5, speed: 1.0, progress: 0.2, navigationStatus: 'normal' },
-  { id: 'ship6', name: '顺安号', type: 'passenger', color: '#d6612e', cargo: '赴京学子', cargoWeight: 38, draft: 1.6, speed: 1.5, progress: 0.85, navigationStatus: 'normal' },
-]
+const pickSim = (state: GameState): SimulationState => ({
+  tick: state.tick,
+  waterLevel: state.waterLevel,
+  windSpeed: state.windSpeed,
+  ships: state.ships,
+  selectedShipId: state.selectedShipId,
+  alertActive: state.alertActive,
+  violations: state.violations,
+})
 
+// 渲染层只读写这份 store；所有推演口径都在 simulation 引擎中，
+// 任何状态变化都以引擎的整体重算收尾，保证局部展示与全局推演一致。
 export const useGameStore = create<GameState>((set) => ({
-  waterLevel: 5,
-  windSpeed: 2,
-  selectedShipId: null,
-  ships: initialShips,
-  alertActive: false,
-  setWaterLevel: (level) => set({ waterLevel: level }),
-  setWindSpeed: (speed) => set({ windSpeed: speed }),
-  setSelectedShipId: (id) => set({ selectedShipId: id }),
+  ...createSimulation({ ships: initialShips }),
+  setWaterLevel: (level) => set((state) => applyEnvironment(pickSim(state), { waterLevel: level })),
+  setWindSpeed: (speed) => set((state) => applyEnvironment(pickSim(state), { windSpeed: speed })),
+  setSelectedShipId: (id) => set((state) => selectShip(pickSim(state), id)),
+  toggleShipSelection: (id) => set((state) => toggleShipSelection(pickSim(state), id)),
   updateShip: (id, data) =>
     set((state) => ({
       ships: state.ships.map((ship) =>
@@ -53,4 +47,5 @@ export const useGameStore = create<GameState>((set) => ({
       ),
     })),
   setAlertActive: (active) => set({ alertActive: active }),
+  advance: (delta) => set((state) => stepSimulation(pickSim(state), delta)),
 }))

@@ -1,0 +1,172 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`离线批量回放的确定性与可比对性 > 回放日志快照：每步依据可整体比对 1`] = `
+[
+  [
+    "操作: 推进 0.016666666666666666s",
+  ],
+  [
+    "操作: 推进 0.016666666666666666s",
+  ],
+  [
+    "操作: 设定水位 3",
+    "水位 5 → 3",
+  ],
+  [
+    "操作: 推进 0.05s",
+  ],
+  [
+    "操作: 选中 ship1",
+    "选中 无 → ship1",
+  ],
+  [
+    "操作: 设定风速 8",
+    "风速 2 → 8",
+  ],
+  [
+    "操作: 推进 0.016666666666666666s",
+  ],
+  [
+    "操作: 设定水位 12",
+    "水位 3 → 10",
+    "春风号(ship2) 状态 warning → danger",
+    "渔家乐(ship3) 状态 warning → danger",
+    "锦绣舫(ship4) 状态 warning → danger",
+    "顺安号(ship6) 状态 warning → danger",
+    "输入越界[waterLevel]: 请求 12 → 水位 超出允许范围 [0, 10]，已钳制",
+  ],
+  [
+    "操作: 切换选中 ship1",
+    "选中 ship1 → 无",
+  ],
+  [
+    "操作: 切换选中 ship1",
+    "选中 无 → ship1",
+  ],
+  [
+    "操作: 设定风速 -2",
+    "风速 8 → 0",
+    "春风号(ship2) 状态 danger → normal",
+    "渔家乐(ship3) 状态 danger → normal",
+    "锦绣舫(ship4) 状态 danger → normal",
+    "顺安号(ship6) 状态 danger → normal",
+    "输入越界[windSpeed]: 请求 -2 → 风速 超出允许范围 [0, 8]，已钳制",
+  ],
+  [
+    "操作: 推进 0.1s",
+  ],
+  [
+    "操作: 推进 0.1s",
+  ],
+  [
+    "操作: 选中 phantom",
+    "输入越界[shipId]: 请求 phantom → 船舶 phantom 不存在，选中请求已拒绝",
+  ],
+  [
+    "操作: 设定水位 5",
+    "水位 10 → 5",
+    "春风号(ship2) 状态 normal → warning",
+    "渔家乐(ship3) 状态 normal → warning",
+    "锦绣舫(ship4) 状态 normal → warning",
+    "顺安号(ship6) 状态 normal → warning",
+  ],
+  [
+    "操作: 设定风速 2",
+    "风速 0 → 2",
+  ],
+  [
+    "操作: 推进 0.016666666666666666s",
+  ],
+]
+`;
+
+exports[`离线批量回放的确定性与可比对性 > 黄金快照：口径调整前后可用此基准做差异比对 1`] = `
+{
+  "alertActive": true,
+  "selectedShipId": "ship1",
+  "ships": [
+    {
+      "cargoWeight": 120,
+      "clearance": -0.34,
+      "draft": 2.8,
+      "effectiveDraft": 2.8,
+      "id": "ship1",
+      "name": "太平号",
+      "navigationStatus": "warning",
+      "positionX": -26.528,
+      "progress": 0.1684,
+      "speed": 1.2,
+      "type": "cargo",
+    },
+    {
+      "cargoWeight": 45,
+      "clearance": -0.04,
+      "draft": 1.8,
+      "effectiveDraft": 1.8,
+      "id": "ship2",
+      "name": "春风号",
+      "navigationStatus": "warning",
+      "positionX": -7.792,
+      "progress": 0.4026,
+      "speed": 1.8,
+      "type": "passenger",
+    },
+    {
+      "cargoWeight": 25,
+      "clearance": 0.14,
+      "draft": 1.2,
+      "effectiveDraft": 1.2,
+      "id": "ship3",
+      "name": "渔家乐",
+      "navigationStatus": "warning",
+      "positionX": 10.032,
+      "progress": 0.6254,
+      "speed": 2.2,
+      "type": "fishing",
+    },
+    {
+      "cargoWeight": 15,
+      "clearance": 0.05,
+      "draft": 1.5,
+      "effectiveDraft": 1.5,
+      "id": "ship4",
+      "name": "锦绣舫",
+      "navigationStatus": "warning",
+      "positionX": 19.648,
+      "progress": 0.7456,
+      "speed": 0.8,
+      "type": "pleasure",
+    },
+    {
+      "cargoWeight": 95,
+      "clearance": -0.25,
+      "draft": 2.5,
+      "effectiveDraft": 2.5,
+      "id": "ship5",
+      "name": "广济号",
+      "navigationStatus": "warning",
+      "positionX": -19.44,
+      "progress": 0.257,
+      "speed": 1,
+      "type": "cargo",
+    },
+    {
+      "cargoWeight": 38,
+      "clearance": 0.02,
+      "draft": 1.6,
+      "effectiveDraft": 1.6,
+      "id": "ship6",
+      "name": "顺安号",
+      "navigationStatus": "warning",
+      "positionX": 34.84,
+      "progress": 0.9355,
+      "speed": 1.5,
+      "type": "passenger",
+    },
+  ],
+  "tick": 7,
+  "violationCount": 3,
+  "waterLevel": 5,
+  "windSpeed": 2,
+}
+`;
