@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useStore, useDrawingLayers, useSelectedColor } from '@/store/useStore';
+import { motion } from 'framer-motion';
+import { useStore, useDrawingLayers, useSelectedColor, selectDrawingLayers } from '@/store/useStore';
 import { generateQuadraticBezierPath, pointToSvgCoord, generateId, lerp } from '@/utils/curveInterpolation';
 import type { Point, DrawingPath } from '@/types';
 import { COLORS } from '@/types';
@@ -14,12 +14,12 @@ export function DrawCanvas({ muralRect }: Props) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [currentPath, setCurrentPath] = useState('');
+  // 填充动画的逐帧进度只属于临时展示层，不进入 store 与撤销历史
   const [animatingFills, setAnimatingFills] = useState<Map<string, number>>(new Map());
   
   const drawingLayers = useDrawingLayers();
   const selectedColor = useSelectedColor();
   const addDrawingLayer = useStore((state) => state.addDrawingLayer);
-  const updateDrawingLayer = useStore((state) => state.updateDrawingLayer);
 
   const isInDamagedArea = useCallback((x: number, y: number) => {
     if (!muralRect) return false;
@@ -87,6 +87,7 @@ export function DrawCanvas({ muralRect }: Props) {
     const rect = svgRef.current.getBoundingClientRect();
     const point = pointToSvgCoord(e.clientX, e.clientY, rect);
     
+    // 提交到 store 的即是已确认的最终结果，历史快照只保存该稳定状态
     const newLayer: DrawingPath = {
       id: generateId(),
       type: 'fill',
@@ -96,7 +97,7 @@ export function DrawCanvas({ muralRect }: Props) {
       cx: point.x,
       cy: point.y,
       r: 10,
-      progress: 0,
+      progress: 1,
     };
     
     addDrawingLayer(newLayer);
@@ -111,10 +112,18 @@ export function DrawCanvas({ muralRect }: Props) {
       const progress = Math.min(elapsed / duration, 1);
       const easedProgress = 1 - Math.pow(1 - progress, 3);
       
-      updateDrawingLayer(newLayer.id, {
-        progress: easedProgress,
-        r: lerp(0, 10, easedProgress),
-      });
+      // 若动画期间该图层被撤销（或所在快照被替换），立即停止并清理临时状态
+      const stillCommitted = selectDrawingLayers(useStore.getState()).some(
+        (layer) => layer.id === newLayer.id
+      );
+      if (!stillCommitted) {
+        setAnimatingFills((prev) => {
+          const next = new Map(prev);
+          next.delete(newLayer.id);
+          return next;
+        });
+        return;
+      }
       
       setAnimatingFills((prev) => {
         const next = new Map(prev);
@@ -134,13 +143,21 @@ export function DrawCanvas({ muralRect }: Props) {
     };
     
     requestAnimationFrame(animate);
-  }, [isDrawing, selectedColor, isInDamagedArea, addDrawingLayer, updateDrawingLayer]);
+  }, [isDrawing, selectedColor, isInDamagedArea, addDrawingLayer]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        useStore.getState().redoDrawing();
+      } else if (key === 'z') {
         e.preventDefault();
         useStore.getState().undoDrawing();
+      } else if (key === 'y') {
+        e.preventDefault();
+        useStore.getState().redoDrawing();
       }
     };
     
@@ -173,8 +190,9 @@ export function DrawCanvas({ muralRect }: Props) {
             />
           );
         } else if (layer.type === 'fill') {
-          const r = layer.r || 0;
-          const progress = layer.progress ?? 1;
+          // 动画中的填充用本地临时进度渲染，已确认的填充用快照中的最终值
+          const progress = animatingFills.get(layer.id) ?? layer.progress ?? 1;
+          const r = lerp(0, layer.r ?? 10, progress);
           return (
             <motion.circle
               key={layer.id}

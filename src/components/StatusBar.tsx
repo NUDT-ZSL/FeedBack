@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Undo2 } from 'lucide-react';
-import { useStore, useLightSource, useDrawingLayers, useCanUndo } from '@/store/useStore';
+import { Undo2, Redo2 } from 'lucide-react';
+import { useStore, useLightSource, useDrawingLayers, useCanUndo, useCanRedo } from '@/store/useStore';
 import { threeUnitsToPx } from '@/utils/curveInterpolation';
 import { LIGHT_CONSTRAINTS, MURAL_DIMENSIONS, COLORS } from '@/types';
 import { calculateFillArea } from '@/utils/curveInterpolation';
@@ -14,7 +14,9 @@ export function StatusBar({ containerHeight }: Props) {
   const lightSource = useLightSource();
   const drawingLayers = useDrawingLayers();
   const canUndo = useCanUndo();
+  const canRedo = useCanRedo();
   const undoDrawing = useStore((state) => state.undoDrawing);
+  const redoDrawing = useStore((state) => state.redoDrawing);
 
   const lightRadiusPx = useMemo(() => {
     const normalized = (lightSource.radius - LIGHT_CONSTRAINTS.minRadiusThree) / 
@@ -134,6 +136,21 @@ export function StatusBar({ containerHeight }: Props) {
             >
               <Undo2 size={14} />
               撤销
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: canRedo ? 1.1 : 1 }}
+              whileTap={{ scale: canRedo ? 0.95 : 1 }}
+              onClick={redoDrawing}
+              disabled={!canRedo}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200 ${
+                canRedo
+                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 cursor-pointer'
+                  : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+              }`}
+              title="重做 (Ctrl+Shift+Z)"
+            >
+              <Redo2 size={14} />
+              重做
             </motion.button>
           </div>
         </div>

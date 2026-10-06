@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import type { StoreState, DrawingPath, LightSource, ReferenceState } from '@/types';
-import { COLORS, LIGHT_CONSTRAINTS, clamp } from '@/utils/curveInterpolation';
+import { COLORS, LIGHT_CONSTRAINTS } from '@/types';
+import { clamp } from '@/utils/curveInterpolation';
 
 const MAX_HISTORY = 10;
+
+const EMPTY_LAYERS: DrawingPath[] = [];
 
 const initialLightSource: LightSource = {
   x: 0,
@@ -22,8 +25,8 @@ const initialReference: ReferenceState = {
 export const useStore = create<StoreState>((set, get) => ({
   lightSource: initialLightSource,
   selectedColor: COLORS.OCHER,
-  drawingLayers: [],
-  history: [[]],
+  // history 是图层集合的唯一可信来源；每个元素都是不可变快照
+  history: [EMPTY_LAYERS],
   historyIndex: 0,
   reference: initialReference,
 
@@ -46,37 +49,27 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addDrawingLayer: (layer) =>
     set((state) => {
-      const newLayers = [...state.drawingLayers, layer];
-      const newHistory = state.history.slice(0, state.historyIndex + 1);
-      newHistory.push(newLayers);
+      // 仅基于当前指针处的快照生成新快照；指针之后的重做分支被丢弃
+      const currentLayers = state.history[state.historyIndex] ?? EMPTY_LAYERS;
+      const newLayers = [...currentLayers, layer];
+      const newHistory = [...state.history.slice(0, state.historyIndex + 1), newLayers];
       
       if (newHistory.length > MAX_HISTORY + 1) {
-        newHistory.shift();
+        newHistory.splice(0, newHistory.length - (MAX_HISTORY + 1));
       }
       
       return {
-        drawingLayers: newLayers,
         history: newHistory,
         historyIndex: newHistory.length - 1,
       };
     }),
 
-  updateDrawingLayer: (id, updates) =>
-    set((state) => ({
-      drawingLayers: state.drawingLayers.map((layer) =>
-        layer.id === id ? { ...layer, ...updates } : layer
-      ),
-    })),
-
   undoDrawing: () =>
-    set((state) => {
-      if (state.historyIndex <= 0) return state;
-      
-      const newIndex = state.historyIndex - 1;
-      return {
-        drawingLayers: state.history[newIndex] || [],
-        historyIndex: newIndex,
-      };
+    set({ historyIndex: Math.max(0, get().historyIndex - 1) }),
+
+  redoDrawing: () =>
+    set({
+      historyIndex: Math.min(get().history.length - 1, get().historyIndex + 1),
     }),
 
   setReferencePosition: (pos) =>
@@ -107,6 +100,13 @@ export const useStore = create<StoreState>((set, get) => ({
 
 export const useLightSource = () => useStore((state) => state.lightSource);
 export const useSelectedColor = () => useStore((state) => state.selectedColor);
-export const useDrawingLayers = () => useStore((state) => state.drawingLayers);
 export const useReference = () => useStore((state) => state.reference);
 export const useCanUndo = () => useStore((state) => state.historyIndex > 0);
+
+// 当前已确认图层 = 历史快照 + 历史指针的派生结果
+export const selectDrawingLayers = (state: StoreState): DrawingPath[] =>
+  state.history[state.historyIndex] ?? EMPTY_LAYERS;
+
+export const useDrawingLayers = () => useStore(selectDrawingLayers);
+export const useCanRedo = () =>
+  useStore((state) => state.historyIndex < state.history.length - 1);
