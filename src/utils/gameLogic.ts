@@ -8,6 +8,8 @@ export interface PitchOutcome {
 
 export const TOTAL_PITCHES = 8;
 
+export const TITLE_THRESHOLDS = [50, 80] as const;
+
 export function determinePitchResult(x: number, y: number): PitchOutcome {
   const potCenterX = 40;
   const potCenterY = 20;
@@ -46,9 +48,9 @@ export function determinePitchResult(x: number, y: number): PitchOutcome {
 }
 
 export function calculateTitle(totalScore: number): { title: string; color: string } {
-  if (totalScore >= 80) {
+  if (totalScore >= TITLE_THRESHOLDS[1]) {
     return { title: '投壶圣手', color: '#ffd700' };
-  } else if (totalScore >= 50) {
+  } else if (totalScore >= TITLE_THRESHOLDS[0]) {
     return { title: '宴席高手', color: '#d4a017' };
   } else {
     return { title: '还需练练', color: '#c0392b' };

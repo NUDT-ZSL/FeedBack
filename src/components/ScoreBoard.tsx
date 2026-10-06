@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const ScoreBoard: React.FC = () => {
   const { totalScore, pitchesRemaining, pitchHistory, gameOver, resetGame } =
     useGameStore();
+  const gameSeed = useGameStore((state) => state.gameSeed);
 
   const titleInfo = calculateTitle(totalScore);
 
@@ -21,6 +22,10 @@ const ScoreBoard: React.FC = () => {
           <div className="score-item">
             <div className="score-label">总积分</div>
             <div className="score-value">{totalScore}</div>
+          </div>
+          <div className="score-item">
+            <div className="score-label">局种子</div>
+            <div className="score-value score-seed">{gameSeed}</div>
           </div>
           <div className="score-item">
             <div className="score-label">投掷记录</div>
@@ -88,8 +93,8 @@ const ScoreBoard: React.FC = () => {
               </motion.div>
 
               <motion.button
-                className="restart-btn"
-                onClick={resetGame}
+              className="restart-btn"
+              onClick={() => resetGame()}
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.9 }}

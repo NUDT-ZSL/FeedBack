@@ -528,35 +528,31 @@ body {
   right: 5px;
 }
 
-.npc-cheer .npc-cup {
-  animation: cupRaise 0.6s ease-out;
+.npc-badge {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  color: #2b1d0e;
+  pointer-events: none;
 }
 
-@keyframes cupRaise {
-  0% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-30px); }
-  100% { transform: translateX(-50%) translateY(0); }
+.npc-badge-hit {
+  background: #ffd700;
 }
 
-.npc-shake-head .npc-head {
-  animation: headShake 0.4s ease-in-out;
+.npc-badge-ear {
+  background: #d4a017;
 }
 
-@keyframes headShake {
-  0%, 100% { transform: translateX(-50%) rotate(0deg); }
-  25% { transform: translateX(-50%) rotate(-15deg); }
-  75% { transform: translateX(-50%) rotate(15deg); }
-}
-
-.npc-laugh .npc-hand-right {
-  opacity: 1;
-  animation: handCover 0.5s ease-in-out;
-}
-
-@keyframes handCover {
-  0% { transform: translateY(0); }
-  50% { transform: translateY(-15px) translateX(-5px); }
-  100% { transform: translateY(0); }
+.score-seed {
+  font-size: 14px;
+  word-break: break-all;
 }
 
 .sigh-bubble {

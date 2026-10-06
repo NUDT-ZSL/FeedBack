@@ -6,17 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "preview"
+    "preview": "preview",
+    "test": "tsc -p tsconfig.test.json && echo '{\"type\":\"commonjs\"}' > dist-test/package.json && node --test dist-test/tests/*.test.js"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "framer-motion": "^10.16.4",
-    "zustand": "^4.4.7",
+    "react": "^18.2.0",
     "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1"
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",

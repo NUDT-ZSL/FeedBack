@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../store/gameStore';
 import { determinePitchResult } from '../utils/gameLogic';
 import type { PitchOutcome } from '../utils/gameLogic';
+import { REACTION_DURATION_MS } from '../utils/guestLogic';
 import {
   playWindSound,
   playArrowSound,
@@ -65,16 +66,17 @@ const PitchArea: React.FC = () => {
   const potRef = useRef<HTMLDivElement>(null);
   const hallRef = useRef<HTMLDivElement>(null);
   const {
-    recordPitch,
+    settlePitch,
+    clearReactions,
     potEffect,
     setPotEffect,
-    setNpcReaction,
     showSigh,
     setShowSigh,
     pitchesRemaining,
   } = useGameStore();
 
   const [flyingArrows, setFlyingArrows] = useState<FlyingArrow[]>([]);
+  const reactionTimerRef = useRef<number | null>(null);
   const [availableArrows] = useState<ArrowItem[]>(() =>
     Array.from({ length: 3 }, (_, i) => ({
       id: `arrow-${i}`,
@@ -129,34 +131,38 @@ const PitchArea: React.FC = () => {
           playPotHitSound();
           setTimeout(() => playApplause(), 200);
           setPotEffect('hit');
-          setNpcReaction('cheer');
         } else if (outcome.result === 'ear') {
           playEarHitSound();
           setTimeout(() => playApplause(), 200);
           setPotEffect('ear');
-          setNpcReaction('cheer');
         } else {
           playMissSound();
-          setNpcReaction('disappoint');
           setShowSigh(true);
           setTimeout(() => setShowSigh(false), 1500);
         }
 
-        recordPitch({
+        settlePitch({
           result: outcome.result,
           score: outcome.score,
           label: outcome.label,
         });
 
+        if (reactionTimerRef.current !== null) {
+          window.clearTimeout(reactionTimerRef.current);
+        }
+        reactionTimerRef.current = window.setTimeout(() => {
+          clearReactions();
+          reactionTimerRef.current = null;
+        }, REACTION_DURATION_MS);
+
         setTimeout(() => {
           setPotEffect('idle');
-          setNpcReaction('idle');
         }, 600);
 
         setFlyingArrows((prev) => prev.filter((a) => a.id !== arrowId));
       }, 100);
     },
-    [flyingArrows, recordPitch, setPotEffect, setNpcReaction, setShowSigh]
+    [flyingArrows, settlePitch, clearReactions, setPotEffect, setShowSigh]
   );
 
   const [{ isOver }, drop] = useDrop(() => ({
@@ -171,6 +177,15 @@ const PitchArea: React.FC = () => {
       isOver: monitor.isOver(),
     }),
   }), [handlePitchComplete]);
+
+  useEffect(
+    () => () => {
+      if (reactionTimerRef.current !== null) {
+        window.clearTimeout(reactionTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     let frameId: number;
