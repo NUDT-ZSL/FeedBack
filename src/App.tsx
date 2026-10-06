@@ -2,29 +2,22 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import Stage from './Stage';
 import CharacterPanel from './CharacterPanel';
-import { useStore } from './useStore';
+import { useStore, getTimelineTotal } from './useStore';
 
 const App: React.FC = () => {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   const animFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
-  const localTimeRef = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
-  const baseStateRef = useRef<Map<number, { x: number; y: number; scale: number }>>(new Map());
 
   const {
     isPlaying,
     currentTime,
     actionQueue,
-    characters,
     setIsPlaying,
-    setCurrentTime,
-    setCharacterPosition,
-    setCharacterScale,
-    setCharacterRotation,
-    setCharacterFlipY,
-    resetCharacterAnim,
+    captureBase,
+    resetPlayback,
   } = useStore();
 
   useEffect(() => {
@@ -38,94 +31,59 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  const saveBaseState = useCallback(() => {
-    baseStateRef.current.clear();
-    characters.forEach((char, index) => {
-      baseStateRef.current.set(index, {
-        x: char.x,
-        y: char.y,
-        scale: char.scale,
-      });
-    });
-  }, [characters]);
-
-  const resetAllAnimations = useCallback(() => {
-    characters.forEach((_char, index) => {
-      resetCharacterAnim(index);
-      const base = baseStateRef.current.get(index);
-      if (base) {
-        setCharacterPosition(index, base.x, base.y);
-        setCharacterScale(index, base.scale);
-      }
-    });
-  }, [characters, resetCharacterAnim, setCharacterPosition, setCharacterScale]);
-
+  // 姿态合成规则（同一角色多个动作时间区间重叠时）：
+  //   位移 dx/dy 逐动作累加；缩放系数连乘；旋转角度累加；垂直翻转取最大值。
+  // 每个动作只作用于自己所属的角色，不同角色之间互不干扰。
   const updateAnimations = useCallback(() => {
-    if (actionQueue.length === 0) return;
+    const state = useStore.getState();
+    const { actionQueue: queue, characters: chars, baseCharacters } = state;
+    const total = getTimelineTotal(queue);
+    if (total <= 0 || !baseCharacters) return;
 
-    const queueDuration = actionQueue.length * 2000;
-    const relativeTime = localTimeRef.current % queueDuration;
+    // 当前时刻在时间轴上的位置（循环播放）
+    const relativeTime = state.currentTime % total;
 
-    const animationStates = new Map<number, {
-      dance: number; fight: number; flip: number }>();
+    const composed = chars.map(() => ({
+      dx: 0,
+      dy: 0,
+      scaleMul: 1,
+      rotation: 0,
+      flipY: 0,
+    }));
 
-    characters.forEach((_char, idx) => {
-      animationStates.set(idx, { dance: 0, fight: 0, flip: 0 });
-    });
+    queue.forEach((action) => {
+      if (action.duration <= 0) return;
+      const start = action.startTime;
+      const end = start + action.duration;
+      if (relativeTime < start || relativeTime >= end) return;
+      const t = (relativeTime - start) / action.duration;
+      const acc = composed[action.characterIndex];
 
-    actionQueue.forEach((action, idx) => {
-      const actionStart = idx * 2000;
-      const actionProgress = Math.max(0, Math.min(1, (relativeTime - actionStart) / 2000));
-      if (actionProgress > 0 && actionProgress <= 1) {
-        const state = animationStates.get(action.characterIndex)!;
-        if (action.type === 'dance') state.dance = Math.max(state.dance, actionProgress);
-        if (action.type === 'fight') state.fight = Math.max(state.fight, actionProgress);
-        if (action.type === 'flip') state.flip = Math.max(state.flip, actionProgress);
+      if (action.type === 'dance') {
+        acc.dx += Math.sin(t * Math.PI * 4) * 20;
+        acc.scaleMul *= 1 + Math.sin(t * Math.PI * 4) * 0.1;
+      }
+      if (action.type === 'fight') {
+        acc.rotation += t * 360;
+        acc.dx += Math.sin(t * Math.PI * 2) * 10;
+        acc.dy += Math.cos(t * Math.PI * 2) * 5;
+      }
+      if (action.type === 'flip') {
+        acc.flipY = Math.max(acc.flipY, t < 0.5 ? t * 2 : (1 - t) * 2);
+        acc.dy -= Math.sin(t * Math.PI) * 60;
+        acc.rotation += t * 360;
       }
     });
 
-    characters.forEach((char, index) => {
-      const base = baseStateRef.current.get(index);
-      if (!base) {
-        baseStateRef.current.set(index, { x: char.x, y: char.y, scale: char.scale });
-        return;
-      }
-
-      const anim = animationStates.get(index)!;
-      let finalX = base.x;
-      let finalY = base.y;
-      let finalScale = base.scale;
-      let finalRotation = 0;
-      let finalFlipY = 0;
-
-      if (anim.dance > 0) {
-        const t = anim.dance;
-        const swing = Math.sin(t * Math.PI * 4) * 20;
-        const pulse = 1 + Math.sin(t * Math.PI * 4) * 0.1;
-        finalX = base.x + swing;
-        finalScale = base.scale * pulse;
-      }
-
-      if (anim.fight > 0) {
-        const t = anim.fight;
-        finalRotation = t * 360;
-        finalX = base.x + Math.sin(t * Math.PI * 2) * 10;
-        finalY = base.y + Math.cos(t * Math.PI * 2) * 5;
-      }
-
-      if (anim.flip > 0) {
-        const t = anim.flip;
-        finalFlipY = t < 0.5 ? t * 2 : (1 - t) * 2;
-        finalY = base.y - Math.sin(t * Math.PI) * 60;
-        finalRotation = t * 360;
-      }
-
-      setCharacterPosition(index, finalX, finalY);
-      setCharacterScale(index, finalScale);
-      setCharacterRotation(index, finalRotation);
-      setCharacterFlipY(index, finalFlipY);
+    chars.forEach((_char, index) => {
+      const base = baseCharacters[index];
+      const acc = composed[index];
+      state.setCharacterPosition(index, base.x + acc.dx, base.y + acc.dy);
+      state.setCharacterScale(index, base.scale * acc.scaleMul);
+      state.setCharacterRotation(index, acc.rotation);
+      state.setCharacterFlipY(index, acc.flipY);
     });
-  }, [actionQueue, characters, setCharacterPosition, setCharacterScale, setCharacterRotation, setCharacterFlipY]);
+  }, []);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -137,13 +95,11 @@ const App: React.FC = () => {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = undefined;
       }
-      resetAllAnimations();
+      // 暂停：姿态定格在当前帧，currentTime 保留，再次播放从当前进度继续。
       return;
     }
 
-    saveBaseState();
-    localTimeRef.current = 0;
-    setCurrentTime(0);
+    captureBase();
     lastTimeRef.current = 0;
 
     const animate = (timestamp: number) => {
@@ -156,10 +112,17 @@ const App: React.FC = () => {
       const deltaTime = timestamp - lastTimeRef.current;
       lastTimeRef.current = timestamp;
 
-      localTimeRef.current += deltaTime;
-
       const startTime = performance.now();
-      setCurrentTime(localTimeRef.current);
+      const state = useStore.getState();
+      const total = getTimelineTotal(state.actionQueue);
+      if (total <= 0) {
+        isPlayingRef.current = false;
+        state.resetPlayback();
+        return;
+      }
+      // 以 store 中的 currentTime 为唯一时钟源推进，
+      // 播放中编辑队列时对 currentTime 的映射调整可无缝生效。
+      state.setCurrentTime((state.currentTime + deltaTime) % total);
       updateAnimations();
       const renderTime = performance.now() - startTime;
 
@@ -177,22 +140,24 @@ const App: React.FC = () => {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [isPlaying, setCurrentTime, updateAnimations, saveBaseState, resetAllAnimations]);
+  }, [isPlaying, captureBase, resetPlayback, updateAnimations]);
 
   const togglePlay = () => {
     if (isPlaying) {
       setIsPlaying(false);
     } else {
       if (actionQueue.length === 0) return;
-      saveBaseState();
-      localTimeRef.current = 0;
-      setCurrentTime(0);
       setIsPlaying(true);
     }
   };
 
-  const queueDuration = actionQueue.length * 2000;
-  const progress = queueDuration > 0 ? ((currentTime % queueDuration) / queueDuration) * 100 : 0;
+  const handleStop = () => {
+    resetPlayback();
+  };
+
+  const queueDuration = getTimelineTotal(actionQueue);
+  const relativeTime = queueDuration > 0 ? currentTime % queueDuration : 0;
+  const progress = queueDuration > 0 ? (relativeTime / queueDuration) * 100 : 0;
 
   const stageWidth = Math.floor(dimensions.width * 0.7);
   const stageHeight = dimensions.height - 70;
@@ -236,6 +201,7 @@ const App: React.FC = () => {
       </header>
 
       <div
+
         style={{
           flex: 1,
           display: 'flex',
@@ -261,7 +227,7 @@ const App: React.FC = () => {
             minWidth: '280px',
           }}
         >
-          <CharacterPanel currentTime={currentTime} />
+          <CharacterPanel currentTime={relativeTime} />
         </div>
       </div>
 
@@ -323,6 +289,36 @@ const App: React.FC = () => {
               </svg>
             )}
           </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={handleStop}
+            disabled={!isPlaying && currentTime === 0}
+            title="停止并复位"
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: '#6d4c41',
+              border: 'none',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: isPlaying || currentTime > 0 ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              transition: 'all 0.2s ease',
+              opacity: isPlaying || currentTime > 0 ? 1 : 0.4,
+              padding: 0,
+              lineHeight: 1,
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+          </motion.button>
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -335,10 +331,10 @@ const App: React.FC = () => {
               marginBottom: '6px',
             }}
           >
-            <span>{isPlaying ? '正在演绎...' : actionQueue.length > 0 ? '准备就绪' : '请编排动作'}</span>
+            <span>{isPlaying ? '正在演绎...' : actionQueue.length > 0 ? (currentTime > 0 ? '已暂停' : '准备就绪') : '请编排动作'}</span>
             <span>
               {queueDuration > 0
-                ? `${((currentTime % queueDuration) / 1000).toFixed(1)}s / ${(queueDuration / 1000).toFixed(1)}s`
+                ? `${(relativeTime / 1000).toFixed(1)}s / ${(queueDuration / 1000).toFixed(1)}s`
                 : '0.0s / 0.0s'}
             </span>
           </div>
@@ -364,22 +360,23 @@ const App: React.FC = () => {
                 boxShadow: '0 0 10px rgba(255, 215, 0, 0.6)',
               }}
             />
-            {actionQueue.map((action, index) => {
-              const markerPos = ((index * 2000) / queueDuration) * 100;
-              return (
-                <div
-                  key={action.id}
-                  style={{
-                    position: 'absolute',
-                    left: `${markerPos}%`,
-                    top: 0,
-                    bottom: 0,
-                    width: '2px',
-                    background: 'rgba(255, 215, 0, 0.4)',
-                  }}
-                />
-              );
-            })}
+            {queueDuration > 0 &&
+              actionQueue.map((action) => {
+                const markerPos = (action.startTime / queueDuration) * 100;
+                return (
+                  <div
+                    key={action.id}
+                    style={{
+                      position: 'absolute',
+                      left: `${markerPos}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      background: 'rgba(255, 215, 0, 0.4)',
+                    }}
+                  />
+                );
+              })}
           </div>
         </div>
 

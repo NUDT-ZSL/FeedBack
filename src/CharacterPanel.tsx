@@ -1,6 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore, CHARACTER_NAMES, CHARACTER_COLORS, ActionType, ActionItem } from './useStore';
+import {
+  useStore,
+  CHARACTER_NAMES,
+  CHARACTER_COLORS,
+  ActionType,
+  ActionItem,
+  hasCharacterOverlap,
+} from './useStore';
 
 interface CharacterPanelProps {
   currentTime: number;
@@ -23,6 +30,8 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
     addAction,
     removeAction,
     reorderActions,
+    setActionDuration,
+    clearQueue,
   } = useStore();
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -82,28 +91,24 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
     dragOverIndex.current = null;
   };
 
+  // currentTime 已是时间轴上的相对时刻（由 App 按时间轴总跨度取模后传入）
+  const isActionActive = (action: ActionItem): boolean =>
+    action.duration > 0 &&
+    currentTime >= action.startTime &&
+    currentTime < action.startTime + action.duration;
+
   const getActionProgress = (action: ActionItem): number => {
-    const queueDuration = actionQueue.length * 2000;
-    if (queueDuration === 0) return 0;
-
-    const actionStartTime = actionQueue.indexOf(action) * 2000;
-    let relativeTime = currentTime % queueDuration;
-    if (relativeTime < 0) relativeTime += queueDuration;
-
-    const actionEndTime = actionStartTime + 2000;
-    if (relativeTime >= actionStartTime && relativeTime < actionEndTime) {
-      return (relativeTime - actionStartTime) / 2000;
-    }
-    return 0;
+    if (!isActionActive(action)) return 0;
+    return (currentTime - action.startTime) / action.duration;
   };
 
   const getRemainingTime = (action: ActionItem): number => {
-    const progress = getActionProgress(action);
-    return Math.max(0, Math.ceil((1 - progress) * 2));
+    if (!isActionActive(action)) return action.duration / 1000;
+    return Math.max(0, (action.startTime + action.duration - currentTime) / 1000);
   };
 
-  const isActionActive = (action: ActionItem): boolean => {
-    return getActionProgress(action) > 0;
+  const handleDurationChange = (action: ActionItem, delta: number) => {
+    setActionDuration(action.id, action.duration + delta);
   };
 
   return (
@@ -399,6 +404,25 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
         <span style={{ fontSize: '12px', color: '#8d6e63', fontWeight: 400 }}>
           ({actionQueue.length} 个动作)
         </span>
+        {actionQueue.length > 0 && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={clearQueue}
+            style={{
+              marginLeft: 'auto',
+              padding: '4px 10px',
+              background: 'rgba(198, 40, 40, 0.25)',
+              border: '1px solid #c62828',
+              borderRadius: '6px',
+              color: '#ef9a9a',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            清空
+          </motion.button>
+        )}
       </h3>
 
       <div
@@ -432,6 +456,7 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
             {actionQueue.map((action, index) => {
               const active = isActionActive(action);
               const progress = getActionProgress(action);
+              const overlapped = hasCharacterOverlap(actionQueue, action);
 
               return (
                 <motion.div
@@ -514,6 +539,22 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
                       {CHARACTER_NAMES[action.characterIndex]}
                       <span style={{ color: '#8d6e63', fontWeight: 400 }}>·</span>
                       {actionLabels[action.type]}
+                      {overlapped && (
+                        <span
+                          title="与同角色其他动作时间重叠，姿态按合成规则叠加"
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 400,
+                            color: '#ffd700',
+                            background: 'rgba(255, 215, 0, 0.15)',
+                            border: '1px solid rgba(255, 215, 0, 0.4)',
+                            borderRadius: '4px',
+                            padding: '0 4px',
+                          }}
+                        >
+                          叠加
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
@@ -523,8 +564,73 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ currentTime }) => {
                       }}
                     >
                       {active
-                        ? `播放中 ${Math.ceil(progress * 100)}%`
-                        : `剩余 ${getRemainingTime(action)} 秒`}
+                        ? `播放中 ${Math.ceil(progress * 100)}% · 剩余 ${getRemainingTime(action).toFixed(1)}s`
+                        : `时长 ${(action.duration / 1000).toFixed(1)}s`}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        marginTop: '4px',
+                        fontSize: '10px',
+                        color: '#8d6e63',
+                      }}
+                    >
+                      <span>
+                        {`${(action.startTime / 1000).toFixed(1)}s – ${((action.startTime + action.duration) / 1000).toFixed(1)}s`}
+                      </span>
+                      <span style={{ color: '#5d4037' }}>|</span>
+                      <span>时长</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDurationChange(action, -500);
+                        }}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          background: '#6d4c41',
+                          border: '1px solid #8d6e63',
+                          color: '#f5f0e6',
+                          fontSize: '12px',
+                          lineHeight: 1,
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        −
+                      </button>
+                      <span style={{ minWidth: '32px', textAlign: 'center', color: '#d7ccc8' }}>
+                        {(action.duration / 1000).toFixed(1)}s
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDurationChange(action, 500);
+                        }}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          background: '#6d4c41',
+                          border: '1px solid #8d6e63',
+                          color: '#f5f0e6',
+                          fontSize: '12px',
+                          lineHeight: 1,
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
 
