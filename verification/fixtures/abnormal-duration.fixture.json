@@ -1,0 +1,78 @@
+{
+  "id": "abnormal-duration",
+  "title": "耗时字段异常或为负：按 0 处理并产生诊断，重复出现的冲突耗时确定性消解",
+  "samples": [
+    {
+      "sampleId": "t1",
+      "spans": [
+        {
+          "id": "a",
+          "parentId": null,
+          "duration": -5
+        },
+        {
+          "id": "b",
+          "parentId": "a",
+          "duration": "12"
+        },
+        {
+          "id": "c",
+          "parentId": "a",
+          "duration": 2.5
+        },
+        {
+          "id": "d",
+          "parentId": "c",
+          "duration": null
+        }
+      ]
+    },
+    {
+      "sampleId": "t2",
+      "spans": [
+        {
+          "id": "a",
+          "parentId": null,
+          "duration": 3
+        },
+        {
+          "id": "a",
+          "parentId": null,
+          "duration": 9
+        }
+      ]
+    }
+  ],
+  "permute": 3,
+  "expectDiagnostics": [
+    {
+      "code": "NEGATIVE_DURATION",
+      "nodeId": "a",
+      "count": 1
+    },
+    {
+      "code": "INVALID_DURATION",
+      "nodeId": "b",
+      "count": 1
+    },
+    {
+      "code": "INVALID_DURATION",
+      "nodeId": "d",
+      "count": 1
+    },
+    {
+      "code": "DUPLICATE_SPAN",
+      "nodeId": "a",
+      "count": 1
+    },
+    {
+      "code": "DURATION_CONFLICT",
+      "nodeId": "a",
+      "count": 1
+    }
+  ],
+  "expectPaths": [
+    "a>b",
+    "a>c>d"
+  ]
+}

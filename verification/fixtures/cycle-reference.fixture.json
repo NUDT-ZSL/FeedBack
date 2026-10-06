@@ -1,0 +1,20 @@
+{
+  "id": "cycle-reference",
+  "title": "引用成环与自引用：确定性断环、产生诊断、节点不丢失",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "a", "parentId": "c", "duration": 5 },
+      { "id": "b", "parentId": "a", "duration": 3 },
+      { "id": "c", "parentId": "b", "duration": 2 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "d", "parentId": "d", "duration": 4 }
+    ]}
+  ],
+  "permute": 3,
+  "expectDiagnostics": [
+    { "code": "CYCLE_EDGE", "nodeId": "a", "count": 1 },
+    { "code": "CYCLE_EDGE", "nodeId": "d", "count": 1 }
+  ],
+  "expectPaths": ["a>b>c", "d"]
+}

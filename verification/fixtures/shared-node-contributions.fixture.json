@@ -1,0 +1,22 @@
+{
+  "id": "shared-node-contributions",
+  "title": "共享节点在不同路径下的贡献被正确区分且全局耗时守恒",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "root", "parentId": null, "duration": 10 },
+      { "id": "a", "parentId": "root", "duration": 4 },
+      { "id": "s", "parentId": "a", "duration": 6 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "root", "parentId": null, "duration": 10 },
+      { "id": "b", "parentId": "root", "duration": 2 },
+      { "id": "s", "parentId": "b", "duration": 6 }
+    ]}
+  ],
+  "permute": 3,
+  "shared": [
+    { "nodeId": "root", "pathCount": 2, "perPathContribution": 5 },
+    { "nodeId": "s", "pathCount": 2, "perPathContribution": 3 }
+  ],
+  "expectPaths": ["root>a>s", "root>b>s"]
+}

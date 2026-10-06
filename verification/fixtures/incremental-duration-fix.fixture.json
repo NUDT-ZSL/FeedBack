@@ -1,0 +1,21 @@
+{
+  "id": "incremental-duration-fix",
+  "title": "耗时修正后只重算受影响路径，结果与全量重算一致",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "b", "parentId": "a", "duration": 4 },
+      { "id": "s", "parentId": "b", "duration": 6 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "c", "parentId": "a", "duration": 3 },
+      { "id": "s", "parentId": "c", "duration": 6 }
+    ]}
+  ],
+  "permute": 2,
+  "fixes": [
+    { "type": "set-duration", "nodeId": "s", "duration": 12 },
+    { "type": "set-duration", "nodeId": "b", "duration": 5 }
+  ]
+}

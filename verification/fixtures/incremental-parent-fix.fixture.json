@@ -1,0 +1,25 @@
+{
+  "id": "incremental-parent-fix",
+  "title": "父引用修正（接回孤儿节点、解除成环）后增量结果与全量重算一致，诊断随之更新",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "a", "parentId": null, "duration": 5 },
+      { "id": "b", "parentId": "a", "duration": 3 },
+      { "id": "c", "parentId": "ghost", "duration": 2 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "e", "parentId": "g", "duration": 1 },
+      { "id": "f", "parentId": "e", "duration": 2 },
+      { "id": "g", "parentId": "f", "duration": 7 }
+    ]}
+  ],
+  "permute": 2,
+  "expectDiagnostics": [
+    { "code": "MISSING_PARENT", "nodeId": "c", "count": 1 },
+    { "code": "CYCLE_EDGE", "nodeId": "e", "count": 1 }
+  ],
+  "fixes": [
+    { "type": "set-parent", "nodeId": "c", "parentId": "b" },
+    { "type": "set-parent", "nodeId": "g", "parentId": "a" }
+  ]
+}

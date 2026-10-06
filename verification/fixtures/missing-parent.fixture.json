@@ -1,0 +1,20 @@
+{
+  "id": "missing-parent",
+  "title": "父节点缺失：边被丢弃但节点保留为根，产生可观察诊断，不静默跳过",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "b", "parentId": "a", "duration": 4 },
+      { "id": "c", "parentId": "missing_p", "duration": 3 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "d", "parentId": "a", "duration": 2 }
+    ]}
+  ],
+  "permute": 3,
+  "expectDiagnostics": [
+    { "code": "MISSING_PARENT", "nodeId": "c", "count": 1 }
+  ],
+  "expectPaths": ["a>b", "a>d", "c"]
+}

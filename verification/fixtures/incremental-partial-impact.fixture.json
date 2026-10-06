@@ -1,0 +1,24 @@
+{
+  "id": "incremental-partial-impact",
+  "title": "修正仅影响部分路径：受影响路径重算且与全量一致，未受影响路径保持原归因对象",
+  "samples": [
+    { "sampleId": "t1", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "b", "parentId": "a", "duration": 4 },
+      { "id": "s", "parentId": "b", "duration": 6 }
+    ]},
+    { "sampleId": "t2", "spans": [
+      { "id": "a", "parentId": null, "duration": 10 },
+      { "id": "c", "parentId": "a", "duration": 3 },
+      { "id": "s", "parentId": "c", "duration": 6 }
+    ]},
+    { "sampleId": "t3", "spans": [
+      { "id": "z", "parentId": null, "duration": 7 },
+      { "id": "y", "parentId": "z", "duration": 2 }
+    ]}
+  ],
+  "permute": 2,
+  "fixes": [
+    { "type": "set-duration", "nodeId": "s", "duration": 9 }
+  ]
+}

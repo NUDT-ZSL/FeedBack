@@ -1,0 +1,28 @@
+{
+  "id": "order-consistency",
+  "title": "同一批样本在全部导入顺序下归因结果一致（含耗时冲突的确定性消解）",
+  "samples": [
+    { "sampleId": "s1", "spans": [
+      { "id": "root", "parentId": null, "duration": 10 },
+      { "id": "a", "parentId": "root", "duration": 4 },
+      { "id": "b", "parentId": "a", "duration": 2 }
+    ]},
+    { "sampleId": "s2", "spans": [
+      { "id": "root", "parentId": null, "duration": 10 },
+      { "id": "a", "parentId": "root", "duration": 5 },
+      { "id": "c", "parentId": "a", "duration": 3 }
+    ]},
+    { "sampleId": "s3", "spans": [
+      { "id": "root", "parentId": null, "duration": 10 },
+      { "id": "d", "parentId": "root", "duration": 1 }
+    ]},
+    { "sampleId": "s4", "spans": [
+      { "id": "x", "parentId": null, "duration": 8 },
+      { "id": "a", "parentId": "x", "duration": 4 }
+    ]}
+  ],
+  "permute": "all",
+  "expectDiagnostics": [
+    { "code": "DURATION_CONFLICT", "nodeId": "a", "count": 1 }
+  ]
+}

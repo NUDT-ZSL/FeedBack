@@ -1,0 +1,898 @@
+{
+  "generatedAt": "2026-10-06T10:13:32.367Z",
+  "analyzerVersion": "1.0.0",
+  "fixtureDir": "verification/fixtures",
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "abnormal-duration",
+      "title": "耗时字段异常或为负：按 0 处理并产生诊断，重复出现的冲突耗时确定性消解",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 3 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-2]",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": null
+    },
+    {
+      "id": "cycle-reference",
+      "title": "引用成环与自引用：确定性断环、产生诊断、节点不丢失",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 3 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-2]",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": null
+    },
+    {
+      "id": "incremental-duration-fix",
+      "title": "耗时修正后只重算受影响路径，结果与全量重算一致",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 2 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "incremental vs full consistency [incremental-duration-fix] (2 affected / 2 paths)",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": {
+        "fixes": [
+          {
+            "type": "set-duration",
+            "nodeId": "s",
+            "duration": 12
+          },
+          {
+            "type": "set-duration",
+            "nodeId": "b",
+            "duration": 5
+          }
+        ],
+        "region": [
+          "b",
+          "s"
+        ],
+        "affectedPaths": [
+          "a>b>s",
+          "a>c>s"
+        ],
+        "removedPaths": [],
+        "addedPaths": [],
+        "recomputedPaths": [
+          "a>b>s",
+          "a>c>s"
+        ],
+        "unchangedPaths": []
+      }
+    },
+    {
+      "id": "incremental-parent-fix",
+      "title": "父引用修正（接回孤儿节点、解除成环）后增量结果与全量重算一致，诊断随之更新",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 2 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "incremental vs full consistency [incremental-parent-fix] (5 affected / 2 paths)",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": {
+        "fixes": [
+          {
+            "type": "set-parent",
+            "nodeId": "c",
+            "requestedParent": "b",
+            "resolvedParents": [
+              "b"
+            ]
+          },
+          {
+            "type": "set-parent",
+            "nodeId": "g",
+            "requestedParent": "a",
+            "resolvedParents": [
+              "a"
+            ]
+          }
+        ],
+        "region": [
+          "a",
+          "b",
+          "c",
+          "e",
+          "f",
+          "g"
+        ],
+        "affectedPaths": [
+          "a>b",
+          "a>b>c",
+          "a>g>e>f",
+          "c",
+          "e>f>g"
+        ],
+        "removedPaths": [
+          "a>b",
+          "c",
+          "e>f>g"
+        ],
+        "addedPaths": [
+          "a>b>c",
+          "a>g>e>f"
+        ],
+        "recomputedPaths": [],
+        "unchangedPaths": []
+      }
+    },
+    {
+      "id": "incremental-partial-impact",
+      "title": "修正仅影响部分路径：受影响路径重算且与全量一致，未受影响路径保持原归因对象",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 2 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "incremental vs full consistency [incremental-partial-impact] (2 affected / 3 paths)",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": {
+        "fixes": [
+          {
+            "type": "set-duration",
+            "nodeId": "s",
+            "duration": 9
+          }
+        ],
+        "region": [
+          "s"
+        ],
+        "affectedPaths": [
+          "a>b>s",
+          "a>c>s"
+        ],
+        "removedPaths": [],
+        "addedPaths": [],
+        "recomputedPaths": [
+          "a>b>s",
+          "a>c>s"
+        ],
+        "unchangedPaths": [
+          "z>y"
+        ]
+      }
+    },
+    {
+      "id": "missing-parent",
+      "title": "父节点缺失：边被丢弃但节点保留为根，产生可观察诊断，不静默跳过",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 3 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-2]",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": null
+    },
+    {
+      "id": "order-consistency",
+      "title": "同一批样本在全部导入顺序下归因结果一致（含耗时冲突的确定性消解）",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-3]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-3]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-4]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-4]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-5]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-5]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-6]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-6]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-7]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-7]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-8]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-8]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-9]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-9]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-10]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-10]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-11]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-11]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-12]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-12]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-13]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-13]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-14]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-14]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-15]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-15]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-16]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-16]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-17]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-17]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-18]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-18]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-19]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-19]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-20]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-20]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-21]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-21]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-22]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-22]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [perm-23]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [perm-23]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 24 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-3]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-4]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-5]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-6]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-7]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-8]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-9]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-10]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-11]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-12]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-13]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-14]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-15]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-16]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-17]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-18]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-19]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-20]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-21]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-22]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected diagnostics [perm-23]",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": null
+    },
+    {
+      "id": "shared-node-contributions",
+      "title": "共享节点在不同路径下的贡献被正确区分且全局耗时守恒",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "attribution invariants [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "attribution invariants [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "no silent skip [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "import-order consistency across 3 orders",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "shared-node contributions [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "shared-node contributions [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "shared-node contributions [shuffle-2]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [original]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-1]",
+          "status": "pass",
+          "details": []
+        },
+        {
+          "name": "expected paths [shuffle-2]",
+          "status": "pass",
+          "details": []
+        }
+      ],
+      "evidence": null
+    }
+  ]
+}
