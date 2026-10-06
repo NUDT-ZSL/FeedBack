@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { Goods, Transaction, Currency, CurrencyHoldings, NegotiationState, DailyStats } from './types';
 import { api } from './api';
-import { generateForeignTrader, generateInitialOffer, generateCounterOffer, getDateString } from './utils/mock';
+import { generateForeignTrader, getDateString } from './utils/mock';
+import { createSession, applyUserCounter, MAX_NEGOTIATION_ROUNDS } from './utils/negotiation';
+import { convertToCopper } from './utils/currency';
 
 interface StoreState {
   goods: Goods[];
@@ -100,13 +102,16 @@ export const useStore = create<StoreState>((set, get) => ({
 
   startNegotiation: (goods) => {
     const trader = generateForeignTrader();
-    const initialOffer = generateInitialOffer(goods.price);
+    const session = createSession(goods.price);
     set({
       negotiation: {
         trader,
         goods,
-        currentOffer: initialOffer,
-        round: 1
+        currentOffer: session.traderOfferCopper,
+        round: session.round,
+        maxRounds: MAX_NEGOTIATION_ROUNDS,
+        status: session.status === 'converged' ? 'converged' : 'ongoing',
+        history: session.history
       }
     });
   },
@@ -118,15 +123,10 @@ export const useStore = create<StoreState>((set, get) => ({
     const { trader, goods, currentOffer } = negotiation;
 
     try {
-      await api.updateStock(goods.id, 1, 'out');
-
-      await api.addTransaction({
+      await api.sellGoods({
         goodsId: goods.id,
-        goodsName: goods.name,
-        type: 'sale',
         quantity: 1,
-        unitPrice: currentOffer,
-        totalAmount: currentOffer,
+        totalCopper: currentOffer,
         currency: settlementCurrency,
         traderName: trader.name,
         traderOrigin: trader.origin
@@ -135,7 +135,7 @@ export const useStore = create<StoreState>((set, get) => ({
       await Promise.all([get().fetchGoods(), get().fetchTransactions(), get().fetchHoldings()]);
       set({ negotiation: null });
     } catch (error) {
-      set({ error: '交易失败' });
+      set({ error: '交易失败，未产生任何库存与账目变动' });
     }
   },
 
@@ -147,18 +147,32 @@ export const useStore = create<StoreState>((set, get) => ({
     const { negotiation } = get();
     if (!negotiation) return;
 
-    if (negotiation.round >= 3) {
-      set({ negotiation: null });
+    const session = applyUserCounter(
+      {
+        listPriceCopper: negotiation.goods.price,
+        round: negotiation.round,
+        maxRounds: negotiation.maxRounds,
+        traderOfferCopper: negotiation.currentOffer,
+        userOfferCopper: negotiation.userCounterOffer ?? null,
+        status: 'ongoing',
+        history: negotiation.history
+      },
+      userOffer
+    );
+
+    if (session.status === 'breakdown') {
+      set({ negotiation: null, error: '议价破裂，番客拂袖而去' });
       return;
     }
 
-    const counterOffer = generateCounterOffer(userOffer, negotiation.currentOffer);
     set({
       negotiation: {
         ...negotiation,
-        currentOffer: counterOffer,
-        round: negotiation.round + 1,
-        userCounterOffer: userOffer
+        currentOffer: session.traderOfferCopper,
+        round: session.round,
+        userCounterOffer: userOffer,
+        status: session.status === 'converged' ? 'converged' : 'ongoing',
+        history: session.history
       }
     });
   },
@@ -208,11 +222,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const totalSales = dayTransactions
       .filter(t => t.type === 'sale')
-      .reduce((sum, t) => sum + t.totalAmount, 0);
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
 
     const totalPurchases = dayTransactions
       .filter(t => t.type === 'purchase')
-      .reduce((sum, t) => sum + t.totalAmount, 0);
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
 
     return {
       date: targetDate,

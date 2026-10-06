@@ -3,6 +3,7 @@ import cors from 'cors';
 import type { Goods, Transaction, Currency, CurrencyHoldings, ExchangeRate } from '../src/types';
 import { initialGoods, generateId } from '../src/utils/mock';
 import { exchangeRate } from '../src/utils/currency';
+import { settleSale, type LedgerState, type SaleInput } from '../src/utils/settlement';
 
 const app = express();
 const PORT = 3001;
@@ -17,6 +18,8 @@ let holdings: CurrencyHoldings = {
   silver: 50,
   silk: 10
 };
+
+const ledgerState: LedgerState = { goods, transactions, holdings };
 
 const rate: ExchangeRate = exchangeRate;
 
@@ -178,6 +181,17 @@ app.post('/api/purchase', (req, res) => {
   transactions.unshift(purchaseTx);
 
   res.json({ success: true, goods: item, holdings, transaction: purchaseTx });
+});
+
+app.post('/api/sale', (req, res) => {
+  const input = req.body as SaleInput;
+  const result = settleSale(ledgerState, input);
+  if (!result.ok) {
+    const status = result.error === '货物不存在' ? 404 : 400;
+    res.status(status).json({ error: result.error });
+    return;
+  }
+  res.json({ success: true, goods: result.goods, holdings: result.holdings, transaction: result.transaction });
 });
 
 app.listen(PORT, () => {

@@ -4,7 +4,7 @@ import { ThumbsUp, ThumbsDown, RefreshCw, X } from 'lucide-react';
 import { useStore } from '../store';
 import ForeignTrader from './ForeignTrader';
 import type { Currency } from '../types';
-import { getCurrencyName, formatCopperValue } from '../utils/currency';
+import { getCurrencyName, formatSettlement, fromSettlementAmount } from '../utils/currency';
 
 export default function TradePanel() {
   const negotiation = useStore(state => state.negotiation);
@@ -36,11 +36,13 @@ export default function TradePanel() {
   };
 
   const handleCounterOffer = () => {
-    const offer = parseInt(counterOffer);
+    const offer = parseFloat(counterOffer);
     if (isNaN(offer) || offer <= 0) return;
+    const offerCopper = fromSettlementAmount(offer, settlementCurrency);
+    if (offerCopper <= 0) return;
     setReaction('thinking');
     setTimeout(() => {
-      makeCounterOffer(offer);
+      makeCounterOffer(offerCopper);
       setShowCounterInput(false);
       setCounterOffer('');
       setReaction('idle');
@@ -89,16 +91,29 @@ export default function TradePanel() {
             </div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-500">第 {negotiation.round} 轮</span>
-              <span className="text-xs text-gray-400">最多3轮</span>
+              <span className="text-xs text-gray-400">最多{negotiation.maxRounds}轮</span>
             </div>
             <div className="border-t border-gray-200 pt-3 mt-3">
               <p className="text-center text-sm text-gray-500 mb-1">番客出价</p>
               <p className="text-center text-2xl font-bold text-[#c0392b]">
-                {negotiation.currentOffer}文
+                {formatSettlement(negotiation.currentOffer, settlementCurrency)}
               </p>
               <p className="text-center text-xs text-gray-400 mt-1">
                 比标价低 {Math.round((1 - negotiation.currentOffer / negotiation.goods.price) * 100)}%
               </p>
+              {negotiation.userCounterOffer !== undefined && (
+                <div className="border-t border-gray-100 mt-3 pt-2">
+                  <p className="text-center text-sm text-gray-500 mb-1">我方还价</p>
+                  <p className="text-center text-xl font-bold text-[#5d3a1a]">
+                    {formatSettlement(negotiation.userCounterOffer, settlementCurrency)}
+                  </p>
+                </div>
+              )}
+              {negotiation.status === 'converged' && (
+                <p className="text-center text-sm font-bold text-[#27ae60] mt-2">
+                  番客接受了你的报价，可以成交了！
+                </p>
+              )}
             </div>
           </div>
 
@@ -120,7 +135,7 @@ export default function TradePanel() {
               ))}
             </div>
             <p className="text-xs text-center text-[#5d3a1a] mt-2">
-              应收: {formatCopperValue(negotiation.currentOffer)}
+              应收: {formatSettlement(negotiation.currentOffer, settlementCurrency)} {getCurrencyName(settlementCurrency)}
             </p>
           </div>
 
@@ -137,7 +152,7 @@ export default function TradePanel() {
                   type="number"
                   value={counterOffer}
                   onChange={(e) => setCounterOffer(e.target.value)}
-                  placeholder="输入价格（文）"
+                  placeholder={`输入价格（${getCurrencyName(settlementCurrency)}）`}
                   className="flex-1 px-3 py-2 border border-[#d4b89a] rounded-lg focus:outline-none focus:border-[#5d3a1a]"
                   autoFocus
                 />
@@ -157,10 +172,10 @@ export default function TradePanel() {
               className="w-full py-3 bg-[#27ae60] text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-[#2ecc71] transition-all active:scale-95"
             >
               <ThumbsUp size={18} />
-              接受（按 {negotiation.currentOffer}文 成交）
+              接受（按 {formatSettlement(negotiation.currentOffer, settlementCurrency)} {getCurrencyName(settlementCurrency)} 成交）
             </button>
 
-            {!showCounterInput && negotiation.round < 3 && (
+            {!showCounterInput && negotiation.status === 'ongoing' && (
               <button
                 onClick={() => setShowCounterInput(true)}
                 className="w-full py-3 bg-[#f39c12] text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-[#e67e22] transition-all active:scale-95"

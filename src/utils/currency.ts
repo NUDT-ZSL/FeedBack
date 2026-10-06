@@ -23,6 +23,23 @@ export function convertCurrency(
   return convertFromCopper(copperAmount, toCurrency);
 }
 
+export function toSettlementAmount(copperAmount: number, currency: Currency): number {
+  return Math.round(convertFromCopper(copperAmount, currency) * 10000) / 10000;
+}
+
+export function fromSettlementAmount(amount: number, currency: Currency): number {
+  return Math.round(convertToCopper(amount, currency));
+}
+
+export function formatSettlement(copperAmount: number, currency: Currency): string {
+  const symbols: Record<Currency, string> = {
+    copper: '文',
+    silver: '两',
+    silk: '匹'
+  };
+  return `${toSettlementAmount(copperAmount, currency)}${symbols[currency]}`;
+}
+
 export function formatCurrency(amount: number, currency: Currency): string {
   const symbols: Record<Currency, string> = {
     copper: '文',

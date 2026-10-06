@@ -70,7 +70,16 @@ export interface NegotiationState {
   goods: Goods;
   currentOffer: number;
   round: number;
+  maxRounds: number;
   userCounterOffer?: number;
+  status: 'ongoing' | 'converged';
+  history: NegotiationOffer[];
+}
+
+export interface NegotiationOffer {
+  round: number;
+  party: 'trader' | 'user';
+  amountCopper: number;
 }
 
 export interface DailyStats {

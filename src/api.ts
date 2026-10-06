@@ -1,4 +1,5 @@
 import type { Goods, Transaction, Currency, CurrencyHoldings, ExchangeRate } from './types';
+import type { SaleInput } from './utils/settlement';
 
 const API_BASE = '/api';
 
@@ -50,5 +51,11 @@ export const api = {
     request<{ success: boolean; goods: Goods; holdings: CurrencyHoldings; transaction: Transaction }>('/purchase', {
       method: 'POST',
       body: JSON.stringify({ goodsId, quantity, cost })
+    }),
+
+  sellGoods: (sale: SaleInput) =>
+    request<{ success: boolean; goods: Goods; holdings: CurrencyHoldings; transaction: Transaction }>('/sale', {
+      method: 'POST',
+      body: JSON.stringify(sale)
     })
 };
