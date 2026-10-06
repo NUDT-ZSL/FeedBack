@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronUp, ChevronDown, Clock, TrendingUp, TrendingDown, Repeat } from 'lucide-react';
 import { useStore } from '../store';
 import { groupTransactionsByDate, getTimeString } from '../utils/mock';
-import { formatCopperValue, getCurrencyName } from '../utils/currency';
+import { formatCopperValue, formatCurrency, getCurrencyName, convertToCopper } from '../utils/currency';
 import type { Transaction } from '../types';
 
 export default function AccountPanel() {
@@ -44,8 +44,13 @@ export default function AccountPanel() {
   };
 
   const getDailyStats = (txs: Transaction[]) => {
-    const sales = txs.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.totalAmount, 0);
-    const purchases = txs.filter(t => t.type === 'purchase').reduce((sum, t) => sum + t.totalAmount, 0);
+    // 各类货币成交先统一折算为铜钱再汇总，保证日统计口径一致
+    const sales = txs
+      .filter(t => t.type === 'sale')
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
+    const purchases = txs
+      .filter(t => t.type === 'purchase')
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
     return { sales, purchases, profit: sales - purchases };
   };
 
@@ -184,7 +189,7 @@ export default function AccountPanel() {
                                 <div className="flex items-center gap-3">
                                   <span className="text-gray-500">
                                     {tx.quantity}
-                                    {tx.type === 'sale' || tx.type === 'purchase' ? '件' : ''} × {tx.unitPrice}文
+                                    {tx.type === 'sale' || tx.type === 'purchase' ? '件' : ''} × {formatCurrency(tx.unitPrice, tx.currency)}
                                   </span>
                                   <span
                                     className={`font-bold ${
@@ -196,7 +201,7 @@ export default function AccountPanel() {
                                     }`}
                                   >
                                     {tx.type === 'sale' ? '+' : tx.type === 'purchase' ? '-' : '±'}
-                                    {formatCopperValue(tx.totalAmount)}
+                                    {formatCurrency(tx.totalAmount, tx.currency)}
                                   </span>
                                 </div>
                               </motion.div>

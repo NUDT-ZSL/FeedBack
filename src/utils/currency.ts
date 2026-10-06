@@ -63,3 +63,22 @@ export function getCurrencyName(currency: Currency): string {
   };
   return names[currency];
 }
+
+/**
+ * 按货币口径取整：铜钱取整到文，白银/丝绸保留两位小数。
+ * 展示与入账共用此函数，避免多次换算产生金额漂移。
+ */
+export function roundToCurrency(amount: number, currency: Currency): number {
+  if (currency === 'copper') return Math.round(amount);
+  return Math.round(amount * 10000) / 10000;
+}
+
+/** 将铜钱金额一次性换算为目标结算货币（含取整） */
+export function convertCopperToCurrency(copperAmount: number, currency: Currency): number {
+  return roundToCurrency(convertFromCopper(copperAmount, currency), currency);
+}
+
+/** 将铜钱金额格式化为指定结算货币口径的字符串（展示与入账同源） */
+export function formatAmountInCurrency(copperAmount: number, currency: Currency): string {
+  return formatCurrency(convertCopperToCurrency(copperAmount, currency), currency);
+}

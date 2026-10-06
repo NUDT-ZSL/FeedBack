@@ -1,4 +1,4 @@
-import type { Goods, Transaction, Currency, CurrencyHoldings, ExchangeRate } from './types';
+import type { Goods, Transaction, Currency, CurrencyHoldings, ExchangeRate, SaleRequest } from './types';
 
 const API_BASE = '/api';
 
@@ -29,6 +29,12 @@ export const api = {
     }),
 
   getTransactions: () => request<Transaction[]>('/transactions'),
+
+  sale: (req: SaleRequest) =>
+    request<{ success: boolean; transaction: Transaction; goods: Goods; holdings: CurrencyHoldings; receivedAmount: number }>('/sale', {
+      method: 'POST',
+      body: JSON.stringify(req)
+    }),
 
   addTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) =>
     request<Transaction>('/transactions', {

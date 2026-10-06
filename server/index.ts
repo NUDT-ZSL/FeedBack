@@ -3,9 +3,11 @@ import cors from 'cors';
 import type { Goods, Transaction, Currency, CurrencyHoldings, ExchangeRate } from '../src/types';
 import { initialGoods, generateId } from '../src/utils/mock';
 import { exchangeRate } from '../src/utils/currency';
+import { applySale } from '../src/utils/sale';
+import type { SaleRequest } from '../src/types';
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -78,7 +80,7 @@ app.post('/api/transactions', (req, res) => {
       item.saleRecords.push({
         id: generateId(),
         quantity: transaction.quantity,
-        revenue: transaction.totalAmount,
+        revenue: convertToCopper(transaction.totalAmount, transaction.currency),
         timestamp: transaction.timestamp,
         traderName: transaction.traderName,
         traderOrigin: transaction.traderOrigin
@@ -94,6 +96,16 @@ app.post('/api/transactions', (req, res) => {
   }
 
   res.status(201).json(transaction);
+});
+
+app.post('/api/sale', (req, res) => {
+  const request = req.body as SaleRequest;
+  try {
+    const result = applySale({ goods, transactions, holdings }, request);
+    res.status(201).json({ success: true, ...result });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
 });
 
 app.get('/api/exchange-rate', (_req, res) => {

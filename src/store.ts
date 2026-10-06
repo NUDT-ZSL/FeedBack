@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { Goods, Transaction, Currency, CurrencyHoldings, NegotiationState, DailyStats } from './types';
 import { api } from './api';
-import { generateForeignTrader, generateInitialOffer, generateCounterOffer, getDateString } from './utils/mock';
+import { generateForeignTrader, getDateString } from './utils/mock';
+import { createNegotiation, applyCounterOffer } from './utils/negotiation';
+import { convertToCopper } from './utils/currency';
 
 interface StoreState {
   goods: Goods[];
@@ -29,8 +31,10 @@ interface StoreState {
   startNegotiation: (goods: Goods) => void;
   acceptOffer: () => Promise<void>;
   rejectOffer: () => void;
-  makeCounterOffer: (userOffer: number) => void;
+  makeCounterOffer: (userOfferCopper: number) => void;
+  dismissNegotiation: () => void;
 
+  finalizeSale: (priceCopper: number) => Promise<void>;
   addTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => Promise<void>;
   updateStock: (goodsId: string, amount: number, type: 'in' | 'out') => Promise<void>;
   purchaseStock: (goodsId: string, quantity: number, cost: number) => Promise<void>;
@@ -100,67 +104,54 @@ export const useStore = create<StoreState>((set, get) => ({
 
   startNegotiation: (goods) => {
     const trader = generateForeignTrader();
-    const initialOffer = generateInitialOffer(goods.price);
-    set({
-      negotiation: {
-        trader,
-        goods,
-        currentOffer: initialOffer,
-        round: 1
-      }
-    });
+    set({ negotiation: createNegotiation(goods, trader), error: null });
   },
 
   acceptOffer: async () => {
-    const { negotiation, settlementCurrency } = get();
-    if (!negotiation) return;
-
-    const { trader, goods, currentOffer } = negotiation;
-
-    try {
-      await api.updateStock(goods.id, 1, 'out');
-
-      await api.addTransaction({
-        goodsId: goods.id,
-        goodsName: goods.name,
-        type: 'sale',
-        quantity: 1,
-        unitPrice: currentOffer,
-        totalAmount: currentOffer,
-        currency: settlementCurrency,
-        traderName: trader.name,
-        traderOrigin: trader.origin
-      });
-
-      await Promise.all([get().fetchGoods(), get().fetchTransactions(), get().fetchHoldings()]);
-      set({ negotiation: null });
-    } catch (error) {
-      set({ error: '交易失败' });
-    }
+    const { negotiation } = get();
+    if (!negotiation || negotiation.status !== 'ongoing') return;
+    await get().finalizeSale(negotiation.currentOffer);
   },
 
   rejectOffer: () => {
     set({ negotiation: null });
   },
 
-  makeCounterOffer: (userOffer) => {
+  dismissNegotiation: () => {
+    set({ negotiation: null });
+  },
+
+  makeCounterOffer: (userOfferCopper) => {
     const { negotiation } = get();
+    if (!negotiation || negotiation.status !== 'ongoing') return;
+
+    const result = applyCounterOffer(negotiation, userOfferCopper);
+    set({ negotiation: result.state });
+
+    if (result.outcome === 'deal' && result.agreedPrice !== undefined) {
+      void get().finalizeSale(result.agreedPrice);
+    }
+  },
+
+  finalizeSale: async (priceCopper) => {
+    const { negotiation, settlementCurrency } = get();
     if (!negotiation) return;
 
-    if (negotiation.round >= 3) {
-      set({ negotiation: null });
-      return;
+    const { trader, goods } = negotiation;
+    try {
+      await api.sale({
+        goodsId: goods.id,
+        quantity: 1,
+        unitPriceCopper: priceCopper,
+        currency: settlementCurrency,
+        traderName: trader.name,
+        traderOrigin: trader.origin
+      });
+      await Promise.all([get().fetchGoods(), get().fetchTransactions(), get().fetchHoldings()]);
+      set({ negotiation: null, error: null });
+    } catch (error) {
+      set({ error: '交易失败，库存与账目未变动', negotiation: null });
     }
-
-    const counterOffer = generateCounterOffer(userOffer, negotiation.currentOffer);
-    set({
-      negotiation: {
-        ...negotiation,
-        currentOffer: counterOffer,
-        round: negotiation.round + 1,
-        userCounterOffer: userOffer
-      }
-    });
   },
 
   addTransaction: async (tx) => {
@@ -208,11 +199,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const totalSales = dayTransactions
       .filter(t => t.type === 'sale')
-      .reduce((sum, t) => sum + t.totalAmount, 0);
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
 
     const totalPurchases = dayTransactions
       .filter(t => t.type === 'purchase')
-      .reduce((sum, t) => sum + t.totalAmount, 0);
+      .reduce((sum, t) => sum + convertToCopper(t.totalAmount, t.currency), 0);
 
     return {
       date: targetDate,
