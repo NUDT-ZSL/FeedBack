@@ -34,6 +34,7 @@ export interface StoreState {
   incenseColor: string;
   incenseOnCenser: boolean;
   aromaScore: number;
+  nextParticleId: number;
   addIngredient: (name: string, grams: number, color: string, powderColor: string) => void;
   setGrind: (level: number) => void;
   createIncense: () => void;

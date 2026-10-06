@@ -315,7 +315,7 @@ const Mortar = () => {
           {hasIncense && !incenseOnCenser && (
             <motion.div
               draggable
-              onDragStart={handleIncenseDragStart}
+              onDragStart={(e) => handleIncenseDragStart(e as unknown as React.DragEvent)}
               onDragEnd={handleIncenseDragEnd}
               className="absolute cursor-grab z-20"
               initial={{ opacity: 0, scale: 0, y: 20 }}

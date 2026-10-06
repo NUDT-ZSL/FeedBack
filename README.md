@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+## 离线状态机验证
+
+`npm run verify`（无需浏览器，直接用 Node 运行 `scripts/verify.ts`）会驱动
+`src/state/machine.ts` 中的纯函数状态机，覆盖：重复加料、超限加料、合成后继续加料、
+放置后再合成、燃烧中重置与完整燃烧周期。每个步骤独立断言，失败时输出具体场景、
+步骤以及期望/实际值，并以非零退出码结束。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
