@@ -1,12 +1,18 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Home from "@/pages/Home";
+import Layout from "@/components/Layout";
+import ShipListPage from "@/pages/ShipListPage";
+import ShipDetailPage from "@/pages/ShipDetailPage";
+import VerifyPage from "@/pages/VerifyPage";
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/other" element={<div className="text-center text-xl">Other Page - Coming Soon</div>} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<ShipListPage />} />
+          <Route path="/ships/:shipId" element={<ShipDetailPage />} />
+          <Route path="/verify" element={<VerifyPage />} />
+        </Route>
       </Routes>
     </Router>
   );
