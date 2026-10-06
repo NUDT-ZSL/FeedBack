@@ -11,6 +11,7 @@ export interface GalleryItem {
   pattern: TeaPattern;
   thumbnail: string;
   createdAt: number;
+  round: number;
   roundScore: {
     color: number;
     duration: number;
@@ -40,4 +41,27 @@ export interface AIPerformance {
   whiskSpeed: number;
   whiskDuration: number;
   delay: number;
+}
+
+export interface RoundRecord {
+  id: string;
+  round: number;
+  userScore: Score;
+  aiScore: Score;
+  updatedAt: number;
+}
+
+export interface ResolvedRound extends RoundRecord {
+  winner: 'user' | 'ai' | 'draw';
+}
+
+export interface RoundConflict {
+  round: number;
+  candidates: RoundRecord[];
+}
+
+export interface MatchHistory {
+  rounds: ResolvedRound[];
+  conflicts: RoundConflict[];
+  totals: { wins: number; losses: number; draws: number };
 }

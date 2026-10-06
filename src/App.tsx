@@ -2,11 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import axios from 'axios';
-import { Play, RotateCcw, Trophy, Info } from 'lucide-react';
+import { Play, RotateCcw, Trophy, Info, History } from 'lucide-react';
 import { TeaSet } from '@/components/TeaSet';
 import { FoamCanvas } from '@/components/FoamCanvas';
 import { ScorePanel } from '@/components/ScorePanel';
 import { Gallery } from '@/components/Gallery';
+import { MatchHistory } from '@/components/MatchHistory';
 import { useGameStore } from '@/store/gameStore';
 import { useAI } from '@/hooks/useAI';
 import type { TeaPattern } from '@/types';
@@ -14,6 +15,7 @@ import type { TeaPattern } from '@/types';
 function App() {
   const [mobileGalleryOpen, setMobileGalleryOpen] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiBottleAngle, setAiBottleAngle] = useState(0);
   const teaSetRef = useRef<React.ElementRef<typeof TeaSet>>(null);
@@ -60,6 +62,7 @@ function App() {
         pattern,
         thumbnail,
         roundScore: userScore,
+        round: currentRound,
       });
     } catch (e) {
       console.log('Save to gallery locally');
@@ -69,6 +72,7 @@ function App() {
       pattern,
       thumbnail,
       roundScore: userScore,
+      round: currentRound,
     });
     
     confetti({
@@ -77,7 +81,7 @@ function App() {
       origin: { y: 0.5, x: 0.5 },
       colors: ['#c49a3c', '#f5e6d3', '#d4a76a'],
     });
-  }, [saveToGallery, userScore]);
+  }, [saveToGallery, userScore, currentRound]);
 
   useEffect(() => {
     if (phase !== 'ai_playing') return;
@@ -175,6 +179,13 @@ function App() {
               onClick={() => setShowInstructions(true)}
             >
               <Info size={20} />
+            </button>
+            <button
+              className="interactive-btn p-2 rounded-lg bg-amber-100/80 text-amber-900"
+              onClick={() => setShowHistory(true)}
+              title="对局记录"
+            >
+              <History size={20} />
             </button>
             {phase === 'pattern_showing' && (
               <button
@@ -317,6 +328,8 @@ function App() {
       <div className="md:hidden">
         <Gallery isMobileOpen={mobileGalleryOpen} onToggleMobile={() => setMobileGalleryOpen(!mobileGalleryOpen)} />
       </div>
+
+      <MatchHistory open={showHistory} onClose={() => setShowHistory(false)} />
       
       <AnimatePresence>
         {showInstructions && (

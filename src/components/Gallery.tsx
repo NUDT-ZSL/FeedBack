@@ -101,7 +101,7 @@ export const Gallery: React.FC<GalleryProps> = ({ isMobileOpen, onToggleMobile }
                   {selectedItem.pattern.name}
                 </h3>
                 <p className="text-xs text-amber-600 font-kai mt-1">
-                  {new Date(selectedItem.createdAt).toLocaleDateString('zh-CN')}
+                  第 {selectedItem.round} 回合 · {new Date(selectedItem.createdAt).toLocaleDateString('zh-CN')}
                 </p>
               </div>
               

@@ -1,5 +1,15 @@
 import { create } from 'zustand';
-import type { GamePhase, Score, TeaPattern, GalleryItem } from '@/types';
+import type { GamePhase, Score, TeaPattern, GalleryItem, RoundRecord } from '@/types';
+import {
+  appendRoundRecord,
+  getDefaultStorage,
+  loadGallery,
+  loadRoundRecords,
+  resolveRoundConflict,
+  saveGallery,
+  saveRoundRecords,
+  upsertGalleryItem,
+} from '@/lib/persistence';
 
 interface GameState {
   currentRound: number;
@@ -19,6 +29,7 @@ interface GameState {
   
   gallery: GalleryItem[];
   currentPattern: TeaPattern | null;
+  roundRecords: RoundRecord[];
   
   startRound: () => void;
   setWaterAmount: (amount: number) => void;
@@ -28,6 +39,7 @@ interface GameState {
   setAiScore: (score: Score) => void;
   setCurrentPattern: (pattern: TeaPattern | null) => void;
   saveToGallery: (item: Omit<GalleryItem, 'id' | 'createdAt'>) => void;
+  resolveConflict: (round: number, keepId: string) => void;
   setPhase: (phase: GamePhase) => void;
   clearRound: () => void;
 }
@@ -50,8 +62,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   userScore: { ...initialScore },
   aiScore: { ...initialScore },
   
-  gallery: [],
+  gallery: loadGallery(),
   currentPattern: null,
+  roundRecords: loadRoundRecords(),
   
   startRound: () => {
     set({
@@ -105,7 +118,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
   
-  setAiScore: (score) => set({ aiScore: score, phase: 'scoring' }),
+  setAiScore: (score) => {
+    const { currentRound, userScore, roundRecords } = get();
+    const record: RoundRecord = {
+      id: crypto.randomUUID(),
+      round: currentRound,
+      userScore: { ...userScore },
+      aiScore: { ...score },
+      updatedAt: Date.now(),
+    };
+    const updatedRecords = appendRoundRecord(roundRecords, record);
+    saveRoundRecords(updatedRecords, getDefaultStorage());
+    set({ aiScore: score, phase: 'scoring', roundRecords: updatedRecords });
+  },
   
   setCurrentPattern: (pattern) => set({ currentPattern: pattern, phase: 'pattern_showing' }),
   
@@ -116,8 +141,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       id: crypto.randomUUID(),
       createdAt: Date.now(),
     };
-    const updatedGallery = [newItem, ...gallery].slice(0, 20);
+    const updatedGallery = upsertGalleryItem(gallery, newItem);
+    saveGallery(updatedGallery, getDefaultStorage());
     set({ gallery: updatedGallery });
+  },
+
+  resolveConflict: (round, keepId) => {
+    const { roundRecords } = get();
+    const updatedRecords = resolveRoundConflict(roundRecords, round, keepId);
+    saveRoundRecords(updatedRecords, getDefaultStorage());
+    set({ roundRecords: updatedRecords });
   },
   
   setPhase: (phase) => set({ phase }),
@@ -129,4 +162,4 @@ export const useGameStore = create<GameState>((set, get) => ({
       phase: 'idle',
     });
   },
-});
+}));

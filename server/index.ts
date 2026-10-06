@@ -72,13 +72,13 @@ const patterns: TeaPattern[] = [
 
 let galleryStore: GalleryItem[] = [];
 
-app.get('/api/patterns/random', (_req: Request, _res: Response) => {
+app.get('/api/patterns/random', (_req: Request, res: Response) => {
   const randomIndex = Math.floor(Math.random() * patterns.length);
   const pattern = { ...patterns[randomIndex], id: uuidv4() };
   res.json(pattern);
 });
 
-app.get('/api/patterns', (_req: Request, _res: Response) => {
+app.get('/api/patterns', (_req: Request, res: Response) => {
   res.json(patterns);
 });
 
