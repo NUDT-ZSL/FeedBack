@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Resources } from '../types';
-import { GRAIN_PER_PILE, ARROWS_PER_QUIVER, MAX_MORALE, MAX_CATAPULTS } from '../types';
+import { GRAIN_PER_PILE, ARROWS_PER_QUIVER, MAX_CATAPULTS } from '../types';
 
 interface ResourcePanelProps {
   side: 'left' | 'right';

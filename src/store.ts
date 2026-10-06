@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import {
   GameState,
   GameAction,
-  Position,
   Projectile
 } from './types';
 import {
@@ -79,7 +78,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           endPos: { ...action.target },
           progress: 0,
           duration: 800,
-          type: 'stone'
+          type: 'stone',
+          startTime: Date.now()
         };
         
         const trajectory = getTrajectoryPoints(catapult.position, action.target);
@@ -142,6 +142,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         break;
       }
 
+      case 'BREAK_GATE': {
+        if (state.gateDestroyed) return;
+        set({
+          wallSegments: state.wallSegments.map(w =>
+            w.isGate ? { ...w, durability: 0 } : w
+          )
+        });
+        break;
+      }
+
       case 'HOVER_TILE':
         set({ hoveredTile: action.position });
         break;
@@ -184,7 +194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const now = Date.now();
         const updatedProjectiles = state.projectiles
           .map(p => {
-            const elapsed = now - (p as Projectile & { startTime?: number }).startTime || 0;
+            const elapsed = p.startTime ? now - p.startTime : p.duration;
             const progress = Math.min(1, elapsed / p.duration);
             return { ...p, progress };
           })

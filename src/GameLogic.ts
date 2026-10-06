@@ -14,16 +14,25 @@ import {
   CATAPULT_ATTACK_RANGE,
   GRAIN_CONSUMPTION_PER_TURN,
   MAX_MORALE,
-  GRAIN_PER_PILE,
   ARROWS_PER_QUIVER,
   INITIAL_GRAIN,
   INITIAL_ARROWS,
   INITIAL_MORALE,
   INITIAL_WALL_DURABILITY,
-  SOLDIER_MOVE_RANGE
+  SOLDIER_MOVE_RANGE,
+  DEFENDER_INITIAL_GARRISON,
+  DEFENDER_INITIAL_MORALE,
+  DEFENDER_INITIAL_GRAIN,
+  WALL_DEFENSE_BASE
 } from './types';
+import { resolveBreakoutPhase } from './BreakoutLogic';
 
-const rng = seedrandom('hangzhou-siege-2024');
+let rng = seedrandom('hangzhou-siege-2024');
+
+/** 供离线批量推演使用：以固定种子重置随机源，保证结果可复现 */
+export const setRngSeed = (seed: string): void => {
+  rng = seedrandom(seed);
+};
 
 export const generateId = (): string => {
   return Math.random().toString(36).substring(2, 11);
@@ -94,7 +103,8 @@ export const createSoldier = (side: 'rebels' | 'imperial', position: Position): 
   position,
   health: 100,
   hasMoved: false,
-  isDying: false
+  isDying: false,
+  inSortie: false
 });
 
 export const createParticle = (
@@ -303,7 +313,8 @@ export const imperialTurn = (state: GameState): Partial<GameState> => {
           endPos: { ...catapult.position },
           progress: 0,
           duration: 600,
-          type: 'arrow'
+          type: 'arrow',
+          startTime: Date.now()
         });
         
         const hitChance = 0.6 - getDistance(nearestTower, catapult.position) * 0.03;
@@ -347,13 +358,14 @@ export const imperialTurn = (state: GameState): Partial<GameState> => {
           }
         });
         
-        if (nearest && minDist <= SOLDIER_MOVE_RANGE) {
+        const nearestImperial = nearest as Soldier | null;
+        if (nearestImperial && minDist <= SOLDIER_MOVE_RANGE) {
           const targetRebel = newSoldiers.find(s => s.id === rebel.id);
           if (targetRebel) {
-            targetRebel.position = { ...nearest.position };
+            targetRebel.position = { ...nearestImperial.position };
             targetRebel.hasMoved = true;
           }
-          target = nearest;
+          target = nearestImperial;
         }
       }
       
@@ -362,8 +374,11 @@ export const imperialTurn = (state: GameState): Partial<GameState> => {
         const targetRebel = newSoldiers.find(s => s.id === rebel.id);
         
         if (targetImperial && targetRebel) {
+          const defenseRatio = state.defenders
+            ? state.defenders.wallDefense / WALL_DEFENSE_BASE
+            : 1;
           targetImperial.health -= 50;
-          targetRebel.health -= 30;
+          targetRebel.health -= Math.round(30 * Math.max(0, defenseRatio));
           
           if (targetImperial.health <= 0) {
             targetImperial.isDying = true;
@@ -418,7 +433,8 @@ export const endTurn = (state: GameState): Partial<GameState> => {
   
   const newSoldiers = state.soldiers.map(s => ({
     ...s,
-    hasMoved: false
+    hasMoved: false,
+    inSortie: false
   }));
   
   const newOilAreas = state.oilAreas
@@ -443,29 +459,17 @@ export const endTurn = (state: GameState): Partial<GameState> => {
   if (gateDestroyed && state.turn % 2 === 0) {
     const gateX = Math.floor(GRID_WIDTH / 2);
     newSoldiersWithSpawn.push(createSoldier('rebels', { x: gateX, y: WALL_ROW + 1 }));
-    
+
     if (state.turn % 3 === 0) {
       newSoldiersWithSpawn.push(createSoldier('imperial', { x: gateX, y: WALL_ROW - 1 }));
     }
   }
-  
-  const rebelSoldiers = newSoldiersWithSpawn.filter(s => s.side === 'rebels' && s.health > 0);
-  const imperialSoldiers = newSoldiersWithSpawn.filter(s => s.side === 'imperial' && s.health > 0);
-  
-  let winner: 'rebels' | 'imperial' | null = null;
-  if (gateDestroyed && rebelSoldiers.length > imperialSoldiers.length && rebelSoldiers.length >= 3) {
-    winner = 'rebels';
-  } else if (newCatapults.length === 0 || newMorale <= 0) {
-    winner = 'imperial';
-  }
-  
-  return {
-    turn: state.turn + 1,
-    phase: 'player',
-    winner,
+
+  // 城门破坏后：以带援兵的中间态进入突围/士气连锁结算
+  const intermediateState: GameState = {
+    ...state,
     catapults: newCatapults,
-    soldiers: newSoldiersWithSpawn.filter(s => s.health > 0),
-    oilAreas: newOilAreas,
+    soldiers: newSoldiersWithSpawn,
     gateDestroyed,
     resources: {
       ...state.resources,
@@ -474,6 +478,69 @@ export const endTurn = (state: GameState): Partial<GameState> => {
       wallDurability
     }
   };
+
+  let finalSoldiers = intermediateState.soldiers;
+  let finalDefenders = state.defenders;
+  let finalArrows = intermediateState.resources.arrows;
+  let breakoutLog = state.breakoutLog;
+  let breakoutSettledTurn = state.breakoutSettledTurn;
+
+  if (gateDestroyed) {
+    const breakoutResult = resolveBreakoutPhase(intermediateState);
+    finalSoldiers = breakoutResult.soldiers;
+    finalDefenders = breakoutResult.defenders;
+    finalArrows = breakoutResult.arrows;
+    breakoutLog = [...state.breakoutLog, ...breakoutResult.events];
+    breakoutSettledTurn = state.turn;
+  }
+
+  const rebelSoldiers = finalSoldiers.filter(s => s.side === 'rebels' && s.health > 0);
+  const imperialSoldiers = finalSoldiers.filter(s => s.side === 'imperial' && s.health > 0);
+
+  let winner: 'rebels' | 'imperial' | null = null;
+  if (
+    gateDestroyed &&
+    (finalDefenders.status === 'routed' || finalDefenders.status === 'escaped')
+  ) {
+    winner = 'rebels';
+  } else if (gateDestroyed && rebelSoldiers.length > imperialSoldiers.length && rebelSoldiers.length >= 3) {
+    winner = 'rebels';
+  } else if (newCatapults.length === 0 || newMorale <= 0) {
+    winner = 'imperial';
+  }
+
+  return {
+    turn: state.turn + 1,
+    phase: 'player',
+    winner,
+    catapults: newCatapults,
+    soldiers: finalSoldiers.filter(s => s.health > 0),
+    oilAreas: newOilAreas,
+    gateDestroyed,
+    defenders: finalDefenders,
+    breakoutLog,
+    breakoutSettledTurn,
+    resources: {
+      ...state.resources,
+      grain: newGrain,
+      morale: newMorale,
+      arrows: finalArrows,
+      wallDurability
+    }
+  };
+};
+
+export const createInitialGarrison = (): Soldier[] => {
+  const gateX = Math.floor(GRID_WIDTH / 2);
+  const positions: Position[] = [
+    { x: gateX - 2, y: WALL_ROW - 1 },
+    { x: gateX + 2, y: WALL_ROW - 1 },
+    { x: gateX - 4, y: WALL_ROW - 2 },
+    { x: gateX + 4, y: WALL_ROW - 2 },
+    { x: gateX, y: WALL_ROW - 2 },
+    { x: gateX - 1, y: WALL_ROW - 1 }
+  ];
+  return positions.slice(0, DEFENDER_INITIAL_GARRISON).map(pos => createSoldier('imperial', pos));
 };
 
 export const createInitialState = (): GameState => ({
@@ -482,7 +549,7 @@ export const createInitialState = (): GameState => ({
   winner: null,
   catapults: [],
   wallSegments: createInitialWall(),
-  soldiers: [],
+  soldiers: createInitialGarrison(),
   resources: {
     grain: INITIAL_GRAIN,
     arrows: INITIAL_ARROWS,
@@ -495,7 +562,17 @@ export const createInitialState = (): GameState => ({
   hoveredTile: null,
   maxCatapults: MAX_CATAPULTS,
   gateDestroyed: false,
-  oilAreas: []
+  oilAreas: [],
+  defenders: {
+    morale: DEFENDER_INITIAL_MORALE,
+    grain: DEFENDER_INITIAL_GRAIN,
+    status: 'holding',
+    wallDefense: WALL_DEFENSE_BASE,
+    escapedCount: 0,
+    casualtyCount: 0
+  },
+  breakoutLog: [],
+  breakoutSettledTurn: 0
 });
 
 export const playSound = (type: 'attack' | 'hit' | 'victory' | 'defeat' | 'gong' | 'bell') => {
