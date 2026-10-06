@@ -38,13 +38,19 @@ export const lerpTransform = (
   z: lerp(start.z, end.z, t),
 });
 
-export const randomRange = (min: number, max: number): number => {
-  return Math.random() * (max - min) + min;
+export const randomRange = (
+  min: number,
+  max: number,
+  random: () => number = Math.random
+): number => {
+  return random() * (max - min) + min;
 };
 
-export const randomDirection = (): Transform => {
-  const theta = Math.random() * Math.PI * 2;
-  const phi = Math.random() * Math.PI;
+export const randomDirection = (
+  random: () => number = Math.random
+): Transform => {
+  const theta = random() * Math.PI * 2;
+  const phi = random() * Math.PI;
   return {
     x: Math.sin(phi) * Math.cos(theta),
     y: Math.cos(phi) * 0.5 + 0.5,
@@ -55,11 +61,12 @@ export const randomDirection = (): Transform => {
 export const generateDisassemblePosition = (
   originalPos: Transform,
   order: number,
-  total: number
+  total: number,
+  random: () => number = Math.random
 ): Transform => {
   const { min, max } = SCENE_CONSTANTS.disassembleDistance;
-  const direction = randomDirection();
-  const distance = randomRange(min, max);
+  const direction = randomDirection(random);
+  const distance = randomRange(min, max, random);
   const offsetFactor = 1 + (order / total) * 0.5;
   
   return {
@@ -70,10 +77,11 @@ export const generateDisassemblePosition = (
 };
 
 export const generateFlyInPosition = (
-  originalPos: Transform
+  originalPos: Transform,
+  random: () => number = Math.random
 ): Transform => {
-  const direction = randomDirection();
-  const distance = randomRange(80, 120);
+  const direction = randomDirection(random);
+  const distance = randomRange(80, 120, random);
   
   return {
     x: originalPos.x + direction.x * distance,
@@ -82,12 +90,14 @@ export const generateFlyInPosition = (
   };
 };
 
-export const generateRandomRotation = (): { x: number; y: number; z: number } => {
+export const generateRandomRotation = (
+  random: () => number = Math.random
+): { x: number; y: number; z: number } => {
   const degToRad = (deg: number) => (deg * Math.PI) / 180;
   return {
-    x: degToRad(randomRange(-15, 15)),
-    y: degToRad(randomRange(-15, 15)),
-    z: degToRad(randomRange(-15, 15)),
+    x: degToRad(randomRange(-15, 15, random)),
+    y: degToRad(randomRange(-15, 15, random)),
+    z: degToRad(randomRange(-15, 15, random)),
   };
 };
 

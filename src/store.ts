@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AppState, AppActions, DougongComponent, Transform, Rotation, SoundQueueItem } from './types';
 import { AssemblyMode } from './types';
-import { INITIAL_COMPONENTS } from './utils/constants';
+import { INITIAL_COMPONENTS, SCENE_CONSTANTS } from './utils/constants';
 import {
   generateDisassemblePosition,
   generateFlyInPosition,
@@ -10,11 +10,40 @@ import {
   easeOutQuart,
   createId,
 } from './utils/helpers';
+import { AnimationEngine } from './animation/engine';
 
 type AppStore = AppState & AppActions;
 
+const BACKGROUND_TRANSITION_KEY = '__backgroundTransition__';
+const FULL_ASSEMBLY_KEY = '__fullAssembly__';
+
 const deepCloneComponents = (components: DougongComponent[]): DougongComponent[] => {
   return JSON.parse(JSON.stringify(components));
+};
+
+const animationEngine = new AnimationEngine();
+
+let rafHandle: number | null = null;
+let lastFrameTs: number | null = null;
+
+const runAnimationLoop = () => {
+  if (typeof requestAnimationFrame === 'undefined') return;
+  if (rafHandle !== null) return;
+  lastFrameTs = null;
+  const frame = (ts: number) => {
+    const dt =
+      lastFrameTs === null
+        ? 16
+        : Math.min(Math.max(ts - lastFrameTs, 0), 100);
+    lastFrameTs = ts;
+    useAppStore.getState().tickAnimations(dt);
+    if (animationEngine.size > 0) {
+      rafHandle = requestAnimationFrame(frame);
+    } else {
+      rafHandle = null;
+    }
+  };
+  rafHandle = requestAnimationFrame(frame);
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -72,6 +101,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
               rotation: { ...c.correctRotation },
               isSnapped: true,
               isAssembled: true,
+              isAnimating: true,
               animationPhase: 'snapping',
             }
           : c
@@ -81,46 +111,64 @@ export const useAppStore = create<AppStore>((set, get) => ({
     get().playSound('snap', 0.4, 0.8);
     get().calculateProgress();
 
-    setTimeout(() => {
-      set((state) => ({
-        components: state.components.map((c) =>
-          c.id === id ? { ...c, animationPhase: 'idle' } : c
-        ),
-      }));
+    animationEngine.schedule({
+      key: id,
+      duration: 500,
+      onComplete: () => {
+        set((state) => ({
+          components: state.components.map((c) =>
+            c.id === id
+              ? { ...c, isAnimating: false, animationPhase: 'idle' }
+              : c
+          ),
+        }));
 
-      const { components, triggerFullAssembly } = get();
-      const allSnapped = components
-        .filter((c) => c.assemblyOrder <= 12)
-        .every((c) => c.isSnapped);
-      if (allSnapped) {
-        triggerFullAssembly();
-      }
-    }, 500);
+        const { components, triggerFullAssembly } = get();
+        const allSnapped = components
+          .filter((c) => c.assemblyOrder <= 12)
+          .every((c) => c.isSnapped);
+        if (allSnapped) {
+          triggerFullAssembly();
+        }
+      },
+    });
+    runAnimationLoop();
   },
 
   errorSnap: (id: string) => {
     set((state) => ({
       components: state.components.map((c) =>
-        c.id === id ? { ...c, animationPhase: 'error' } : c
+        c.id === id
+          ? { ...c, isAnimating: true, animationPhase: 'error' }
+          : c
       ),
     }));
 
     get().playSound('error', 0.5, 0.4);
 
-    setTimeout(() => {
-      set((state) => ({
-        components: state.components.map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                position: { ...c.correctPosition },
-                rotation: { ...c.correctRotation },
-                animationPhase: 'idle',
-              }
-            : c
-        ),
-      }));
-    }, 800);
+    animationEngine.schedule({
+      key: id,
+      duration: 800,
+      onComplete: () => {
+        set((state) => ({
+          components: state.components.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  position: { ...c.correctPosition },
+                  rotation: { ...c.correctRotation },
+                  isSnapped: true,
+                  isAssembled: true,
+                  isAnimating: false,
+                  animationPhase: 'idle',
+                }
+              : c
+          ),
+        }));
+        get().calculateProgress();
+      },
+    });
+    runAnimationLoop();
   },
 
   toggleMode: () => {
@@ -141,23 +189,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
       get().flyInAll();
     }
 
-    let t = 0;
-    const duration = 1000;
-    const interval = 16;
-    const animate = () => {
-      t += interval;
-      const progress = Math.min(t / duration, 1);
-      const eased = easeOutQuart(progress);
-      get().updateBackgroundTransition(eased);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
+    animationEngine.schedule({
+      key: BACKGROUND_TRANSITION_KEY,
+      duration: 1000,
+      ease: easeOutQuart,
+      onUpdate: (eased) => {
+        get().updateBackgroundTransition(eased);
+      },
+      onComplete: () => {
         get().completeModeTransition();
         get().updateBackgroundTransition(0);
-      }
-    };
-    requestAnimationFrame(animate);
+      },
+    });
+    runAnimationLoop();
   },
 
   completeModeTransition: () => {
@@ -186,12 +230,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   triggerFullAssembly: () => {
-    setTimeout(() => {
-      set({ showFullAssembly: true });
-    }, 500);
+    animationEngine.schedule({
+      key: FULL_ASSEMBLY_KEY,
+      duration: 500,
+      onComplete: () => {
+        set({ showFullAssembly: true });
+      },
+    });
+    runAnimationLoop();
   },
 
   resetComponents: () => {
+    animationEngine.cancelAll();
+    animationEngine.reseed();
     set({
       components: deepCloneComponents(INITIAL_COMPONENTS),
       selectedComponentId: null,
@@ -201,6 +252,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       mode: AssemblyMode.Assemble,
       isModeTransitioning: false,
       showFullAssembly: false,
+      backgroundTransition: 0,
     });
   },
 
@@ -214,6 +266,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ...c,
         isSnapped: false,
         isAssembled: false,
+        isAnimating: true,
         animationPhase: 'disassembling',
       })),
       progress: 0,
@@ -221,54 +274,62 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     sortedComponents.forEach((component, index) => {
       const delay = index * 80;
-      const duration = 500;
-      const startPos = { ...component.correctPosition };
-      const targetPos = generateDisassemblePosition(component.correctPosition, index, total);
-      const randomRot = generateRandomRotation();
+      const duration = SCENE_CONSTANTS.disassembleDuration;
+      const current = get().components.find((c) => c.id === component.id);
+      const startPos = current ? { ...current.position } : { ...component.correctPosition };
+      const startRot = current ? { ...current.rotation } : { ...component.correctRotation };
+      const targetPos = generateDisassemblePosition(
+        component.correctPosition,
+        index,
+        total,
+        animationEngine.nextRandom
+      );
+      const targetRot = generateRandomRotation(animationEngine.nextRandom);
 
-      setTimeout(() => {
-        let t = 0;
-        const interval = 16;
-        const animate = () => {
-          t += interval;
-          const progress = Math.min(t / duration, 1);
-          const eased = easeOutQuart(progress);
-
-          const newX = startPos.x + (targetPos.x - startPos.x) * eased;
-          const newY = startPos.y + (targetPos.y - startPos.y) * eased;
-          const newZ = startPos.z + (targetPos.z - startPos.z) * eased;
-
+      animationEngine.schedule({
+        key: component.id,
+        delay,
+        duration,
+        ease: easeOutQuart,
+        onStart: () => {
+          get().playSound('friction', 0.3, 1.2);
+        },
+        onUpdate: (eased, progress, random) => {
           const vibrateAmount = Math.sin(progress * Math.PI) * 0.5;
-          const vibrateX = (Math.random() - 0.5) * vibrateAmount;
-          const vibrateY = (Math.random() - 0.5) * vibrateAmount;
-          const vibrateZ = (Math.random() - 0.5) * vibrateAmount;
+          const vibrateX = (random() - 0.5) * vibrateAmount;
+          const vibrateY = (random() - 0.5) * vibrateAmount;
+          const vibrateZ = (random() - 0.5) * vibrateAmount;
 
           get().moveComponent(component.id, {
-            x: newX + vibrateX,
-            y: newY + vibrateY,
-            z: newZ + vibrateZ,
+            x: startPos.x + (targetPos.x - startPos.x) * eased + vibrateX,
+            y: startPos.y + (targetPos.y - startPos.y) * eased + vibrateY,
+            z: startPos.z + (targetPos.z - startPos.z) * eased + vibrateZ,
           });
 
           get().rotateComponent(component.id, {
-            x: randomRot.x * eased,
-            y: randomRot.y * eased,
-            z: randomRot.z * eased,
+            x: startRot.x + (targetRot.x - startRot.x) * eased,
+            y: startRot.y + (targetRot.y - startRot.y) * eased,
+            z: startRot.z + (targetRot.z - startRot.z) * eased,
           });
-
-          if (progress < 1) {
-            requestAnimationFrame(animate);
-          } else {
-            set((state) => ({
-              components: state.components.map((c) =>
-                c.id === component.id ? { ...c, animationPhase: 'idle' } : c
-              ),
-            }));
-          }
-        };
-        get().playSound('friction', 0.3, 1.2);
-        requestAnimationFrame(animate);
-      }, delay);
+        },
+        onComplete: () => {
+          set((state) => ({
+            components: state.components.map((c) =>
+              c.id === component.id
+                ? {
+                    ...c,
+                    position: { ...targetPos },
+                    rotation: { ...targetRot },
+                    isAnimating: false,
+                    animationPhase: 'idle',
+                  }
+                : c
+            ),
+          }));
+        },
+      });
     });
+    runAnimationLoop();
   },
 
   flyInAll: () => {
@@ -280,15 +341,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ...c,
         isSnapped: false,
         isAssembled: false,
+        isAnimating: true,
         animationPhase: 'flyingIn',
       })),
     }));
 
     sortedComponents.forEach((component, index) => {
       const delay = index * 100;
-      const duration = 1000;
-      const startPos = generateFlyInPosition(component.correctPosition);
+      const duration = SCENE_CONSTANTS.flyInDuration;
+      const startPos = generateFlyInPosition(
+        component.correctPosition,
+        animationEngine.nextRandom
+      );
+      const current = get().components.find((c) => c.id === component.id);
+      const startRot = current ? { ...current.rotation } : { x: 0, y: 0, z: 0 };
       const targetPos = { ...component.correctPosition };
+      const targetRot = { ...component.correctRotation };
 
       set((state) => ({
         components: state.components.map((c) =>
@@ -296,14 +364,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ),
       }));
 
-      setTimeout(() => {
-        let t = 0;
-        const interval = 16;
-        const animate = () => {
-          t += interval;
-          const progress = Math.min(t / duration, 1);
-          const eased = easeOutQuart(progress);
-
+      animationEngine.schedule({
+        key: component.id,
+        delay,
+        duration,
+        ease: easeOutQuart,
+        onUpdate: (eased) => {
           get().moveComponent(component.id, {
             x: startPos.x + (targetPos.x - startPos.x) * eased,
             y: startPos.y + (targetPos.y - startPos.y) * eased,
@@ -311,26 +377,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
           });
 
           get().rotateComponent(component.id, {
-            x: component.correctRotation.x * eased,
-            y: component.correctRotation.y * eased,
-            z: component.correctRotation.z * eased,
+            x: startRot.x + (targetRot.x - startRot.x) * eased,
+            y: startRot.y + (targetRot.y - startRot.y) * eased,
+            z: startRot.z + (targetRot.z - startRot.z) * eased,
           });
-
-          if (progress < 1) {
-            requestAnimationFrame(animate);
-          } else {
-            set((state) => ({
-              components: state.components.map((c) =>
-                c.id === component.id
-                  ? { ...c, position: { ...targetPos }, rotation: { ...c.correctRotation }, animationPhase: 'idle' }
-                  : c
-              ),
-            }));
-          }
-        };
-        requestAnimationFrame(animate);
-      }, delay);
+        },
+        onComplete: () => {
+          set((state) => ({
+            components: state.components.map((c) =>
+              c.id === component.id
+                ? {
+                    ...c,
+                    position: { ...targetPos },
+                    rotation: { ...targetRot },
+                    isSnapped: true,
+                    isAssembled: true,
+                    isAnimating: false,
+                    animationPhase: 'idle',
+                  }
+                : c
+            ),
+          }));
+          get().calculateProgress();
+        },
+      });
     });
+    runAnimationLoop();
   },
 
   setComponentAnimation: (id: string, phase: DougongComponent['animationPhase']) => {
@@ -344,4 +416,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   updateBackgroundTransition: (value: number) => {
     set({ backgroundTransition: value });
   },
+
+  tickAnimations: (dtMs: number) => {
+    animationEngine.tick(dtMs);
+  },
+
+  getActiveAnimationCount: () => animationEngine.size,
 }));
