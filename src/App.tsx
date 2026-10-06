@@ -44,8 +44,8 @@ const App: React.FC = () => {
     setProgress(Math.min(newProgress, 1))
   }, [])
 
-  const handleComplete = useCallback(() => {
-    setIsCompleted(true)
+  const handleCompletionChange = useCallback((completed: boolean) => {
+    setIsCompleted(completed)
   }, [])
 
   const handleUndo = useCallback(() => {
@@ -144,7 +144,7 @@ const App: React.FC = () => {
               ref={canvasRef}
               template={selectedTemplate}
               onProgressChange={handleProgressChange}
-              onComplete={handleComplete}
+              onCompletionChange={handleCompletionChange}
               scale={scale}
               onUndoAvailable={handleUndoAvailable}
             />

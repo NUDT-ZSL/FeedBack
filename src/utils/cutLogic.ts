@@ -20,6 +20,9 @@ export const PAPER_SIZE = 400
 
 const MAX_UNDO_STACK = 10
 
+const CUT_RADIUS = 1
+const TEMPLATE_ALPHA_THRESHOLD = 50
+
 export class CutLogic {
   private currentPath: Point[] = []
   private cutPaths: CutPath[] = []
@@ -57,7 +60,6 @@ export class CutLogic {
     if (this.isCompleted) return
     this.isDrawing = true
     this.currentPath = [point]
-    this.saveUndoState()
   }
 
   continueDrawing(point: Point): void {
@@ -77,6 +79,7 @@ export class CutLogic {
       return null
     }
     this.isDrawing = false
+    this.saveUndoState()
     const cutPath: CutPath = {
       points: [...this.currentPath],
       timestamp: Date.now()
@@ -98,9 +101,10 @@ export class CutLogic {
   undo(): boolean {
     if (this.undoStack.length === 0) return false
     const previousState = this.undoStack.pop()!
+    this.isDrawing = false
+    this.currentPath = []
     this.cutPaths = previousState
     this.rebuildCutMask()
-    this.isCompleted = false
     this.calculateCompletion()
     return true
   }
@@ -120,7 +124,7 @@ export class CutLogic {
   }
 
   private markPoint(cx: number, cy: number): void {
-    const radius = 3
+    const radius = CUT_RADIUS
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const x = cx + dx
@@ -144,6 +148,15 @@ export class CutLogic {
   }
 
   calculateCompletion(): number {
+    const progress = this.computeProgress()
+    this.isCompleted = progress >= this.completionThreshold
+    if (this.completionCallback) {
+      this.completionCallback(progress, this.isCompleted)
+    }
+    return progress
+  }
+
+  private computeProgress(): number {
     if (!this.templateMask) return 0
     const data = this.templateMask.data
     let totalTemplatePixels = 0
@@ -151,8 +164,7 @@ export class CutLogic {
     for (let y = 0; y < PAPER_SIZE; y++) {
       for (let x = 0; x < PAPER_SIZE; x++) {
         const idx = (y * PAPER_SIZE + x) * 4
-        const alpha = data[idx + 3]
-        if (alpha > 50) {
+        if (data[idx + 3] > TEMPLATE_ALPHA_THRESHOLD) {
           totalTemplatePixels++
           if (this.cutMask[y][x]) {
             cutTemplatePixels++
@@ -160,15 +172,12 @@ export class CutLogic {
         }
       }
     }
-    const progress = totalTemplatePixels > 0 ? cutTemplatePixels / totalTemplatePixels : 0
-    const completed = progress >= this.completionThreshold && !this.isCompleted
-    if (completed) {
-      this.isCompleted = true
-    }
-    if (this.completionCallback) {
-      this.completionCallback(progress, completed)
-    }
-    return progress
+    return totalTemplatePixels > 0 ? cutTemplatePixels / totalTemplatePixels : 0
+  }
+
+  isCut(x: number, y: number): boolean {
+    if (x < 0 || x >= PAPER_SIZE || y < 0 || y >= PAPER_SIZE) return false
+    return this.cutMask[y][x]
   }
 
   getCutPaths(): CutPath[] {
