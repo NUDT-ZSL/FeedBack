@@ -6,6 +6,7 @@ interface WaterState {
   curvature: number
   collisionCount: number
   isAutoDemo: boolean
+  resetToken: number
   setGateOpening: (value: number) => void
   setSlope: (value: number) => void
   setCurvature: (value: number) => void
@@ -22,6 +23,7 @@ export const useWaterStore = create<WaterState>((set) => ({
   curvature: 45,
   collisionCount: 0,
   isAutoDemo: false,
+  resetToken: 0,
 
   setGateOpening: (value: number) => set({ gateOpening: Math.max(0, Math.min(100, value)) }),
   setSlope: (value: number) => set({ slope: Math.max(0, Math.min(30, value)) }),
@@ -29,13 +31,14 @@ export const useWaterStore = create<WaterState>((set) => ({
 
   incrementCollision: () => set(state => ({ collisionCount: state.collisionCount + 1 })),
 
-  reset: () => set({
+  reset: () => set(state => ({
     gateOpening: 50,
     slope: 15,
     curvature: 45,
     collisionCount: 0,
-    isAutoDemo: false
-  }),
+    isAutoDemo: false,
+    resetToken: state.resetToken + 1
+  })),
 
   startAutoDemo: () => set({ isAutoDemo: true }),
   stopAutoDemo: () => set({ isAutoDemo: false }),
