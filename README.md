@@ -1,57 +1,42 @@
-# React + TypeScript + Vite
+# 古代玉器作坊 · 解玉砂配比 × 工序依赖推演链路
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+在交互作坊之上补出的**可复算推演层**：玉料、解玉砂、工序统一录入后，
+每次配比或工序属性调整都会沿「依赖图 + 资源消耗」重推可执行顺序、
+消耗分布与成品产出结论；冲突不静默跳过，全部保留并给出裁决入口。
 
-Currently, two official plugins are available:
+## 离线运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install        # 首次需要联网装依赖，之后完全离线
+npm run dev        # 界面：录入 → 配置 → 推演 → 裁决 → 查看结论
+npm run build      # 产出静态站点 dist/，任意静态服务器可离线托管
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 统一批量推演入口
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+npm run infer        # 固定样例：配比调整 + 五类裁决，逐步断言 增量重推 == 整体重推
+npm run infer:fuzz   # 随机编辑/裁决序列下的一致性模糊校验（SEED=1 ITER=500 可调）
+```
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+两者均以退出码报告结果：任一步增量与全量结论不一致即失败。
+
+## 推演语义（确定性）
+
+- **定序**：Tarjan 找环 + Kahn 拓扑（id 字典序决胜），同输入必同顺序。
+- **砂耗**：`砂量基数 × 0.5 / 配比`——配比变化同时改写所有引用该砂的工序（跨工序影响）。
+- **玉损**：`切削强度 × 砂量基数 × (0.6+硬度/10) × (200/粒度) × (1.25-配比)`。
+- **冲突**：依赖成环 / 引用缺失 / 玉料不足 / 砂不足 / 砂不适用。
+  资源不足时保留本工序与全部同资源竞争方，由裁决入口显式处理
+  （补足资源、降强度、提配比、断环边、暂停竞争工序等）。
+- **增量重推**：属性编辑只播种直接引用工序，沿「依赖后继 ∪ 同资源消费者后缀」
+  传播受影响集，未受影响工序直接复用；结构编辑（前置/用料/启停）自动回退全量。
+  执行序号在 finalize 统一重排，保证复用结果与整体重推逐项一致。
+
+## 目录
+
+```
+src/engine/    纯函数引擎（types/formula/graph/inference/incremental/adjudicate/edits/batch/samples）
+src/components/ 五段式向导界面（录入/配置/推演/裁决/查看结论）
+scripts/       批量推演与模糊校验 CLI
 ```

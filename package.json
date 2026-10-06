@@ -1,25 +1,26 @@
 {
-  "name": "auto38",
+  "name": "jade-workshop-inference",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
     "preview": "vite preview",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "infer": "tsx scripts/batch-infer.ts",
+    "infer:fuzz": "tsx scripts/fuzz.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "framer-motion": "^11.0.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.4.1",
+    "tsx": "^4.19.0",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }
