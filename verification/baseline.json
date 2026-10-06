@@ -1,0 +1,377 @@
+{
+  "scenarios": {
+    "base": {
+      "digest": "11a3b66df85ad425",
+      "result": {
+        "conflicts": [],
+        "diagnostics": [],
+        "eventImpacts": {
+          "evt-1": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              10
+            ]
+          },
+          "evt-2": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-3": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-4": {
+            "objects": [
+              "obj-gamma"
+            ],
+            "timeRange": [
+              11,
+              11
+            ]
+          }
+        },
+        "objectStates": {
+          "obj-alpha": {
+            "depth": {
+              "observedAt": 15,
+              "recordId": "rec-003",
+              "value": "3.5"
+            },
+            "position": {
+              "observedAt": 20,
+              "recordId": "rec-002",
+              "value": "A2"
+            }
+          },
+          "obj-beta": {
+            "position": {
+              "observedAt": 12,
+              "recordId": "rec-004",
+              "value": "B1"
+            },
+            "status": {
+              "observedAt": 18,
+              "recordId": "rec-005",
+              "value": "active"
+            }
+          },
+          "obj-gamma": {
+            "position": {
+              "observedAt": 11,
+              "recordId": "rec-006",
+              "value": "G1"
+            }
+          }
+        }
+      }
+    },
+    "broken-links": {
+      "digest": "8f75d0afab39de69",
+      "result": {
+        "conflicts": [],
+        "diagnostics": [
+          {
+            "kind": "link-cycle",
+            "message": "event links form a cycle: evt-2 -> evt-3",
+            "refs": [
+              "evt-2",
+              "evt-3"
+            ],
+            "severity": "error"
+          },
+          {
+            "kind": "missing-link",
+            "message": "event evt-1 links to missing event evt-9",
+            "refs": [
+              "evt-1",
+              "evt-9"
+            ],
+            "severity": "error"
+          }
+        ],
+        "eventImpacts": {
+          "evt-1": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              10
+            ]
+          },
+          "evt-2": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta"
+            ],
+            "timeRange": [
+              18,
+              20
+            ]
+          },
+          "evt-3": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta"
+            ],
+            "timeRange": [
+              18,
+              20
+            ]
+          },
+          "evt-4": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta",
+              "obj-gamma"
+            ],
+            "timeRange": [
+              11,
+              20
+            ]
+          }
+        },
+        "objectStates": {
+          "obj-alpha": {
+            "position": {
+              "observedAt": 10,
+              "recordId": "rec-001",
+              "value": "A1"
+            }
+          },
+          "obj-beta": {
+            "position": {
+              "observedAt": 12,
+              "recordId": "rec-004",
+              "value": "B1"
+            }
+          },
+          "obj-gamma": {
+            "position": {
+              "observedAt": 11,
+              "recordId": "rec-006",
+              "value": "G1"
+            }
+          }
+        }
+      }
+    },
+    "conflict": {
+      "digest": "4daa436724a96388",
+      "result": {
+        "conflicts": [
+          {
+            "conflictId": "obj-alpha|position|20",
+            "field": "position",
+            "objectId": "obj-alpha",
+            "observedAt": 20,
+            "recordIds": [
+              "rec-002",
+              "rec-101"
+            ],
+            "resolved": true,
+            "winnerRecordId": "rec-101"
+          },
+          {
+            "conflictId": "obj-beta|status|18",
+            "field": "status",
+            "objectId": "obj-beta",
+            "observedAt": 18,
+            "recordIds": [
+              "rec-005",
+              "rec-102"
+            ],
+            "resolved": false
+          }
+        ],
+        "diagnostics": [
+          {
+            "kind": "unresolved-conflict",
+            "message": "conflict obj-beta|status|18 kept 2 records without adjudication",
+            "refs": [
+              "obj-beta|status|18",
+              "rec-005",
+              "rec-102"
+            ],
+            "severity": "error"
+          }
+        ],
+        "eventImpacts": {
+          "evt-1": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              10
+            ]
+          },
+          "evt-2": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-3": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-4": {
+            "objects": [
+              "obj-gamma"
+            ],
+            "timeRange": [
+              11,
+              11
+            ]
+          }
+        },
+        "objectStates": {
+          "obj-alpha": {
+            "depth": {
+              "observedAt": 15,
+              "recordId": "rec-003",
+              "value": "3.5"
+            },
+            "position": {
+              "observedAt": 20,
+              "recordId": "rec-101",
+              "value": "A2-alt"
+            }
+          },
+          "obj-beta": {
+            "position": {
+              "observedAt": 12,
+              "recordId": "rec-004",
+              "value": "B1"
+            }
+          },
+          "obj-gamma": {
+            "position": {
+              "observedAt": 11,
+              "recordId": "rec-006",
+              "value": "G1"
+            }
+          }
+        }
+      }
+    },
+    "correction": {
+      "digest": "6a8fdda5f66e7f5c",
+      "result": {
+        "conflicts": [],
+        "diagnostics": [
+          {
+            "kind": "dangling-correction",
+            "message": "record rec-202 corrects unknown record rec-999",
+            "refs": [
+              "rec-202",
+              "rec-999"
+            ],
+            "severity": "warning"
+          }
+        ],
+        "eventImpacts": {
+          "evt-1": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              10
+            ]
+          },
+          "evt-2": {
+            "objects": [
+              "obj-alpha"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-3": {
+            "objects": [
+              "obj-alpha",
+              "obj-beta"
+            ],
+            "timeRange": [
+              10,
+              20
+            ]
+          },
+          "evt-4": {
+            "objects": [
+              "obj-gamma"
+            ],
+            "timeRange": [
+              11,
+              11
+            ]
+          }
+        },
+        "objectStates": {
+          "obj-alpha": {
+            "depth": {
+              "observedAt": 15,
+              "recordId": "rec-003",
+              "value": "3.5"
+            },
+            "position": {
+              "observedAt": 20,
+              "recordId": "rec-002",
+              "value": "A2"
+            }
+          },
+          "obj-beta": {
+            "depth": {
+              "observedAt": 19,
+              "recordId": "rec-202",
+              "value": "2.1"
+            },
+            "position": {
+              "observedAt": 12,
+              "recordId": "rec-004",
+              "value": "B1"
+            },
+            "status": {
+              "observedAt": 18,
+              "recordId": "rec-005",
+              "value": "active"
+            }
+          },
+          "obj-gamma": {
+            "position": {
+              "observedAt": 11,
+              "recordId": "rec-201",
+              "value": "G1-fixed"
+            }
+          }
+        }
+      }
+    }
+  }
+}

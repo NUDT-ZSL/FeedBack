@@ -1,0 +1,15 @@
+{
+  "name": "broken-links",
+  "records": [
+    { "id": "rec-001", "objectId": "obj-alpha", "field": "position", "value": "A1", "observedAt": 10, "source": "survey" },
+    { "id": "rec-004", "objectId": "obj-beta", "field": "position", "value": "B1", "observedAt": 12, "source": "survey" },
+    { "id": "rec-006", "objectId": "obj-gamma", "field": "position", "value": "G1", "observedAt": 11, "source": "survey" }
+  ],
+  "events": [
+    { "id": "evt-1", "objectId": "obj-alpha", "kind": "survey", "occurredAt": 10, "links": ["evt-9"] },
+    { "id": "evt-2", "objectId": "obj-alpha", "kind": "drill", "occurredAt": 20, "links": ["evt-3"] },
+    { "id": "evt-3", "objectId": "obj-beta", "kind": "inspect", "occurredAt": 18, "links": ["evt-2"] },
+    { "id": "evt-4", "objectId": "obj-gamma", "kind": "survey", "occurredAt": 11, "links": ["evt-2"] }
+  ],
+  "adjudications": []
+}

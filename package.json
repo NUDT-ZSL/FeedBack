@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "verify": "node verification/run.ts",
+    "verify:update": "node verification/run.ts --update"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",

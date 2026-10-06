@@ -1,0 +1,26 @@
+{
+  "name": "conflict",
+  "records": [
+    { "id": "rec-001", "objectId": "obj-alpha", "field": "position", "value": "A1", "observedAt": 10, "source": "survey" },
+    { "id": "rec-002", "objectId": "obj-alpha", "field": "position", "value": "A2", "observedAt": 20, "source": "survey" },
+    { "id": "rec-101", "objectId": "obj-alpha", "field": "position", "value": "A2-alt", "observedAt": 20, "source": "re-survey" },
+    { "id": "rec-003", "objectId": "obj-alpha", "field": "depth", "value": "3.5", "observedAt": 15, "source": "sonar" },
+    { "id": "rec-004", "objectId": "obj-beta", "field": "position", "value": "B1", "observedAt": 12, "source": "survey" },
+    { "id": "rec-005", "objectId": "obj-beta", "field": "status", "value": "active", "observedAt": 18, "source": "patrol" },
+    { "id": "rec-102", "objectId": "obj-beta", "field": "status", "value": "inactive", "observedAt": 18, "source": "audit" },
+    { "id": "rec-006", "objectId": "obj-gamma", "field": "position", "value": "G1", "observedAt": 11, "source": "survey" }
+  ],
+  "events": [
+    { "id": "evt-1", "objectId": "obj-alpha", "kind": "survey", "occurredAt": 10, "links": [] },
+    { "id": "evt-2", "objectId": "obj-alpha", "kind": "drill", "occurredAt": 20, "links": ["evt-1"] },
+    { "id": "evt-3", "objectId": "obj-beta", "kind": "inspect", "occurredAt": 18, "links": ["evt-2"] },
+    { "id": "evt-4", "objectId": "obj-gamma", "kind": "survey", "occurredAt": 11, "links": [] }
+  ],
+  "adjudications": [
+    {
+      "conflictId": "obj-alpha|position|20",
+      "winnerRecordId": "rec-101",
+      "rationale": "re-survey supersedes the original survey reading"
+    }
+  ]
+}
