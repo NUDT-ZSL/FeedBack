@@ -12,3 +12,74 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* ---- 猴子动作关键帧：每个动作在自身耗时内完成并回到原位 ---- */
+@keyframes monkey-flip {
+  to { transform: rotate(360deg); }
+}
+@keyframes monkey-tripleFlip {
+  to { transform: rotate(1080deg); }
+}
+@keyframes monkey-climb {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-80px); }
+  60% { transform: translateY(-80px); }
+  100% { transform: translateY(0); }
+}
+@keyframes monkey-handstand {
+  0% { transform: rotate(0deg); }
+  30% { transform: rotate(180deg); }
+  70% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes monkey-jump {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-60px); }
+  100% { transform: translateY(0); }
+}
+@keyframes monkey-rest {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(75deg); }
+}
+@keyframes monkey-signature {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(360deg) scale(1.4); }
+  100% { transform: rotate(720deg) scale(1); }
+}
+
+.monkey-anim-flip { animation-name: monkey-flip; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-tripleFlip { animation-name: monkey-tripleFlip; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-climb { animation-name: monkey-climb; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-handstand { animation-name: monkey-handstand; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-jump { animation-name: monkey-jump; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-rest { animation-name: monkey-rest; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+.monkey-anim-signature { animation-name: monkey-signature; animation-timing-function: ease-in-out; animation-fill-mode: forwards; }
+
+/* ---- 铜钱：12px 圆形，亮铜到暗铜渐变，中央方孔 ---- */
+.coin {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #ebb04b, #8b6914);
+  border: 1px solid #6d4f0e;
+  z-index: 5;
+  pointer-events: none;
+}
+.coin-hole {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: #f5e6c8;
+  border: 1px solid #6d4f0e;
+}
+
+/* 落地后闪烁两次（0.3s x 2 = 0.6s，与 store 中 COIN_BLINK_MS 对应） */
+@keyframes coin-blink {
+  50% { opacity: 0.15; }
+}
+.coin-blink {
+  animation: coin-blink 0.3s linear 2;
+}
