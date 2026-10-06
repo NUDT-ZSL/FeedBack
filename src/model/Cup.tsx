@@ -1,9 +1,10 @@
-import { useRef, useMemo, useEffect, useState } from 'react'
+import { useRef, useMemo, useEffect, type MutableRefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { CatmullRomCurve3 } from 'three'
 
-import { getWaterDepth, getFlowSpeed, getSlopeSpeedMultiplier } from '../store/waterStore'
+import { getWaterDepth } from '../store/waterStore'
+import type { SimState } from '../sim/cupSimulation'
 
 interface CupProps {
   id: number
@@ -11,13 +12,7 @@ interface CupProps {
   curve: CatmullRomCurve3
   totalLength: number
   gateOpening: number
-  slope: number
-  curvature: number
-  allCups: { id: number; distance: number; setDistance: (d: number) => void }[]
-  onCollision: () => void
-  onFinish: () => void
-  setDistance: (d: number) => void
-  distance: number
+  simRef: MutableRefObject<SimState>
 }
 
 export default function Cup({
@@ -26,19 +21,11 @@ export default function Cup({
   curve,
   totalLength,
   gateOpening,
-  slope,
-  curvature,
-  allCups,
-  onCollision,
-  onFinish,
-  setDistance,
-  distance
+  simRef
 }: CupProps) {
   const meshRef = useRef<THREE.Mesh>(null)
-  const rotationRef = useRef({ x: 0, y: 0, z: 0 })
-  const velocityRef = useRef(0)
-  const stuckRef = useRef(false)
-  const [rotation, setRotation] = useState([0, 0, 0])
+  const rotationRef = useRef(new THREE.Euler(0, 0, 0))
+  const wasStuckRef = useRef(false)
 
   const cupGeometry = useMemo(() => {
     const profilePoints: THREE.Vector2[] = []
@@ -59,35 +46,30 @@ export default function Cup({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!stuckRef.current) {
-        rotationRef.current.x = (Math.random() - 0.5) * (Math.PI / 12)
-        rotationRef.current.z = (Math.random() - 0.5) * (Math.PI / 12)
-      }
+      if (simRef.current.cups[id].stuck) return
+      rotationRef.current.x = (Math.random() - 0.5) * (Math.PI / 12)
+      rotationRef.current.z = (Math.random() - 0.5) * (Math.PI / 12)
     }, 800)
     return () => clearInterval(interval)
-  }, [])
+  }, [id, simRef])
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (!meshRef.current) return
 
+    const cup = simRef.current.cups[id]
     const waterDepth = getWaterDepth(gateOpening)
-    const baseSpeed = getFlowSpeed(gateOpening, slope)
-    const slopeMultiplier = getSlopeSpeedMultiplier(slope)
-    const speed = baseSpeed * slopeMultiplier
 
-    const currentT = distance / totalLength
-    const bendFactor = Math.sin(currentT * Math.PI)
-    const curveSlowdown = 1 - bendFactor * (curvature / 90) * 0.3
+    if (cup.stuck) {
+      if (!wasStuckRef.current) {
+        rotationRef.current.z = Math.PI / 6 + Math.random() * (Math.PI / 12)
+      }
+    } else if (wasStuckRef.current) {
+      rotationRef.current.z = 0
+    }
+    wasStuckRef.current = cup.stuck
 
-    velocityRef.current = speed * curveSlowdown
-
-    if (waterDepth < 0.12) {
-      stuckRef.current = true
-      velocityRef.current = 0
-      rotationRef.current.z = Math.PI / 6 + (Math.random() * Math.PI / 12)
-    } else if (stuckRef.current && waterDepth > 0.15) {
-      stuckRef.current = false
-      velocityRef.current = speed * 0.5
+    if (cup.justCollided) {
+      rotationRef.current.y += (Math.random() - 0.5) * (Math.PI / 9)
     }
 
     let buoyancyOffset = 0
@@ -99,55 +81,28 @@ export default function Cup({
       pitchOffset = (0.18 - waterDepth) * 2
     }
 
-    const newDistance = distance + velocityRef.current * delta
-    const t = Math.max(0, Math.min(1, newDistance / totalLength))
+    const t = Math.max(0, Math.min(1, cup.distance / totalLength))
     const point = curve.getPointAt(t)
     const tangent = curve.getTangentAt(t).normalize()
 
-    allCups.forEach(otherCup => {
-      if (otherCup.id !== id) {
-        const distanceDiff = Math.abs(newDistance - otherCup.distance)
-
-        if (distanceDiff < 0.08 && distanceDiff > 0) {
-          onCollision()
-
-          const thisBehind = newDistance < otherCup.distance
-          if (thisBehind) {
-            velocityRef.current *= -0.5
-            rotationRef.current.y += (Math.random() - 0.5) * (Math.PI / 9)
-          }
-        }
-      }
-    })
-
-    if (newDistance >= totalLength) {
-      setDistance(0)
-      onFinish()
-      return
-    }
-
-    setDistance(newDistance)
-
-    const lookAtPoint = point.clone().add(tangent)
     meshRef.current.position.set(
       point.x,
       point.y + buoyancyOffset + 0.08,
       point.z
     )
-    meshRef.current.lookAt(lookAtPoint)
+    meshRef.current.lookAt(point.clone().add(tangent))
 
-    const finalRotX = rotationRef.current.x - pitchOffset
-    const finalRotY = rotationRef.current.y
-    const finalRotZ = rotationRef.current.z
-
-    setRotation([finalRotX, finalRotY, finalRotZ])
+    meshRef.current.rotation.set(
+      rotationRef.current.x - pitchOffset,
+      rotationRef.current.y,
+      rotationRef.current.z
+    )
   })
 
   return (
     <mesh
       ref={meshRef}
       geometry={cupGeometry}
-      rotation={rotation as [number, number, number]}
       castShadow
     >
       <meshStandardMaterial

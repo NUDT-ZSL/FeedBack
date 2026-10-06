@@ -6,10 +6,11 @@ interface WaterState {
   curvature: number
   collisionCount: number
   isAutoDemo: boolean
+  simResetToken: number
   setGateOpening: (value: number) => void
   setSlope: (value: number) => void
   setCurvature: (value: number) => void
-  incrementCollision: () => void
+  addCollisions: (count: number) => void
   reset: () => void
   startAutoDemo: () => void
   stopAutoDemo: () => void
@@ -22,23 +23,32 @@ export const useWaterStore = create<WaterState>((set) => ({
   curvature: 45,
   collisionCount: 0,
   isAutoDemo: false,
+  simResetToken: 0,
 
   setGateOpening: (value: number) => set({ gateOpening: Math.max(0, Math.min(100, value)) }),
   setSlope: (value: number) => set({ slope: Math.max(0, Math.min(30, value)) }),
   setCurvature: (value: number) => set({ curvature: Math.max(0, Math.min(90, value)) }),
 
-  incrementCollision: () => set(state => ({ collisionCount: state.collisionCount + 1 })),
+  addCollisions: (count: number) =>
+    set(state => ({ collisionCount: state.collisionCount + count })),
 
-  reset: () => set({
-    gateOpening: 50,
-    slope: 15,
-    curvature: 45,
-    collisionCount: 0,
-    isAutoDemo: false
-  }),
+  reset: () =>
+    set(state => ({
+      gateOpening: 50,
+      slope: 15,
+      curvature: 45,
+      collisionCount: 0,
+      isAutoDemo: false,
+      simResetToken: state.simResetToken + 1
+    })),
 
   startAutoDemo: () => set({ isAutoDemo: true }),
-  stopAutoDemo: () => set({ isAutoDemo: false }),
+  stopAutoDemo: () =>
+    set(state => ({
+      isAutoDemo: false,
+      collisionCount: 0,
+      simResetToken: state.simResetToken + 1
+    })),
 
   easeValue: (target: number, current: number, factor: number = 0.1) => {
     return current + (target - current) * factor

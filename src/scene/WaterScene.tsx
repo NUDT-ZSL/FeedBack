@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, useCallback } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { useMemo, useRef, useEffect, useCallback } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import Duct from '../model/Duct'
@@ -8,6 +8,7 @@ import Rockery from '../model/Rockery'
 import WaterParticles from '../model/WaterParticles'
 import { generateDuctPoints, createDuctCurve, CUP_COLORS } from '../utils/curveUtils'
 import { useWaterStore, getWaterDepth } from '../store/waterStore'
+import { createInitialSimState, stepSimulation, type SimState } from '../sim/cupSimulation'
 
 interface SceneContentProps {
   onFinish: (cupId: number) => void
@@ -15,9 +16,10 @@ interface SceneContentProps {
 }
 
 function SceneContent({ onFinish, poemTexts }: SceneContentProps) {
-  const { gateOpening, slope, curvature, incrementCollision } = useWaterStore()
+  const { gateOpening, slope, curvature, simResetToken } = useWaterStore()
   const lightRef = useRef<THREE.PointLight>(null)
   const flashTimerRef = useRef<number | null>(null)
+  const simRef = useRef<SimState>(createInitialSimState())
 
   const { curve, totalLength } = useMemo(() => {
     const points = generateDuctPoints(slope, curvature, 50)
@@ -28,43 +30,62 @@ function SceneContent({ onFinish, poemTexts }: SceneContentProps) {
 
   const waterDepth = useMemo(() => getWaterDepth(gateOpening), [gateOpening])
 
-  const [cupDistances, setCupDistances] = useState<{ [key: number]: number }>(
-    Object.fromEntries(
-      Array.from({ length: 6 }, (_, i) => [i, i * 0.3])
-    )
-  )
+  useEffect(() => {
+    simRef.current = createInitialSimState()
+  }, [simResetToken])
 
-  const handleCollision = useCallback(() => {
-    incrementCollision()
+  const flashCollisionLight = useCallback(() => {
+    if (!lightRef.current) return
 
-    if (lightRef.current) {
-      lightRef.current.intensity = 2
+    lightRef.current.intensity = 2
 
-      if (flashTimerRef.current) {
-        clearTimeout(flashTimerRef.current)
-      }
+    if (flashTimerRef.current) {
+      cancelAnimationFrame(flashTimerRef.current)
+    }
 
-      const startTime = Date.now()
-      const animateFlash = () => {
-        if (lightRef.current) {
-          const elapsed = Date.now() - startTime
-          const progress = Math.min(elapsed / 300, 1)
-          lightRef.current.intensity = 2 - progress * 1.5
+    const startTime = Date.now()
+    const animateFlash = () => {
+      if (lightRef.current) {
+        const elapsed = Date.now() - startTime
+        const progress = Math.min(elapsed / 300, 1)
+        lightRef.current.intensity = 2 - progress * 1.5
 
-          if (progress < 1) {
-            flashTimerRef.current = requestAnimationFrame(animateFlash)
-          }
+        if (progress < 1) {
+          flashTimerRef.current = requestAnimationFrame(animateFlash)
         }
       }
-
-      flashTimerRef.current = requestAnimationFrame(animateFlash)
     }
-  }, [incrementCollision])
 
-  const handleFinish = useCallback((id: number) => {
-    setCupDistances(prev => ({ ...prev, [id]: 0 }))
-    onFinish(id)
-  }, [onFinish])
+    flashTimerRef.current = requestAnimationFrame(animateFlash)
+  }, [])
+
+  useFrame((_, delta) => {
+    const {
+      gateOpening: gate,
+      slope: currentSlope,
+      curvature: currentCurvature,
+      addCollisions
+    } = useWaterStore.getState()
+
+    const result = stepSimulation(
+      simRef.current,
+      {
+        gateOpening: gate,
+        slope: currentSlope,
+        curvature: currentCurvature,
+        totalLength
+      },
+      delta
+    )
+    simRef.current = result.state
+
+    if (result.collisions > 0) {
+      addCollisions(result.collisions)
+      flashCollisionLight()
+    }
+
+    result.finishedCupIds.forEach(id => onFinish(id))
+  }, -1)
 
   const cupColors = useMemo(() => {
     const colors: string[] = []
@@ -73,14 +94,6 @@ function SceneContent({ onFinish, poemTexts }: SceneContentProps) {
     }
     return colors.sort(() => Math.random() - 0.5)
   }, [])
-
-  const allCups = useMemo(() => {
-    return Object.entries(cupDistances).map(([id, distance]) => ({
-      id: parseInt(id),
-      distance,
-      setDistance: (d: number) => setCupDistances(prev => ({ ...prev, [id]: d }))
-    }))
-  }, [cupDistances])
 
   return (
     <>
@@ -125,13 +138,7 @@ function SceneContent({ onFinish, poemTexts }: SceneContentProps) {
           curve={curve}
           totalLength={totalLength}
           gateOpening={gateOpening}
-          slope={slope}
-          curvature={curvature}
-          allCups={allCups}
-          onCollision={handleCollision}
-          onFinish={() => handleFinish(index)}
-          distance={cupDistances[index]}
-          setDistance={(d) => setCupDistances(prev => ({ ...prev, [index]: d }))}
+          simRef={simRef}
         />
       ))}
 
