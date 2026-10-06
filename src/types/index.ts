@@ -57,6 +57,7 @@ export interface Order {
   fanRibIds: string[];
   status: OrderStatus;
   thumbnail: string;
+  inventoryReserved?: boolean;
   submittedAt: Date;
   updatedAt: Date;
 }

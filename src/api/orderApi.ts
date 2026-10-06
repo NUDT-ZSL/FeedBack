@@ -6,6 +6,16 @@ const api = axios.create({
   timeout: 10000,
 });
 
+export const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.error;
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+  }
+  return fallback;
+};
+
 export const orderApi = {
   async getOrders(page = 1, pageSize = 100) {
     const response = await api.get('/orders', {

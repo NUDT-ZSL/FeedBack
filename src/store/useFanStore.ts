@@ -49,6 +49,7 @@ interface FanState {
   complete定型Animation: () => void;
 
   setFanRibs: (ribs: FanRib[]) => void;
+  updateFanRib: (rib: FanRib) => void;
   addAssembledRib: (ribId: string, positionIndex: number) => void;
   removeAssembledRib: (ribId: string) => void;
   clearAssembly: () => void;
@@ -59,6 +60,7 @@ interface FanState {
 
   setOrders: (orders: Order[]) => void;
   addOrder: (order: Order) => void;
+  removeOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   updateOrder: (orderId: string, updates: Partial<Order>) => void;
   setCurrentOrderId: (id: string | null) => void;
@@ -204,6 +206,11 @@ export const useFanStore = create<FanState>((set, get) => ({
 
   setFanRibs: (ribs) => set({ fanRibs: ribs }),
 
+  updateFanRib: (rib) =>
+    set((state) => ({
+      fanRibs: state.fanRibs.map((r) => (r.id === rib.id ? rib : r)),
+    })),
+
   addAssembledRib: (ribId, positionIndex) => {
     const { assembledRibs, fanRibs } = get();
     if (assembledRibs.some((r) => r.ribId === ribId || r.positionIndex === positionIndex)) {
@@ -257,6 +264,8 @@ export const useFanStore = create<FanState>((set, get) => ({
 
   setOrders: (orders) => set({ orders }),
   addOrder: (order) => set((state) => ({ orders: [order, ...state.orders] })),
+  removeOrder: (orderId) =>
+    set((state) => ({ orders: state.orders.filter((o) => o.id !== orderId) })),
 
   updateOrderStatus: (orderId, status) => {
     set((state) => ({

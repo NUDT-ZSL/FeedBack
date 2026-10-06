@@ -27,6 +27,7 @@ let orders: Order[] = [
     fanRibIds: [],
     status: 'pending',
     thumbnail: '',
+    inventoryReserved: false,
     submittedAt: new Date('2026-06-01'),
     updatedAt: new Date('2026-06-01'),
   },
@@ -38,6 +39,7 @@ let orders: Order[] = [
     fanRibIds: [],
     status: 'in_progress',
     thumbnail: '',
+    inventoryReserved: false,
     submittedAt: new Date('2026-06-02'),
     updatedAt: new Date('2026-06-03'),
   },
@@ -49,10 +51,51 @@ let orders: Order[] = [
     fanRibIds: ['rib-1', 'rib-2', 'rib-3', 'rib-4', 'rib-5', 'rib-6', 'rib-7', 'rib-8', 'rib-9', 'rib-10', 'rib-11', 'rib-12'],
     status: 'completed',
     thumbnail: '',
+    inventoryReserved: false,
     submittedAt: new Date('2026-05-28'),
     updatedAt: new Date('2026-06-01'),
   },
 ];
+
+
+const STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: '待制作',
+  in_progress: '制作中',
+  completed: '已完成',
+  shipped: '已发货',
+};
+
+// 合法状态流转表：任何非法流转整笔拒绝
+const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ['in_progress'],
+  in_progress: ['pending', 'completed'],
+  completed: ['shipped'],
+  shipped: [],
+};
+
+// 按扇骨汇总订单的实际占用量（同一根扇骨可能被占用多件）
+const countRibUsage = (ribIds: string[]): Map<string, number> => {
+  const counts = new Map<string, number>();
+  for (const ribId of ribIds) {
+    counts.set(ribId, (counts.get(ribId) || 0) + 1);
+  }
+  return counts;
+};
+
+// 把订单占用的扇骨原样归还；未占用则什么都不做，保证重复调用不重复归还
+const returnReservedRibs = (order: Order): void => {
+  if (!order.inventoryReserved) return;
+  const counts = countRibUsage(order.fanRibIds);
+  for (const [ribId, quantity] of counts) {
+    const rib = fanRibs.find((r) => r.id === ribId);
+    if (rib) {
+      rib.quantity += quantity;
+      rib.inStock = true;
+      rib.used = false;
+    }
+  }
+  order.inventoryReserved = false;
+};
 
 app.get('/api/orders', (req: Request, res: Response) => {
   try {
@@ -123,30 +166,72 @@ app.put('/api/orders/:id', (req: Request, res: Response) => {
     if (index === -1) {
       return res.status(404).json({ error: '订单不存在' });
     }
-    
-    const oldStatus = orders[index].status;
-    const newStatus = req.body.status as OrderStatus;
-    
-    if (newStatus === 'in_progress' && oldStatus === 'pending') {
-      const { fanRibIds } = orders[index];
-      for (const ribId of fanRibIds) {
-        const rib = fanRibs.find(r => r.id === ribId);
-        if (rib) {
-          rib.quantity = Math.max(0, rib.quantity - 1);
-          rib.inStock = rib.quantity > 0;
-          if (rib.quantity === 0) {
-            rib.used = true;
+
+    const order = orders[index];
+    const newStatus = req.body.status as OrderStatus | undefined;
+
+    if (newStatus && newStatus !== order.status) {
+      if (!ALLOWED_TRANSITIONS[order.status].includes(newStatus)) {
+        return res.status(409).json({
+          error: `订单 ${order.orderNo} 当前为「${STATUS_LABELS[order.status]}」，不能变更为「${STATUS_LABELS[newStatus]}」`,
+          orderId: order.id,
+          status: order.status,
+        });
+      }
+
+      if (order.status === 'pending' && newStatus === 'in_progress') {
+        // 先一次性校验订单实际占用的每一种扇骨，任一不足则整笔不生效
+        const counts = countRibUsage(order.fanRibIds);
+        const insufficient: { ribId: string; number: number | null; required: number; available: number }[] = [];
+        for (const [ribId, required] of counts) {
+          const rib = fanRibs.find(r => r.id === ribId);
+          if (!rib) {
+            insufficient.push({ ribId, number: null, required, available: 0 });
+          } else if (rib.quantity < required) {
+            insufficient.push({ ribId, number: rib.number, required, available: rib.quantity });
           }
         }
+        if (insufficient.length > 0) {
+          return res.status(409).json({
+            error: insufficient
+              .map(item => `扇骨 ${item.number ? `#${item.number}` : item.ribId} 库存不足（需 ${item.required} 件，仅剩 ${item.available} 件）`)
+              .join('；'),
+            orderId: order.id,
+            insufficient,
+          });
+        }
+
+        // 校验全部通过后才扣减，与状态更新在同一同步处理中整体生效
+        for (const [ribId, required] of counts) {
+          const rib = fanRibs.find(r => r.id === ribId);
+          if (rib) {
+            rib.quantity -= required;
+            rib.inStock = rib.quantity > 0;
+            if (rib.quantity === 0) {
+              rib.used = true;
+            }
+          }
+        }
+        order.inventoryReserved = true;
+      }
+
+      // 从制作中回退到待制作：归还已占用的扇骨
+      if (order.status === 'in_progress' && newStatus === 'pending') {
+        returnReservedRibs(order);
       }
     }
-    
+
+    // 重复提交相同状态时整体幂等：库存不重复扣减/归还，只回显当前事实
     orders[index] = {
-      ...orders[index],
+      ...order,
       ...req.body,
+      id: order.id,
+      fanRibIds: order.fanRibIds,
+      inventoryReserved: order.inventoryReserved,
+      status: newStatus ?? order.status,
       updatedAt: new Date(),
     };
-    
+
     res.json(orders[index]);
   } catch (error) {
     res.status(500).json({ error: '更新订单失败' });
@@ -159,6 +244,8 @@ app.delete('/api/orders/:id', (req: Request, res: Response) => {
     if (index === -1) {
       return res.status(404).json({ error: '订单不存在' });
     }
+    // 作废订单：若库存已占用则先原样归还，归还与删除整体生效
+    returnReservedRibs(orders[index]);
     orders.splice(index, 1);
     res.json({ success: true });
   } catch (error) {

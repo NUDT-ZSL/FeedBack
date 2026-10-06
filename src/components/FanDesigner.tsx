@@ -196,4 +196,161 @@ export const FanDesigner: React.FC = () => {
     }
     setIsDrawing(true);
     lastPointRef.current = p;
-    addStroke({ id: `s-${Date.now()}`, points: [p],
+    addStroke({ id: `s-${Date.now()}`, points: [p],      brushType: currentBrush, color: currentColor, size: brushSize, opacity: 1 });
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDraggingRef.current && selectedPattern && dragStartRef.current) {
+      const rotation = dragStartRef.current.rotation + (e.clientX - dragStartRef.current.x) * 0.5;
+      updateOverlay(selectedPattern.id, { rotation });
+      setSelectedPattern({ ...selectedPattern, rotation });
+      return;
+    }
+    if (!isDrawing) return;
+    const p = getPoint(e);
+    if (!inFan(p)) return;
+    updateLastStroke(p);
+  };
+
+  const onMouseUp = () => {
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+    setIsDrawing(false);
+  };
+
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (!selectedPattern) return;
+    const scale = Math.min(3, Math.max(0.3, selectedPattern.scale - e.deltaY * 0.001));
+    updateOverlay(selectedPattern.id, { scale });
+    setSelectedPattern({ ...selectedPattern, scale });
+  };
+
+  const handleAddPattern = (pattern: (typeof PRESET_PATTERNS)[number]) => {
+    if (!currentFanSurface || is定型) return;
+    const overlay: OverlayPattern = {
+      ...pattern,
+      id: `${pattern.id}-${Date.now()}`,
+      x: 100, y: 100, scale: 1, rotation: 0, opacity: overlayOpacity,
+    };
+    addOverlay(overlay);
+    setSelectedPattern(overlay);
+  };
+
+  const handleOpacityChange = (value: number) => {
+    setOverlayOpacity(value);
+    if (selectedPattern) {
+      updateOverlay(selectedPattern.id, { opacity: value });
+      setSelectedPattern({ ...selectedPattern, opacity: value });
+    }
+  };
+
+  const handleDropSurface = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const shape = e.dataTransfer.getData('fan-shape');
+    if (shape === 'round' || shape === 'fan') {
+      createFanSurface(shape);
+    }
+  };
+
+  return (
+    <div className="p-4 flex gap-4" style={{ minHeight: 560 }}>
+      <div className="w-32 shrink-0 space-y-3">
+        <p className="text-sm font-bold text-[#6b4e3a]">材料架</p>
+        {[
+          { shape: 'round' as const, label: '圆形团扇' },
+          { shape: 'fan' as const, label: '折扇扇面' },
+        ].map((item) => (
+          <div key={item.shape} draggable
+            onDragStart={(e) => e.dataTransfer.setData('fan-shape', item.shape)}
+            className="cursor-grab active:cursor-grabbing rounded-lg border-2 border-[#6b4e3a]/40 bg-[#f5e6d3] p-3 text-center text-xs text-[#6b4e3a] hover:shadow-md transition-shadow">
+            <div className={`mx-auto mb-2 bg-[#f5e6d3] border border-[#6b4e3a]/50 ${item.shape === 'round' ? 'w-12 h-12 rounded-full' : 'w-14 h-10 rounded-t-full'}`} />
+            {item.label}
+          </div>
+        ))}
+        <p className="text-[10px] text-gray-400">拖拽素绢扇面至画案</p>
+      </div>
+
+      <div className="flex-1 flex items-start justify-center"
+        onDrop={handleDropSurface} onDragOver={(e) => e.preventDefault()}>
+        <div className="relative" style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}>
+          <canvas ref={canvasRef} width={CANVAS_SIZE} height={CANVAS_SIZE}
+            className="absolute inset-0 rounded-lg shadow-lg cursor-crosshair"
+            onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel} />
+          <canvas ref={overlayCanvasRef} width={CANVAS_SIZE} height={CANVAS_SIZE}
+            className="absolute inset-0 pointer-events-none" />
+          {currentFanSurface && (
+            <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-white text-xs"
+              style={{ backgroundColor: is定型 ? '#4a7c59' : '#9a8a7a' }}>
+              {is定型 ? '待组装' : '草稿'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="w-52 shrink-0 space-y-4">
+        <div>
+          <p className="text-sm font-bold text-[#6b4e3a] mb-2">画笔</p>
+          <div className="grid grid-cols-2 gap-2">
+            {BRUSH_TYPES.map((item) => (
+              <button key={item.type} onClick={() => setCurrentBrush(item.type)}
+                className="px-2 py-1.5 rounded text-xs border transition-colors"
+                style={{
+                  backgroundColor: currentBrush === item.type ? '#6b4e3a' : '#ffffff',
+                  color: currentBrush === item.type ? '#f5e6d3' : '#6b4e3a',
+                  borderColor: '#6b4e3a',
+                }}>
+                <i className={`fa-solid ${item.icon} mr-1`} />{item.name}
+              </button>
+            ))}
+          </div>
+          <label className="block text-xs text-gray-500 mt-2">笔锋粗细 {brushSize}</label>
+          <input type="range" min={1} max={12} value={brushSize}
+            onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full" />
+        </div>
+
+        <div>
+          <p className="text-sm font-bold text-[#6b4e3a] mb-2">矿物颜料</p>
+          <div className="flex flex-wrap gap-2">
+            {MINERAL_COLORS.map((c) => (
+              <button key={c.value} title={c.name} onClick={() => setCurrentColor(c.value)}
+                className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: c.value,
+                  borderColor: currentColor === c.value ? '#d4a017' : 'transparent',
+                }} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-bold text-[#6b4e3a] mb-2">预制图样</p>
+          <div className="flex flex-wrap gap-2">
+            {PRESET_PATTERNS.map((pattern) => (
+              <button key={pattern.id} onClick={() => handleAddPattern(pattern)}
+                className="px-2 py-1 rounded text-xs bg-white border border-[#6b4e3a]/40 text-[#6b4e3a] hover:bg-amber-100">
+                {pattern.name}
+              </button>
+            ))}
+          </div>
+          <label className="block text-xs text-gray-500 mt-2">底稿透明度 {overlayOpacity}%</label>
+          <input type="range" min={0} max={100} value={overlayOpacity}
+            onChange={(e) => handleOpacityChange(Number(e.target.value))} className="w-full" />
+          <p className="text-[10px] text-gray-400 mt-1">滚轮缩放底稿，Ctrl+拖拽旋转</p>
+        </div>
+
+        <div className="space-y-2 pt-2 border-t border-[#6b4e3a]/20">
+          <button onClick={定型FanSurface} disabled={!currentFanSurface || is定型}
+            className="w-full px-3 py-2 rounded text-sm text-white disabled:opacity-40"
+            style={{ backgroundColor: '#3a6b8a' }}>
+            <i className="fa-solid fa-wand-magic-sparkles mr-1" />定型
+          </button>
+          <button onClick={resetAll}
+            className="w-full px-3 py-2 rounded text-sm border border-[#6b4e3a]/40 text-[#6b4e3a] hover:bg-amber-100">
+            <i className="fa-solid fa-rotate-left mr-1" />重置画案
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

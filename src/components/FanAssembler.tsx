@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useFanStore } from '../store/useFanStore';
 import { inventoryApi } from '../api/orderApi';
@@ -25,13 +25,20 @@ export default function FanAssembler() {
     setFan展开Angle,
     showNotification,
     setFanRibs,
+    updateFanRib,
   } = useFanStore();
 
   const [draggingRib, setDraggingRib] = useState<FanRib | null>(null);
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const [velocity, setVelocity] = useState({ x: 0, y: 0 });
   const [errorSlot, setErrorSlot] = useState<number | null>(null);
-  const [inventory, setInventory] = useState<Record<number, number>>({});
+
+  // 库存数量只认共享总账（store.fanRibs），与订单页、库存页保持一致
+  const inventory = useMemo(() => {
+    const inv: Record<number, number> = {};
+    fanRibs.forEach((r) => (inv[r.number] = r.quantity));
+    return inv;
+  }, [fanRibs]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>();
@@ -41,18 +48,12 @@ export default function FanAssembler() {
     const loadInventory = async () => {
       try {
         const ribs = await inventoryApi.getFanRibs();
-        const inv: Record<number, number> = {};
-        ribs.forEach((r) => (inv[r.number] = r.quantity));
-        setInventory(inv);
         setFanRibs(ribs);
       } catch {
-        const inv: Record<number, number> = {};
         const ribs: FanRib[] = [];
         for (let i = 1; i <= TOTAL_RIBS; i++) {
-          inv[i] = Math.floor(Math.random() * 5) + 1;
-          ribs.push({ id: `rib-${i}`, number: i, material: 'bamboo', color: '#a67c52', inStock: true, used: false, quantity: inv[i] });
+          ribs.push({ id: `rib-${i}`, number: i, material: 'bamboo', color: '#a67c52', inStock: true, used: false, quantity: 0 });
         }
-        setInventory(inv);
         setFanRibs(ribs);
       }
     };
@@ -78,7 +79,9 @@ export default function FanAssembler() {
       };
       animRef.current = requestAnimationFrame(animate);
     }
-    return () => animRef.current && cancelAnimationFrame(animRef.current);
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
   }, [assemblyComplete, show合扇Animation, trigger合扇Animation, complete合扇Animation, setFan展开Angle]);
 
   const getSlotPosition = useCallback(
@@ -143,14 +146,13 @@ export default function FanAssembler() {
         setTimeout(() => setErrorSlot(null), 300);
       } else {
         try {
-          await inventoryApi.useFanRib(draggingRib.id);
-          setInventory((prev) => ({ ...prev, [draggingRib.number]: prev[draggingRib.number] - 1 }));
+          const updated = await inventoryApi.useFanRib(draggingRib.id);
+          updateFanRib(updated);
           addAssembledRib(draggingRib.id, nearest);
           playBambooClick();
         } catch {
-          addAssembledRib(draggingRib.id, nearest);
-          setInventory((prev) => ({ ...prev, [draggingRib.number]: Math.max(0, prev[draggingRib.number] - 1) }));
-          playBambooClick();
+          playErrorSound();
+          showNotification(`第 ${draggingRib.number} 号扇骨库存不足，无法组装`, 'error');
         }
       }
     }
@@ -203,3 +205,68 @@ export default function FanAssembler() {
 
   return (
     <div ref={containerRef} className="relative w-full h-full paper-texture rounded-lg border-4 p-4 overflow-hidden" style={{
+borderColor: '#6b4e3a', minHeight: 620, backgroundColor: '#faf6e9' }}>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="text-xl font-bold text-[#6b4e3a]">扇骨组装</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            按编号顺序拖拽扇骨到扇面连接点 · 已装 {assembledRibs.length}/{TOTAL_RIBS}
+          </p>
+        </div>
+        <button onClick={clearAssembly}
+          className="px-3 py-1.5 bg-[#6b4e3a] text-[#f5e6d3] rounded text-sm hover:opacity-90">
+          <i className="fa-solid fa-rotate-left mr-1" />重新组装
+        </button>
+      </div>
+
+      <svg viewBox="0 0 500 560" className="w-full max-w-xl mx-auto block" style={{ height: 380 }}>
+        <path d={getFanPath()} fill="#f5e6d3" stroke="#6b4e3a" strokeWidth="3" opacity="0.9" />
+        {Array.from({ length: TOTAL_RIBS }, (_, i) => {
+          const slot = getSlotPosition(i);
+          const occupied = assembledRibs.some((r) => r.positionIndex === i);
+          return (
+            <g key={i}>
+              {occupied && (
+                <line x1={CENTER.x} y1={CENTER.y} x2={slot.x} y2={slot.y}
+                  stroke="#a67c52" strokeWidth="5" strokeLinecap="round" />
+              )}
+              <circle cx={slot.x} cy={slot.y} r="9"
+                fill={occupied ? '#a67c52' : errorSlot === i ? '#c0392b' : '#ffffff'}
+                stroke={errorSlot === i ? '#c0392b' : '#6b4e3a'} strokeWidth="2"
+                opacity={occupied ? 1 : 0.7}>
+                {errorSlot === i && (
+                  <animate attributeName="opacity" values="1;0.2;1" dur="0.3s" repeatCount="2" />
+                )}
+              </circle>
+              {!occupied && (
+                <text x={slot.x} y={slot.y + 3.5} textAnchor="middle" fontSize="9" fill="#6b4e3a">
+                  {i + 1}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        <circle cx={CENTER.x} cy={CENTER.y} r="10" fill="#d4a017" stroke="#8b6914" strokeWidth="2" />
+      </svg>
+
+      {assemblyComplete && (
+        <div className="text-center text-sm text-[#4a7c59] font-medium my-2">
+          <i className="fa-solid fa-circle-check mr-1" />十二根扇骨俱已归位，绢扇开合自如
+        </div>
+      )}
+
+      <div className="mt-4 pt-6 pb-8 border-t border-[#6b4e3a]/20">
+        <p className="text-xs text-gray-500 mb-2">扇骨库（下一根应为第 {getExpectedNext()} 号）</p>
+        <div className="flex flex-wrap justify-center gap-3">
+          {fanRibs.map((rib) => (
+            <div key={rib.id} className="relative w-8 h-52 mx-1 my-4">
+              {renderRib(rib)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {draggingRib && renderRib(draggingRib, true, 0, dragPos)}
+    </div>
+  );
+}
