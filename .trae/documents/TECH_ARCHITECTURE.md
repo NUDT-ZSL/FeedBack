@@ -25,6 +25,7 @@ graph TD
 | 路由 | 页面 | 用途 |
 |------|------|------|
 | / | 首页 | 瀑布流展示菜谱卡片、搜索、分类筛选 |
+| /favorites | 收藏夹 | 展示已收藏的菜谱，可取消收藏 |
 | /recipe/:id | 菜谱详情页 | 展示菜谱详情、食材、步骤、评论 |
 | /add-recipe | 新增菜谱页 | 富文本编辑、提交新菜谱 |
 
@@ -45,6 +46,7 @@ interface Recipe {
   tags: string[];
   likes: number;
   liked: boolean;
+  favorited: boolean;
   ingredients: { name: string; checked: boolean }[];
   steps: { id: number; content: string; expanded: boolean }[];
   comments: { id: string; nickname: string; content: string; createdAt: Date }[];
@@ -60,6 +62,8 @@ interface Recipe {
 | GET | /api/recipes/:id | 获取单个菜谱详情 | - | Recipe |
 | POST | /api/recipes | 创建新菜谱 | Omit<Recipe, 'id' \| 'likes' \| 'liked' \| 'comments' \| 'createdAt'> | Recipe |
 | PUT | /api/recipes/:id/like | 点赞/取消点赞 | { liked: boolean } | { likes: number; liked: boolean } |
+| PUT | /api/recipes/:id/favorite | 收藏/取消收藏（幂等） | { favorited: boolean } | { id: string; favorited: boolean } |
+| GET | /api/favorites | 获取收藏的菜谱列表 | - | Recipe[] |
 | POST | /api/recipes/:id/comments | 添加评论 | { nickname: string; content: string } | Comment |
 | PUT | /api/recipes/:id/ingredients | 更新食材勾选状态 | { ingredientIndex: number; checked: boolean } | { success: boolean } |
 | PUT | /api/recipes/:id/steps | 更新步骤展开状态 | { stepIndex: number; expanded: boolean } | { success: boolean } |
@@ -132,16 +136,20 @@ erDiagram
 ```
 src/
 ├── App.tsx                    # 主应用组件，路由管理
+├── pages/
+│   ├── Home.tsx               # 首页（搜索 + 分类筛选 + 瀑布流）
+│   └── Favorites.tsx          # 收藏夹页面
 ├── components/
 │   ├── RecipeCard.tsx         # 菜谱卡片组件
-│   ├── RecipeDetail.tsx       # 菜谱详情组件
 │   ├── RecipeList.tsx         # 瀑布流列表组件
 │   ├── SearchBar.tsx          # 搜索栏组件
 │   ├── CategoryFilter.tsx     # 分类筛选组件
 │   ├── Navbar.tsx             # 导航栏组件
+│   ├── FavoriteButton.tsx     # 收藏按钮组件（乐观更新）
 │   ├── AddRecipe.tsx          # 新增菜谱组件
 │   ├── CommentSection.tsx     # 评论区组件
 │   └── Toast.tsx              # Toast提示组件
+├── RecipeDetail.tsx           # 菜谱详情页组件
 ├── types/
 │   └── index.ts               # TypeScript类型定义
 ├── utils/

@@ -35,6 +35,22 @@ export const api = {
     return res.json();
   },
 
+  async favoriteRecipe(id: string, favorited: boolean): Promise<{ id: string; favorited: boolean }> {
+    const res = await fetch(`${API_BASE}/recipes/${id}/favorite`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favorited }),
+    });
+    if (!res.ok) throw new Error('收藏失败');
+    return res.json();
+  },
+
+  async getFavorites(): Promise<Recipe[]> {
+    const res = await fetch(`${API_BASE}/favorites`);
+    if (!res.ok) throw new Error('获取收藏列表失败');
+    return res.json();
+  },
+
   async addComment(id: string, nickname: string, content: string): Promise<Comment> {
     const res = await fetch(`${API_BASE}/recipes/${id}/comments`, {
       method: 'POST',

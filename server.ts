@@ -3,7 +3,7 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -38,6 +38,7 @@ interface Recipe {
   tags: string[];
   likes: number;
   liked: boolean;
+  favorited: boolean;
   ingredients: Ingredient[];
   steps: Step[];
   comments: Comment[];
@@ -148,6 +149,7 @@ const mockRecipes: Recipe[] = recipeTitles.map((title, index) => ({
   tags: tags[index],
   likes: Math.floor(Math.random() * 500) + 50,
   liked: false,
+  favorited: false,
   ingredients: ingredientsList[index].map(name => ({ name, checked: false })),
   steps: stepsList[index].map((content, i) => ({ id: i + 1, content, expanded: false })),
   comments: [
@@ -190,6 +192,7 @@ app.post('/api/recipes', (req, res) => {
     tags: tags || [],
     likes: 0,
     liked: false,
+    favorited: false,
     ingredients: ingredients.map((name: string) => ({ name, checked: false })),
     steps: steps.map((content: string, i: number) => ({ id: i + 1, content, expanded: false })),
     comments: [],
@@ -207,14 +210,38 @@ app.put('/api/recipes/:id/like', (req, res) => {
   }
 
   const { liked } = req.body;
-  if (liked) {
-    recipe.likes += 1;
-  } else {
-    recipe.likes = Math.max(0, recipe.likes - 1);
+  if (typeof liked !== 'boolean') {
+    return res.status(400).json({ error: '无效的点赞状态' });
   }
-  recipe.liked = liked;
+
+  // 幂等处理：重复提交相同状态不会改变计数
+  if (liked !== recipe.liked) {
+    recipe.likes = Math.max(0, recipe.likes + (liked ? 1 : -1));
+    recipe.liked = liked;
+  }
 
   res.json({ likes: recipe.likes, liked: recipe.liked });
+});
+
+app.get('/api/favorites', (_req, res) => {
+  res.json(recipes.filter(r => r.favorited));
+});
+
+app.put('/api/recipes/:id/favorite', (req, res) => {
+  const recipe = recipes.find(r => r.id === req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ error: '菜谱不存在' });
+  }
+
+  const { favorited } = req.body;
+  if (typeof favorited !== 'boolean') {
+    return res.status(400).json({ error: '无效的收藏状态' });
+  }
+
+  // 幂等处理：重复提交相同状态是安全的
+  recipe.favorited = favorited;
+
+  res.json({ id: recipe.id, favorited: recipe.favorited });
 });
 
 app.post('/api/recipes/:id/comments', (req, res) => {

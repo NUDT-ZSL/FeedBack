@@ -28,6 +28,7 @@ export interface Recipe {
   tags: string[];
   likes: number;
   liked: boolean;
+  favorited: boolean;
   ingredients: Ingredient[];
   steps: Step[];
   comments: Comment[];
