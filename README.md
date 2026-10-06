@@ -1,57 +1,47 @@
-# React + TypeScript + Vite
+# 泉州市舶司 · 商船通关管理
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+宋代泉州市舶司商船通关与抽检裁定的离线管理应用（React + TypeScript + Vite + Tailwind + zustand），
+数据存于浏览器 `localStorage`，无需后端。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev        # 开发预览
+npm run build      # 类型检查 + 生产构建
+npm run verify:domain  # 离线批量核验领域逻辑（27 项断言）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 业务分层
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **通关管理**：录入商船与货单；关税按「货物类别基础税率 + 船籍加减」计算（细色/粗色），
+  给出通关结论（准予通关 / 补税复核 / 暂扣候裁）与逐条目税额。
+- **抽检裁定**：对商船发起抽检并登记实测结果，逐条裁定后整船结论从头重推。
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 抽检裁定规则（对应边界）
+
+1. 同一商船在裁定完成前不得再次发起抽检，货单封存、关税口径冻结（有任一待裁定抽检时）。
+2. 裁定落地只走同一入口 `buildConclusion`：以当前全部有效货单 + 当前口径**整船从头重推**，
+   不做局部修补；一致性核验会比对存档结论与从头重算结果。
+3. 抽检与货单冲突时双方保留：货单条目标记「冲突待裁」，裁定后一方标「已被取代」留档，
+   另一方入册并标注来源（货单登记 / 抽检实测）。
+4. 裁定只作用于本船，不影响其他商船（核验脚本含船间隔离断言）。
+5. 裁定后货单若被外部修正：版本号递增、结论重推，已落地裁定不被覆盖，
+   保留裁定依据（货单快照）并标记「货单已于裁定后变更」。
+6. 多轮抽检按裁定落地时刻依次生效；后一轮推翻前一轮时，前一轮结论与依据仍可追溯。
+
+## 界面入口
+
+- `/` 商船总览：按裁定状态筛选（未抽检 / 抽检待裁定 / 已裁定 / 结论被推翻）、
+  新船登记、关税口径调整。
+- `/ships/:id` 商船详情：货单（含来源/状态标记、被推翻条目定位高亮）、通关结论、
+  发起抽检、登记实测、落裁定、裁定前后对比与裁定历史。
+- `/verify` 一致性核验：抽检裁定与结论重推的统一验证入口，批量核对全部商船。
+
+## 代码结构
+
+- `src/domain/` 纯领域逻辑（类型、关税、结论推导、抽检守卫与裁定、批量核验、示例数据）
+- `src/store/customsStore.ts` zustand 状态与全部受控操作（localStorage 持久化）
+- `src/components/` 货单表、结论视图、抽检面板、裁定对比等
+- `src/pages/` 三个页面
+- `scripts/check-domain.ts` 离线核验脚本（由 `npm run verify:domain` 运行）

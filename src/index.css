@@ -12,3 +12,7 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+body {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  background-color: #f5f0e0;
+}
