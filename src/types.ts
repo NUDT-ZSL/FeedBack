@@ -41,3 +41,33 @@ export interface AIPerformance {
   whiskDuration: number;
   delay: number;
 }
+
+export interface StoredGalleryItem extends GalleryItem {
+  round: number;
+  patternKey: string;
+  updatedAt: number;
+  conflictKey: string | null;
+}
+
+export interface MatchRecord {
+  id: string;
+  round: number;
+  userScore: Score;
+  aiScore: Score;
+  winner: 'user' | 'ai' | 'draw';
+  recordedAt: number;
+  conflictKey: string | null;
+}
+
+export interface MatchStats {
+  wins: number;
+  losses: number;
+  draws: number;
+  total: number;
+}
+
+export interface PersistedStateV1 {
+  version: 1;
+  gallery: StoredGalleryItem[];
+  records: MatchRecord[];
+}

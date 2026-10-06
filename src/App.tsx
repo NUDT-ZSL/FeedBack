@@ -2,18 +2,21 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import axios from 'axios';
-import { Play, RotateCcw, Trophy, Info } from 'lucide-react';
+import { Play, RotateCcw, Trophy, Info, History } from 'lucide-react';
 import { TeaSet } from '@/components/TeaSet';
 import { FoamCanvas } from '@/components/FoamCanvas';
 import { ScorePanel } from '@/components/ScorePanel';
 import { Gallery } from '@/components/Gallery';
+import { MatchHistory } from '@/components/MatchHistory';
 import { useGameStore } from '@/store/gameStore';
 import { useAI } from '@/hooks/useAI';
+import { SAMPLE_PATTERNS } from '@/lib/sampleData';
 import type { TeaPattern } from '@/types';
 
 function App() {
   const [mobileGalleryOpen, setMobileGalleryOpen] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiBottleAngle, setAiBottleAngle] = useState(0);
   const teaSetRef = useRef<React.ElementRef<typeof TeaSet>>(null);
@@ -55,16 +58,6 @@ function App() {
   }, [startRound]);
 
   const handlePatternClick = useCallback(async (pattern: TeaPattern, thumbnail: string) => {
-    try {
-      await axios.post('/api/gallery', {
-        pattern,
-        thumbnail,
-        roundScore: userScore,
-      });
-    } catch (e) {
-      console.log('Save to gallery locally');
-    }
-    
     saveToGallery({
       pattern,
       thumbnail,
@@ -109,19 +102,8 @@ function App() {
             const res = await axios.get<TeaPattern>('/api/patterns/random');
             setCurrentPattern(res.data);
           } catch (e) {
-            const patterns: TeaPattern[] = [
-              {
-                id: 'fallback',
-                type: 'landscape',
-                name: '山水清远',
-                poem: '空山新雨后，天气晚来秋。\n明月松间照，清泉石上流。',
-                paths: [
-                  { points: [[10, 70], [30, 40], [50, 55], [70, 35], [90, 50]], strokeWidth: 2 },
-                  { points: [[20, 60], [40, 45], [60, 50], [80, 40]], strokeWidth: 1.5 },
-                ]
-              }
-            ];
-            setCurrentPattern(patterns[0]);
+            const fallback = SAMPLE_PATTERNS[Math.floor(Math.random() * SAMPLE_PATTERNS.length)];
+            setCurrentPattern(fallback);
           }
           
           setTimeout(() => {
@@ -175,6 +157,13 @@ function App() {
               onClick={() => setShowInstructions(true)}
             >
               <Info size={20} />
+            </button>
+            <button
+              className="interactive-btn flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-100/80 text-amber-900 font-kai text-sm"
+              onClick={() => setShowHistory(true)}
+            >
+              <History size={18} />
+              对局记录
             </button>
             {phase === 'pattern_showing' && (
               <button
@@ -317,6 +306,8 @@ function App() {
       <div className="md:hidden">
         <Gallery isMobileOpen={mobileGalleryOpen} onToggleMobile={() => setMobileGalleryOpen(!mobileGalleryOpen)} />
       </div>
+
+      <MatchHistory open={showHistory} onClose={() => setShowHistory(false)} />
       
       <AnimatePresence>
         {showInstructions && (
