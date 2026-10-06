@@ -1,5 +1,8 @@
 import type { Transform, DougongComponent } from '../types';
 import { SCENE_CONSTANTS } from './constants';
+import { random } from './random';
+
+export type Rng = () => number;
 
 export const calculateDistance = (p1: Transform, p2: Transform): number => {
   const dx = p1.x - p2.x;
@@ -38,13 +41,13 @@ export const lerpTransform = (
   z: lerp(start.z, end.z, t),
 });
 
-export const randomRange = (min: number, max: number): number => {
-  return Math.random() * (max - min) + min;
+export const randomRange = (min: number, max: number, rng: Rng = random): number => {
+  return rng() * (max - min) + min;
 };
 
-export const randomDirection = (): Transform => {
-  const theta = Math.random() * Math.PI * 2;
-  const phi = Math.random() * Math.PI;
+export const randomDirection = (rng: Rng = random): Transform => {
+  const theta = rng() * Math.PI * 2;
+  const phi = rng() * Math.PI;
   return {
     x: Math.sin(phi) * Math.cos(theta),
     y: Math.cos(phi) * 0.5 + 0.5,
@@ -55,11 +58,12 @@ export const randomDirection = (): Transform => {
 export const generateDisassemblePosition = (
   originalPos: Transform,
   order: number,
-  total: number
+  total: number,
+  rng: Rng = random
 ): Transform => {
   const { min, max } = SCENE_CONSTANTS.disassembleDistance;
-  const direction = randomDirection();
-  const distance = randomRange(min, max);
+  const direction = randomDirection(rng);
+  const distance = randomRange(min, max, rng);
   const offsetFactor = 1 + (order / total) * 0.5;
   
   return {
@@ -70,10 +74,11 @@ export const generateDisassemblePosition = (
 };
 
 export const generateFlyInPosition = (
-  originalPos: Transform
+  originalPos: Transform,
+  rng: Rng = random
 ): Transform => {
-  const direction = randomDirection();
-  const distance = randomRange(80, 120);
+  const direction = randomDirection(rng);
+  const distance = randomRange(80, 120, rng);
   
   return {
     x: originalPos.x + direction.x * distance,
@@ -82,12 +87,14 @@ export const generateFlyInPosition = (
   };
 };
 
-export const generateRandomRotation = (): { x: number; y: number; z: number } => {
+export const generateRandomRotation = (
+  rng: Rng = random
+): { x: number; y: number; z: number } => {
   const degToRad = (deg: number) => (deg * Math.PI) / 180;
   return {
-    x: degToRad(randomRange(-15, 15)),
-    y: degToRad(randomRange(-15, 15)),
-    z: degToRad(randomRange(-15, 15)),
+    x: degToRad(randomRange(-15, 15, rng)),
+    y: degToRad(randomRange(-15, 15, rng)),
+    z: degToRad(randomRange(-15, 15, rng)),
   };
 };
 

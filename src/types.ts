@@ -91,6 +91,7 @@ export interface AppActions {
   resetComponents: () => void;
   disassembleAll: () => void;
   flyInAll: () => void;
+  advanceAnimations: (now: number) => void;
   setComponentAnimation: (id: string, phase: DougongComponent['animationPhase']) => void;
   updateBackgroundTransition: (value: number) => void;
 }
