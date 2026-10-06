@@ -68,7 +68,6 @@ const PitchArea: React.FC = () => {
     recordPitch,
     potEffect,
     setPotEffect,
-    setNpcReaction,
     showSigh,
     setShowSigh,
     pitchesRemaining,
@@ -129,15 +128,12 @@ const PitchArea: React.FC = () => {
           playPotHitSound();
           setTimeout(() => playApplause(), 200);
           setPotEffect('hit');
-          setNpcReaction('cheer');
         } else if (outcome.result === 'ear') {
           playEarHitSound();
           setTimeout(() => playApplause(), 200);
           setPotEffect('ear');
-          setNpcReaction('cheer');
         } else {
           playMissSound();
-          setNpcReaction('disappoint');
           setShowSigh(true);
           setTimeout(() => setShowSigh(false), 1500);
         }
@@ -150,13 +146,12 @@ const PitchArea: React.FC = () => {
 
         setTimeout(() => {
           setPotEffect('idle');
-          setNpcReaction('idle');
         }, 600);
 
         setFlyingArrows((prev) => prev.filter((a) => a.id !== arrowId));
       }, 100);
     },
-    [flyingArrows, recordPitch, setPotEffect, setNpcReaction, setShowSigh]
+    [flyingArrows, recordPitch, setPotEffect, setShowSigh]
   );
 
   const [{ isOver }, drop] = useDrop(() => ({

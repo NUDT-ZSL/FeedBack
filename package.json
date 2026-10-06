@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "preview"
+    "preview": "preview",
+    "test": "node tests/guestReactions.test.ts"
   },
   "dependencies": {
     "react": "^18.2.0",

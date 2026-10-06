@@ -528,35 +528,67 @@ body {
   right: 5px;
 }
 
+.npc-guest {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
 .npc-cheer .npc-cup {
-  animation: cupRaise 0.6s ease-out;
+  animation: cupRaise 0.45s ease-in-out 2;
 }
 
 @keyframes cupRaise {
   0% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-30px); }
+  50% { transform: translateX(-50%) translateY(calc(-10px * var(--reaction-intensity, 1))); }
   100% { transform: translateX(-50%) translateY(0); }
 }
 
 .npc-shake-head .npc-head {
-  animation: headShake 0.4s ease-in-out;
+  animation: headShake 0.45s ease-in-out 2;
 }
 
 @keyframes headShake {
   0%, 100% { transform: translateX(-50%) rotate(0deg); }
-  25% { transform: translateX(-50%) rotate(-15deg); }
-  75% { transform: translateX(-50%) rotate(15deg); }
+  25% { transform: translateX(-50%) rotate(calc(-5deg * var(--reaction-intensity, 1))); }
+  75% { transform: translateX(-50%) rotate(calc(5deg * var(--reaction-intensity, 1))); }
 }
 
+.npc-laugh .npc-hand-left,
 .npc-laugh .npc-hand-right {
   opacity: 1;
-  animation: handCover 0.5s ease-in-out;
+  animation: handCover 0.45s ease-in-out 2;
 }
 
 @keyframes handCover {
   0% { transform: translateY(0); }
-  50% { transform: translateY(-15px) translateX(-5px); }
+  50% { transform: translateY(calc(-5px * var(--reaction-intensity, 1))) translateX(-5px); }
   100% { transform: translateY(0); }
+}
+
+.npc-watch .npc-head {
+  transition: transform 0.25s ease;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.npc-watch .npc-cup {
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.npc-tense .npc-head {
+  animation: headTremble 0.25s ease-in-out infinite;
+}
+
+.npc-tense .npc-body {
+  animation: bodyTremble 0.25s ease-in-out infinite;
+}
+
+@keyframes headTremble {
+  0%, 100% { transform: translateX(-50%) translateX(0); }
+  50% { transform: translateX(-50%) translateX(calc(1px * var(--reaction-intensity, 1))); }
+}
+
+@keyframes bodyTremble {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(calc(-1px * var(--reaction-intensity, 1))); }
 }
 
 .sigh-bubble {
