@@ -195,9 +195,10 @@ export class ScrollViewer {
     this.clearAutoRollbackTimer();
   }
 
-  public unroll(): void {
-    if (this.state !== ScrollState.FLOATING) return;
+  public unroll(): boolean {
+    if (this.state !== ScrollState.FLOATING) return false;
 
+    this.clearAutoRollbackTimer();
     this.state = ScrollState.UNROLLING;
     this.animation.startTime = performance.now();
     this.animation.duration = (this.FULL_UNROLL_WIDTH / 2) / this.UNROLL_SPEED * 1000;
@@ -210,10 +211,11 @@ export class ScrollViewer {
     if (this.backgroundMesh) {
       this.backgroundMesh.visible = true;
     }
+    return true;
   }
 
-  public rollback(): void {
-    if (this.state !== ScrollState.FULLY_UNROLLED) return;
+  public rollback(): boolean {
+    if (this.state !== ScrollState.FULLY_UNROLLED) return false;
 
     this.clearAutoRollbackTimer();
     this.state = ScrollState.ROLLING_BACK;
@@ -221,6 +223,11 @@ export class ScrollViewer {
     this.animation.duration = (this.FULL_UNROLL_WIDTH / 2) / this.UNROLL_SPEED * 1000;
     this.animation.startValue = 1;
     this.animation.endValue = 0;
+    return true;
+  }
+
+  public hasPendingAutoRollback(): boolean {
+    return this.autoRollbackTimer !== null;
   }
 
   private startAutoRollback(): void {
@@ -259,12 +266,14 @@ export class ScrollViewer {
   }
 
   public update(deltaTime: number): void {
+    if (!Number.isFinite(deltaTime) || deltaTime < 0) return;
+    const dt = Math.min(deltaTime, 0.1);
     const now = performance.now();
 
     if (this.state === ScrollState.FLOATING) {
       const floatTime = (now - this.floatStartTime) / 1000;
       this.scrollCore.position.y = 1.5 + Math.sin(floatTime * 0.5) * 0.1;
-      this.scrollCore.rotation.y += deltaTime * (Math.PI * 2 / 10);
+      this.scrollCore.rotation.y += dt * (Math.PI * 2 / 10);
     }
 
     if (this.state === ScrollState.UNROLLING || this.state === ScrollState.ROLLING_BACK) {

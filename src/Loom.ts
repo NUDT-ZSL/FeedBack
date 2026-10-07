@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { Howl } from 'howler';
-import { PatternMapping, WeaveType } from './PatternEngine';
+import {
+  PatternMapping,
+  WeaveType,
+  getHeddlePositionsForRow,
+  getSilkColorsForPattern,
+} from './PatternEngine';
 
 export interface WarpThread {
   id: number;
@@ -62,6 +67,10 @@ export class Loom {
   private dropSound: Howl;
   private patternPreview: THREE.Mesh | null = null;
   private halos: THREE.PointLight[] = [];
+  private fabricCompletionArmed = false;
+  private fabricCompleteNotified = false;
+  private fabricCompleteTimer: ReturnType<typeof setTimeout> | null = null;
+  private rowContexts: { color: string; heddlePositions: number[] }[] = [];
 
   private shuttleAnimation = {
     active: false,
@@ -483,7 +492,7 @@ export class Loom {
   }
 
   public setWarpColor(slotIndex: number, color: string): void {
-    if (slotIndex < 0 || slotIndex >= HEDDLE_COUNT) return;
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= HEDDLE_COUNT) return;
 
     this.state.warpThreads[slotIndex].color = color;
 
@@ -500,6 +509,15 @@ export class Loom {
     this.dropSound.play();
   }
 
+  public dropSilk(slotIndex: number, color: string): boolean {
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= HEDDLE_COUNT) {
+      return false;
+    }
+    this.setWarpColor(slotIndex, color);
+    this.setCurrentWeftColor(color);
+    return true;
+  }
+
   private animateHeddleLift(index: number, targetHeight: number): void {
     if (!this.heddleAnimations.has(index)) {
       this.heddleAnimations.set(index, []);
@@ -513,13 +531,15 @@ export class Loom {
   }
 
   public setTargetLength(cm: number): void {
+    if (!Number.isFinite(cm)) return;
     this.state.targetLength = Math.max(10, Math.min(50, cm));
+    this.armFabricCompletionIfNeeded();
   }
 
   public applyPattern(mapping: PatternMapping): void {
     this.state.currentPattern = mapping;
 
-    const colors = this.getSilkColorsForPattern(mapping);
+    const colors = getSilkColorsForPattern(mapping, HEDDLE_COUNT);
     for (let i = 0; i < HEDDLE_COUNT; i++) {
       this.setWarpColor(i, colors[i]);
     }
@@ -527,30 +547,14 @@ export class Loom {
     this.updatePatternPreview(mapping);
   }
 
-  private getSilkColorsForPattern(mapping: PatternMapping): string[] {
-    const colors: string[] = [];
-    const scale = HEDDLE_COUNT / 64;
-    const warpColor = '#cc2936';
-    const weftColor = '#ffe066';
-    const mixColor = '#1f4e79';
-
-    for (let i = 0; i < HEDDLE_COUNT; i++) {
-      const patternX = Math.floor(i / scale);
-      const weaveType = mapping.weaveTypes[0][Math.min(patternX, 63)];
-      if (weaveType === WeaveType.WARP_UP) {
-        colors[i] = warpColor;
-      } else if (weaveType === WeaveType.WEFT_VISIBLE) {
-        colors[i] = weftColor;
-      } else {
-        colors[i] = mixColor;
-      }
-    }
-    return colors;
-  }
-
   private updatePatternPreview(mapping: PatternMapping): void {
     if (this.patternPreview) {
       this.group.remove(this.patternPreview);
+      this.patternPreview.geometry.dispose();
+      const previewMat = this.patternPreview.material as THREE.MeshBasicMaterial;
+      previewMat.map?.dispose();
+      previewMat.dispose();
+      this.patternPreview = null;
     }
 
     const canvas = document.createElement('canvas');
@@ -589,6 +593,8 @@ export class Loom {
 
   public fireShuttle(): boolean {
     if (this.state.isShuttling) return false;
+    if (this.fabricCompleteNotified || this.fabricCompletionArmed) return false;
+    if (this.state.fabricLength >= this.state.targetLength) return false;
 
     this.state.isShuttling = true;
     this.shuttleAnimation.active = true;
@@ -602,7 +608,7 @@ export class Loom {
 
     const rowIndex = Math.floor(this.state.weftThreads.length);
     if (this.state.currentPattern) {
-      const positions = this.getHeddlePositionsForRow(this.state.currentPattern, rowIndex);
+      const positions = getHeddlePositionsForRow(this.state.currentPattern, rowIndex, HEDDLE_COUNT);
       for (let i = 0; i < HEDDLE_COUNT; i++) {
         if (positions[i] === 1) {
           this.animateHeddleLift(i, 0.15);
@@ -614,28 +620,23 @@ export class Loom {
       }
     }
 
+    this.rowContexts[rowIndex] = {
+      color: this.state.currentWeftColor,
+      heddlePositions: this.state.heddlePositions.slice(),
+    };
+
     this.shuttleSound.play();
 
     return true;
   }
 
-  private getHeddlePositionsForRow(mapping: PatternMapping, rowIndex: number): number[] {
-    const positions: number[] = new Array(HEDDLE_COUNT).fill(0);
-    const heddleRow = mapping.heddleSequence[rowIndex % 64];
-    const scale = HEDDLE_COUNT / 64;
-
-    for (let i = 0; i < HEDDLE_COUNT; i++) {
-      const patternX = Math.floor(i / scale);
-      positions[i] = heddleRow[Math.min(patternX, 63)];
-    }
-
-    return positions;
-  }
-
   private addWeftThread(): void {
+    if (this.state.fabricLength >= this.state.targetLength) return;
+
+    const rowContext = this.rowContexts[this.state.weftThreads.length];
     const weft: WeftThread = {
       id: this.state.weftThreads.length,
-      color: this.state.currentWeftColor,
+      color: rowContext ? rowContext.color : this.state.currentWeftColor,
       yPosition: this.state.fabricLength / this.state.targetLength * 1.5 - 0.75,
     };
     this.state.weftThreads.push(weft);
@@ -654,22 +655,36 @@ export class Loom {
     this.state.fabricLength += 2;
     this.updateFabricTexture();
 
-    if (this.state.fabricLength >= this.state.targetLength) {
-      setTimeout(() => {
-        this.onFabricComplete?.();
-      }, 500);
-    }
+    this.armFabricCompletionIfNeeded();
+  }
+
+  private armFabricCompletionIfNeeded(): void {
+    if (this.fabricCompletionArmed || this.fabricCompleteNotified) return;
+    if (this.state.fabricLength < this.state.targetLength) return;
+
+    this.fabricCompletionArmed = true;
+    this.fabricCompleteTimer = setTimeout(() => {
+      this.fabricCompleteTimer = null;
+      if (this.state.fabricLength < this.state.targetLength) {
+        this.fabricCompletionArmed = false;
+        return;
+      }
+      this.fabricCompleteNotified = true;
+      this.onFabricComplete?.();
+    }, 500);
   }
 
   private updateFabricTexture(): void {
     const ctx = this.fabricCtx;
     const rowHeight = 512 / (this.state.targetLength / 2);
     const currentRow = this.state.weftThreads.length - 1;
+    const rowContext = this.rowContexts[currentRow];
     const y = 512 - (currentRow + 1) * rowHeight;
 
     for (let x = 0; x < HEDDLE_COUNT; x++) {
-      const heddleUp = this.state.heddlePositions[x];
-      const threadColor = heddleUp ? this.state.warpThreads[x].color : this.state.currentWeftColor;
+      const heddleUp = rowContext ? rowContext.heddlePositions[x] : this.state.heddlePositions[x];
+      const weftColor = rowContext ? rowContext.color : this.state.currentWeftColor;
+      const threadColor = heddleUp ? this.state.warpThreads[x].color : weftColor;
       ctx.fillStyle = threadColor;
       const threadWidth = 512 / HEDDLE_COUNT;
       ctx.fillRect(x * threadWidth, y, threadWidth + 1, rowHeight + 1);
@@ -699,6 +714,7 @@ export class Loom {
   }
 
   public update(deltaTime: number): void {
+    if (!Number.isFinite(deltaTime) || deltaTime < 0) return;
     const now = performance.now();
 
     if (this.shuttleAnimation.active) {
@@ -766,6 +782,10 @@ export class Loom {
   }
 
   public dispose(): void {
+    if (this.fabricCompleteTimer !== null) {
+      clearTimeout(this.fabricCompleteTimer);
+      this.fabricCompleteTimer = null;
+    }
     this.heddleMeshes.dispose();
     this.warpThreads.forEach((line) => {
       line.geometry.dispose();

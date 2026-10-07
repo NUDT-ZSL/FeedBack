@@ -167,8 +167,7 @@ class App {
 
   private handleSilkDrop(event: InteractionEvent): void {
     const { slotIndex, color } = event.data;
-    this.loom.setWarpColor(slotIndex, color);
-    this.loom.setCurrentWeftColor(color);
+    this.loom.dropSilk(slotIndex, color);
   }
 
   private handlePatternSelect(event: InteractionEvent): void {
@@ -232,7 +231,7 @@ class App {
     const maxWidth = 1920;
     const scale = Math.max(
       0.8,
-      Math.min(1.2, width / ((minWidth + maxWidth) / 2)
+      Math.min(1.2, width / ((minWidth + maxWidth) / 2))
     );
 
     this.camera.fov = 45 / scale;
@@ -269,7 +268,7 @@ class App {
       this.performanceMonitor.lastFpsUpdate = now;
 
       if (this.performanceMonitor.currentFps < 50) {
-        console.warn(`Low FPS: ${this.performanceMonitor.currentFps);
+        console.warn(`Low FPS: ${this.performanceMonitor.currentFps}`);
       }
     }
   }

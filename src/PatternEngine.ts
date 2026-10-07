@@ -161,12 +161,21 @@ export function getHeddlePositionsForRow(
   totalHeddles: number = 108
 ): number[] {
   const positions: number[] = new Array(totalHeddles).fill(0);
-  const heddleRow = mapping.heddleSequence[rowIndex % 64];
-  const scale = totalHeddles / 64;
+  const rowCount = mapping.heddleSequence.length;
+  if (rowCount === 0 || !Number.isFinite(rowIndex)) {
+    return positions;
+  }
+  const normalizedRow = ((Math.floor(rowIndex) % rowCount) + rowCount) % rowCount;
+  const heddleRow = mapping.heddleSequence[normalizedRow];
+  const rowLength = heddleRow.length;
+  if (rowLength === 0) {
+    return positions;
+  }
+  const scale = totalHeddles / rowLength;
 
   for (let i = 0; i < totalHeddles; i++) {
     const patternX = Math.floor(i / scale);
-    positions[i] = heddleRow[Math.min(patternX, 63)];
+    positions[i] = heddleRow[Math.min(patternX, rowLength - 1)];
   }
 
   return positions;
@@ -177,11 +186,16 @@ export function getSilkColorsForPattern(
   totalThreads: number = 108
 ): string[] {
   const colors: string[] = new Array(totalThreads);
-  const scale = totalThreads / 64;
+  const firstRow = mapping.weaveTypes[0];
+  const rowLength = firstRow ? firstRow.length : 0;
+  if (rowLength === 0) {
+    return colors.fill(SILK_COLORS[2]);
+  }
+  const scale = totalThreads / rowLength;
 
   for (let i = 0; i < totalThreads; i++) {
     const patternX = Math.floor(i / scale);
-    const weaveType = mapping.weaveTypes[0][Math.min(patternX, 63)];
+    const weaveType = firstRow[Math.min(patternX, rowLength - 1)];
     if (weaveType === WeaveType.WARP_UP) {
       colors[i] = SILK_COLORS[0];
     } else if (weaveType === WeaveType.WEFT_VISIBLE) {
