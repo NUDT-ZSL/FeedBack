@@ -1,100 +1,58 @@
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Observatory from './components/Observatory';
 import TalismanPanel from './components/TalismanPanel';
-import { baguaMatchRules, Trigram } from './lib/starData';
-
-export interface LightBeamData {
-  position: [number, number, number];
-  visible: boolean;
-  timestamp: number;
-}
+import { useDivinationKernel } from './hooks/useDivinationKernel';
 
 export default function App() {
-  const [rotation, setRotation] = useState<[number, number]>([0, 0]);
-  const [isDraggingSphere, setIsDraggingSphere] = useState(false);
-  const [draggedTalisman, setDraggedTalisman] = useState<string | null>(null);
-  const [lightBeam, setLightBeam] = useState<LightBeamData | null>(null);
-  const [baguaError, setBaguaError] = useState(false);
-  const [isDragOverBagua, setIsDragOverBagua] = useState(false);
+  const { state, dispatch } = useDivinationKernel();
   const lastMousePos = useRef<[number, number]>([0, 0]);
 
   const handleSphereMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDraggingSphere(true);
     lastMousePos.current = [e.clientX, e.clientY];
-  }, []);
+    dispatch({ type: 'sphereDragStart', at: Date.now() });
+  }, [dispatch]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDraggingSphere) return;
     const deltaX = e.clientX - lastMousePos.current[0];
     const deltaY = e.clientY - lastMousePos.current[1];
-    setRotation(prev => {
-      const newRotX = (prev[0] + deltaY * 0.5) % 360;
-      const newRotY = (prev[1] + deltaX * 0.5) % 360;
-      return [newRotX < 0 ? newRotX + 360 : newRotX, newRotY < 0 ? newRotY + 360 : newRotY];
-    });
     lastMousePos.current = [e.clientX, e.clientY];
-  }, [isDraggingSphere]);
+    dispatch({ type: 'sphereRotate', at: Date.now(), deltaX, deltaY });
+  }, [dispatch]);
 
   const handleMouseUp = useCallback(() => {
-    setIsDraggingSphere(false);
-  }, []);
+    dispatch({ type: 'sphereDragEnd', at: Date.now() });
+  }, [dispatch]);
 
   const handleTalismanDragStart = useCallback((talismanName: string) => {
-    setDraggedTalisman(talismanName);
-  }, []);
+    dispatch({ type: 'talismanDragStart', at: Date.now(), talisman: talismanName });
+  }, [dispatch]);
 
   const handleTalismanDragEnd = useCallback(() => {
-    setDraggedTalisman(null);
-    setIsDragOverBagua(false);
-  }, []);
+    dispatch({ type: 'talismanDragEnd', at: Date.now() });
+  }, [dispatch]);
 
   const handleBaguaDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOverBagua(true);
-  }, []);
+    dispatch({ type: 'baguaDragOver', at: Date.now() });
+  }, [dispatch]);
 
   const handleBaguaDragLeave = useCallback(() => {
-    setIsDragOverBagua(false);
-  }, []);
+    dispatch({ type: 'baguaDragLeave', at: Date.now() });
+  }, [dispatch]);
 
   const handleBaguaDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOverBagua(false);
-    
-    if (!draggedTalisman) return;
-    
+    // 页面只负责把屏幕坐标换算成相对阵图中心的方向；
+    // 卦位判定、命中结果与状态流转全部在内核中完成
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - rect.width / 2;
-    const y = -(e.clientY - rect.top - rect.height / 2);
-    const angle = Math.atan2(y, x);
-    let position = Math.round(((angle * 180 / Math.PI) + 360 + 90) % 360 / 45) % 8;
-    
-    const expectedPosition = baguaMatchRules[draggedTalisman];
-    
-    if (position === expectedPosition) {
-      const angleRad = (position * 45 - 90) * Math.PI / 180;
-      const beamX = Math.cos(angleRad) * 1.5;
-      const beamZ = Math.sin(angleRad) * 1.5;
-      
-      setLightBeam({
-        position: [beamX, -3, beamZ],
-        visible: true,
-        timestamp: Date.now()
-      });
-      
-      setTimeout(() => {
-        setLightBeam(null);
-      }, 2000);
-    } else {
-      setBaguaError(true);
-      setTimeout(() => {
-        setBaguaError(false);
-      }, 400);
-    }
-    
-    setDraggedTalisman(null);
-  }, [draggedTalisman]);
+    const direction: [number, number] = [
+      e.clientX - (rect.left + rect.width / 2),
+      -(e.clientY - (rect.top + rect.height / 2)),
+    ];
+    const talisman = e.dataTransfer.getData('text/plain') || state.draggedTalisman || '';
+    dispatch({ type: 'baguaDrop', at: Date.now(), talisman, direction });
+  }, [dispatch, state.draggedTalisman]);
 
   return (
     <div 
@@ -125,16 +83,16 @@ export default function App() {
           <pointLight position={[0, 0, 0]} intensity={1} color="#0099cc" distance={20} />
           
           <Observatory
-            rotation={rotation}
+            rotation={state.rotation}
             onSphereMouseDown={handleSphereMouseDown}
-            isDraggingSphere={isDraggingSphere}
-            lightBeam={lightBeam}
+            isDraggingSphere={state.isRotating}
+            lightBeam={state.lightBeam}
           />
         </Canvas>
       </div>
 
       <div
-        className={`bagua-drop-zone ${isDragOverBagua ? 'drag-over' : ''} ${baguaError ? 'error' : ''}`}
+        className={`bagua-drop-zone ${state.isDragOverBagua ? 'drag-over' : ''} ${state.baguaError ? 'error' : ''}`}
         onDragOver={handleBaguaDragOver}
         onDragLeave={handleBaguaDragLeave}
         onDrop={handleBaguaDrop}
@@ -143,7 +101,7 @@ export default function App() {
       <TalismanPanel
         onDragStart={handleTalismanDragStart}
         onDragEnd={handleTalismanDragEnd}
-        draggedTalisman={draggedTalisman}
+        draggedTalisman={state.draggedTalisman}
       />
     </div>
   );

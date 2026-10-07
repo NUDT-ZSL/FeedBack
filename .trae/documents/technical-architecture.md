@@ -172,3 +172,36 @@ export default defineConfig({
 | 光柱出现 | opacity / scale | 0.3s | ease-out |
 | 光柱消失 | opacity | 2s | ease-out |
 | 符咒弹回 | transform | 0.4s | cubic-bezier(0.68, -0.55, 0.265, 1.55) |
+
+## 7. 推演内核（与渲染解耦）
+
+落点判定、推演结果与状态流转已从页面 / 场景组件中抽出为纯 TypeScript 内核，不依赖 React、DOM 与真实时钟，可离线批量驱动。
+
+```
+src/kernel/
+├── divinationKernel.ts   # 状态机内核：事件、状态、落点判定、到期清理
+├── batch.ts              # 统一批量运行入口 runBatch(events)
+├── scenarios.ts          # 内置场景集（命中/未命中/重复投递/中途切换/边界/旋转叠加）
+└── cli.ts                # 离线命令行入口（npm run batch，或重放自定义事件 JSON）
+```
+
+### 7.1 核心约定
+
+- **落点判定只看方向**：`resolveTrigramPosition([x, y])` 以落点相对八卦阵图中心的方向（x 向右、y 向上）做 `atan2` 归位，与向量长度、阵图尺寸、缩放、滚动、指针精度无关；页面仅负责把屏幕坐标换算成方向后投递。
+- **时间注入**：所有事件携带 `at` 时间戳；光柱 2000ms 消失、错误 400ms 复位均由内核按时间戳判定，`nextExpiryAt()` 告诉外部何时唤醒，杜绝陈旧 setTimeout 覆盖新状态。
+- **字段独立演化**：`rotation` / `isRotating` / `draggedTalisman` / `isDragOverBagua` / `lightBeam` / `baguaError` 为同一状态对象上的独立字段，命中只写光柱、未命中只写错误。
+- **投递幂等**：落点后当前拖拽符咒立即清空；同一次拖拽的重复投递、中途切换符咒后的陈旧投递一律忽略（`ignored: true`），最终状态与单次干净投递一致。
+- **无变化不换引用**：被忽略的事件返回同一个 state 引用，React 绑定时 setState 自动跳过无效渲染。
+
+### 7.2 React 绑定
+
+`src/hooks/useDivinationKernel.ts` 以 `dispatch(event)` 接收 DOM 输入、以 `state` 驱动渲染，并依据 `nextExpiryAt()` 调度唯一的到期唤醒定时器；`App.tsx` 不再持有旋转 / 拖拽 / 光柱 / 错误的多份副本。
+
+### 7.3 离线复现
+
+```bash
+npm run batch                         # 运行全部内置场景并断言
+node --experimental-strip-types src/kernel/cli.ts events.json   # 重放事件序列
+```
+
+相同事件序列（含注入时间戳）的逐步状态快照与推演结果完全一致、可复现。

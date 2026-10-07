@@ -2,14 +2,14 @@ import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Html, Stars } from '@react-three/drei';
 import * as THREE from 'three';
-import { LightBeamData } from '../App';
+import { LightBeamState } from '../kernel/divinationKernel';
 import { planets, constellations, trigrams } from '../lib/starData';
 
 interface ObservatoryProps {
   rotation: [number, number];
   onSphereMouseDown: (e: React.MouseEvent) => void;
   isDraggingSphere: boolean;
-  lightBeam: LightBeamData | null;
+  lightBeam: LightBeamState | null;
 }
 
 export default function Observatory({ rotation, onSphereMouseDown, isDraggingSphere, lightBeam }: ObservatoryProps) {
