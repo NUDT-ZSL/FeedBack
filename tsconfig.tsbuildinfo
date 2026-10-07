@@ -1,0 +1,1 @@
+{"root":["./src/vite-env.d.ts","./src/data/scrolls.ts","./src/hooks/usetheme.ts","./src/lib/utils.ts","./src/types/index.ts","./src/utils/particles.ts","./src/app.tsx","./src/main.tsx","./src/components/empty.tsx","./src/pages/home.tsx","./src/utils/sealshapes.tsx"],"version":"5.8.3"}

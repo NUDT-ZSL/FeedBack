@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&display=swap');
+
+:root {
+  --silk-yellow: #f3ebd8;
+  --dark-wood: #5d4037;
+  --cinnabar: #c0392b;
+  --pine-wood: #8d6e63;
+  --dark-pine: #6d4c41;
+  --gold: #d4a017;
+  --indigo: #2c3e50;
+  --ink-black: #2c2c2c;
+  --old-silk: #e8d8b0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--silk-yellow);
+  font-family: 'ZCOOL XiaoWei', serif;
+  color: var(--ink-black);
+  overflow-x: hidden;
+  line-height: 1.6;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse at 20% 30%, rgba(139, 90, 43, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(139, 90, 43, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(212, 160, 23, 0.03) 0%, transparent 70%);
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  pointer-events: none;
+  z-index: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Ma Shan Zheng', cursive;
+  color: var(--ink-black);
+  font-weight: normal;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: 3rem;
+}
+
+h2 {
+  font-size: 2.25rem;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+.btn-g {
+  display: inline-block;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--cinnabar) 0%, #a93226 100%);
+  color: white;
+  font-family: 'ZCOOL XiaoWei', serif;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(192, 57, 43, 0.3);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-g::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-g:hover {
+  box-shadow: 0 4px 16px rgba(192, 57, 43, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-g:hover::before {
+  left: 100%;
+}
+
+.btn-g:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 4px rgba(192, 57, 43, 0.3);
+}
+
+@keyframes scroll-unroll {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.scroll-unroll {
+  animation: scroll-unroll 1.5s ease-out forwards;
+  transform-origin: center;
+}
+
+@keyframes brush-write {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.brush-write > * {
+  opacity: 0;
+  animation: brush-write 0.5s ease-out forwards;
+}
+
+.brush-write > *:nth-child(1) { animation-delay: 0s; }
+.brush-write > *:nth-child(2) { animation-delay: 0.2s; }
+.brush-write > *:nth-child(3) { animation-delay: 0.4s; }
+.brush-write > *:nth-child(4) { animation-delay: 0.6s; }
+.brush-write > *:nth-child(5) { animation-delay: 0.8s; }
+.brush-write > *:nth-child(6) { animation-delay: 1s; }
+.brush-write > *:nth-child(7) { animation-delay: 1.2s; }
+.brush-write > *:nth-child(8) { animation-delay: 1.4s; }
+.brush-write > *:nth-child(9) { animation-delay: 1.6s; }
+.brush-write > *:nth-child(10) { animation-delay: 1.8s; }
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@media (max-width: 900px) {
+  h1 {
+    font-size: 2.25rem;
+  }
+
+  h2 {
+    font-size: 1.75rem;
+  }
+
+  h3 {
+    font-size: 1.4rem;
+  }
+
+  .btn-g {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 600px) {
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+  }
+
+  body {
+    font-size: 0.9rem;
+  }
+
+  .btn-g {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    width: 100%;
+  }
+}
