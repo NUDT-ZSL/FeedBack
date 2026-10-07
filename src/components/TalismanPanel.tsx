@@ -3,7 +3,7 @@ import { trigrams } from '../lib/starData';
 
 interface TalismanPanelProps {
   onDragStart: (talismanName: string) => void;
-  onDragEnd: () => void;
+  onDragEnd: (talismanName: string) => void;
   draggedTalisman: string | null;
 }
 
@@ -38,7 +38,7 @@ export default function TalismanPanel({ onDragStart, onDragEnd, draggedTalisman 
             className={`talisman-item ${draggedTalisman === trigram.name ? 'dragging' : ''}`}
             draggable
             onDragStart={(e) => handleDragStart(e, trigram.name)}
-            onDragEnd={onDragEnd}
+            onDragEnd={() => onDragEnd(trigram.name)}
             title={trigram.name}
           >
             <span style={{ color: '#ffffff', fontSize: '32px', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
