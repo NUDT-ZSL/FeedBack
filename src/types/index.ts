@@ -42,6 +42,21 @@ export interface HistoryItem {
   actionName: string;
 }
 
+export interface SealDocument {
+  id: string;
+  name: string;
+  state: SealState;
+  history: HistoryItem[];
+  historyIndex: number;
+}
+
+export interface StampRecord {
+  id: string;
+  sealId: string;
+  snapshot: SealState;
+  createdAt: number;
+}
+
 export interface SealSizeConfig {
   value: SealSize;
   label: string;

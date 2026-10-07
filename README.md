@@ -1,57 +1,37 @@
-# React + TypeScript + Vite
+# 虚拟篆刻工坊
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于浏览器的虚拟篆刻互动应用（React + TypeScript + Vite）。支持**多方印章并行管理**：每一方印独立保存文字、字体、尺寸、阴刻/阳刻、笔画偏移与撤销历史，可随时切换、增删，刷新后完整恢复。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 多印章工作台
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- 顶部页签栏管理多方印章：新增（回到初始空白状态，不沿用上一方参数）、切换、删除（自动选中相邻一方，删空后回到空白引导态）。
+- 每方印独立持有：印文（最多四字）、篆书字体（小篆/缪篆/九叠篆）、印面尺寸（1寸/1.5寸/2寸）、刀法（阴刻/阳刻）、笔画微调偏移与最多 15 步撤销/重做历史。
+- 钤盖与导出只作用于当前选中的一方；印谱按印章分别归档，互不影响。
+- 全部状态通过 `localStorage` 持久化（键：`seal-workbench-v1`），刷新后印章数量、顺序、选中态、笔画偏移与历史记录完整恢复。
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## 离线批量验证
+
+无需浏览器、无需联网，基于 Node 内置 test runner 直接运行核心逻辑验证（Node ≥ 20.6，推荐 22）：
+
+```bash
+npm run verify
 ```
+
+覆盖关键路径（`src/verify/`）：
+
+- `workbench.test.ts`：多印章增删切换、新印章初始状态、参数/笔画偏移/撤销重做隔离、相邻笔画弹性归位、历史上限、钤盖作用域。
+- `persistence.test.ts`：序列化与恢复后印章数量、顺序、选中态、全部参数、笔画偏移与撤销历史不丢失；钤盖快照不受后续修改影响。
+- `renderer.test.ts`：设计预览随状态即时刷新、不同印章渲染互不残留、480×480 宣纸 PNG 导出正确性（尺寸、朱砂印文、纸纹背景、当前印章内容）。
+
+## 其他脚本
+
+- `npm run check`：TypeScript 类型检查
+- `npm run lint`：ESLint
+- `npm run build`：生产构建

@@ -1,4 +1,4 @@
-import { SealFont } from '../types';
+import type { SealFont } from '../types/index.ts';
 
 interface CharPath {
   xiaozhuan: string;
