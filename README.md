@@ -1,57 +1,72 @@
-# React + TypeScript + Vite
+# 数字灵感板（情节编排工具）
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+交互式数字灵感板：在无限画布上拖拽灵感卡片、用连线标注因果/时序关系、把同一情节线的卡片归入可折叠的“卡组”，并自动生成叙事大纲。纯前端、纯本地持久化，完全离线可用。
 
-Currently, two official plugins are available:
+## 快速开始
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install        # 安装依赖（react / react-dom / uuid / vite / typescript）
+npm run dev        # 开发服务器（默认 5173 端口）
+npm run build      # 类型检查 + 生产构建
+npm run check      # 仅 TypeScript 严格检查
+npm run verify     # 统一批量验证入口（纯 Node，无需浏览器与网络）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 功能一览
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- 无限画布：滚轮缩放（0.5x–3x，以鼠标为不动点）、右键/中键拖拽平移、50px 网格
+- 灵感卡片：双击画布或工具栏新建，标题/正文编辑、12 色调色板、图片上传与放大预览、拖拽移动
+- 连线：连线模式下从卡片锚点拖出贝塞尔连线，箭头/虚线两种类型、6 色、≤10 字标签；点击连线弹出编辑器
+- 框选：框选模式下拖出矩形批量选中，支持批量改色与网格对齐（Delete 删除选中）
+- 卡组：把同一情节线的卡片归入可折叠容器（见下节）
+- 叙事大纲：基于连线的拓扑排序生成线性路径，右侧面板可拖拽重排（顺序随画布持久化）
+- 本地持久化：所有状态（含卡组折叠状态、归属、成员顺序）自动保存到 localStorage，带版本迁移
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## 卡组语义（可观察行为）
+
+- 折叠：成员卡片隐藏，卡组以摘要容器（名称 + 成员摘要 + 隐藏连线计数）呈现；展开后成员恢复原有位置与大小
+- 连线与折叠：
+  - 两端在同一折叠卡组内 → 连线隐藏（数据保留，展开自动恢复）
+  - 跨卡组或组内↔组外 → 连线不消失，端点吸附到折叠容器的边界上，展开恢复为卡片端点
+- 单卡单组：把已入组卡片拖入另一个卡组会被拒绝，并弹出提示说明保留在哪个组（不静默变更）
+- 删除卡组：仅移除容器，成员卡片与全部连线保留，连线端点回退为原始卡片；引用缺失卡片的连线以红色虚线 + ⚠ 标记呈现，可手动删除，绝不静默丢弃
+- 框选：命中折叠卡组时选中卡组容器本身，不触及内部卡片
+- 缩放/平移只作用于视图层，不改变卡组与成员的相对关系
+- 入组方式：选中卡片后点工具栏“新建卡组”，或拖动卡片底部“⋕ 拖我入组”把手到任意卡组容器上
+
+## 批量验证
+
+`npm run verify`（即 `node scripts/verify.ts`）覆盖六组路径共 39 项断言：
+
+1. 折叠/展开：组内连线隐藏与恢复、成员位置大小不变
+2. 跨组连线吸附：端点吸附到容器边界、展开恢复卡片端点
+3. 成员归属冲突：一卡入两组被拒绝且冲突信息可观察
+4. 删除卡组后连线引用：连线/成员保留、dangling 连线可观察
+5. 旧状态兼容加载：v1 无 `groups` 字段可加载、脏数据归一化且问题可观察
+6. 持久化往返：折叠状态/归属/成员顺序重载后一致
+
+## 目录结构
+
+```
+src/
+  types.ts                 数据模型与常量（Card / Connection / CardGroup / CanvasState）
+  App.tsx                  根组件：组合工具栏、画布、大纲面板、提示浮层
+  components/
+    Board.tsx              无限画布：渲染与全部交互编排（拖拽/框选/连线/缩放/平移）
+    Card.tsx               灵感卡片（编辑、调色板、图片、连线锚点、入组拖拽把手）
+    GroupView.tsx          卡组容器（折叠摘要芯片 / 展开包围盒两种形态）
+    ConnectionLayer.tsx    SVG 连线层（贝塞尔曲线、边界吸附、dangling 标记）
+    Toolbar.tsx            顶部工具栏
+    OutlinePanel.tsx       叙事大纲面板（拓扑排序 + 拖拽重排）
+  hooks/
+    useCanvasState.ts      统一承载 CanvasState：卡片/连线/卡组/视口/选择/持久化
+    useConnections.ts      连线管理 API + 拓扑排序大纲
+    useDrag.ts             统一拖拽会话（平移/卡片/组容器/框选/连线）
+  utils/
+    geometry.ts            矩形/边界吸附等几何计算
+    groups.ts              卡组纯逻辑（归属冲突、连线解析、折叠语义）
+    storage.ts             localStorage 持久化、版本迁移与脏数据归一化
+    topology.ts            Kahn 拓扑排序
+scripts/
+  verify.ts                统一批量验证入口
 ```
