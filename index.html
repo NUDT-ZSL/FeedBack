@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>天工开物 - 冶铁铸造</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1a0a02;
+      font-family: 'Ma Shan Zheng', cursive;
+    }
+    #app {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+    #left-panel {
+      width: 220px;
+      background: rgba(44, 30, 14, 0.9);
+      padding: 20px;
+      color: #d4c9b3;
+      font-size: 16px;
+      overflow-y: auto;
+      border-right: 2px solid #8b0000;
+    }
+    #left-panel h2 {
+      color: #b8860b;
+      margin-bottom: 15px;
+      font-size: 22px;
+      text-align: center;
+      border-bottom: 1px solid #b8860b;
+      padding-bottom: 10px;
+    }
+    #left-panel .tip-item {
+      margin-bottom: 12px;
+      line-height: 1.6;
+      padding-left: 10px;
+      border-left: 3px solid #8b0000;
+    }
+    #scene-container {
+      flex: 1;
+      position: relative;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+    }
+    #right-panel {
+      width: 260px;
+      background: #3a2a1a;
+      border-radius: 8px;
+      margin: 10px;
+      padding: 15px;
+      color: #d4c9b3;
+      overflow-y: auto;
+    }
+    #right-panel h3 {
+      color: #b8860b;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    .tool-rack {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+    .tool-shelf {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #5c3a21;
+      min-height: 50px;
+    }
+    .tool-shelf:last-child {
+      border-bottom: none;
+    }
+    .tool-item {
+      cursor: grab;
+      padding: 5px 10px;
+      border-radius: 4px;
+      background: rgba(139, 115, 85, 0.5);
+      font-size: 14px;
+      user-select: none;
+      transition: all 0.1s ease-out;
+    }
+    .tool-item:hover {
+      background: rgba(184, 134, 11, 0.5);
+      transform: scale(1.05);
+    }
+    .tool-item:active {
+      cursor: grabbing;
+    }
+    .tool-item.dragging {
+      opacity: 0.5;
+    }
+    .work-order-panel {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .work-order-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .work-order-item {
+      background: #f5deb3;
+      color: #2c1e0e;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: flex;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .work-order-item:hover {
+      transform: translateX(5px);
+    }
+    .grade-badge {
+      width: 8px;
+      border-radius: 2px;
+      margin-right: 10px;
+    }
+    .grade-上品 { background: #ffd700; }
+    .grade-良品 { background: #44ff44; }
+    .grade-次品 { background: #ff4444; }
+    .order-content {
+      flex: 1;
+    }
+    .order-type {
+      font-weight: bold;
+      color: #8b0000;
+    }
+    .order-stats {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+    .stat-hard { color: #ff4444; }
+    .stat-tough { color: #44ff44; }
+    .stat-sharp { color: #4444ff; }
+    .order-grade {
+      margin-top: 4px;
+      font-weight: bold;
+    }
+    .btn-expand {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #8b0000, #b8860b);
+      color: #f5deb3;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 16px;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+    .btn-expand:hover {
+      transform: scale(1.02);
+      box-shadow: 0 4px 15px rgba(139, 0, 0, 0.5);
+    }
+    .scroll-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .scroll-overlay.active {
+      display: flex;
+    }
+    .scroll-container {
+      background: #f5deb3;
+      padding: 40px;
+      border-radius: 8px;
+      max-width: 80%;
+      max-height: 80%;
+      overflow-y: auto;
+      position: relative;
+      transform-origin: left right;
+    }
+    .scroll-container.expanding {
+      animation: expandScroll 1s ease-out forwards;
+    }
+    @keyframes expandScroll {
+      0% { transform: scaleX(0); }
+      100% { transform: scaleX(1); }
+    }
+    .scroll-close {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #8b0000;
+    }
+    .scroll-title {
+      text-align: center;
+      color: #8b0000;
+      font-size: 28px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #b8860b;
+      padding-bottom: 10px;
+    }
+    .btn-screenshot {
+      padding: 8px 16px;
+      background: #b8860b;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 14px;
+      margin-top: 15px;
+    }
+    .cursor-forbidden {
+      cursor: not-allowed !important;
+    }
+    .border-flash {
+      animation: borderFlash 0.3s ease-in-out 3;
+    }
+    @keyframes borderFlash {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+      50% { box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.8); }
+    }
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid #b8860b;
+      animation: rippleEffect 0.4s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes rippleEffect {
+      0% { width: 0; height: 0; opacity: 1; }
+      100% { width: 50px; height: 50px; opacity: 0; margin-left: -25px; margin-top: -25px; }
+    }
+    .temperature-bubble {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      pointer-events: none;
+      font-family: Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="left-panel">
+      <h2>天工开物 · 冶铁篇</h2>
+      <div class="tip-item">【鼓风】点击高炉下方拉杆，前后拖动控制鼓风量，炉温随鼓风量变化。</div>
+      <div class="tip-item">【浇铸】从右侧工具架拖拽铸模（剑/犁/鼎）至浇筑区，铁水自动流出。</div>
+      <div class="tip-item">【冷却】耐心等待铸件冷却，颜色从炽红变为铁灰色后方可开模。</div>
+      <div class="tip-item">【淬火】将冷却后的成品拖拽至右侧水桶淬火，提升品质。</div>
+      <div class="tip-item">【质检】将淬火后成品拖拽至前方质检台，检测三项指标。</div>
+      <div class="tip-item">【视角】鼠标左键旋转，滚轮缩放，右键平移场景。</div>
+    </div>
+    <div id="scene-container">
+      <div id="canvas-container"></div>
+    </div>
+    <div id="right-panel">
+      <h3>🔧 工具架</h3>
+      <div class="tool-rack">
+        <div class="tool-shelf">
+          <span class="tool-item" draggable="false">🔧 铁钳</span>
+        </div>
+        <div class="tool-shelf">
+          <div class="tool-item mold-item" data-mold="sword" draggable="true">⚔️ 剑模</div>
+          <div class="tool-item mold-item" data-mold="plow" draggable="true">🌾 犁模</div>
+          <div class="tool-item mold-item" data-mold="ding" draggable="true">🏺 鼎模</div>
+        </div>
+        <div class="tool-shelf">
+          <span class="tool-item" draggable="false">🔨 锤子</span>
+          <span class="tool-item" draggable="false" id="water-bucket-ui">💧 水桶</span>
+        </div>
+      </div>
+      <h3>📜 工单记录</h3>
+      <div class="work-order-panel">
+        <div class="work-order-list" id="work-order-list"></div>
+        <button class="btn-expand" id="btn-expand-scroll">展开书卷</button>
+      </div>
+    </div>
+  </div>
+  <div class="scroll-overlay" id="scroll-overlay">
+    <div class="scroll-container" id="scroll-container">
+      <span class="scroll-close" id="scroll-close">&times;</span>
+      <h2 class="scroll-title">冶铁工单 · 天工开物</h2>
+      <div id="scroll-content"></div>
+      <button class="btn-screenshot" id="btn-screenshot">📷 截图分享</button>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
