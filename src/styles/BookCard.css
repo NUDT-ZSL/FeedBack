@@ -1,0 +1,109 @@
+.book-card {
+  width: var(--book-width);
+  height: var(--book-height);
+  border-radius: 4px 8px 8px 4px;
+  position: relative;
+  cursor: pointer;
+  box-shadow: var(--shadow-book);
+  overflow: hidden;
+  perspective: 1000px;
+  will-change: transform;
+}
+
+.book-card.filtered {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.book-card:hover:not(.filtered) {
+  z-index: 10;
+}
+
+.book-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: linear-gradient(90deg, 
+    rgba(0,0,0,0.3) 0%, 
+    rgba(0,0,0,0.1) 50%, 
+    rgba(0,0,0,0.2) 100%
+  );
+  border-radius: 4px 0 0 4px;
+}
+
+.book-content {
+  position: absolute;
+  left: 12px;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  color: #fff;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.book-title {
+  font-family: var(--font-title);
+  font-size: 20px;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.book-author {
+  font-family: var(--font-body);
+  font-size: 12px;
+  opacity: 0.9;
+  margin: 0;
+}
+
+.borrowed-seal {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--color-zhusha);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(204, 41, 54, 0.1);
+  animation: sealStamp 0.5s ease-out;
+}
+
+.borrowed-seal span {
+  color: var(--color-zhusha);
+  font-size: 10px;
+  font-weight: bold;
+  writing-mode: vertical-rl;
+  letter-spacing: 1px;
+}
+
+.book-pages {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: rgba(255,255,255,0.8);
+  font-size: 10px;
+}
+
+@media (max-width: 768px) {
+  .book-title {
+    font-size: 16px;
+  }
+  
+  .book-author {
+    font-size: 10px;
+  }
+  
+  .borrowed-seal {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .borrowed-seal span {
+    font-size: 8px;
+  }
+}
