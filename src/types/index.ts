@@ -20,6 +20,33 @@ export interface StrokeData {
   springVelocity: Position;
 }
 
+/** 一方印章可编辑参数的快照，也是撤销/重做的最小单位 */
+export interface SealSnapshot {
+  text: string;
+  font: SealFont;
+  size: SealSize;
+  style: CarvingStyle;
+  /** 按字序记录的笔画偏移，单位：印面像素 */
+  strokeOffsets: Record<number, Position>;
+}
+
+/** 一方完整印章：参数 + 独立历史 */
+export interface SealDocument extends SealSnapshot {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  history: {
+    past: SealSnapshot[];
+    future: SealSnapshot[];
+  };
+}
+
+export interface WorkshopState {
+  seals: SealDocument[];
+  activeId: string | null;
+}
+
 export interface SealState {
   font: SealFont;
   size: SealSize;
@@ -71,3 +98,6 @@ export const SEAL_POSITIONS: Position[] = [
   { x: 0.75, y: 0.75 },
   { x: 0.25, y: 0.75 },
 ];
+
+export const MAX_CHARS = 4;
+export const DEFAULT_TEXT = '';
