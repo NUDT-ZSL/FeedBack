@@ -12,23 +12,13 @@ export interface Mold {
   capacity: number;
 }
 
-export interface OrderData {
+export interface Catalog {
   fillings: Filling[];
-  mold: Mold | null;
-  drawingData: string;
-  baked: boolean;
-  recipientName: string;
-  blessing: string;
-}
-
-export interface OrderResponse {
-  orderId: string;
-  shareLink: string;
-  duplicate: boolean;
+  molds: Mold[];
 }
 
 export interface OrderSnapshot {
-  version: number;
+  version: 1;
   fillings: Filling[];
   mold: Mold;
   drawingData: string;
@@ -37,12 +27,11 @@ export interface OrderSnapshot {
   createdAt: string;
 }
 
-export interface OrderSnapshotResponse {
+export interface StoredOrder {
+  id: string;
   orderId: string;
+  idempotencyKey: string | null;
   snapshot: OrderSnapshot;
-}
-
-export interface ApiError {
-  error: string;
-  code?: string;
+  snapshotHash: string;
+  createdAt: string;
 }

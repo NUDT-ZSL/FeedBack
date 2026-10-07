@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
-import { SavedOrder } from '../types';
+import { ApiError, OrderSnapshot, OrderSnapshotResponse } from '../types';
 
 interface GreetingCardProps {
   onBack: () => void;
@@ -9,7 +9,8 @@ interface GreetingCardProps {
 
 const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
   const { orderId } = useParams<{ orderId: string }>();
-  const [order, setOrder] = useState<SavedOrder | null>(null);
+  const [snapshot, setSnapshot] = useState<OrderSnapshot | null>(null);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showContent, setShowContent] = useState(false);
@@ -21,12 +22,14 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
       try {
         const response = await fetch(`/api/orders/${orderId}`);
         if (!response.ok) {
-          throw new Error('订单不存在');
+          const data: ApiError = await response.json().catch(() => ({ error: '' }));
+          throw new Error(data.error || '订单加载失败');
         }
-        const data: SavedOrder = await response.json();
-        setOrder(data);
-      } catch (error) {
-        console.error('Failed to fetch order:', error);
+        const data: OrderSnapshotResponse = await response.json();
+        setSnapshot(data.snapshot);
+      } catch (err) {
+        console.error('Failed to fetch order:', err);
+        setError(err instanceof Error && err.message ? err.message : '订单加载失败');
       } finally {
         setLoading(false);
       }
@@ -35,7 +38,7 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
   }, [orderId]);
 
   useEffect(() => {
-    if (order) {
+    if (snapshot) {
       const startTime = Date.now();
       const duration = 3000;
       
@@ -52,7 +55,7 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
       };
       animate();
     }
-  }, [order]);
+  }, [snapshot]);
 
   const handleDownload = async () => {
     if (!cardRef.current || isDownloading) return;
@@ -76,7 +79,7 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
   };
 
   const handleShare = (platform: string) => {
-    const shareText = `${order?.recipientName}，祝您福寿安康！这是我为您定制的玉露糕坊糕点贺卡：`;
+    const shareText = `${snapshot?.recipientName}，祝您福寿安康！这是我为您定制的玉露糕坊糕点贺卡：`;
     const url = window.location.href;
     
     let shareUrl = '';
@@ -107,10 +110,10 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
     );
   }
 
-  if (!order) {
+  if (!snapshot) {
     return (
       <div style={styles.container}>
-        <div style={styles.loading}>订单不存在</div>
+        <div style={styles.loading}>{error || '订单不存在'}</div>
         <button className="btn-ancient" onClick={onBack} style={{ marginTop: '20px' }}>
           返回首页
         </button>
@@ -118,9 +121,7 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
     );
   }
 
-  const fillings = JSON.parse(order.fillings);
-  const mold = JSON.parse(order.mold);
-  const fillingNames = fillings.map((f: { name: string }) => f.name).join('、');
+  const fillingNames = snapshot.fillings.map(f => f.name).join('、');
 
   return (
     <div style={styles.container} className="page-transition">
@@ -149,9 +150,9 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
             <div style={styles.decoration} />
             
             <div style={styles.pastryDisplay}>
-              {order.drawingData ? (
+              {snapshot.drawingData ? (
                 <img 
-                  src={order.drawingData} 
+                  src={snapshot.drawingData} 
                   alt="定制糕点" 
                   style={styles.pastryImage}
                 />
@@ -161,19 +162,19 @@ const GreetingCard: React.FC<GreetingCardProps> = ({ onBack }) => {
             </div>
 
             <div style={styles.greetingSection}>
-              <p style={styles.recipient}>{order.recipientName} 亲启</p>
-              <p style={styles.blessing}>{order.blessing}</p>
+              <p style={styles.recipient}>{snapshot.recipientName} 亲启</p>
+              <p style={styles.blessing}>{snapshot.blessing}</p>
             </div>
 
             <div style={styles.details}>
               <p style={styles.detail}>馅料：{fillingNames}</p>
-              <p style={styles.detail}>模具：{mold.name}</p>
+              <p style={styles.detail}>模具：{snapshot.mold.name}</p>
             </div>
 
             <div style={styles.orderIdSection}>
-              <p style={styles.orderId}>订单编号：{order.orderId}</p>
+              <p style={styles.orderId}>订单编号：{orderId}</p>
               <p style={styles.date}>
-                {new Date(order.createdAt).toLocaleDateString('zh-CN')}
+                {new Date(snapshot.createdAt).toLocaleDateString('zh-CN')}
               </p>
             </div>
             

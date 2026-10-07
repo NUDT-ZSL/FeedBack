@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { OrderData, OrderResponse } from '../types';
+import React, { useRef, useState } from 'react';
+import { ApiError, OrderData, OrderResponse } from '../types';
 
 interface OrderConfirmProps {
   orderData: OrderData;
@@ -18,6 +18,7 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
   const [blessing, setBlessing] = useState(orderData.blessing);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const handleSubmit = async () => {
     if (!recipientName.trim()) {
@@ -38,6 +39,7 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKeyRef.current,
         },
         body: JSON.stringify({
           fillings: orderData.fillings,
@@ -49,13 +51,14 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error('提交订单失败');
+        const data: ApiError = await response.json().catch(() => ({ error: '' }));
+        throw new Error(data.error || '提交订单失败');
       }
 
       const data: OrderResponse = await response.json();
       onOrderComplete(data.orderId);
     } catch (err) {
-      setError('提交订单失败，请重试');
+      setError(err instanceof Error && err.message ? err.message : '提交订单失败，请重试');
     } finally {
       setIsSubmitting(false);
     }

@@ -326,6 +326,7 @@ const MoldDesign: React.FC<MoldDesignProps> = ({
                 <MoldIcon shape={mold.shape} />
               </div>
               <p style={styles.moldName}>{mold.name}</p>
+              <p style={styles.moldCapacity}>可容纳{mold.capacity}种馅料</p>
             </div>
           ))}
         </div>
@@ -539,6 +540,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     color: '#333',
     fontFamily: "'Ma Shan Zheng', cursive",
+  },
+  moldCapacity: {
+    fontSize: '12px',
+    color: '#999',
+    marginTop: '2px',
   },
   designSection: {
     width: '100%',

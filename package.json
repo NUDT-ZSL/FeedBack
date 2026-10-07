@@ -4,9 +4,10 @@
   "description": "Virtual ancient Chinese pastry shop",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "ts-node server/index.ts",
+    "server": "ts-node -P tsconfig.server.json server/index.ts",
     "client": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "verify": "ts-node -P tsconfig.server.json server/verify.ts"
   },
   "dependencies": {
     "express": "^4.18.2",
