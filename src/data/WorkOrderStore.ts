@@ -1,4 +1,7 @@
+import { computeGrade } from '../core/Casting.ts';
+
 export interface WorkOrderRecord {
+  castingId: string;
   timestamp: number;
   productType: string;
   hardness: number;
@@ -19,16 +22,13 @@ export class WorkOrderStore {
   }
 
   addRecord(record: Omit<WorkOrderRecord, 'timestamp' | 'grade'>): WorkOrderRecord {
-    const total = record.hardness + record.toughness + record.sharpness;
-    let grade: '上品' | '良品' | '次品';
-    
-    if (total > 240) {
-      grade = '上品';
-    } else if (total > 200) {
-      grade = '良品';
-    } else {
-      grade = '次品';
+    const existing = this.records.find(r => r.castingId === record.castingId);
+    if (existing) {
+      return existing;
     }
+
+    const total = record.hardness + record.toughness + record.sharpness;
+    const grade = computeGrade(total);
     
     const newRecord: WorkOrderRecord = {
       ...record,
@@ -49,6 +49,10 @@ export class WorkOrderStore {
 
   getRecords(): WorkOrderRecord[] {
     return [...this.records];
+  }
+
+  hasRecordFor(castingId: string): boolean {
+    return this.records.some(r => r.castingId === castingId);
   }
 
   onUpdate(callback: () => void): void {

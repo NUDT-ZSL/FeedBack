@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ForgeScene } from '../core/ForgeScene';
 import { FurnaceSystem } from '../core/FurnaceSystem';
+import { Casting, CastingStats } from '../core/Casting';
 import { WorkOrderStore } from '../data/WorkOrderStore';
 
 interface DragState {
@@ -11,21 +12,28 @@ interface DragState {
   offset: THREE.Vector3;
 }
 
+interface CastingEntity {
+  casting: Casting;
+  object: THREE.Object3D;
+  kind: 'mold' | 'product';
+  glow: THREE.Mesh | null;
+  cleanupTimer: number | null;
+}
+
 export class InteractionPanel {
   private forgeScene: ForgeScene;
   private furnaceSystem: FurnaceSystem;
   private workOrderStore: WorkOrderStore;
   
   private dragState: DragState;
-  private currentMold: THREE.Object3D | null;
-  private currentProduct: THREE.Object3D | null;
-  private isProductQuenched: boolean;
+  private entities: Map<string, CastingEntity>;
+  private castingSeq: number;
   private bellowsDragState: { isDragging: boolean; startX: number; startHandleX: number };
   private pouringAreaPosition: THREE.Vector3;
   private quenchingBucketPosition: THREE.Vector3;
   private inspectionTablePosition: THREE.Vector3;
   private statFloats: THREE.Mesh[];
-  private moldGlow: THREE.Mesh | null;
+  private toastTimer: number | null;
 
   constructor(
     forgeScene: ForgeScene,
@@ -44,9 +52,8 @@ export class InteractionPanel {
       offset: new THREE.Vector3()
     };
     
-    this.currentMold = null;
-    this.currentProduct = null;
-    this.isProductQuenched = false;
+    this.entities = new Map();
+    this.castingSeq = 0;
     this.bellowsDragState = { isDragging: false, startX: 0, startHandleX: 0 };
     
     this.pouringAreaPosition = new THREE.Vector3(2.5, 0.1, 2);
@@ -54,7 +61,7 @@ export class InteractionPanel {
     this.inspectionTablePosition = new THREE.Vector3(0, 1, 5);
     
     this.statFloats = [];
-    this.moldGlow = null;
+    this.toastTimer = null;
   }
 
   init(): void {
@@ -72,7 +79,7 @@ export class InteractionPanel {
       htmlItem.addEventListener('dragstart', (e) => {
         const dragEvent = e as unknown as DragEvent;
         const moldType = (e.target as HTMLElement).dataset.mold;
-        if (moldType && !this.currentMold && !this.furnaceSystem.isPouringActive()) {
+        if (moldType) {
           (e.target as HTMLElement).classList.add('dragging');
           dragEvent.dataTransfer!.setData('moldType', moldType);
         } else {
@@ -106,19 +113,26 @@ export class InteractionPanel {
       if (distToPouring < 1) {
         if (this.furnaceSystem.getTemperature() < 1200) {
           this.showInvalidOperation();
-          console.warn('温度不足！请先拉动拉杆鼓风升温至1200°C以上。');
+          this.showToast('炉温不足！请先拉动拉杆鼓风升温至1200°C以上再浇铸。');
           return;
         }
-        this.createMold(moldType, this.pouringAreaPosition);
-        this.furnaceSystem.startPouring(moldType, this.pouringAreaPosition);
-        this.createRipple(this.pouringAreaPosition);
+        const moldPosition = this.pouringAreaPosition.clone();
+        const offsetIndex = this.entities.size;
+        moldPosition.x += (offsetIndex % 3 - 1) * 0.9;
+        moldPosition.z += Math.floor(offsetIndex / 3) * 0.9;
         
-        setTimeout(() => {
-          this.furnaceSystem.stopPouring();
-          this.furnaceSystem.startCooling();
-        }, 3000);
+        const entity = this.createCastingEntity(moldType, moldPosition);
+        const pourStarted = this.furnaceSystem.startPour(moldType, moldPosition);
+        if (pourStarted) {
+          this.createRipple(moldPosition);
+          const coolingStart = Date.now() + 3000;
+          window.setTimeout(() => {
+            entity.casting.beginCooling(coolingStart);
+          }, 3000);
+        }
       } else {
-        this.createMold(moldType, worldPos);
+        this.showInvalidOperation();
+        this.showToast('请将铸模拖至高炉前的浇筑区进行浇铸。');
       }
     });
   }
@@ -151,18 +165,24 @@ export class InteractionPanel {
         }
       }
       
-      if (this.currentProduct) {
-        const intersects = raycaster.intersectObject(this.currentProduct, true);
+      const entityObjects = Array.from(this.entities.values()).map(entity => entity.object);
+      if (entityObjects.length > 0) {
+        const intersects = raycaster.intersectObjects(entityObjects, true);
         if (intersects.length > 0) {
-          this.startDrag3D(this.currentProduct, e.clientX, e.clientY);
-          return;
-        }
-      }
-      
-      if (this.currentMold && this.furnaceSystem.isMoldCooled()) {
-        const intersects = raycaster.intersectObject(this.currentMold, true);
-        if (intersects.length > 0) {
-          this.openMold();
+          const entity = this.findEntityByObject(intersects[0].object);
+          if (entity) {
+            if (entity.kind === 'mold') {
+              if (entity.casting.isCooled(Date.now())) {
+                this.openMold(entity);
+              } else {
+                this.showInvalidOperation();
+                this.showToast('铸件尚未冷却完成，无法开模！');
+              }
+            } else {
+              this.startDrag3D(entity.object, e.clientX, e.clientY);
+            }
+            return;
+          }
         }
       }
     });
@@ -221,23 +241,28 @@ export class InteractionPanel {
     
     if (!object) return;
     
+    const entity = this.findEntityByObject(object);
+    if (!entity) return;
+    
     const distToBucket = object.position.distanceTo(this.quenchingBucketPosition);
     const distToTable = object.position.distanceTo(this.inspectionTablePosition);
     
-    if (distToBucket < 1.5) {
-      if (this.currentProduct && !this.isProductQuenched && this.furnaceSystem.isMoldCooled()) {
-        this.performQuenching();
-      } else if (!this.furnaceSystem.isMoldCooled() && this.currentMold) {
+    if (distToBucket < 1.5 && entity.kind === 'product') {
+      const result = entity.casting.quench(Date.now());
+      if (result.ok) {
+        this.performQuenching(entity);
+      } else {
         this.showInvalidOperation();
-        console.warn('铸件尚未冷却，无法淬火！');
+        this.showToast(result.ok ? '' : result.reason);
         object.position.copy(this.dragState.startPosition);
       }
-    } else if (distToTable < 1.5) {
-      if (this.currentProduct && this.isProductQuenched) {
-        this.performInspection();
-      } else if (!this.isProductQuenched && this.currentProduct) {
+    } else if (distToTable < 1.5 && entity.kind === 'product') {
+      const result = entity.casting.inspect(Date.now());
+      if (result.ok && result.stats) {
+        this.performInspection(entity, result.stats);
+      } else {
         this.showInvalidOperation();
-        console.warn('产品尚未淬火，无法质检！');
+        this.showToast(result.ok ? '' : result.reason);
         object.position.copy(this.dragState.startPosition);
       }
     }
@@ -245,13 +270,50 @@ export class InteractionPanel {
     this.createRipple(object.position);
   }
 
-  private createMold(moldType: string, position: THREE.Vector3): void {
-    if (this.currentMold) {
-      this.forgeScene.removeObject('currentMold');
+  private findEntityByObject(object: THREE.Object3D): CastingEntity | null {
+    let current: THREE.Object3D | null = object;
+    while (current) {
+      for (const entity of this.entities.values()) {
+        if (entity.object === current) {
+          return entity;
+        }
+      }
+      current = current.parent;
     }
+    return null;
+  }
+
+  private createCastingEntity(moldType: string, position: THREE.Vector3): CastingEntity {
+    const id = `casting-${++this.castingSeq}`;
+    const casting = new Casting(id, moldType, this.furnaceSystem.getTemperature());
     
+    const { group, glow } = this.createMoldObject(moldType, position);
+    
+    const entity: CastingEntity = {
+      casting,
+      object: group,
+      kind: 'mold',
+      glow,
+      cleanupTimer: null
+    };
+    
+    this.entities.set(id, entity);
+    this.forgeScene.addObject(id, group);
+    
+    return entity;
+  }
+
+  private removeEntity(entity: CastingEntity): void {
+    if (entity.cleanupTimer !== null) {
+      clearTimeout(entity.cleanupTimer);
+      entity.cleanupTimer = null;
+    }
+    this.forgeScene.removeObject(entity.casting.id);
+    this.entities.delete(entity.casting.id);
+  }
+
+  private createMoldObject(moldType: string, position: THREE.Vector3): { group: THREE.Group; glow: THREE.Mesh } {
     const moldGroup = new THREE.Group();
-    moldGroup.name = 'currentMold';
     
     let moldGeo: THREE.BufferGeometry;
     let moldScale = 1;
@@ -300,9 +362,6 @@ export class InteractionPanel {
     moldGroup.position.copy(position);
     moldGroup.position.y = 0.3;
     
-    this.forgeScene.addObject('currentMold', moldGroup);
-    this.currentMold = moldGroup;
-    
     const glowGeo = moldGeo.clone();
     const glowMat = new THREE.MeshBasicMaterial({
       color: 0xff4400,
@@ -313,38 +372,33 @@ export class InteractionPanel {
     const glow = new THREE.Mesh(glowGeo, glowMat);
     glow.scale.setScalar(moldScale * 1.05);
     moldGroup.add(glow);
-    this.moldGlow = glow;
+    
+    return { group: moldGroup, glow };
   }
 
-  private openMold(): void {
-    if (!this.currentMold || !this.furnaceSystem.isMoldCooled()) return;
+  private openMold(entity: CastingEntity): void {
+    if (entity.kind !== 'mold' || !entity.casting.isCooled(Date.now())) return;
     
-    const moldType = this.furnaceSystem.getMoldType();
-    if (!moldType) return;
+    const moldPos = entity.object.position.clone();
     
-    const moldPos = this.currentMold.position.clone();
+    this.forgeScene.removeObject(entity.casting.id);
     
-    this.forgeScene.removeObject('currentMold');
-    this.currentMold = null;
-    this.moldGlow = null;
+    const productGroup = this.createProductObject(entity.casting.moldType, moldPos);
+    this.forgeScene.addObject(entity.casting.id, productGroup);
     
-    this.createProduct(moldType, moldPos);
+    entity.object = productGroup;
+    entity.kind = 'product';
+    entity.glow = null;
     
-    this.currentMold = this.currentProduct;
-    
-    setTimeout(() => {
-      if (this.currentMold) {
-        this.forgeScene.removeObject('currentMold');
-        this.currentMold = null;
-        this.currentProduct = null;
-        this.furnaceSystem.reset();
+    entity.cleanupTimer = window.setTimeout(() => {
+      if (this.entities.has(entity.casting.id) && !entity.casting.isInspected()) {
+        this.removeEntity(entity);
       }
     }, 15000);
   }
 
-  private createProduct(productType: string, position: THREE.Vector3): void {
+  private createProductObject(productType: string, position: THREE.Vector3): THREE.Group {
     const productGroup = new THREE.Group();
-    productGroup.name = 'currentMold';
     
     let productMesh: THREE.Mesh;
     
@@ -375,9 +429,7 @@ export class InteractionPanel {
     productGroup.position.copy(position);
     productGroup.position.y = 0.5;
     
-    this.forgeScene.addObject('currentMold', productGroup);
-    this.currentProduct = productGroup;
-    this.isProductQuenched = false;
+    return productGroup;
   }
 
   private createSwordMesh(material: THREE.MeshStandardMaterial): THREE.Mesh {
@@ -523,12 +575,14 @@ export class InteractionPanel {
     return new THREE.Mesh(mergedGeo, finalMaterial);
   }
 
-  private performQuenching(): void {
-    if (!this.currentProduct) return;
+  private performQuenching(entity: CastingEntity): void {
+    if (entity.kind !== 'product') return;
+    
+    const product = entity.object;
     
     this.furnaceSystem.startSteamEffect(this.quenchingBucketPosition);
     
-    this.currentProduct.traverse((child) => {
+    product.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
         child.material.color.setHex(0x2f4f4f);
         child.material.roughness = 0.3;
@@ -536,45 +590,41 @@ export class InteractionPanel {
       }
     });
     
-    this.isProductQuenched = true;
-    
-    this.currentProduct.position.copy(this.quenchingBucketPosition);
-    this.currentProduct.position.y = 0.8;
+    product.position.copy(this.quenchingBucketPosition);
+    product.position.y = 0.8;
   }
 
-  private performInspection(): void {
-    if (!this.currentProduct) return;
+  private performInspection(entity: CastingEntity, stats: CastingStats): void {
+    if (entity.kind !== 'product') return;
     
-    this.currentProduct.position.copy(this.inspectionTablePosition);
-    this.currentProduct.position.y = 1.2;
+    const product = entity.object;
     
-    const hardness = Math.floor(60 + Math.random() * 40);
-    const toughness = Math.floor(60 + Math.random() * 40);
-    const sharpness = Math.floor(60 + Math.random() * 40);
+    product.position.copy(this.inspectionTablePosition);
+    product.position.y = 1.2;
     
-    const moldType = this.furnaceSystem.getMoldType() || 'sword';
-    
-    this.createStatFloats(this.currentProduct.position, hardness, toughness, sharpness);
+    this.createStatFloats(product.position, stats.hardness, stats.toughness, stats.sharpness);
     
     const record = this.workOrderStore.addRecord({
-      productType: moldType,
-      hardness,
-      toughness,
-      sharpness
+      castingId: entity.casting.id,
+      productType: entity.casting.moldType,
+      hardness: stats.hardness,
+      toughness: stats.toughness,
+      sharpness: stats.sharpness
     });
     
+    if (entity.cleanupTimer !== null) {
+      clearTimeout(entity.cleanupTimer);
+      entity.cleanupTimer = null;
+    }
+    
     setTimeout(() => {
-      this.createGradeEffect(record.grade, this.currentProduct!.position);
+      this.createGradeEffect(record.grade, product.position);
     }, 500);
     
     setTimeout(() => {
       this.cleanupStatFloats();
-      if (this.currentProduct) {
-        this.forgeScene.removeObject('currentMold');
-        this.currentProduct = null;
-        this.currentMold = null;
-        this.isProductQuenched = false;
-        this.furnaceSystem.reset();
+      if (this.entities.has(entity.casting.id)) {
+        this.removeEntity(entity);
       }
     }, 4000);
   }
@@ -776,34 +826,56 @@ export class InteractionPanel {
     }, 900);
   }
 
-  private update(delta: number): void {
-    if (this.moldGlow && this.currentMold) {
-      const temp = this.furnaceSystem.getMoldTemperature();
-      if (temp > 100 && this.furnaceSystem.isPouringActive() || this.furnaceSystem.getMoldTemperature() > 100) {
-        const time = Date.now() * 0.001;
-        const pulse = 0.5 + Math.sin(time * Math.PI * 2 / 0.8) * 0.5;
-        const tempRatio = Math.max(0, (temp - 100) / 1500);
-        
-        const glowMat = this.moldGlow.material as THREE.MeshBasicMaterial;
-        glowMat.opacity = 0.3 + pulse * 0.5 * tempRatio;
-        
-        if (temp > 800) {
-          glowMat.color.setHex(0xff4400);
-        } else if (temp > 400) {
-          glowMat.color.setHex(0xff2200);
-        } else {
-          glowMat.color.setHex(0x8b0000);
-        }
-      } else {
-        (this.moldGlow.material as THREE.MeshBasicMaterial).opacity = 0;
-      }
-    }
+  private showToast(message: string): void {
+    if (!message) return;
+    console.warn(message);
     
-    if (this.currentMold && !this.furnaceSystem.isPouringActive() && this.furnaceSystem.getMoldTemperature() > 0) {
-      const temp = this.furnaceSystem.getMoldTemperature();
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    
+    toast.textContent = message;
+    toast.classList.add('show');
+    
+    if (this.toastTimer !== null) {
+      clearTimeout(this.toastTimer);
+    }
+    this.toastTimer = window.setTimeout(() => {
+      toast.classList.remove('show');
+      this.toastTimer = null;
+    }, 2200);
+  }
+
+  private update(delta: number): void {
+    const now = Date.now();
+    
+    this.entities.forEach(entity => {
+      if (entity.kind !== 'mold') return;
       
-      this.currentMold.traverse((child) => {
-        if (child instanceof THREE.Mesh && child !== this.moldGlow) {
+      const temp = entity.casting.getTemperature(now);
+      
+      if (entity.glow) {
+        const glowMat = entity.glow.material as THREE.MeshBasicMaterial;
+        if (temp > 100) {
+          const time = now * 0.001;
+          const pulse = 0.5 + Math.sin(time * Math.PI * 2 / 0.8) * 0.5;
+          const tempRatio = Math.max(0, (temp - 100) / 1500);
+          
+          glowMat.opacity = 0.3 + pulse * 0.5 * tempRatio;
+          
+          if (temp > 800) {
+            glowMat.color.setHex(0xff4400);
+          } else if (temp > 400) {
+            glowMat.color.setHex(0xff2200);
+          } else {
+            glowMat.color.setHex(0x8b0000);
+          }
+        } else {
+          glowMat.opacity = 0;
+        }
+      }
+      
+      entity.object.traverse((child) => {
+        if (child instanceof THREE.Mesh && child !== entity.glow) {
           if (child.material instanceof THREE.MeshBasicMaterial && child.material.wireframe) {
             if (temp > 800) {
               child.material.color.setHex(0xff4400);
@@ -828,7 +900,7 @@ export class InteractionPanel {
           }
         }
       });
-    }
+    });
     
     this.statFloats.forEach((float, index) => {
       if (index % 2 === 0) {

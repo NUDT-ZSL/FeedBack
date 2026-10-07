@@ -52,6 +52,27 @@
       flex: 1;
       position: relative;
     }
+    #toast {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px);
+      background: rgba(139, 0, 0, 0.92);
+      color: #f5deb3;
+      padding: 10px 24px;
+      border-radius: 6px;
+      border: 1px solid #b8860b;
+      font-size: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+      z-index: 100;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
     #canvas-container {
       width: 100%;
       height: 100%;
@@ -278,6 +299,7 @@
       <div class="tip-item">【视角】鼠标左键旋转，滚轮缩放，右键平移场景。</div>
     </div>
     <div id="scene-container">
+      <div id="toast"></div>
       <div id="canvas-container"></div>
     </div>
     <div id="right-panel">

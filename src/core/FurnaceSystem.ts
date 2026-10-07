@@ -25,6 +25,11 @@ interface SteamParticle {
   mesh: THREE.Mesh;
 }
 
+interface ActivePour {
+  targetPosition: THREE.Vector3;
+  endTime: number;
+}
+
 export class FurnaceSystem {
   private forgeScene: ForgeScene;
   private airFlow: number;
@@ -33,13 +38,7 @@ export class FurnaceSystem {
   private ironParticlePool: THREE.Mesh[];
   private smokeParticles: SmokeParticle[];
   private steamParticles: SteamParticle[];
-  private isPouring: boolean;
-  private pourTargetPosition: THREE.Vector3 | null;
-  private currentMoldType: string | null;
-  private moldTemperature: number;
-  private isCooling: boolean;
-  private coolingStartTime: number;
-  private initialTemperature: number;
+  private activePours: ActivePour[];
   private tempUpdateCallback: ((temp: number) => void) | null;
 
   constructor(forgeScene: ForgeScene) {
@@ -50,22 +49,17 @@ export class FurnaceSystem {
     this.ironParticlePool = [];
     this.smokeParticles = [];
     this.steamParticles = [];
-    this.isPouring = false;
-    this.pourTargetPosition = null;
-    this.currentMoldType = null;
-    this.moldTemperature = 0;
-    this.isCooling = false;
-    this.coolingStartTime = 0;
-    this.initialTemperature = 0;
+    this.activePours = [];
     this.tempUpdateCallback = null;
   }
 
   init(): void {
     this.initIronParticlePool();
+    this.forgeScene.onUpdate((delta: number) => this.updateParticles(delta));
   }
 
   update(): void {
-    // 更新由 ForgeScene 的 onUpdate 回调处理
+    // 粒子与浇铸更新由 ForgeScene 的 onUpdate 回调处理
   }
 
   private initIronParticlePool(): void {
@@ -163,62 +157,31 @@ export class FurnaceSystem {
     }
   }
 
-  startPouring(moldType: string, targetPosition: THREE.Vector3): void {
+  startPour(moldType: string, targetPosition: THREE.Vector3, durationMs: number = 3000): boolean {
     if (this.temperature < 1200) {
       console.warn('温度不足，无法浇铸！请先提升炉温到1200°C以上。');
-      return;
+      return false;
     }
     
-    this.isPouring = true;
-    this.pourTargetPosition = targetPosition.clone();
-    this.currentMoldType = moldType;
-    this.moldTemperature = this.temperature;
-    this.isCooling = false;
-    
-    this.forgeScene.getScene().getObjectByName('furnaceGlow')!;
-  }
-
-  stopPouring(): void {
-    this.isPouring = false;
-    this.pourTargetPosition = null;
-    this.isCooling = true;
-    this.coolingStartTime = Date.now();
-    this.initialTemperature = this.moldTemperature;
-    this.startSmokeEffect();
+    this.activePours.push({
+      targetPosition: targetPosition.clone(),
+      endTime: Date.now() + durationMs
+    });
+    return true;
   }
 
   isPouringActive(): boolean {
-    return this.isPouring;
+    return this.activePours.length > 0;
   }
 
-  getMoldTemperature(): number {
-    return this.moldTemperature;
-  }
-
-  isMoldCooled(): boolean {
-    return this.isCooling && this.moldTemperature <= 100;
-  }
-
-  startCooling(): void {
-    if (!this.isCooling) {
-      this.isCooling = true;
-      this.coolingStartTime = Date.now();
-      this.initialTemperature = this.moldTemperature;
-    }
-  }
-
-  getMoldType(): string | null {
-    return this.currentMoldType;
-  }
-
-  private spawnIronParticle(): void {
-    if (!this.pourTargetPosition || this.ironParticles.length >= 60) return;
+  private spawnIronParticle(targetPosition: THREE.Vector3): void {
+    if (this.ironParticles.length >= 60) return;
     
     const availableMesh = this.ironParticlePool.find(m => !m.visible);
     if (!availableMesh) return;
     
     const spoutPosition = new THREE.Vector3(0.8, 1.5, 1.4);
-    const target = this.pourTargetPosition.clone();
+    const target = targetPosition.clone();
     target.y = 0.5;
     
     const direction = target.clone().sub(spoutPosition).normalize();
@@ -249,11 +212,19 @@ export class FurnaceSystem {
   }
 
   private updateParticles(delta: number): void {
-    if (this.isPouring && this.pourTargetPosition) {
+    const now = Date.now();
+    
+    for (let i = this.activePours.length - 1; i >= 0; i--) {
+      const pour = this.activePours[i];
+      if (now >= pour.endTime) {
+        this.activePours.splice(i, 1);
+        this.startSmokeEffect(pour.targetPosition);
+        continue;
+      }
       const spawnRate = 40 + Math.floor((this.temperature - 800) / 20);
       const spawnChance = (spawnRate / 60) * delta * 10;
       if (Math.random() < spawnChance) {
-        this.spawnIronParticle();
+        this.spawnIronParticle(pour.targetPosition);
       }
     }
     
@@ -268,13 +239,7 @@ export class FurnaceSystem {
       const opacity = 1 - (p.life / p.maxLife) * 0.5;
       (p.mesh.material as THREE.MeshBasicMaterial).opacity = opacity;
       
-      if (this.pourTargetPosition) {
-        const dist = p.position.distanceTo(this.pourTargetPosition);
-        if (dist < 0.3 || p.life > p.maxLife) {
-          p.mesh.visible = false;
-          this.ironParticles.splice(i, 1);
-        }
-      } else if (p.life > p.maxLife) {
+      if (p.life > p.maxLife) {
         p.mesh.visible = false;
         this.ironParticles.splice(i, 1);
       }
@@ -318,28 +283,18 @@ export class FurnaceSystem {
       }
     }
     
-    if (this.isCooling && this.moldTemperature > 100) {
-      const elapsed = (Date.now() - this.coolingStartTime) / 1000;
-      const decayConstant = Math.log(2) / 2;
-      this.moldTemperature = 100 + (this.initialTemperature - 100) * Math.exp(-decayConstant * elapsed);
-    }
-    
     const waterSurface = this.forgeScene.getObject('waterSurface') as THREE.Mesh;
     if (waterSurface) {
-      const time = Date.now() * 0.001;
+      const time = now * 0.001;
       const waveOffset = Math.sin(time * 2) * 0.01;
       waterSurface.position.y = 0.45 + waveOffset;
     }
   }
 
-  private startSmokeEffect(): void {
-    if (!this.pourTargetPosition) return;
-    
+  private startSmokeEffect(position: THREE.Vector3): void {
     const smokeCount = 15;
     for (let i = 0; i < smokeCount; i++) {
       setTimeout(() => {
-        if (!this.pourTargetPosition) return;
-        
         const geo = new THREE.SphereGeometry(0.1, 8, 8);
         const mat = new THREE.MeshBasicMaterial({
           color: 0xcccccc,
@@ -348,7 +303,7 @@ export class FurnaceSystem {
         });
         const mesh = new THREE.Mesh(geo, mat);
         
-        const pos = this.pourTargetPosition.clone();
+        const pos = position.clone();
         pos.x += (Math.random() - 0.5) * 0.5;
         pos.z += (Math.random() - 0.5) * 0.5;
         pos.y = 0.5;
@@ -417,10 +372,6 @@ export class FurnaceSystem {
   reset(): void {
     this.ironParticles.forEach(p => p.mesh.visible = false);
     this.ironParticles = [];
-    this.isPouring = false;
-    this.pourTargetPosition = null;
-    this.currentMoldType = null;
-    this.isCooling = false;
-    this.moldTemperature = 0;
+    this.activePours = [];
   }
 }
