@@ -45,6 +45,10 @@ export const TEA_PRESETS: TeaPreset[] = [
 
 type ParamsChangeCallback = (params: TeaParams) => void;
 type PresetChangeCallback = (preset: TeaPreset | null) => void;
+type WarningChangeCallback = (paramKey: string, active: boolean) => void;
+
+const PARAM_KEYS = ['waterTemp', 'pourAngle', 'brewDuration'] as const;
+type ParamKey = (typeof PARAM_KEYS)[number];
 
 export class TeaController {
   private params: TeaParams;
@@ -52,7 +56,10 @@ export class TeaController {
   private presets: TeaPreset[] = TEA_PRESETS;
   private paramsChangeCallbacks: ParamsChangeCallback[] = [];
   private presetChangeCallbacks: PresetChangeCallback[] = [];
+  private warningChangeCallbacks: WarningChangeCallback[] = [];
   private warningTimers: Map<string, number> = new Map();
+  private warningActive: Map<string, boolean> = new Map();
+  private disposed: boolean = false;
 
   constructor() {
     this.params = {
@@ -95,6 +102,7 @@ export class TeaController {
   loadPreset(presetName: string): void {
     const preset = this.presets.find(p => p.name === presetName);
     if (preset) {
+      this.clearAllWarnings();
       this.currentPreset = preset;
       this.setWaterTemp(
         (preset.recommendedTemp[0] + preset.recommendedTemp[1]) / 2
@@ -124,7 +132,7 @@ export class TeaController {
     };
   }
 
-  private checkParamWarning(paramKey: 'waterTemp' | 'pourAngle' | 'brewDuration'): void {
+  private checkParamWarning(paramKey: ParamKey): void {
     if (!this.currentPreset) return;
 
     const validation = this.validateParams();
@@ -134,30 +142,78 @@ export class TeaController {
 
     if (!isValid) {
       this.triggerWarning(paramKey);
+    } else {
+      this.stopWarning(paramKey);
     }
   }
 
   private triggerWarning(paramKey: string): void {
+    if (this.disposed) return;
+
     const existingTimer = this.warningTimers.get(paramKey);
-    if (existingTimer) {
-      window.clearTimeout(existingTimer);
+    if (existingTimer !== undefined) {
+      clearInterval(existingTimer);
+      this.warningTimers.delete(paramKey);
     }
 
-    const element = document.querySelector(`[data-param="${paramKey}"]`);
-    if (element) {
-      let flashCount = 0;
-      const maxFlashes = 6;
-      const flashInterval = window.setInterval(() => {
-        if (flashCount >= maxFlashes) {
-          window.clearInterval(flashInterval);
+    this.setWarningState(paramKey, true);
+
+    const element = this.queryParamElement(paramKey);
+    let flashCount = 0;
+    const maxFlashes = 6;
+    const flashInterval = setInterval(() => {
+      if (flashCount >= maxFlashes) {
+        clearInterval(flashInterval);
+        if (this.warningTimers.get(paramKey) === flashInterval) {
           this.warningTimers.delete(paramKey);
-          return;
+          this.setWarningState(paramKey, false);
         }
+        return;
+      }
+      if (element) {
         element.classList.toggle('warning-flash');
-        flashCount++;
-      }, 500);
-      this.warningTimers.set(paramKey, flashInterval as unknown as number);
+      }
+      flashCount++;
+    }, 500);
+    this.warningTimers.set(paramKey, flashInterval as unknown as number);
+  }
+
+  private stopWarning(paramKey: string): void {
+    const timer = this.warningTimers.get(paramKey);
+    if (timer !== undefined) {
+      clearInterval(timer);
+      this.warningTimers.delete(paramKey);
     }
+    if (this.warningActive.get(paramKey)) {
+      this.setWarningState(paramKey, false);
+    }
+    this.queryParamElement(paramKey)?.classList.remove('warning-flash');
+  }
+
+  private clearAllWarnings(): void {
+    PARAM_KEYS.forEach(key => this.stopWarning(key));
+  }
+
+  private queryParamElement(paramKey: string): Element | null {
+    if (typeof document === 'undefined') return null;
+    return document.querySelector(`[data-param="${paramKey}"]`);
+  }
+
+  private setWarningState(paramKey: string, active: boolean): void {
+    this.warningActive.set(paramKey, active);
+    this.warningChangeCallbacks.forEach(cb => cb(paramKey, active));
+  }
+
+  isWarningActive(paramKey: string): boolean {
+    return this.warningActive.get(paramKey) === true;
+  }
+
+  getActiveWarnings(): string[] {
+    return PARAM_KEYS.filter(key => this.isWarningActive(key));
+  }
+
+  onWarningChange(callback: WarningChangeCallback): void {
+    this.warningChangeCallbacks.push(callback);
   }
 
   onParamsChange(callback: ParamsChangeCallback): void {
@@ -183,16 +239,17 @@ export class TeaController {
       brewDuration: 30
     };
     this.currentPreset = null;
-    this.warningTimers.forEach(timer => window.clearTimeout(timer));
-    this.warningTimers.clear();
+    this.clearAllWarnings();
     this.notifyParamsChange();
     this.notifyPresetChange();
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.clearAllWarnings();
+    this.currentPreset = null;
     this.paramsChangeCallbacks = [];
     this.presetChangeCallbacks = [];
-    this.warningTimers.forEach(timer => window.clearTimeout(timer));
-    this.warningTimers.clear();
+    this.warningChangeCallbacks = [];
   }
 }
