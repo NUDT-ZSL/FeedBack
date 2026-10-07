@@ -1,23 +1,26 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Herb, Pill, Particle, DragState, FurnaceState, Element } from './types';
+import { Herb, Pill, Particle, DragState, Element } from './types';
 import { ELEMENT_COLORS } from './constants';
 import { 
-  mixFireColor, 
-  calculateFlameHeight, 
   getSmokeColor, 
   getParticleRate,
-  createPill,
   getBeamElements,
-  clamp,
-  lerp,
-  hasGeneratingCombination
+  clamp
 } from './utils';
 import { audioManager } from './audio';
+import type { DropOutcome, FurnaceStatus } from './engine/model';
 
 interface FurnaceProps {
   dragState: DragState;
-  onIngredientAdded: (herb: Herb) => void;
-  onPillCreated: (pill: Pill) => void;
+  furnaceView: {
+    temperature: number;
+    flameColor: string;
+    flameHeight: number;
+    status: FurnaceStatus;
+    elements: Element[];
+  };
+  onDropHerb: (herb: Herb) => DropOutcome;
+  onPillCreated: (pill: Pill, reason: string) => void;
   airflow: number;
   onAirflowChange: (value: number) => void;
 }
@@ -36,7 +39,8 @@ const JADE_BOX_HEIGHT = 50;
 
 const Furnace: React.FC<FurnaceProps> = ({
   dragState,
-  onIngredientAdded,
+  furnaceView,
+  onDropHerb,
   onPillCreated,
   airflow,
   onAirflowChange
@@ -53,21 +57,17 @@ const Furnace: React.FC<FurnaceProps> = ({
   const landscapeTransitionRef = useRef<number>(0);
   
   const particlesRef = useRef<Particle[]>([]);
-  const ingredientsRef = useRef<Herb[]>([]);
-  const furnaceStateRef = useRef<FurnaceState>({
-    temperature: 25,
-    airFlow: 50,
-    flameHeight: 80,
-    flameColor: '#e74c3c',
-    baseFireColor: '#e74c3c',
-    currentElements: [],
+  const furnaceStateRef = useRef({
     shakeTime: 0,
-    beamTimes: [],
-    beamElements: [null, null, null, null, null, null, null, null, null]
+    beamTimes: [] as number[],
+    beamElements: [null, null, null, null, null, null, null, null, null] as (Element | null)[]
   });
+  const furnaceViewRef = useRef(furnaceView);
+  furnaceViewRef.current = furnaceView;
   
   const [flyingPill, setFlyingPill] = useState<{
     pill: Pill;
+    reason: string;
     x: number;
     y: number;
     vy: number;
@@ -741,19 +741,20 @@ const Furnace: React.FC<FurnaceProps> = ({
     const furnaceResult = drawFurnace(ctx, offsetX, offsetY);
     
     const state = furnaceStateRef.current;
-    
-    state.temperature = lerp(state.temperature, 20 + airflow * 0.8, 0.02);
+    const view = furnaceViewRef.current;
+    const isExploded = view.status === 'exploded';
+    const displayFlameColor = isExploded ? '#3a3a3a' : view.flameColor;
     
     drawFlame(
       ctx,
       offsetX + FURNACE_WIDTH / 2,
       FLAME_BASE_Y,
-      state.flameHeight,
-      state.flameColor,
+      view.flameHeight,
+      displayFlameColor,
       time / 1000
     );
     
-    const particleRate = getParticleRate(state.temperature);
+    const particleRate = getParticleRate(view.temperature);
     if (time - lastParticleTimeRef.current > 1000 / particleRate) {
       lastParticleTimeRef.current = time;
       
@@ -770,7 +771,7 @@ const Furnace: React.FC<FurnaceProps> = ({
           life: 60 + Math.random() * 40,
           maxLife: 100,
           size: 3 + Math.random() * 4,
-          color: getSmokeColor(state.temperature),
+          color: isExploded ? 'rgba(50, 50, 50, 0.75)' : getSmokeColor(view.temperature),
           type: 'smoke'
         });
       }
@@ -784,7 +785,7 @@ const Furnace: React.FC<FurnaceProps> = ({
           life: 20 + Math.random() * 20,
           maxLife: 40,
           size: 2 + Math.random() * 3,
-          color: state.flameColor,
+          color: displayFlameColor,
           type: 'spark'
         });
       }
@@ -965,15 +966,11 @@ const Furnace: React.FC<FurnaceProps> = ({
     
     if (distToFeeder < 40) {
       const herb = dragState.herb;
-      ingredientsRef.current.push(herb);
-      onIngredientAdded(herb);
-      
+      const outcome = onDropHerb(herb);
+
       const state = furnaceStateRef.current;
-      state.flameColor = mixFireColor(state.flameColor, herb.element);
-      state.currentElements = [...new Set([...state.currentElements, herb.element])];
-      state.flameHeight = calculateFlameHeight(80, airflow, state.currentElements);
-      state.shakeTime = 300;
-      
+      state.shakeTime = outcome.outcome === 'explode' ? 900 : 300;
+
       for (let i = 0; i < 10; i++) {
         addParticle({
           x: feederX + (Math.random() - 0.5) * 20,
@@ -987,42 +984,61 @@ const Furnace: React.FC<FurnaceProps> = ({
           type: 'ingredient'
         });
       }
-      
+
       audioManager.playDropSound();
-      audioManager.updateFurnaceSound(airflow, state.temperature);
-      
-      const uniqueElements = [...new Set(ingredientsRef.current.map(i => i.element))];
-      if (hasGeneratingCombination(uniqueElements) && ingredientsRef.current.length >= 2) {
-        const pill = createPill(
-          ingredientsRef.current,
-          state.temperature,
-          airflow
-        );
-        
-        if (pill) {
-          state.beamElements = getBeamElements(uniqueElements);
-          state.beamTimes = [2, 2, 2, 2, 2, 2, 2, 2, 2];
-          
-          setTimeout(() => {
-            setFlyingPill({
-              pill,
-              x: feederX,
-              y: feederY - 20,
-              vy: -8,
-              vx: (Math.random() - 0.5) * 2,
-              rotation: 0,
-              rotationSpeed: (Math.random() - 0.5) * 0.3,
-              phase: 'rising'
-            });
-            audioManager.playSuccessSound();
-          }, 1000);
-          
-          ingredientsRef.current = [];
-          state.currentElements = [];
+      audioManager.updateFurnaceSound(airflow, furnaceViewRef.current.temperature);
+
+      if (outcome.outcome === 'explode') {
+        for (let i = 0; i < 36; i++) {
+          addParticle({
+            x: feederX,
+            y: feederY + 10,
+            vx: (Math.random() - 0.5) * 12,
+            vy: -Math.random() * 8 - 1,
+            life: 40 + Math.random() * 30,
+            maxLife: 70,
+            size: 4 + Math.random() * 6,
+            color: i % 3 === 0 ? '#e74c3c' : '#444444',
+            type: 'spark'
+          });
         }
+      } else if (outcome.outcome === 'waste') {
+        for (let i = 0; i < 20; i++) {
+          addParticle({
+            x: feederX + (Math.random() - 0.5) * 30,
+            y: feederY,
+            vx: (Math.random() - 0.5) * 3,
+            vy: -Math.random() * 2 - 1,
+            life: 50 + Math.random() * 30,
+            maxLife: 80,
+            size: 4 + Math.random() * 5,
+            color: 'rgba(120, 120, 120, 0.7)',
+            type: 'smoke'
+          });
+        }
+      } else if (outcome.outcome === 'pill' && outcome.pill) {
+        state.beamElements = getBeamElements(outcome.elements);
+        state.beamTimes = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+
+        const producedPill = outcome.pill;
+        const verdictReason = outcome.reason;
+        setTimeout(() => {
+          setFlyingPill({
+            pill: producedPill,
+            reason: verdictReason,
+            x: feederX,
+            y: feederY - 20,
+            vy: -8,
+            vx: (Math.random() - 0.5) * 2,
+            rotation: 0,
+            rotationSpeed: (Math.random() - 0.5) * 0.3,
+            phase: 'rising'
+          });
+          audioManager.playSuccessSound();
+        }, 1000);
       }
     }
-  }, [dragState, airflow, addParticle, onIngredientAdded]);
+  }, [dragState, airflow, addParticle, onDropHerb]);
 
   useEffect(() => {
     if (!flyingPill) return;
@@ -1078,7 +1094,7 @@ const Furnace: React.FC<FurnaceProps> = ({
           setGlowPos({ x: newX, y: newY });
           setTimeout(() => {
             setShowGlow(false);
-            onPillCreated(prev.pill);
+            onPillCreated(prev.pill, prev.reason);
           }, 500);
           
           return null;
@@ -1122,7 +1138,7 @@ const Furnace: React.FC<FurnaceProps> = ({
       );
       
       onAirflowChange(newValue);
-      audioManager.updateFurnaceSound(newValue, furnaceStateRef.current.temperature);
+      audioManager.updateFurnaceSound(newValue, furnaceViewRef.current.temperature);
     }
   }, [isDraggingBellows, bellowsDragStart, onAirflowChange]);
 
@@ -1151,10 +1167,7 @@ const Furnace: React.FC<FurnaceProps> = ({
   }, [jadeBoxOpen]);
 
   useEffect(() => {
-    const state = furnaceStateRef.current;
-    state.airFlow = airflow;
-    state.flameHeight = calculateFlameHeight(80, airflow, state.currentElements);
-    audioManager.updateFurnaceSound(airflow, state.temperature);
+    audioManager.updateFurnaceSound(airflow, furnaceViewRef.current.temperature);
   }, [airflow]);
 
   useEffect(() => {

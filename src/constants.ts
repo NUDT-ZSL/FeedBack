@@ -1,4 +1,4 @@
-import { Herb, Element, Pill, PillRarity, Gourd } from './types';
+import type { Herb, Element, Pill, PillRarity, Gourd } from './types';
 
 export const ELEMENT_COLORS: Record<Element, string> = {
   wood: '#2ecc71',
