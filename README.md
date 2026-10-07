@@ -1,5 +1,18 @@
 # React + TypeScript + Vite
 
+## 时间胶囊生命周期自动化验证
+
+仓库内置一套**完全离线**的自动化验证，覆盖胶囊从创建到解锁的完整生命周期：
+
+```bash
+npm run verify
+```
+
+- 无需 `npm install`、无需网络与外部账号，仅依赖 Node.js（>= 22）内置测试运行器。
+- 领域核心位于 `src/core/`（`capsule.ts` 纯函数状态机、`service.ts` 幂等/版本冲突控制、`store.ts` 本地持久化与损坏识别），所有时间逻辑通过显式传入的时间戳驱动，边界时刻可精确复现。
+- 测试位于 `tests/`：生命周期一致性、时间边界（含恰好等于投递时间/条件刚满足）、重复与冲突提交、持久化一致性与损坏识别。
+- 退出码 0 表示全部通过，非 0 表示存在失败用例，可直接接入 CI。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

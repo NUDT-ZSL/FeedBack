@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "verify": "node scripts/verify.mjs",
     "server:dev": "tsx watch server/index.ts",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
   },
