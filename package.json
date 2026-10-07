@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:escort": "node --test \"src/escort/**/*.test.ts\""
   },
   "dependencies": {
     "@react-three/drei": "^9.92.7",
