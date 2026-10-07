@@ -16,6 +16,8 @@ export interface EmbroideryCanvasHandle {
   clear: () => void;
   exportImage: (includeBackground: boolean) => string;
   getSegments: () => StitchSegment[];
+  loadSegments: (segments: StitchSegment[]) => void;
+  finalizeStroke: () => void;
 }
 
 const CANVAS_WIDTH = 600;
@@ -36,6 +38,7 @@ const EmbroideryCanvas: React.ForwardRefRenderFunction<
   const currentSegmentRef = useRef<StitchSegment | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const pendingPointsRef = useRef<StitchPoint[]>([]);
+  const clearTimerRef = useRef<number | null>(null);
 
   const drawPeonySketch = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -296,12 +299,13 @@ const EmbroideryCanvas: React.ForwardRefRenderFunction<
 
   const clear = useCallback(() => {
     setShowRipple(true);
-    setTimeout(() => {
+    clearTimerRef.current = window.setTimeout(() => {
       segmentsRef.current = [];
       currentSegmentRef.current = null;
       pendingPointsRef.current = [];
       onSegmentsChange?.([]);
       setShowRipple(false);
+      clearTimerRef.current = null;
     }, 1000);
   }, [onSegmentsChange]);
 
@@ -330,12 +334,46 @@ const EmbroideryCanvas: React.ForwardRefRenderFunction<
     return [...segmentsRef.current];
   }, []);
 
+  const loadSegments = useCallback((segments: StitchSegment[]) => {
+    if (clearTimerRef.current) {
+      window.clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+      setShowRipple(false);
+    }
+    segmentsRef.current = segments.map((segment) => ({
+      ...segment,
+      points: segment.points.map((point) => ({ ...point })),
+    }));
+    currentSegmentRef.current = null;
+    pendingPointsRef.current = [];
+    setIsDrawing(false);
+  }, []);
+
+  const finalizeStroke = useCallback(() => {
+    if (!currentSegmentRef.current) return;
+    
+    if (pendingPointsRef.current.length > 0) {
+      currentSegmentRef.current.points.push(...pendingPointsRef.current);
+      pendingPointsRef.current = [];
+    }
+    
+    if (currentSegmentRef.current.points.length > 0) {
+      segmentsRef.current.push(currentSegmentRef.current);
+      onSegmentsChange?.([...segmentsRef.current]);
+    }
+    
+    currentSegmentRef.current = null;
+    setIsDrawing(false);
+  }, [onSegmentsChange]);
+
   React.useImperativeHandle(ref, () => ({
     undo,
     clear,
     exportImage,
     getSegments,
-  }), [undo, clear, exportImage, getSegments]);
+    loadSegments,
+    finalizeStroke,
+  }), [undo, clear, exportImage, getSegments, loadSegments, finalizeStroke]);
 
   useEffect(() => {
     initBackgroundCanvas();
@@ -344,6 +382,9 @@ const EmbroideryCanvas: React.ForwardRefRenderFunction<
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (clearTimerRef.current) {
+        window.clearTimeout(clearTimerRef.current);
       }
     };
   }, [initBackgroundCanvas, loop]);

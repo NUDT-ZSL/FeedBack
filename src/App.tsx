@@ -1,25 +1,99 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import EmbroideryCanvas, { EmbroideryCanvasHandle } from './components/EmbroideryCanvas';
-import type { StitchType, ThreadColor, StitchSegment } from './types/embroidery';
+import type { StitchType, ThreadColor, StitchSegment, EmbroideryPiece } from './types/embroidery';
 import { THREAD_COLORS, STITCH_TYPES } from './types/embroidery';
+
+const createPiece = (name: string): EmbroideryPiece => ({
+  id: uuidv4(),
+  name,
+  segments: [],
+  stitchType: 'straight',
+  threadColor: '#c0392b',
+  createdAt: Date.now(),
+});
+
+const formatTimestamp = (ts: number): string => {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
 
 const App: React.FC = () => {
   const canvasRef = useRef<EmbroideryCanvasHandle & { triggerSilkEffect?: () => void } | null>(null);
-  const [stitchType, setStitchType] = useState<StitchType>('straight');
-  const [threadColor, setThreadColor] = useState<ThreadColor>('#c0392b');
+  const [initialPiece] = useState(() => createPiece('牡丹绣品'));
+  const [pieces, setPieces] = useState<EmbroideryPiece[]>([initialPiece]);
+  const [activePieceId, setActivePieceId] = useState<string>(initialPiece.id);
   const [stitchRadius] = useState(3);
-  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
-  const [selectedStitchIndex, setSelectedStitchIndex] = useState(0);
   const [inkRipplePos, setInkRipplePos] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [showScroll, setShowScroll] = useState(false);
   const [scrollUnfolding, setScrollUnfolding] = useState(false);
-  const [embroideryName, setEmbroideryName] = useState('牡丹绣品');
   const [embroideryImage, setEmbroideryImage] = useState('');
-  const [createdAt, setCreatedAt] = useState('');
-  const [showCopyToast, setShowCopyToast] = useState(false);
-  const [, setSegments] = useState<StitchSegment[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [editingPieceId, setEditingPieceId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
-  const handleStitchTypeChange = useCallback((index: number, type: StitchType, e: React.MouseEvent) => {
+  const piecesRef = useRef(pieces);
+  piecesRef.current = pieces;
+  const activePieceIdRef = useRef(activePieceId);
+  activePieceIdRef.current = activePieceId;
+  const toastTimerRef = useRef<number | null>(null);
+  const sharedImportRef = useRef(false);
+
+  const activePiece = pieces.find((p) => p.id === activePieceId) ?? pieces[0];
+  const stitchType = activePiece.stitchType;
+  const threadColor = activePiece.threadColor;
+  const selectedStitchIndex = Math.max(0, STITCH_TYPES.findIndex((s) => s.type === stitchType));
+  const selectedColorIndex = Math.max(0, THREAD_COLORS.indexOf(threadColor));
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  // 切换绣品时，把该绣品已绣的针脚恢复到画布上
+  useEffect(() => {
+    const piece = piecesRef.current.find((p) => p.id === activePieceId);
+    canvasRef.current?.loadSegments(piece ? piece.segments : []);
+  }, [activePieceId]);
+
+  // 打开分享链接时，导入链接里的绣品数据
+  useEffect(() => {
+    if (sharedImportRef.current) return;
+    sharedImportRef.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get('embroidery');
+    if (!encoded) return;
+
+    try {
+      const json = decodeURIComponent(atob(encoded));
+      const data = JSON.parse(json) as { segments?: StitchSegment[]; name?: string; createdAt?: number };
+      if (!data || !Array.isArray(data.segments)) return;
+
+      const piece: EmbroideryPiece = {
+        id: uuidv4(),
+        name: typeof data.name === 'string' && data.name.trim() ? data.name : '分享的绣品',
+        segments: data.segments,
+        stitchType: 'straight',
+        threadColor: '#c0392b',
+        createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
+      };
+      setPieces((prev) => [...prev, piece]);
+      setActivePieceId(piece.id);
+      showToast(`已打开分享的绣品《${piece.name}》`);
+    } catch (e) {
+      console.error('Failed to load shared embroidery:', e);
+      showToast('分享链接解析失败');
+    } finally {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [showToast]);
+
+  const handleStitchTypeChange = useCallback((type: StitchType, e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setInkRipplePos({
       x: e.clientX - rect.left,
@@ -27,14 +101,12 @@ const App: React.FC = () => {
       visible: true,
     });
     setTimeout(() => setInkRipplePos((prev) => ({ ...prev, visible: false })), 300);
-    
-    setSelectedStitchIndex(index);
-    setStitchType(type);
+
+    setPieces((prev) => prev.map((p) => (p.id === activePieceIdRef.current ? { ...p, stitchType: type } : p)));
   }, []);
 
-  const handleColorChange = useCallback((index: number, color: ThreadColor) => {
-    setSelectedColorIndex(index);
-    setThreadColor(color);
+  const handleColorChange = useCallback((color: ThreadColor) => {
+    setPieces((prev) => prev.map((p) => (p.id === activePieceIdRef.current ? { ...p, threadColor: color } : p)));
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -43,74 +115,216 @@ const App: React.FC = () => {
 
   const handleClear = useCallback(() => {
     canvasRef.current?.clear();
-  }, []);
+    showToast('已清空当前绣品的针脚');
+  }, [showToast]);
 
   const handleComplete = useCallback(() => {
     if (!canvasRef.current) return;
-    
+
+    canvasRef.current.finalizeStroke();
     canvasRef.current.triggerSilkEffect?.();
-    
+
     setTimeout(() => {
       const dataUrl = canvasRef.current?.exportImage(false) || '';
       setEmbroideryImage(dataUrl);
-      
-      const now = new Date();
-      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      setCreatedAt(timestamp);
-      
+
       setScrollUnfolding(true);
       setShowScroll(true);
-      
+
       setTimeout(() => setScrollUnfolding(false), 600);
     }, 500);
   }, []);
 
   const handleDownload = useCallback(() => {
     if (!embroideryImage) return;
-    
+
     const link = document.createElement('a');
-    const timestamp = Date.now();
-    link.download = `绣品_${timestamp}.png`;
+    const name = activePiece.name.trim() || '绣品';
+    link.download = `${name}.png`;
     link.href = embroideryImage;
     link.click();
-  }, [embroideryImage]);
+  }, [embroideryImage, activePiece]);
 
   const handleShareLink = useCallback(async () => {
     if (!canvasRef.current) return;
-    
+
+    canvasRef.current.finalizeStroke();
     const segments = canvasRef.current.getSegments();
+    const piece = piecesRef.current.find((p) => p.id === activePieceIdRef.current);
     const data = {
       segments,
-      name: embroideryName,
-      createdAt: Date.now(),
+      name: piece?.name || '绣品',
+      createdAt: piece?.createdAt ?? Date.now(),
     };
-    
+
     try {
       const jsonStr = JSON.stringify(data);
       const base64 = btoa(encodeURIComponent(jsonStr));
       const shareUrl = `${window.location.origin}${window.location.pathname}?embroidery=${base64}`;
-      
+
       await navigator.clipboard.writeText(shareUrl);
-      setShowCopyToast(true);
-      setTimeout(() => setShowCopyToast(false), 2000);
+      showToast('绣品链接已复制');
     } catch (e) {
       console.error('Failed to copy link:', e);
     }
-  }, [embroideryName]);
+  }, [showToast]);
 
   const handleSegmentsChange = useCallback((newSegments: StitchSegment[]) => {
-    setSegments(newSegments);
+    const snapshot = [...newSegments];
+    setPieces((prev) => prev.map((p) => (p.id === activePieceIdRef.current ? { ...p, segments: snapshot } : p)));
   }, []);
 
-  const formatTimestamp = (ts: string) => {
-    return ts;
-  };
+  const handleSelectPiece = useCallback((id: string) => {
+    if (id === activePieceIdRef.current) return;
+
+    canvasRef.current?.finalizeStroke();
+    setActivePieceId(id);
+    setShowScroll(false);
+
+    const piece = piecesRef.current.find((p) => p.id === id);
+    if (piece) {
+      showToast(`已切换到《${piece.name}》`);
+    }
+  }, [showToast]);
+
+  const handleNewPiece = useCallback(() => {
+    canvasRef.current?.finalizeStroke();
+
+    const piece = createPiece(`绣品${piecesRef.current.length + 1}`);
+    setPieces((prev) => [...prev, piece]);
+    setActivePieceId(piece.id);
+    setShowScroll(false);
+    showToast(`已新建《${piece.name}》，开始绣制吧`);
+  }, [showToast]);
+
+  const handleDeletePiece = useCallback((id: string) => {
+    const prev = piecesRef.current;
+    const target = prev.find((p) => p.id === id);
+    if (!target) return;
+
+    const remaining = prev.filter((p) => p.id !== id);
+    let message = `已删除《${target.name}》`;
+
+    if (remaining.length === 0) {
+      const fresh = createPiece('牡丹绣品');
+      setPieces([fresh]);
+      setActivePieceId(fresh.id);
+      message += '，绣坊已重置为空白底稿';
+    } else {
+      if (id === activePieceIdRef.current) {
+        const index = prev.findIndex((p) => p.id === id);
+        const next = remaining[Math.min(index, remaining.length - 1)];
+        setActivePieceId(next.id);
+        message += `，已切换到《${next.name}》`;
+      }
+      setPieces(remaining);
+    }
+
+    if (editingPieceId === id) {
+      setEditingPieceId(null);
+    }
+    setShowScroll(false);
+    showToast(message);
+  }, [editingPieceId, showToast]);
+
+  const handleRenameActivePiece = useCallback((name: string) => {
+    setPieces((prev) => prev.map((p) => (p.id === activePieceIdRef.current ? { ...p, name } : p)));
+  }, []);
+
+  const commitRename = useCallback(() => {
+    if (editingPieceId) {
+      const trimmed = editingName.trim();
+      if (trimmed) {
+        setPieces((prev) => prev.map((p) => (p.id === editingPieceId ? { ...p, name: trimmed } : p)));
+      }
+    }
+    setEditingPieceId(null);
+  }, [editingPieceId, editingName]);
 
   return (
     <div style={styles.app}>
       <h1 style={styles.title}>姑苏绣坊</h1>
       
       <div style={styles.mainContent}>
+        <div style={styles.piecePanel}>
+          <div style={styles.piecePanelHeader}>
+            <span style={styles.piecePanelTitle}>绣品列表</span>
+            <button style={styles.newPieceButton} onClick={handleNewPiece}>＋ 新建</button>
+          </div>
+          <div style={styles.pieceList}>
+            {pieces.map((piece) => {
+              const stitchCount = piece.segments.reduce((sum, segment) => sum + segment.points.length, 0);
+              const isActive = piece.id === activePieceId;
+              const isEditing = editingPieceId === piece.id;
+              return (
+                <div
+                  key={piece.id}
+                  style={{
+                    ...styles.pieceItem,
+                    ...(isActive ? styles.pieceItemActive : {}),
+                  }}
+                  onClick={() => handleSelectPiece(piece.id)}
+                >
+                  <div style={styles.pieceNameRow}>
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename();
+                          if (e.key === 'Escape') setEditingPieceId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={styles.pieceNameInput}
+                      />
+                    ) : (
+                      <span style={styles.pieceName} title={piece.name}>
+                        {piece.name.trim() || '未命名绣品'}
+                      </span>
+                    )}
+                    <div style={styles.pieceActions}>
+                      <button
+                        style={styles.pieceActionButton}
+                        title="改名"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingPieceId(piece.id);
+                          setEditingName(piece.name);
+                        }}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        style={styles.pieceActionButton}
+                        title="删除"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePiece(piece.id);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div style={styles.pieceStatusRow}>
+                    <span
+                      style={{
+                        ...styles.statusDot,
+                        backgroundColor: stitchCount === 0 ? '#b0a58c' : '#27ae60',
+                      }}
+                    />
+                    <span style={styles.pieceStatus}>
+                      {stitchCount === 0 ? '未开绣' : `已绣 ${stitchCount} 针`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
         <div style={styles.stitchToolbar}>
           {STITCH_TYPES.map((stitch, index) => (
             <button
@@ -119,7 +333,7 @@ const App: React.FC = () => {
                 ...styles.stitchButton,
                 ...(selectedStitchIndex === index ? styles.stitchButtonActive : {}),
               }}
-              onClick={(e) => handleStitchTypeChange(index, stitch.type, e)}
+              onClick={(e) => handleStitchTypeChange(stitch.type, e)}
             >
               {inkRipplePos.visible && selectedStitchIndex === index && (
                 <span
@@ -187,7 +401,7 @@ const App: React.FC = () => {
                     backgroundColor: color,
                     ...(selectedColorIndex === index ? styles.threadButtonSelected : {}),
                   }}
-                  onClick={() => handleColorChange(index, color)}
+                  onClick={() => handleColorChange(color)}
                 />
               ))}
             </div>
@@ -209,7 +423,7 @@ const App: React.FC = () => {
               </div>
               
               <div style={styles.scrollContent}>
-                <h2 style={styles.embroideryTitle}>{embroideryName}</h2>
+                <h2 style={styles.embroideryTitle}>{activePiece.name.trim() || '未命名绣品'}</h2>
                 <div style={styles.embroideryImageContainer}>
                   <img src={embroideryImage} alt="绣品" style={styles.embroideryImage} />
                 </div>
@@ -218,14 +432,14 @@ const App: React.FC = () => {
                     <label style={styles.infoLabel}>作品名称：</label>
                     <input
                       type="text"
-                      value={embroideryName}
-                      onChange={(e) => setEmbroideryName(e.target.value)}
+                      value={activePiece.name}
+                      onChange={(e) => handleRenameActivePiece(e.target.value)}
                       style={styles.nameInput}
                     />
                   </div>
                   <div style={styles.infoRow}>
                     <span style={styles.infoLabel}>创作时间：</span>
-                    <span style={styles.infoValue}>{formatTimestamp(createdAt)}</span>
+                    <span style={styles.infoValue}>{formatTimestamp(activePiece.createdAt)}</span>
                   </div>
                 </div>
                 
@@ -262,9 +476,9 @@ const App: React.FC = () => {
         </div>
       </div>
       
-      {showCopyToast && (
+      {toast && (
         <div style={styles.copyToast}>
-          绣品链接已复制
+          {toast}
         </div>
       )}
     </div>
@@ -301,6 +515,114 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '16px',
     paddingTop: '20px',
+  },
+  piecePanel: {
+    backgroundColor: '#e5d5b0',
+    border: '2px solid #8b5e3c',
+    borderRadius: '12px',
+    padding: '12px',
+    width: '220px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  piecePanelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  piecePanelTitle: {
+    fontSize: '20px',
+    color: '#5a3a1d',
+    letterSpacing: '2px',
+  },
+  newPieceButton: {
+    padding: '4px 10px',
+    fontSize: '14px',
+    fontFamily: "'Ma Shan Zheng', cursive",
+    backgroundColor: '#fcf5e8',
+    border: '1px solid #8b5e3c',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    color: '#5a3a1d',
+  },
+  pieceList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '430px',
+    overflowY: 'auto',
+  },
+  pieceItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    padding: '8px 10px',
+    backgroundColor: '#fcf5e8',
+    border: '2px solid rgba(139, 94, 60, 0.25)',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  pieceItemActive: {
+    borderColor: '#8b5e3c',
+    boxShadow: '0 0 10px rgba(255, 215, 0, 0.7)',
+  },
+  pieceNameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '6px',
+  },
+  pieceName: {
+    fontSize: '17px',
+    color: '#333',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  pieceNameInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: '2px 6px',
+    fontSize: '15px',
+    fontFamily: "'Ma Shan Zheng', cursive",
+    border: '1px solid #8b5e3c',
+    borderRadius: '4px',
+    backgroundColor: '#fff',
+    color: '#333',
+    outline: 'none',
+  },
+  pieceActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  pieceActionButton: {
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    fontSize: '14px',
+    color: '#8b5e3c',
+    padding: '2px 4px',
+    lineHeight: 1,
+  },
+  pieceStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    display: 'inline-block',
+  },
+  pieceStatus: {
+    fontSize: '13px',
+    color: '#8b5e3c',
   },
   stitchButton: {
     position: 'relative',

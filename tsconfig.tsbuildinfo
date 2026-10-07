@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/EmbroideryCanvas.tsx","./src/components/Empty.tsx","./src/hooks/useTheme.ts","./src/lib/utils.ts","./src/pages/Home.tsx","./src/types/embroidery.ts","./src/utils/stitches.ts"],"errors":true,"version":"5.8.3"}

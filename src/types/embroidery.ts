@@ -23,6 +23,15 @@ export interface EmbroideryData {
   createdAt: number;
 }
 
+export interface EmbroideryPiece {
+  id: string;
+  name: string;
+  segments: StitchSegment[];
+  stitchType: StitchType;
+  threadColor: ThreadColor;
+  createdAt: number;
+}
+
 export const THREAD_COLORS: ThreadColor[] = [
   '#c0392b',
   '#f1c40f',
