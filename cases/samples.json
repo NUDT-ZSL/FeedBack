@@ -1,0 +1,110 @@
+[
+  {
+    "name": "四级处置：丢弃/降采样/扩容/暂停",
+    "events": [
+      { "id": "a1", "sourceId": "web", "arrivalTime": 0 },
+      { "id": "a2", "sourceId": "web", "arrivalTime": 0.2 },
+      { "id": "a3", "sourceId": "iot", "arrivalTime": 0.3 },
+      { "id": "a4", "sourceId": "web", "arrivalTime": 0.4 },
+      { "id": "a5", "sourceId": "iot", "arrivalTime": 0.5 },
+      { "id": "a6", "sourceId": "web", "arrivalTime": 0.6 },
+      { "id": "a7", "sourceId": "iot", "arrivalTime": 0.7 },
+      { "id": "a8", "sourceId": "web", "arrivalTime": 0.8 },
+      { "id": "a9", "sourceId": "iot", "arrivalTime": 0.9 },
+      { "id": "a10", "sourceId": "web", "arrivalTime": 1.0 },
+      { "id": "a11", "sourceId": "iot", "arrivalTime": 1.1 },
+      { "id": "a12", "sourceId": "web", "arrivalTime": 1.2 },
+      { "id": "a13", "sourceId": "iot", "arrivalTime": 1.3 },
+      { "id": "a14", "sourceId": "web", "arrivalTime": 1.4 },
+      { "id": "a15", "sourceId": "iot", "arrivalTime": 1.5 },
+      { "id": "a16", "sourceId": "web", "arrivalTime": 1.6 },
+      { "id": "a17", "sourceId": "iot", "arrivalTime": 1.7 },
+      { "id": "a18", "sourceId": "web", "arrivalTime": 1.8 },
+      { "id": "a19", "sourceId": "iot", "arrivalTime": 1.9 },
+      { "id": "a20", "sourceId": "web", "arrivalTime": 2.0 }
+    ],
+    "config": {
+      "baseConsumeRate": 2,
+      "baseCapacity": 4,
+      "tiers": [
+        { "id": "t1-sample", "label": "降采样", "threshold": 3, "consumeRate": 3,
+          "action": { "type": "downsample", "keepRatio": 0.5 } },
+        { "id": "t2-expand", "label": "缓冲扩容", "threshold": 5, "consumeRate": 4,
+          "action": { "type": "expandBuffer", "capacity": 8 } },
+        { "id": "t3-pause", "label": "暂停iot", "threshold": 7, "consumeRate": 5,
+          "action": { "type": "pauseSource", "sources": ["iot"] } },
+        { "id": "t4-drop", "label": "丢弃", "threshold": 9, "consumeRate": 6,
+          "action": { "type": "drop" } }
+      ]
+    },
+    "mutations": [
+      { "kind": "sourceRate", "sourceId": "web", "factor": 1.5 },
+      { "kind": "tierThreshold", "tierId": "t2-expand", "threshold": 4 }
+    ]
+  },
+  {
+    "name": "数据质量：乱序/缺来源/同时刻",
+    "events": [
+      { "id": "b1", "sourceId": "x", "arrivalTime": 3 },
+      { "id": "b2", "arrivalTime": 1 },
+      { "id": "b3", "sourceId": "x", "arrivalTime": 1 },
+      { "id": "b4", "sourceId": "y", "arrivalTime": 1 },
+      { "id": "b5", "sourceId": "y", "arrivalTime": 0.5 },
+      { "id": "b6", "sourceId": "x", "arrivalTime": 2 }
+    ],
+    "config": {
+      "baseConsumeRate": 1,
+      "tiers": [
+        { "id": "t1", "threshold": 2, "consumeRate": 2, "action": { "type": "downsample", "keepRatio": 0.5 } }
+      ]
+    },
+    "mutations": [
+      { "kind": "sourceRate", "sourceId": "x", "factor": 2 }
+    ]
+  },
+  {
+    "name": "阈值重叠：人工裁决后推演",
+    "events": [
+      { "id": "c1", "sourceId": "s", "arrivalTime": 0 },
+      { "id": "c2", "sourceId": "s", "arrivalTime": 0.1 },
+      { "id": "c3", "sourceId": "s", "arrivalTime": 0.2 },
+      { "id": "c4", "sourceId": "s", "arrivalTime": 0.3 },
+      { "id": "c5", "sourceId": "s", "arrivalTime": 0.4 },
+      { "id": "c6", "sourceId": "s", "arrivalTime": 0.5 }
+    ],
+    "config": {
+      "baseConsumeRate": 1,
+      "tiers": [
+        { "id": "drop-a", "threshold": 2, "consumeRate": 2, "action": { "type": "drop" } },
+        { "id": "expand-b", "threshold": 2, "consumeRate": 2, "action": { "type": "expandBuffer", "capacity": 6 } }
+      ]
+    },
+    "adjudications": [
+      { "id": "adj-c1", "kind": "overlap", "anchor": 2, "chosenTierId": "expand-b", "note": "同阈值冲突时优先扩容而非丢弃" }
+    ],
+    "mutations": [
+      { "kind": "adjudicate", "adjudication": { "id": "adj-c2", "kind": "overlap", "anchor": 2, "chosenTierId": "drop-a", "note": "改裁为丢弃" } }
+    ]
+  },
+  {
+    "name": "升级链成环：裁决断点",
+    "events": [
+      { "id": "d1", "sourceId": "s", "arrivalTime": 0 },
+      { "id": "d2", "sourceId": "s", "arrivalTime": 0.2 },
+      { "id": "d3", "sourceId": "s", "arrivalTime": 0.4 },
+      { "id": "d4", "sourceId": "s", "arrivalTime": 0.6 },
+      { "id": "d5", "sourceId": "s", "arrivalTime": 0.8 }
+    ],
+    "config": {
+      "baseConsumeRate": 1,
+      "tiers": [
+        { "id": "ring-a", "threshold": 1, "consumeRate": 1, "escalateTo": "ring-b", "action": { "type": "downsample", "keepRatio": 0.5 } },
+        { "id": "ring-b", "threshold": 3, "consumeRate": 2, "escalateTo": "ring-a", "action": { "type": "drop" } }
+      ]
+    },
+    "adjudications": [
+      { "id": "adj-d1", "kind": "cycle", "anchor": "ring-a", "chosenTierId": "ring-a", "note": "在 ring-a 处断开环，回退默认升序" }
+    ],
+    "mutations": []
+  }
+]
