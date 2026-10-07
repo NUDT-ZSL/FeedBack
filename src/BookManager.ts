@@ -12,6 +12,7 @@ export interface Damage {
   repairMaterial?: string;
   repairProgress: number;
   mesh?: THREE.Mesh;
+  sourceCanvas?: HTMLCanvasElement;
 }
 
 export interface RepairRecord {
@@ -20,6 +21,18 @@ export interface RepairRecord {
   materials: { name: string; count: number }[];
   restorerSignature: string;
   timestamp: number;
+}
+
+export interface ApplyRepairResult {
+  accepted: boolean;
+  reason?: string;
+}
+
+export interface OverallProgress {
+  repaired: number;
+  repairing: number;
+  total: number;
+  percent: number;
 }
 
 export class BookManager {
@@ -39,6 +52,9 @@ export class BookManager {
   private pageCanvas: HTMLCanvasElement | null = null;
   private pageTexture: THREE.CanvasTexture | null = null;
   private originalPageImageData: ImageData | null = null;
+  private beforeImageCanvas: HTMLCanvasElement | null = null;
+  private afterImageCanvas: HTMLCanvasElement | null = null;
+  private bound: boolean = false;
 
   private readonly PAGE_WIDTH = 2.5;
   private readonly PAGE_HEIGHT = 1.8;
@@ -78,6 +94,7 @@ export class BookManager {
     this.bookGroup.add(this.pageMesh);
     this.createDamages();
     this.updatePageTexture();
+    this.beforeImageCanvas = this.composePageImage(true);
   }
 
   private drawPaperTexture(ctx: CanvasRenderingContext2D): void {
@@ -164,7 +181,27 @@ export class BookManager {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(damage.position.x, 0.015, damage.position.y);
     damage.mesh = mesh;
+    damage.sourceCanvas = canvas;
     this.damageMeshes.add(mesh);
+  }
+
+  private composePageImage(withDamages: boolean): HTMLCanvasElement | null {
+    if (!this.originalPageImageData) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 768;
+    const ctx = canvas.getContext('2d')!;
+    ctx.putImageData(this.originalPageImageData, 0, 0);
+    if (withDamages) {
+      for (const damage of this.damages) {
+        if (!damage.sourceCanvas) continue;
+        const x = (damage.position.x / this.PAGE_WIDTH + 0.5) * 1024;
+        const y = (damage.position.y / this.PAGE_HEIGHT + 0.5) * 768;
+        const size = damage.radius * 2.5 * (1024 / this.PAGE_WIDTH);
+        ctx.drawImage(damage.sourceCanvas, x - size / 2, y - size / 2, size, size);
+      }
+    }
+    return canvas;
   }
 
   private drawWormHole(ctx: CanvasRenderingContext2D, _radius: number): void {
@@ -247,7 +284,6 @@ export class BookManager {
     let nearest: Damage | null = null;
     let minDist = Infinity;
     for (const damage of this.damages) {
-      if (damage.repaired) continue;
       const dx = localPos.x - damage.position.x;
       const dz = localPos.z - damage.position.y;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -259,8 +295,16 @@ export class BookManager {
     return nearest;
   }
 
-  public applyRepair(damage: Damage, materialName: string): boolean {
-    if (damage.repaired || damage.repairProgress > 0) return false;
+  public applyRepair(damage: Damage, materialName: string): ApplyRepairResult {
+    if (this.bound) {
+      return { accepted: false, reason: '古籍已装订成卷，无法继续修补' };
+    }
+    if (damage.repaired) {
+      return { accepted: false, reason: '该处破损已修复完成，无需重复修补' };
+    }
+    if (damage.repairProgress > 0) {
+      return { accepted: false, reason: `该处破损正在修复中（已用${damage.repairMaterial}），请稍候` };
+    }
     damage.repairMaterial = materialName;
     this.repairAnimations.push({
       damage,
@@ -269,13 +313,75 @@ export class BookManager {
     });
     const worldPos = this.bookGroup.localToWorld(new THREE.Vector3(damage.position.x, 0.02, damage.position.y));
     this.effectManager.emitRipple(worldPos, damage.radius);
+    this.registerMaterial(materialName);
+    return { accepted: true };
+  }
+
+  private registerMaterial(materialName: string): void {
     const existing = this.usedMaterials.find(m => m.name === materialName);
     if (existing) {
       existing.count++;
     } else {
       this.usedMaterials.push({ name: materialName, count: 1 });
     }
-    return true;
+  }
+
+  public getUsedMaterials(): { name: string; count: number }[] {
+    return this.usedMaterials.map(m => ({ name: m.name, count: m.count }));
+  }
+
+  public getOverallProgress(): OverallProgress {
+    const total = this.damages.length;
+    const repaired = this.damages.filter(d => d.repaired).length;
+    const repairing = this.damages.filter(d => !d.repaired && d.repairProgress > 0).length;
+    const progressSum = this.damages.reduce((sum, d) => sum + (d.repaired ? 1 : d.repairProgress), 0);
+    const percent = total > 0 ? Math.round((progressSum / total) * 100) : 0;
+    return { repaired, repairing, total, percent };
+  }
+
+  public validateMaterials(): string[] {
+    const issues: string[] = [];
+    const startedDamages = this.damages.filter(d => d.repaired || d.repairProgress > 0);
+    const totalCount = this.usedMaterials.reduce((sum, m) => sum + m.count, 0);
+    if (totalCount !== startedDamages.length) {
+      issues.push('材料清单与实际修补次数不一致');
+    }
+    for (const damage of startedDamages) {
+      if (!damage.repairMaterial) {
+        issues.push(`破损 ${damage.id} 缺少材料记录`);
+      }
+    }
+    for (const m of this.usedMaterials) {
+      if (m.count <= 0) {
+        issues.push(`材料「${m.name}」数量异常`);
+      }
+    }
+    return issues;
+  }
+
+  public getBindingBlockers(): string[] {
+    const blockers: string[] = [];
+    if (this.bound) {
+      blockers.push('古籍已装订成卷');
+      return blockers;
+    }
+    const repairing = this.damages.filter(d => !d.repaired && d.repairProgress > 0).length;
+    if (repairing > 0) {
+      blockers.push(`有 ${repairing} 处破损正在修复中，请稍候`);
+    }
+    const unrepaired = this.damages.filter(d => !d.repaired && d.repairProgress === 0).length;
+    if (unrepaired > 0) {
+      blockers.push(`尚有 ${unrepaired} 处破损未修复`);
+    }
+    if (this.usedMaterials.length === 0) {
+      blockers.push('尚未使用任何修复材料');
+    }
+    blockers.push(...this.validateMaterials());
+    return blockers;
+  }
+
+  public canBind(): boolean {
+    return this.getBindingBlockers().length === 0;
   }
 
   private updateRepairAnimations(): void {
@@ -331,7 +437,17 @@ export class BookManager {
   }
 
   public startScrollAnimation(): void {
-    if (!this.isComplete() || this.scrollAnimation) return;
+    if (this.scrollAnimation || !this.canBind()) return;
+    this.bound = true;
+    this.updatePageTexture();
+    this.afterImageCanvas = this.composePageImage(false);
+    this.repairRecord = {
+      beforeImage: this.beforeImageCanvas ? this.beforeImageCanvas.toDataURL('image/png') : '',
+      afterImage: this.afterImageCanvas ? this.afterImageCanvas.toDataURL('image/png') : '',
+      materials: this.getUsedMaterials(),
+      restorerSignature: '古籍修复师',
+      timestamp: Date.now()
+    };
     this.scrollAnimation = {
       active: true,
       startTime: performance.now(),
@@ -406,13 +522,6 @@ export class BookManager {
     this.scrollMesh.position.copy(this.bookGroup.position);
     this.scrollMesh.visible = false;
     this.scene.add(this.scrollMesh);
-    this.repairRecord = {
-      beforeImage: '',
-      afterImage: '',
-      materials: [...this.usedMaterials],
-      restorerSignature: '古籍修复师',
-      timestamp: Date.now()
-    };
   }
 
   private drawScrollContent(ctx: CanvasRenderingContext2D): void {
@@ -427,17 +536,16 @@ export class BookManager {
     ctx.fillStyle = '#2a1a0f';
     ctx.font = '24px "ZCOOL XiaoWei", serif';
     ctx.textAlign = 'left';
-    ctx.fillText('【修复前后对比】', 150, 200);
-    ctx.fillStyle = '#3d2817';
-    ctx.fillText('修复前：书页破损，虫蛀霉斑，亟待修复', 180, 240);
-    ctx.fillText('修复后：破镜重圆，墨迹如新，重现芳华', 180, 280);
+    ctx.fillText('【修复前后对比】', 150, 180);
+    this.drawRecordImage(ctx, this.beforeImageCanvas, 180, 200, 640, 200, '修复前');
+    this.drawRecordImage(ctx, this.afterImageCanvas, 880, 200, 640, 200, '修复后');
     ctx.fillStyle = '#2a1a0f';
-    ctx.fillText('【用材清单】', 150, 330);
+    ctx.fillText('【用材清单】', 150, 450);
     ctx.fillStyle = '#3d2817';
     const materials = this.usedMaterials.length > 0 
       ? this.usedMaterials.map(m => `${m.name} ×${m.count}`).join('、')
-      : '安徽宣纸、蚕丝线、小麦浆糊、松烟墨';
-    this.wrapText(ctx, materials, 180, 370, 1700, 35);
+      : '（无材料记录）';
+    ctx.fillText(materials, 300, 450);
     ctx.fillStyle = '#2a1a0f';
     ctx.textAlign = 'right';
     ctx.fillText('【修复师签名】', 1900, 430);
@@ -449,21 +557,30 @@ export class BookManager {
     ctx.fillText(new Date().toLocaleDateString('zh-CN'), 1900, 500);
   }
 
-  private wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number): void {
-    const chars = text.split('');
-    let line = '';
-    let currentY = y;
-    for (let i = 0; i < chars.length; i++) {
-      const test = line + chars[i];
-      if (ctx.measureText(test).width > maxWidth && i > 0) {
-        ctx.fillText(line, x, currentY);
-        line = chars[i];
-        currentY += lineHeight;
-      } else {
-        line = test;
-      }
+  private drawRecordImage(
+    ctx: CanvasRenderingContext2D,
+    source: HTMLCanvasElement | null,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    label: string
+  ): void {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(92, 58, 33, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    if (source) {
+      ctx.drawImage(source, x + 2, y + 2, w - 4, h - 4);
+    } else {
+      ctx.fillStyle = 'rgba(92, 58, 33, 0.1)';
+      ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
     }
-    ctx.fillText(line, x, currentY);
+    ctx.fillStyle = '#3d2817';
+    ctx.font = '20px "ZCOOL XiaoWei", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + w / 2, y + h + 24);
+    ctx.restore();
   }
 
   private updateScrollAnimation(): void {

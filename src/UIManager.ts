@@ -16,7 +16,6 @@ export interface MaterialItem {
 export class UIManager {
   private uiContainer: HTMLElement;
   private camera: THREE.Camera;
-  private renderer: THREE.WebGLRenderer;
   private bookManager: BookManager;
   private effectManager: EffectManager;
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
@@ -24,23 +23,27 @@ export class UIManager {
   private materials: MaterialItem[] = [];
   private draggingMaterial: MaterialItem | null = null;
   private dragGhost: HTMLElement | null = null;
-  private hoveredMaterial: HTMLElement | null = null;
   private onBindCallback: (() => void) | null = null;
   private materialShelf: HTMLElement | null = null;
   private bindButton: HTMLElement | null = null;
+  private bindHint: HTMLElement | null = null;
   private repairProgress: HTMLElement | null = null;
+  private usedMaterialsPanel: HTMLElement | null = null;
+  private toast: HTMLElement | null = null;
+  private toastTimer: number | null = null;
   private lastMouseMoveTime: number = 0;
+  private lastStateSignature: string = '';
+  private uiHidden: boolean = false;
 
   constructor(
     uiContainer: HTMLElement,
     camera: THREE.Camera,
-    renderer: THREE.WebGLRenderer,
+    _renderer: THREE.WebGLRenderer,
     bookManager: BookManager,
     effectManager: EffectManager
   ) {
     this.uiContainer = uiContainer;
     this.camera = camera;
-    this.renderer = renderer;
     this.bookManager = bookManager;
     this.effectManager = effectManager;
     this.initMaterials();
@@ -69,6 +72,8 @@ export class UIManager {
     this.createMaterialShelf();
     this.createBindButton();
     this.createRepairProgress();
+    this.createUsedMaterialsPanel();
+    this.createToast();
     this.createDragGhost();
   }
 
@@ -108,8 +113,8 @@ export class UIManager {
       grid-template-rows: repeat(3, 1fr);
       gap: 8px;
     `;
-    this.materials.forEach((material, index) => {
-      const cell = this.createMaterialCell(material, index);
+    this.materials.forEach((material) => {
+      const cell = this.createMaterialCell(material);
       grid.appendChild(cell);
     });
     this.materialShelf.appendChild(grid);
@@ -121,7 +126,7 @@ export class UIManager {
       padding-top: 8px;
       border-top: 1px solid rgba(245, 240, 230, 0.2);
     `;
-    ['纸', '线', '糊', '墨'].forEach((label, i) => {
+    ['纸', '线', '糊', '墨'].forEach((label) => {
       const span = document.createElement('span');
       span.textContent = label;
       span.style.cssText = `
@@ -135,7 +140,7 @@ export class UIManager {
     this.uiContainer.appendChild(this.materialShelf);
   }
 
-  private createMaterialCell(material: MaterialItem, index: number): HTMLElement {
+  private createMaterialCell(material: MaterialItem): HTMLElement {
     const cell = document.createElement('div');
     cell.dataset.materialId = material.id;
     cell.style.cssText = `
@@ -199,10 +204,10 @@ export class UIManager {
     `;
     tooltip.appendChild(tipDesc);
     cell.appendChild(tooltip);
-    cell.addEventListener('mouseenter', (e) => {
+    cell.addEventListener('mouseenter', () => {
       this.onMaterialHover(cell, material, true);
     });
-    cell.addEventListener('mouseleave', (e) => {
+    cell.addEventListener('mouseleave', () => {
       this.onMaterialHover(cell, material, false);
     });
     cell.addEventListener('mousedown', (e) => {
@@ -246,7 +251,7 @@ export class UIManager {
     this.bindButton.addEventListener('click', () => {
       this.onBindClick();
     });
-    this.bindButton.addEventListener('mouseenter', (e) => {
+    this.bindButton.addEventListener('mouseenter', () => {
       const rect = this.bindButton!.getBoundingClientRect();
       this.effectManager.emitInkWash(
         new THREE.Vector3(
@@ -258,6 +263,85 @@ export class UIManager {
       );
     });
     this.uiContainer.appendChild(this.bindButton);
+    this.bindHint = document.createElement('div');
+    this.bindHint.style.cssText = `
+      position: absolute;
+      right: 40px;
+      bottom: 30px;
+      width: 260px;
+      text-align: center;
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: 13px;
+      color: #8b5a2b;
+      letter-spacing: 1px;
+      z-index: 100;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(245, 240, 230, 0.6);
+    `;
+    this.uiContainer.appendChild(this.bindHint);
+  }
+
+  private createUsedMaterialsPanel(): void {
+    this.usedMaterialsPanel = document.createElement('div');
+    this.usedMaterialsPanel.style.cssText = `
+      position: absolute;
+      top: 30px;
+      right: 40px;
+      min-width: 150px;
+      max-width: 220px;
+      padding: 10px 16px;
+      background: rgba(92, 58, 33, 0.9);
+      border: 1px solid rgba(245, 240, 230, 0.3);
+      border-radius: 8px;
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: 14px;
+      color: #f5f0e6;
+      z-index: 100;
+      letter-spacing: 1px;
+    `;
+    this.uiContainer.appendChild(this.usedMaterialsPanel);
+  }
+
+  private createToast(): void {
+    this.toast = document.createElement('div');
+    this.toast.style.cssText = `
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 28px;
+      background: rgba(40, 25, 15, 0.95);
+      border: 1px solid #8baa9a;
+      border-radius: 8px;
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: 15px;
+      color: #f5f0e6;
+      letter-spacing: 2px;
+      z-index: 200;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s, visibility 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    `;
+    this.uiContainer.appendChild(this.toast);
+  }
+
+  public showToast(message: string): void {
+    if (!this.toast) return;
+    this.toast.textContent = message;
+    this.toast.style.opacity = '1';
+    this.toast.style.visibility = 'visible';
+    if (this.toastTimer !== null) {
+      window.clearTimeout(this.toastTimer);
+    }
+    this.toastTimer = window.setTimeout(() => {
+      if (this.toast) {
+        this.toast.style.opacity = '0';
+        this.toast.style.visibility = 'hidden';
+      }
+      this.toastTimer = null;
+    }, 2400);
   }
 
   private createRepairProgress(): void {
@@ -277,7 +361,6 @@ export class UIManager {
       z-index: 100;
       letter-spacing: 2px;
     `;
-    this.updateProgress();
     this.uiContainer.appendChild(this.repairProgress);
   }
 
@@ -320,7 +403,6 @@ export class UIManager {
     const box = cell.querySelector('div') as HTMLElement;
     const tooltip = cell.querySelector('div:nth-child(2)') as HTMLElement;
     if (isEnter) {
-      this.hoveredMaterial = cell;
       box.style.transform = 'scale(1.3)';
       box.style.background = material.color + '40';
       box.style.borderColor = material.color;
@@ -337,7 +419,6 @@ export class UIManager {
         )
       );
     } else {
-      this.hoveredMaterial = null;
       box.style.transform = 'scale(1)';
       box.style.background = 'rgba(245, 240, 230, 0.15)';
       box.style.borderColor = 'rgba(245, 240, 230, 0.3)';
@@ -371,7 +452,7 @@ export class UIManager {
     }
   }
 
-  private onMouseUp(e: MouseEvent): void {
+  private onMouseUp(_e: MouseEvent): void {
     if (this.draggingMaterial) {
       this.raycaster.setFromCamera(this.mouse, this.camera);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.8);
@@ -397,28 +478,57 @@ export class UIManager {
   }
 
   private applyMaterialToDamage(damage: Damage, material: MaterialItem): void {
-    const success = this.bookManager.applyRepair(damage, material.name);
-    if (success) {
-      this.updateProgress();
+    const result = this.bookManager.applyRepair(damage, material.name);
+    if (result.accepted) {
+      this.syncState(true);
+    } else if (result.reason) {
+      this.showToast(result.reason);
     }
   }
 
-  public updateProgress(): void {
+  private syncState(force: boolean = false): void {
+    if (this.uiHidden) return;
+    const progress = this.bookManager.getOverallProgress();
+    const usedMaterials = this.bookManager.getUsedMaterials();
+    const blockers = this.bookManager.getBindingBlockers();
+    const signature = JSON.stringify({ progress, usedMaterials, blockers });
+    if (!force && signature === this.lastStateSignature) return;
+    this.lastStateSignature = signature;
+    this.renderProgress(progress);
+    this.renderUsedMaterials(usedMaterials);
+    this.renderBindState(blockers);
+  }
+
+  private renderProgress(progress: { repaired: number; repairing: number; total: number; percent: number }): void {
     if (!this.repairProgress) return;
-    const damages = this.bookManager.getDamages();
-    const repaired = damages.filter(d => d.repaired || d.repairProgress > 0).length;
-    const total = damages.length;
-    const percent = Math.round((repaired / total) * 100);
+    const repairingText = progress.repairing > 0
+      ? `<span style="margin-left: 12px; color: #d4c5a9;">修复中 ${progress.repairing} 处…</span>`
+      : '';
     this.repairProgress.innerHTML = `
       <span style="color: #8baa9a;">古籍修复进度</span>
-      <span style="margin: 0 12px; color: #f5f0e6;">${repaired}/${total}</span>
-      <span style="color: #d4c5a9;">(${percent}%)</span>
+      <span style="margin: 0 12px; color: #f5f0e6;">${progress.repaired}/${progress.total}</span>
+      <span style="color: #d4c5a9;">(${progress.percent}%)</span>${repairingText}
     `;
+  }
+
+  private renderUsedMaterials(usedMaterials: { name: string; count: number }[]): void {
+    if (!this.usedMaterialsPanel) return;
+    const rows = usedMaterials.length > 0
+      ? usedMaterials.map(m => `<div style="margin-top: 4px; color: #d4c5a9;">${m.name} <span style="color: #f5f0e6;">×${m.count}</span></div>`).join('')
+      : '<div style="margin-top: 4px; color: rgba(245, 240, 230, 0.5);">尚未使用材料</div>';
+    this.usedMaterialsPanel.innerHTML = `
+      <div style="font-family: 'Ma Shan Zheng', serif; font-size: 16px; color: #8baa9a; letter-spacing: 3px;">已用材料</div>
+      ${rows}
+    `;
+  }
+
+  private renderBindState(blockers: string[]): void {
+    const canBind = blockers.length === 0;
     if (this.bindButton) {
-      const isComplete = this.bookManager.isComplete();
-      this.bindButton.style.opacity = isComplete ? '1' : '0.5';
-      this.bindButton.style.pointerEvents = isComplete ? 'auto' : 'none';
-      if (isComplete) {
+      this.bindButton.style.opacity = canBind ? '1' : '0.5';
+      this.bindButton.style.cursor = canBind ? 'pointer' : 'not-allowed';
+      this.bindButton.style.pointerEvents = 'auto';
+      if (canBind) {
         this.bindButton.style.animation = 'pulse 2s infinite';
         const style = document.createElement('style');
         style.textContent = `
@@ -431,11 +541,22 @@ export class UIManager {
           style.dataset.pulse = 'true';
           document.head.appendChild(style);
         }
+      } else {
+        this.bindButton.style.animation = 'none';
       }
+    }
+    if (this.bindHint) {
+      this.bindHint.textContent = canBind ? '所有破损已修复，可以装订成卷' : blockers[0];
+      this.bindHint.style.color = canBind ? '#2f5d3a' : '#8b3a2b';
     }
   }
 
   private onBindClick(): void {
+    const blockers = this.bookManager.getBindingBlockers();
+    if (blockers.length > 0) {
+      this.showToast(`暂不能装订：${blockers.join('；')}`);
+      return;
+    }
     if (this.onBindCallback) {
       this.onBindCallback();
     }
@@ -446,6 +567,7 @@ export class UIManager {
   }
 
   public hideForScroll(): void {
+    this.uiHidden = true;
     if (this.materialShelf) {
       this.materialShelf.style.transition = 'opacity 0.5s';
       this.materialShelf.style.opacity = '0';
@@ -460,9 +582,17 @@ export class UIManager {
       this.repairProgress.style.transition = 'opacity 0.5s';
       this.repairProgress.style.opacity = '0';
     }
+    if (this.bindHint) {
+      this.bindHint.style.opacity = '0';
+    }
+    if (this.usedMaterialsPanel) {
+      this.usedMaterialsPanel.style.transition = 'opacity 0.5s';
+      this.usedMaterialsPanel.style.opacity = '0';
+    }
   }
 
   public showAfterScroll(): void {
+    this.uiHidden = false;
     if (this.materialShelf) {
       this.materialShelf.style.opacity = '1';
       this.materialShelf.style.pointerEvents = 'auto';
@@ -472,19 +602,26 @@ export class UIManager {
       this.bindButton.style.pointerEvents = 'auto';
     }
     if (this.repairProgress) {
+      this.repairProgress.style.opacity = '1';
+    }
+    this.syncState(true);
+    if (this.repairProgress) {
       this.repairProgress.innerHTML = `
         <span style="color: #8baa9a;">修复完成</span>
         <span style="margin: 0 12px; color: #c41e3a;">✓</span>
         <span style="color: #d4c5a9;">点击书卷查看详情</span>
       `;
-      this.repairProgress.style.opacity = '1';
     }
   }
 
-  public update(deltaTime: number): void {
+  public update(_deltaTime: number): void {
+    this.syncState();
   }
 
   public dispose(): void {
+    if (this.toastTimer !== null) {
+      window.clearTimeout(this.toastTimer);
+    }
     if (this.dragGhost) {
       document.body.removeChild(this.dragGhost);
     }
@@ -496,6 +633,15 @@ export class UIManager {
     }
     if (this.repairProgress) {
       this.uiContainer.removeChild(this.repairProgress);
+    }
+    if (this.bindHint) {
+      this.uiContainer.removeChild(this.bindHint);
+    }
+    if (this.usedMaterialsPanel) {
+      this.uiContainer.removeChild(this.usedMaterialsPanel);
+    }
+    if (this.toast) {
+      this.uiContainer.removeChild(this.toast);
     }
   }
 }

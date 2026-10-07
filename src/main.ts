@@ -376,6 +376,7 @@ class AncientBookRestoration {
 
   private startBinding(): void {
     if (this.state !== 'repairing') return;
+    if (!this.bookManager.canBind()) return;
     this.state = 'binding';
     this.uiManager.hideForScroll();
     this.controls.enabled = false;
