@@ -1,0 +1,174 @@
+:root {
+  --color-bg: #0d0d1a;
+  --color-gold: #b8860b;
+  --color-red: #cc3333;
+  --color-cyan: #0099cc;
+  --color-white: #ffffff;
+  --color-dark-blue: #000033;
+  --color-purple: #400080;
+  --transition: 0.3s ease-out;
+}
+
+.app-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--color-purple) 0%, var(--color-dark-blue) 50%, var(--color-bg) 100%);
+}
+
+.canvas-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.talisman-panel {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  padding: 20px;
+  background: rgba(13, 13, 26, 0.9);
+  border-left: 2px solid var(--color-gold);
+  border-top: 2px solid var(--color-gold);
+  border-bottom: 2px solid var(--color-gold);
+  border-radius: 12px 0 0 12px;
+  z-index: 100;
+  transition: all var(--transition);
+}
+
+.panel-title {
+  color: var(--color-gold);
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 20px;
+  font-family: 'ZCOOL XiaoWei', serif;
+  letter-spacing: 4px;
+}
+
+.talisman-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  justify-items: center;
+}
+
+.talisman-item {
+  width: 60px;
+  height: 60px;
+  background-color: var(--color-red);
+  border: 2px solid var(--color-gold);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  cursor: grab;
+  transition: all var(--transition);
+  user-select: none;
+  position: relative;
+}
+
+.talisman-item:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(204, 51, 51, 0.6);
+}
+
+.talisman-item:active {
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+.talisman-item.dragging {
+  opacity: 0.5;
+  box-shadow: 5px 5px 8px rgba(0, 0, 0, 0.5);
+}
+
+.talisman-name {
+  position: absolute;
+  bottom: -20px;
+  font-size: 12px;
+  color: var(--color-gold);
+  font-family: 'ZCOOL XiaoWei', serif;
+  white-space: nowrap;
+}
+
+.bagua-drop-zone {
+  position: absolute;
+  left: 50%;
+  bottom: 10%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 200px;
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.bagua-drop-zone.drag-over {
+  filter: drop-shadow(0 0 20px var(--color-gold));
+}
+
+.bagua-drop-zone.error {
+  animation: error-flash 0.4s ease-out;
+}
+
+@keyframes error-flash {
+  0%, 100% { filter: none; }
+  25%, 75% { filter: drop-shadow(0 0 20px #ff0000); }
+  50% { filter: drop-shadow(0 0 30px #ff0000); }
+}
+
+.info-panel {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: var(--color-gold);
+  font-family: 'ZCOOL XiaoWei', serif;
+  z-index: 100;
+}
+
+.info-title {
+  font-size: 28px;
+  letter-spacing: 8px;
+  margin-bottom: 8px;
+  text-shadow: 0 0 10px rgba(184, 134, 11, 0.5);
+}
+
+.info-subtitle {
+  font-size: 14px;
+  opacity: 0.7;
+  letter-spacing: 2px;
+}
+
+.hint-text {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  color: var(--color-gold);
+  font-size: 12px;
+  opacity: 0.6;
+  font-family: 'ZCOOL XiaoWei', serif;
+  z-index: 100;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 1440px) {
+  .talisman-panel {
+    width: 200px;
+    padding: 16px;
+  }
+
+  .talisman-item {
+    width: 54px;
+    height: 54px;
+    font-size: 28px;
+  }
+
+  .info-title {
+    font-size: 24px;
+  }
+}
