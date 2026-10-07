@@ -5,12 +5,18 @@ import Panel from './Panel';
 import type {
   Piece,
   FormationType,
-  GamePhase,
   SimulationResult,
   HistoryItem,
+  MoraleState,
 } from './types';
-import { COLORS, BOARD_SIZE, CELL_SIZE } from './types';
-import { initializePieces } from './GameSimulation';
+import { COLORS, BOARD_SIZE, CELL_SIZE, GamePhase } from './types';
+import {
+  initializePieces,
+  buildHistoryItem,
+  pushHistory,
+  createInitialMorale,
+  resultFromHistoryItem,
+} from './GameSimulation';
 import { loadFromUrl } from './ExportTool';
 import '@/index.css';
 
@@ -19,8 +25,7 @@ const App: React.FC = () => {
   const [phase, setPhase] = useState<GamePhase>(GamePhase.IDLE);
   const [playerFormation, setPlayerFormation] = useState<FormationType | null>(null);
   const [aiFormation, setAiFormation] = useState<FormationType | null>(null);
-  const [playerMorale, setPlayerMorale] = useState<number>(100);
-  const [aiMorale, setAiMorale] = useState<number>(100);
+  const [morale, setMorale] = useState<MoraleState>(createInitialMorale);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [formationToApply, setFormationToApply] = useState<FormationType | null>(null);
@@ -54,7 +59,11 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectFormation = useCallback((formation: FormationType) => {
-    if (phase !== GamePhase.IDLE) return;
+    if (phase !== GamePhase.IDLE && phase !== GamePhase.FINISHED) return;
+    if (phase === GamePhase.FINISHED) {
+      setPieces(initializePieces());
+      setResult(null);
+    }
     setFormationToApply(formation);
   }, [phase]);
 
@@ -66,53 +75,32 @@ const App: React.FC = () => {
     setResult(null);
   }, []);
 
-  useEffect(() => {
-    if (result && phase === GamePhase.FINISHED) {
-      const historyItem: HistoryItem = {
-        id: uuidv4(),
-        playerFormation: result.playerFormation,
-        aiFormation: result.aiFormation,
-        result: result.winner === 'player' ? 'win' : result.winner === 'ai' ? 'lose' : 'draw',
-        remaining: result.playerRemaining,
-        timestamp: result.timestamp,
-        snapshot: result.snapshot,
-      };
-      setHistory((prev) => {
-        const updated = [historyItem, ...prev].slice(0, 20);
-        return updated;
-      });
-
-      setPlayerMorale((prev) => {
-        const change = result.winner === 'player' ? 10 : result.winner === 'ai' ? -10 : 0;
-        return Math.max(0, Math.min(100, prev + change));
-      });
-      setAiMorale((prev) => {
-        const change = result.winner === 'ai' ? 10 : result.winner === 'player' ? -10 : 0;
-        return Math.max(0, Math.min(100, prev + change));
-      });
-    }
-  }, [result, phase]);
+  const handleBattleComplete = useCallback((battleResult: SimulationResult) => {
+    setResult(battleResult);
+    setMorale({ player: battleResult.playerMoraleEnd, ai: battleResult.aiMoraleEnd });
+    setHistory((prev) => pushHistory(prev, buildHistoryItem(battleResult, uuidv4())));
+  }, []);
 
   const handleReset = useCallback(() => {
     setPieces(initializePieces());
     setPhase(GamePhase.IDLE);
     setPlayerFormation(null);
     setAiFormation(null);
+    setMorale(createInitialMorale());
     setResult(null);
     setFormationToApply(null);
   }, []);
 
-  const handleRestoreHistory = useCallback((snapshot: Piece[]) => {
-    const restored = snapshot.map((p) => ({
-      ...p,
-      status: 'alive' as const,
-    }));
-    setPieces(restored);
-    setPhase(GamePhase.IDLE);
-    setPlayerFormation(null);
-    setAiFormation(null);
-    setResult(null);
-  }, []);
+  const handleRestoreHistory = useCallback((item: HistoryItem) => {
+    if (phase !== GamePhase.IDLE && phase !== GamePhase.FINISHED) return;
+    setPieces(JSON.parse(JSON.stringify(item.snapshot)));
+    setMorale({ player: item.playerMoraleEnd, ai: item.aiMoraleEnd });
+    setPlayerFormation(item.playerFormation as FormationType);
+    setAiFormation(item.aiFormation as FormationType);
+    setResult(resultFromHistoryItem(item));
+    setFormationToApply(null);
+    setPhase(GamePhase.FINISHED);
+  }, [phase]);
 
   return (
     <div
@@ -177,17 +165,18 @@ const App: React.FC = () => {
             <Board
               pieces={pieces}
               setPieces={setPieces}
+              morale={morale}
+              setMorale={setMorale}
               phase={phase}
               setPhase={setPhase}
               playerFormation={playerFormation}
               setPlayerFormation={setPlayerFormation}
               aiFormation={aiFormation}
               setAiFormation={setAiFormation}
-              result={result}
-              setResult={setResult}
               formationToApply={formationToApply}
               onFormationApplied={handleFormationApplied}
               onSimulationStart={handleSimulationStart}
+              onBattleComplete={handleBattleComplete}
               scale={scale}
               boardRef={boardRef}
             />
@@ -201,8 +190,8 @@ const App: React.FC = () => {
           result={result}
           history={history}
           phase={phase}
-          playerMorale={playerMorale}
-          aiMorale={aiMorale}
+          playerMorale={morale.player}
+          aiMorale={morale.ai}
           onSelectFormation={handleSelectFormation}
           onReset={handleReset}
           onRestoreHistory={handleRestoreHistory}

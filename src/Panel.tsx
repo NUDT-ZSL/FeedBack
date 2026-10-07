@@ -2,7 +2,7 @@ import React from 'react';
 import type { Piece, FormationType, HistoryItem, SimulationResult } from './types';
 import { FORMATION_NAMES, PIECE_STATS, COLORS } from './types';
 import { FORMATIONS } from './formations';
-import { formatHistoryText } from './GameSimulation';
+import { formatHistoryText, formatMoraleRange } from './GameSimulation';
 import { downloadJSON, copyShareLink } from './ExportTool';
 
 interface PanelProps {
@@ -16,7 +16,7 @@ interface PanelProps {
   phase: string;
   onSelectFormation: (formation: FormationType) => void;
   onReset: () => void;
-  onRestoreHistory: (snapshot: Piece[]) => void;
+  onRestoreHistory: (item: HistoryItem) => void;
 }
 
 const Panel: React.FC<PanelProps> = ({
@@ -32,11 +32,11 @@ const Panel: React.FC<PanelProps> = ({
   onReset,
   onRestoreHistory,
 }) => {
-  const playerPieces = pieces.filter((p) => p.side === 'player' && p.status === 'alive');
-  const aiPieces = pieces.filter((p) => p.side === 'ai' && p.status === 'alive');
+  const playerPieces = pieces.filter((p) => p.side === 'player' && p.status !== 'dead');
+  const aiPieces = pieces.filter((p) => p.side === 'ai' && p.status !== 'dead');
 
   const countByType = (side: 'player' | 'ai') => {
-    const filtered = pieces.filter((p) => p.side === side && p.status === 'alive');
+    const filtered = pieces.filter((p) => p.side === side && p.status !== 'dead');
     return {
       infantry: filtered.filter((p) => p.type === 'infantry').length,
       archer: filtered.filter((p) => p.type === 'archer').length,
@@ -60,7 +60,7 @@ const Panel: React.FC<PanelProps> = ({
     }
   };
 
-  const isDisabled = phase !== 'idle';
+  const isDisabled = phase !== 'idle' && phase !== 'finished';
 
   return (
     <div className="flex h-full">
@@ -198,6 +198,47 @@ const Panel: React.FC<PanelProps> = ({
         >
           推演控制
         </h3>
+
+        <div>
+          <div
+            className="text-sm mb-1 flex justify-between"
+            style={{ color: COLORS.parchment, fontFamily: '"Ma Shan Zheng", serif' }}
+          >
+            <span>我方士气</span>
+            <span style={{ color: COLORS.gold }}>{playerMorale}%</span>
+          </div>
+          <div
+            className="h-3 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+          >
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                width: `${playerMorale}%`,
+                background: `linear-gradient(to right, ${COLORS.darkRed}, ${COLORS.gold})`,
+              }}
+            />
+          </div>
+          <div
+            className="text-sm mb-1 mt-2 flex justify-between"
+            style={{ color: COLORS.parchment, fontFamily: '"Ma Shan Zheng", serif' }}
+          >
+            <span>敌方士气</span>
+            <span style={{ color: COLORS.gold }}>{aiMorale}%</span>
+          </div>
+          <div
+            className="h-3 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'rgba(0,0,0,0,0.3)' }}
+          >
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                width: `${aiMorale}%`,
+                background: `linear-gradient(to right, ${COLORS.darkRed}, ${COLORS.gold})`,
+              }}
+            />
+          </div>
+        </div>
 
         <div className="space-y-2">
           <div
@@ -372,7 +413,7 @@ const Panel: React.FC<PanelProps> = ({
               history.map((item) => (
                 <div
                   key={item.id}
-                  onClick={() => onRestoreHistory(item.snapshot)}
+                  onClick={() => onRestoreHistory(item)}
                   className="p-2 rounded cursor-pointer transition-all duration-200 hover:scale-105"
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -386,12 +427,14 @@ const Panel: React.FC<PanelProps> = ({
                       fontFamily: '"Ma Shan Zheng", serif',
                     }}
                   >
-                    {formatHistoryText(
-                      item.playerFormation,
-                      item.aiFormation,
-                      item.result,
-                      item.remaining
-                    )}
+                    {formatHistoryText(item)}
+                  </div>
+                  <div
+                    className="text-xs mt-1 flex justify-between"
+                    style={{ color: 'rgba(245, 230, 200, 0.75)' }}
+                  >
+                    <span>士气 我{formatMoraleRange(item.playerMoraleStart, item.playerMoraleEnd)}</span>
+                    <span>敌{formatMoraleRange(item.aiMoraleStart, item.aiMoraleEnd)}</span>
                   </div>
                   <div
                     className="text-xs mt-1"

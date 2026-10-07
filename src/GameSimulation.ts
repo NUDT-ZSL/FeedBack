@@ -5,7 +5,8 @@ import type {
   Side,
   FormationType,
   SimulationResult,
-  PieceStatus,
+  MoraleState,
+  HistoryItem,
 } from './types';
 import {
   BOARD_SIZE,
@@ -13,8 +14,50 @@ import {
   PIECE_RADIUS,
   PIECE_STATS,
   FORMATION_NAMES,
+  MORALE_MAX,
+  MORALE_MIN,
 } from './types';
 import { FORMATIONS } from './formations';
+
+export const HISTORY_LIMIT = 20;
+
+export const MORALE_CASUALTY_COST: Record<PieceType, number> = {
+  infantry: 4,
+  archer: 5,
+  cavalry: 6,
+};
+export const MORALE_KILL_BONUS = 2;
+
+export function createInitialMorale(): MoraleState {
+  return { player: MORALE_MAX, ai: MORALE_MAX };
+}
+
+export function clampMorale(value: number): number {
+  return Math.max(MORALE_MIN, Math.min(MORALE_MAX, Math.round(value)));
+}
+
+export function moraleSpeedFactor(morale: number): number {
+  return 0.6 + 0.4 * (clampMorale(morale) / MORALE_MAX);
+}
+
+export function moraleCombatFactor(morale: number): number {
+  return 0.7 + 0.3 * (clampMorale(morale) / MORALE_MAX);
+}
+
+export function applyCasualtyMorale(morale: MoraleState, deadPiece: Piece): MoraleState {
+  const loser = deadPiece.side;
+  const killer: Side = loser === 'player' ? 'ai' : 'player';
+  return {
+    ...morale,
+    [loser]: clampMorale(morale[loser] - MORALE_CASUALTY_COST[deadPiece.type]),
+    [killer]: clampMorale(morale[killer] + MORALE_KILL_BONUS),
+  };
+}
+
+export function isSideBroken(pieces: Piece[], morale: MoraleState, side: Side): boolean {
+  if (morale[side] <= MORALE_MIN) return true;
+  return !pieces.some((p) => p.side === side && p.status !== 'dead');
+}
 
 export function createPiece(
   type: PieceType,
@@ -36,6 +79,10 @@ export function createPiece(
 }
 
 export function initializePieces(): Piece[] {
+  return initializePiecesWithRandom(Math.random);
+}
+
+export function initializePiecesWithRandom(random: () => number): Piece[] {
   const pieces: Piece[] = [];
   const playerPieces: { type: PieceType; count: number }[] = [
     { type: 'infantry', count: 8 },
@@ -48,8 +95,8 @@ export function initializePieces(): Piece[] {
     for (let i = 0; i < count; i++) {
       let gridX: number, gridY: number, key: string;
       do {
-        gridX = Math.floor(Math.random() * 6) + 2;
-        gridY = Math.floor(Math.random() * 10) + 3;
+        gridX = Math.floor(random() * 6) + 2;
+        gridY = Math.floor(random() * 10) + 3;
         key = `${gridX},${gridY}`;
       } while (usedPositions.has(key));
       usedPositions.add(key);
@@ -68,8 +115,8 @@ export function initializePieces(): Piece[] {
     for (let i = 0; i < count; i++) {
       let gridX: number, gridY: number, key: string;
       do {
-        gridX = Math.floor(Math.random() * 6) + 8;
-        gridY = Math.floor(Math.random() * 10) + 3;
+        gridX = Math.floor(random() * 6) + 8;
+        gridY = Math.floor(random() * 10) + 3;
         key = `${gridX},${gridY}`;
       } while (usedPositions.has(key));
       usedPositions.add(key);
@@ -154,9 +201,11 @@ export interface CollisionEvent {
   deadPieceId: string;
 }
 
-export function checkCollisions(pieces: Piece[]): CollisionEvent[] {
+export function checkCollisions(pieces: Piece[], morale?: MoraleState): CollisionEvent[] {
   const events: CollisionEvent[] = [];
-  const alivePieces = pieces.filter((p) => p.status === 'alive');
+  const alivePieces = pieces.filter((p) => p.status !== 'dead');
+  const combatFactor = (side: Side) =>
+    morale ? moraleCombatFactor(morale[side]) : 1;
 
   for (let i = 0; i < alivePieces.length; i++) {
     for (let j = i + 1; j < alivePieces.length; j++) {
@@ -169,8 +218,8 @@ export function checkCollisions(pieces: Piece[]): CollisionEvent[] {
       );
 
       if (dist < PIECE_RADIUS * 2) {
-        const p1EffectiveAttack = p1.attack;
-        const p2EffectiveAttack = p2.attack;
+        const p1EffectiveAttack = p1.attack * combatFactor(p1.side);
+        const p2EffectiveAttack = p2.attack * combatFactor(p2.side);
         let deadPieceId: string;
         if (p1EffectiveAttack >= p2.defense && p2EffectiveAttack >= p1.defense) {
           deadPieceId = p1.defense <= p2.defense ? p1.id : p2.id;
@@ -198,26 +247,29 @@ export function calculateMovement(
   pieces: Piece[],
   playerFormation: FormationType | null,
   aiFormation: FormationType | null,
-  deltaTime: number
+  deltaTime: number,
+  morale?: MoraleState
 ): Piece[] {
   const updatedPieces = pieces.map((p) => ({ ...p }));
   const speed = 40 * deltaTime;
 
   const playerBonus = playerFormation ? FORMATIONS[playerFormation].attackBonus : 1;
   const aiBonus = aiFormation ? FORMATIONS[aiFormation].attackBonus : 1;
+  const playerMoraleFactor = morale ? moraleSpeedFactor(morale.player) : 1;
+  const aiMoraleFactor = morale ? moraleSpeedFactor(morale.ai) : 1;
 
   const alivePlayers = updatedPieces.filter(
-    (p) => p.side === 'player' && p.status === 'alive'
+    (p) => p.side === 'player' && p.status !== 'dead'
   );
   const aliveAis = updatedPieces.filter(
-    (p) => p.side === 'ai' && p.status === 'alive'
+    (p) => p.side === 'ai' && p.status !== 'dead'
   );
 
   alivePlayers.forEach((player) => {
     let nearestEnemy: Piece | null = null;
     let minDist = Infinity;
     aliveAis.forEach((ai) => {
-      if (ai.status !== 'alive') return;
+      if (ai.status === 'dead') return;
       const dist = Math.sqrt(
         Math.pow(ai.x - player.x, 2) + Math.pow(ai.y - player.y, 2)
       );
@@ -226,11 +278,13 @@ export function calculateMovement(
         nearestEnemy = ai;
       }
     });
-    if (nearestEnemy && minDist > PIECE_RADIUS * 2) {
-      const dx = nearestEnemy.x - player.x;
-      const dy = nearestEnemy.y - player.y;
+    const playerTarget = nearestEnemy as Piece | null;
+    if (playerTarget && minDist > PIECE_RADIUS * 2) {
+      const dx = playerTarget.x - player.x;
+      const dy = playerTarget.y - player.y;
       const len = Math.sqrt(dx * dx + dy * dy);
-      const pieceSpeed = speed * (player.type === 'cavalry' ? 1.3 : 1) * playerBonus;
+      const pieceSpeed =
+        speed * (player.type === 'cavalry' ? 1.3 : 1) * playerBonus * playerMoraleFactor;
       player.x += (dx / len) * pieceSpeed;
       player.y += (dy / len) * pieceSpeed;
       player.status = 'moving';
@@ -241,7 +295,7 @@ export function calculateMovement(
     let nearestEnemy: Piece | null = null;
     let minDist = Infinity;
     alivePlayers.forEach((player) => {
-      if (player.status !== 'alive') return;
+      if (player.status === 'dead') return;
       const dist = Math.sqrt(
         Math.pow(player.x - ai.x, 2) + Math.pow(player.y - ai.y, 2)
       );
@@ -250,11 +304,13 @@ export function calculateMovement(
         nearestEnemy = player;
       }
     });
-    if (nearestEnemy && minDist > PIECE_RADIUS * 2) {
-      const dx = nearestEnemy.x - ai.x;
-      const dy = nearestEnemy.y - ai.y;
+    const aiTarget = nearestEnemy as Piece | null;
+    if (aiTarget && minDist > PIECE_RADIUS * 2) {
+      const dx = aiTarget.x - ai.x;
+      const dy = aiTarget.y - ai.y;
       const len = Math.sqrt(dx * dx + dy * dy);
-      const pieceSpeed = speed * (ai.type === 'cavalry' ? 1.3 : 1) * aiBonus;
+      const pieceSpeed =
+        speed * (ai.type === 'cavalry' ? 1.3 : 1) * aiBonus * aiMoraleFactor;
       ai.x += (dx / len) * pieceSpeed;
       ai.y += (dy / len) * pieceSpeed;
       ai.status = 'moving';
@@ -264,32 +320,74 @@ export function calculateMovement(
   return updatedPieces;
 }
 
-export function isSimulationComplete(pieces: Piece[]): boolean {
-  const alivePlayers = pieces.filter(
-    (p) => p.side === 'player' && p.status === 'alive'
-  );
-  const aliveAis = pieces.filter(
-    (p) => p.side === 'ai' && p.status === 'alive'
-  );
-  return alivePlayers.length === 0 || aliveAis.length === 0;
+export interface SimulationStepOutcome {
+  pieces: Piece[];
+  morale: MoraleState;
+  deaths: CollisionEvent[];
+  complete: boolean;
+}
+
+export function simulateStep(
+  pieces: Piece[],
+  playerFormation: FormationType | null,
+  aiFormation: FormationType | null,
+  morale: MoraleState,
+  deltaTime: number
+): SimulationStepOutcome {
+  let updated = calculateMovement(pieces, playerFormation, aiFormation, deltaTime, morale);
+  const events = checkCollisions(updated, morale);
+  const deaths: CollisionEvent[] = [];
+  let currentMorale: MoraleState = { ...morale };
+
+  for (const event of events) {
+    if (currentMorale.player <= MORALE_MIN || currentMorale.ai <= MORALE_MIN) break;
+    const deadPiece = updated.find((p) => p.id === event.deadPieceId);
+    if (!deadPiece || deadPiece.status === 'dead') continue;
+    updated = updated.map((p) =>
+      p.id === event.deadPieceId ? { ...p, status: 'dead' as const } : p
+    );
+    currentMorale = applyCasualtyMorale(currentMorale, deadPiece);
+    deaths.push(event);
+  }
+
+  return {
+    pieces: updated,
+    morale: currentMorale,
+    deaths,
+    complete: isSimulationComplete(updated, currentMorale),
+  };
+}
+
+export function isSimulationComplete(pieces: Piece[], morale?: MoraleState): boolean {
+  const playerBroken = isSideBroken(pieces, morale ?? { player: 1, ai: 1 }, 'player');
+  const aiBroken = isSideBroken(pieces, morale ?? { player: 1, ai: 1 }, 'ai');
+  return playerBroken || aiBroken;
 }
 
 export function getSimulationResult(
   pieces: Piece[],
   playerFormation: FormationType,
-  aiFormation: FormationType
+  aiFormation: FormationType,
+  moraleStart?: MoraleState,
+  moraleEnd?: MoraleState
 ): SimulationResult {
-  const alivePlayers = pieces.filter(
-    (p) => p.side === 'player' && p.status === 'alive'
-  );
-  const aliveAis = pieces.filter(
-    (p) => p.side === 'ai' && p.status === 'alive'
-  );
+  const endMorale: MoraleState = moraleEnd ?? createInitialMorale();
+  const startMorale: MoraleState = moraleStart ?? endMorale;
+  const playerBroken = isSideBroken(pieces, endMorale, 'player');
+  const aiBroken = isSideBroken(pieces, endMorale, 'ai');
+  const playerStanding = pieces.filter((p) => p.side === 'player' && p.status !== 'dead');
+  const aiStanding = pieces.filter((p) => p.side === 'ai' && p.status !== 'dead');
 
   let winner: 'player' | 'ai' | 'draw';
-  if (alivePlayers.length > aliveAis.length) {
+  if (playerBroken && aiBroken) {
+    winner = 'draw';
+  } else if (playerBroken) {
+    winner = 'ai';
+  } else if (aiBroken) {
     winner = 'player';
-  } else if (aliveAis.length > alivePlayers.length) {
+  } else if (playerStanding.length > aiStanding.length) {
+    winner = 'player';
+  } else if (aiStanding.length > playerStanding.length) {
     winner = 'ai';
   } else {
     winner = 'draw';
@@ -297,12 +395,53 @@ export function getSimulationResult(
 
   return {
     winner,
-    playerRemaining: alivePlayers.length,
-    aiRemaining: aliveAis.length,
+    playerRemaining: playerStanding.length,
+    aiRemaining: aiStanding.length,
+    playerMoraleStart: clampMorale(startMorale.player),
+    playerMoraleEnd: clampMorale(endMorale.player),
+    aiMoraleStart: clampMorale(startMorale.ai),
+    aiMoraleEnd: clampMorale(endMorale.ai),
     playerFormation,
     aiFormation,
     timestamp: Date.now(),
     snapshot: JSON.parse(JSON.stringify(pieces)),
+  };
+}
+
+export function buildHistoryItem(result: SimulationResult, id: string): HistoryItem {
+  return {
+    id,
+    playerFormation: result.playerFormation,
+    aiFormation: result.aiFormation,
+    result: result.winner === 'player' ? 'win' : result.winner === 'ai' ? 'lose' : 'draw',
+    playerRemaining: result.playerRemaining,
+    aiRemaining: result.aiRemaining,
+    playerMoraleStart: result.playerMoraleStart,
+    playerMoraleEnd: result.playerMoraleEnd,
+    aiMoraleStart: result.aiMoraleStart,
+    aiMoraleEnd: result.aiMoraleEnd,
+    timestamp: result.timestamp,
+    snapshot: JSON.parse(JSON.stringify(result.snapshot)),
+  };
+}
+
+export function pushHistory(history: HistoryItem[], item: HistoryItem): HistoryItem[] {
+  return [item, ...history].slice(0, HISTORY_LIMIT);
+}
+
+export function resultFromHistoryItem(item: HistoryItem): SimulationResult {
+  return {
+    winner: item.result === 'win' ? 'player' : item.result === 'lose' ? 'ai' : 'draw',
+    playerRemaining: item.playerRemaining,
+    aiRemaining: item.aiRemaining,
+    playerMoraleStart: item.playerMoraleStart,
+    playerMoraleEnd: item.playerMoraleEnd,
+    aiMoraleStart: item.aiMoraleStart,
+    aiMoraleEnd: item.aiMoraleEnd,
+    playerFormation: item.playerFormation as FormationType,
+    aiFormation: item.aiFormation as FormationType,
+    timestamp: item.timestamp,
+    snapshot: JSON.parse(JSON.stringify(item.snapshot)),
   };
 }
 
@@ -324,19 +463,20 @@ export function getFormationCenter(
   };
 }
 
-export function selectAiFormation(): FormationType {
+export function selectAiFormation(random: () => number = Math.random): FormationType {
   const formations: FormationType[] = ['yulin', 'fangyuan', 'heyi'];
-  return formations[Math.floor(Math.random() * formations.length)];
+  return formations[Math.floor(random() * formations.length)];
 }
 
 export function formatHistoryText(
-  playerFormation: string,
-  aiFormation: string,
-  result: 'win' | 'lose' | 'draw',
-  remaining: number
+  item: Pick<HistoryItem, 'playerFormation' | 'aiFormation' | 'result' | 'playerRemaining' | 'aiRemaining'>
 ): string {
-  const resultText = result === 'win' ? '胜' : result === 'lose' ? '败' : '平';
-  const playerName = FORMATION_NAMES[playerFormation as FormationType] || playerFormation;
-  const aiName = FORMATION_NAMES[aiFormation as FormationType] || aiFormation;
-  return `${playerName}vs${aiName}，${resultText}，剩余${remaining}兵`;
+  const resultText = item.result === 'win' ? '胜' : item.result === 'lose' ? '败' : '平';
+  const playerName = FORMATION_NAMES[item.playerFormation as FormationType] || item.playerFormation;
+  const aiName = FORMATION_NAMES[item.aiFormation as FormationType] || item.aiFormation;
+  return `${playerName}vs${aiName}，${resultText}，剩余 我${item.playerRemaining}/敌${item.aiRemaining}`;
+}
+
+export function formatMoraleRange(start: number, end: number): string {
+  return `${start}→${end}`;
 }

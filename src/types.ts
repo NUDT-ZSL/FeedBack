@@ -3,6 +3,11 @@ export type Side = 'player' | 'ai';
 export type PieceStatus = 'alive' | 'dead' | 'moving';
 export type FormationType = 'yulin' | 'fangyuan' | 'heyi';
 
+export interface MoraleState {
+  player: number;
+  ai: number;
+}
+
 export enum GamePhase {
   IDLE = 'idle',
   DRAGGING = 'dragging',
@@ -35,6 +40,10 @@ export interface SimulationResult {
   winner: Side | 'draw';
   playerRemaining: number;
   aiRemaining: number;
+  playerMoraleStart: number;
+  playerMoraleEnd: number;
+  aiMoraleStart: number;
+  aiMoraleEnd: number;
   playerFormation: FormationType;
   aiFormation: FormationType;
   timestamp: number;
@@ -67,7 +76,12 @@ export interface HistoryItem {
   playerFormation: string;
   aiFormation: string;
   result: 'win' | 'lose' | 'draw';
-  remaining: number;
+  playerRemaining: number;
+  aiRemaining: number;
+  playerMoraleStart: number;
+  playerMoraleEnd: number;
+  aiMoraleStart: number;
+  aiMoraleEnd: number;
   timestamp: number;
   snapshot: Piece[];
 }
@@ -77,8 +91,7 @@ export interface GameState {
   phase: GamePhase;
   playerFormation: FormationType | null;
   aiFormation: FormationType | null;
-  playerMorale: number;
-  aiMorale: number;
+  morale: MoraleState;
   result: SimulationResult | null;
   history: HistoryItem[];
 }
@@ -103,6 +116,9 @@ export const BOARD_SIZE = 16;
 export const CELL_SIZE = 60;
 export const PIECE_RADIUS = 15;
 export const SNAP_DISTANCE = 20;
+
+export const MORALE_MAX = 100;
+export const MORALE_MIN = 0;
 
 export const COLORS = {
   parchment: '#f5e6c8',

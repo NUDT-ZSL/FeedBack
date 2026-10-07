@@ -5,7 +5,7 @@ import type {
   Particle,
   HaloEffect,
   FormationType,
-  GamePhase,
+  MoraleState,
 } from './types';
 import {
   BOARD_SIZE,
@@ -13,6 +13,7 @@ import {
   PIECE_RADIUS,
   SNAP_DISTANCE,
   COLORS,
+  GamePhase,
 } from './types';
 import {
   drawFeltBackground,
@@ -31,48 +32,48 @@ import {
 import {
   snapToGrid,
   isValidPosition,
-  checkCollisions,
-  calculateMovement,
-  isSimulationComplete,
+  simulateStep,
   getSimulationResult,
   selectAiFormation,
   getFormationCenter,
   rearrangeFormation,
 } from './GameSimulation';
-import type { SimulationResult, CollisionEvent } from './GameSimulation';
+import type { SimulationResult } from './types';
 
 interface BoardProps {
   pieces: Piece[];
   setPieces: React.Dispatch<React.SetStateAction<Piece[]>>;
+  morale: MoraleState;
+  setMorale: React.Dispatch<React.SetStateAction<MoraleState>>;
   phase: GamePhase;
   setPhase: React.Dispatch<React.SetStateAction<GamePhase>>;
   playerFormation: FormationType | null;
   setPlayerFormation: React.Dispatch<React.SetStateAction<FormationType | null>>;
   aiFormation: FormationType | null;
   setAiFormation: React.Dispatch<React.SetStateAction<FormationType | null>>;
-  result: SimulationResult | null;
-  setResult: React.Dispatch<React.SetStateAction<SimulationResult | null>>;
   formationToApply: FormationType | null;
   onFormationApplied: () => void;
   onSimulationStart: () => void;
+  onBattleComplete: (result: SimulationResult) => void;
   scale: number;
-  boardRef: React.RefObject<HTMLDivElement | null>;
+  boardRef: React.RefObject<HTMLDivElement>;
 }
 
 const Board: React.FC<BoardProps> = ({
   pieces,
   setPieces,
+  morale,
+  setMorale,
   phase,
   setPhase,
   playerFormation,
   setPlayerFormation,
   aiFormation,
   setAiFormation,
-  result,
-  setResult,
   formationToApply,
   onFormationApplied,
   onSimulationStart,
+  onBattleComplete,
   scale,
   boardRef,
 }) => {
@@ -80,6 +81,12 @@ const Board: React.FC<BoardProps> = ({
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+  const moraleRef = useRef<MoraleState>(morale);
+  const moraleStartRef = useRef<MoraleState>(morale);
+
+  useEffect(() => {
+    moraleRef.current = morale;
+  }, [morale]);
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
     pieceId: null,
@@ -332,6 +339,7 @@ const Board: React.FC<BoardProps> = ({
       alert('请先选择阵法！');
       return;
     }
+    moraleStartRef.current = { ...moraleRef.current };
     setPhase(GamePhase.SIMULATING);
     setResultBanner(null);
     onSimulationStart();
@@ -343,34 +351,35 @@ const Board: React.FC<BoardProps> = ({
     const simulationStep = () => {
       setPieces((currentPieces) => {
         const dt = 1 / 60;
-        let updated = calculateMovement(
+        const outcome = simulateStep(
           currentPieces,
           playerFormation,
           aiFormation,
+          moraleRef.current,
           dt
         );
 
-        const collisions = checkCollisions(updated);
         const newParticles: Particle[] = [];
-
-        collisions.forEach((event: CollisionEvent) => {
-          updated = updated.map((p) =>
-            p.id === event.deadPieceId ? { ...p, status: 'dead' as const } : p
-          );
+        outcome.deaths.forEach((event) => {
           newParticles.push(...createInkParticles(event.x, event.y, 15));
         });
+
+        moraleRef.current = outcome.morale;
+        setMorale(outcome.morale);
 
         if (newParticles.length > 0) {
           setParticles((prev) => [...prev, ...newParticles]);
         }
 
-        if (isSimulationComplete(updated)) {
+        if (outcome.complete) {
           const simResult = getSimulationResult(
-            updated,
+            outcome.pieces,
             playerFormation!,
-            aiFormation!
+            aiFormation!,
+            moraleStartRef.current,
+            outcome.morale
           );
-          setResult(simResult);
+          onBattleComplete(simResult);
 
           const resultText =
             simResult.winner === 'player'
@@ -378,7 +387,7 @@ const Board: React.FC<BoardProps> = ({
               : simResult.winner === 'ai'
               ? '失 败！'
               : '平 局';
-          const subText = `剩余兵力：我方 ${simResult.playerRemaining} / 敌方 ${simResult.aiRemaining}`;
+          const subText = `剩余兵力: 我${simResult.playerRemaining}/敌${simResult.aiRemaining} | 士气: 我${simResult.playerMoraleStart}→${simResult.playerMoraleEnd} 敌${simResult.aiMoraleStart}→${simResult.aiMoraleEnd}`;
           setResultBanner({
             text: resultText,
             subText,
@@ -389,16 +398,16 @@ const Board: React.FC<BoardProps> = ({
             setPhase(GamePhase.FINISHED);
           }, 2000);
 
-          return updated;
+          return outcome.pieces;
         }
 
-        return updated;
+        return outcome.pieces;
       });
     };
 
     const interval = setInterval(simulationStep, 1000 / 60);
     return () => clearInterval(interval);
-  }, [phase, playerFormation, aiFormation, setPieces, setResult, setPhase]);
+  }, [phase, playerFormation, aiFormation, setPieces, setPhase, setMorale, onBattleComplete]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -535,7 +544,7 @@ const Board: React.FC<BoardProps> = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
-      {phase === GamePhase.IDLE && result && (
+      {phase === GamePhase.IDLE && playerFormation && aiFormation && (
         <button
           onClick={handleStartSimulation}
           className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-8 py-3 text-white font-bold rounded shadow-lg transition-all duration-100 hover:-translate-y-0.5 active:translate-y-0.5"

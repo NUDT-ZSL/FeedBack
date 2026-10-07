@@ -217,7 +217,12 @@ export interface HistoryItem {
   playerFormation: string;
   aiFormation: string;
   result: 'win' | 'lose' | 'draw';
-  remaining: number;
+  playerRemaining: number;
+  aiRemaining: number;
+  playerMoraleStart: number;
+  playerMoraleEnd: number;
+  aiMoraleStart: number;
+  aiMoraleEnd: number;
   timestamp: number;
   snapshot: Piece[];
 }
@@ -228,12 +233,28 @@ export interface GameState {
   phase: GamePhase;
   playerFormation: FormationType | null;
   aiFormation: FormationType | null;
-  playerMorale: number;
-  aiMorale: number;
+  morale: MoraleState; // { player: number; ai: number }
   result: SimulationResult | null;
   history: HistoryItem[];
 }
 ```
+
+### 4.1.1 士气对战链路
+
+- 士气取值 0–100，初始双方各 100。移动速度系数为 `0.6 + 0.4 × 士气/100`，
+  交战攻击系数为 `0.7 + 0.3 × 士气/100`，士气直接进入 `calculateMovement`
+  与 `checkCollisions`，不再只驱动面板。
+- 同一局内士气只随战损推导：阵亡方按兵种扣分（步 4 / 弓 5 / 骑 6），击杀方
+  +2；推演步进 `simulateStep` 先移动、再结算交战，逐个死亡事件同步更新士气。
+- 任一方兵力清零或士气归零即本局结束：一方崩溃判对方胜，双方同一步同时崩溃
+  （兵力清零或士气归零的任意组合）按平局；士气归零后立即停止后续交战结算。
+- 连续多局：下一局士气起点等于上一局 `SimulationResult` 的终值；战报结束由
+  `onBattleComplete` 显式落账（士气 + 历史），不再按胜负做固定 ±10。
+- 历史记录上限 `HISTORY_LIMIT = 20`，由 `pushHistory` 淘汰最旧条目；士气是
+  独立状态，淘汰不影响承接。恢复历史时棋盘快照、士气终值、双方阵型、战报
+  由同一条 `HistoryItem` 一并还原。
+- 可离线批量复现：`npm run verify`（`scripts/verify-simulation.ts`，基于种子
+  RNG 驱动纯函数推演）。
 
 ### 4.2 常量配置
 
