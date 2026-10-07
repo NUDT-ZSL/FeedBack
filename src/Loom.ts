@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Howl } from 'howler';
-import { PatternMapping, WeaveType } from './PatternEngine';
+import { WeaveType } from './PatternEngine';
+import type { PatternMapping } from './PatternEngine';
 
 export interface WarpThread {
   id: number;
@@ -70,6 +71,8 @@ export class Loom {
     startPos: new THREE.Vector3(),
     endPos: new THREE.Vector3(),
   };
+
+  private fabricCompleted = false;
 
   private heddleAnimations: Map<number, { startHeight: number; targetHeight: number; startTime: number; duration: number }[]> = new Map();
 
@@ -513,6 +516,7 @@ export class Loom {
   }
 
   public setTargetLength(cm: number): void {
+    if (!Number.isFinite(cm)) return;
     this.state.targetLength = Math.max(10, Math.min(50, cm));
   }
 
@@ -536,7 +540,10 @@ export class Loom {
 
     for (let i = 0; i < HEDDLE_COUNT; i++) {
       const patternX = Math.floor(i / scale);
-      const weaveType = mapping.weaveTypes[0][Math.min(patternX, 63)];
+      const firstRow = mapping.weaveTypes[0];
+      const weaveType = firstRow && firstRow.length > 0
+        ? firstRow[Math.min(patternX, firstRow.length - 1)]
+        : WeaveType.MIXED;
       if (weaveType === WeaveType.WARP_UP) {
         colors[i] = warpColor;
       } else if (weaveType === WeaveType.WEFT_VISIBLE) {
@@ -558,9 +565,11 @@ export class Loom {
     canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
 
+    const previewRowCount = mapping.weaveTypes.length;
     for (let y = 0; y < 64; y++) {
+      const previewRow = previewRowCount > 0 ? mapping.weaveTypes[y % previewRowCount] : null;
       for (let x = 0; x < 64; x++) {
-        const gray = mapping.weaveTypes[y][x];
+        const gray = previewRow && previewRow.length > 0 ? previewRow[x % previewRow.length] : WeaveType.MIXED;
         let color: string;
         if (gray === WeaveType.WARP_UP) {
           color = '#cc2936';
@@ -621,18 +630,22 @@ export class Loom {
 
   private getHeddlePositionsForRow(mapping: PatternMapping, rowIndex: number): number[] {
     const positions: number[] = new Array(HEDDLE_COUNT).fill(0);
-    const heddleRow = mapping.heddleSequence[rowIndex % 64];
+    const sequence = mapping.heddleSequence;
+    if (!sequence || sequence.length === 0) return positions;
+    const heddleRow = sequence[((rowIndex % sequence.length) + sequence.length) % sequence.length];
     const scale = HEDDLE_COUNT / 64;
 
     for (let i = 0; i < HEDDLE_COUNT; i++) {
       const patternX = Math.floor(i / scale);
-      positions[i] = heddleRow[Math.min(patternX, 63)];
+      positions[i] = heddleRow.length > 0 ? heddleRow[Math.min(patternX, heddleRow.length - 1)] : 0;
     }
 
     return positions;
   }
 
   private addWeftThread(): void {
+    if (this.fabricCompleted) return;
+
     const weft: WeftThread = {
       id: this.state.weftThreads.length,
       color: this.state.currentWeftColor,
@@ -655,6 +668,7 @@ export class Loom {
     this.updateFabricTexture();
 
     if (this.state.fabricLength >= this.state.targetLength) {
+      this.fabricCompleted = true;
       setTimeout(() => {
         this.onFabricComplete?.();
       }, 500);
