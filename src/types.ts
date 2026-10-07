@@ -1,6 +1,6 @@
 export type Element = 'wood' | 'fire' | 'earth' | 'metal' | 'water';
 
-export type PillRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type PillRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'waste';
 
 export interface Herb {
   id: string;
@@ -23,6 +23,7 @@ export interface Pill {
   ingredients: string[];
   fireTemp: number;
   airFlow: number;
+  basis?: string[];
 }
 
 export interface Particle {

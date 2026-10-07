@@ -1,24 +1,19 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Herb, Pill, Particle, DragState, FurnaceState, Element } from './types';
-import { ELEMENT_COLORS } from './constants';
-import { 
-  mixFireColor, 
-  calculateFlameHeight, 
-  getSmokeColor, 
+import { Herb, Pill, Particle, DragState, Element } from './types';
+import { ELEMENT_COLORS, ELEMENT_NAMES } from './constants';
+import {
+  getSmokeColor,
   getParticleRate,
-  createPill,
   getBeamElements,
-  clamp,
-  lerp,
-  hasGeneratingCombination
+  clamp
 } from './utils';
 import { audioManager } from './audio';
+import { AddResult, FurnaceRuntime } from './core';
 
 interface FurnaceProps {
   dragState: DragState;
-  onIngredientAdded: (herb: Herb) => void;
-  onPillCreated: (pill: Pill) => void;
-  airflow: number;
+  furnace: FurnaceRuntime;
+  onIngredientDrop: (herb: Herb) => AddResult;
   onAirflowChange: (value: number) => void;
 }
 
@@ -36,9 +31,8 @@ const JADE_BOX_HEIGHT = 50;
 
 const Furnace: React.FC<FurnaceProps> = ({
   dragState,
-  onIngredientAdded,
-  onPillCreated,
-  airflow,
+  furnace,
+  onIngredientDrop,
   onAirflowChange
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,16 +47,17 @@ const Furnace: React.FC<FurnaceProps> = ({
   const landscapeTransitionRef = useRef<number>(0);
   
   const particlesRef = useRef<Particle[]>([]);
-  const ingredientsRef = useRef<Herb[]>([]);
-  const furnaceStateRef = useRef<FurnaceState>({
-    temperature: 25,
-    airFlow: 50,
-    flameHeight: 80,
-    flameColor: '#e74c3c',
-    baseFireColor: '#e74c3c',
-    currentElements: [],
+  const furnaceRef = useRef<FurnaceRuntime>(furnace);
+  furnaceRef.current = furnace;
+  const fxRef = useRef<{
+    shakeTime: number;
+    flashTime: number;
+    beamTimes: number[];
+    beamElements: (Element | null)[];
+  }>({
     shakeTime: 0,
-    beamTimes: [],
+    flashTime: 0,
+    beamTimes: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     beamElements: [null, null, null, null, null, null, null, null, null]
   });
   
@@ -242,9 +237,9 @@ const Furnace: React.FC<FurnaceProps> = ({
   }, []);
 
   const drawFurnace = useCallback((ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
-    const state = furnaceStateRef.current;
-    const shakeX = state.shakeTime > 0 ? Math.sin(Date.now() * 0.1) * 3 : 0;
-    const shakeY = state.shakeTime > 0 ? Math.cos(Date.now() * 0.15) * 2 : 0;
+    const fx = fxRef.current;
+    const shakeX = fx.shakeTime > 0 ? Math.sin(Date.now() * 0.1) * 3 : 0;
+    const shakeY = fx.shakeTime > 0 ? Math.cos(Date.now() * 0.15) * 2 : 0;
     
     const baseX = FURNACE_X + offsetX + shakeX;
     const baseY = FURNACE_Y + offsetY + shakeY;
@@ -361,8 +356,8 @@ const Furnace: React.FC<FurnaceProps> = ({
     }
     
     for (let i = 0; i < 9; i++) {
-      const beamTime = state.beamTimes[i] || 0;
-      const beamElement = state.beamElements[i];
+      const beamTime = fx.beamTimes[i] || 0;
+      const beamElement = fx.beamElements[i];
       if (beamTime > 0 && beamElement) {
         const beamProgress = 1 - beamTime / 2;
         const beamHeight = (30 + Math.sin(beamTime * 5) * 20) * (1 - beamProgress * 0.5);
@@ -740,20 +735,36 @@ const Furnace: React.FC<FurnaceProps> = ({
     
     const furnaceResult = drawFurnace(ctx, offsetX, offsetY);
     
-    const state = furnaceStateRef.current;
-    
-    state.temperature = lerp(state.temperature, 20 + airflow * 0.8, 0.02);
-    
+    const fx = fxRef.current;
+    const core = furnaceRef.current;
+
     drawFlame(
       ctx,
       offsetX + FURNACE_WIDTH / 2,
       FLAME_BASE_Y,
-      state.flameHeight,
-      state.flameColor,
+      core.flameHeight,
+      core.flameColor,
       time / 1000
     );
-    
-    const particleRate = getParticleRate(state.temperature);
+
+    if (fx.flashTime > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const flashAlpha = Math.min(0.6, fx.flashTime / 600);
+      const flash = ctx.createRadialGradient(
+        offsetX + FURNACE_WIDTH / 2, FLAME_BASE_Y - 40, 0,
+        offsetX + FURNACE_WIDTH / 2, FLAME_BASE_Y - 40, 220
+      );
+      flash.addColorStop(0, `rgba(255, 120, 40, ${flashAlpha})`);
+      flash.addColorStop(1, 'transparent');
+      ctx.fillStyle = flash;
+      ctx.beginPath();
+      ctx.arc(offsetX + FURNACE_WIDTH / 2, FLAME_BASE_Y - 40, 220, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    const particleRate = getParticleRate(core.temperature);
     if (time - lastParticleTimeRef.current > 1000 / particleRate) {
       lastParticleTimeRef.current = time;
       
@@ -770,7 +781,7 @@ const Furnace: React.FC<FurnaceProps> = ({
           life: 60 + Math.random() * 40,
           maxLife: 100,
           size: 3 + Math.random() * 4,
-          color: getSmokeColor(state.temperature),
+          color: getSmokeColor(core.temperature),
           type: 'smoke'
         });
       }
@@ -784,7 +795,7 @@ const Furnace: React.FC<FurnaceProps> = ({
           life: 20 + Math.random() * 20,
           maxLife: 40,
           size: 2 + Math.random() * 3,
-          color: state.flameColor,
+          color: core.flameColor,
           type: 'spark'
         });
       }
@@ -860,19 +871,22 @@ const Furnace: React.FC<FurnaceProps> = ({
       ctx.restore();
     }
     
-    if (state.shakeTime > 0) {
-      state.shakeTime -= deltaTime;
+    if (fx.shakeTime > 0) {
+      fx.shakeTime -= deltaTime;
     }
-    
+    if (fx.flashTime > 0) {
+      fx.flashTime -= deltaTime;
+    }
+
     for (let i = 0; i < 9; i++) {
-      if (state.beamTimes[i] > 0) {
-        state.beamTimes[i] -= deltaTime / 1000;
+      if (fx.beamTimes[i] > 0) {
+        fx.beamTimes[i] -= deltaTime / 1000;
       }
     }
     
     const bellowsX = offsetX - 130;
     const bellowsY = FURNACE_BODY_TOP + 80;
-    const bellowsBounds = drawBellows(ctx, bellowsX, bellowsY, airflow);
+    const bellowsBounds = drawBellows(ctx, bellowsX, bellowsY, core.airflow);
     
     const jadeBoxX = offsetX + FURNACE_WIDTH / 2 - JADE_BOX_WIDTH / 2;
     const jadeBoxY = FLAME_BASE_Y + 80;
@@ -937,7 +951,7 @@ const Furnace: React.FC<FurnaceProps> = ({
     }
     
     animationRef.current = requestAnimationFrame(render);
-  }, [addParticle, dragState, drawBagua, drawBellows, drawDragonPillar, drawFlame, drawFurnace, drawJadeBox, drawLandscape, flyingPill, jadeBoxOpen, mouseOverFeeder, airflow, glowPos, showGlow]);
+  }, [addParticle, dragState, drawBagua, drawBellows, drawDragonPillar, drawFlame, drawFurnace, drawJadeBox, drawLandscape, flyingPill, jadeBoxOpen, mouseOverFeeder, glowPos, showGlow]);
 
   const handleIngredientDrop = useCallback(() => {
     if (!dragState.isDragging || !dragState.herb) return;
@@ -965,15 +979,12 @@ const Furnace: React.FC<FurnaceProps> = ({
     
     if (distToFeeder < 40) {
       const herb = dragState.herb;
-      ingredientsRef.current.push(herb);
-      onIngredientAdded(herb);
-      
-      const state = furnaceStateRef.current;
-      state.flameColor = mixFireColor(state.flameColor, herb.element);
-      state.currentElements = [...new Set([...state.currentElements, herb.element])];
-      state.flameHeight = calculateFlameHeight(80, airflow, state.currentElements);
-      state.shakeTime = 300;
-      
+      const result = onIngredientDrop(herb);
+      if (!result.accepted) return;
+
+      const fx = fxRef.current;
+      fx.shakeTime = 300;
+
       for (let i = 0; i < 10; i++) {
         addParticle({
           x: feederX + (Math.random() - 0.5) * 20,
@@ -987,42 +998,65 @@ const Furnace: React.FC<FurnaceProps> = ({
           type: 'ingredient'
         });
       }
-      
+
       audioManager.playDropSound();
-      audioManager.updateFurnaceSound(airflow, state.temperature);
-      
-      const uniqueElements = [...new Set(ingredientsRef.current.map(i => i.element))];
-      if (hasGeneratingCombination(uniqueElements) && ingredientsRef.current.length >= 2) {
-        const pill = createPill(
-          ingredientsRef.current,
-          state.temperature,
-          airflow
-        );
-        
-        if (pill) {
-          state.beamElements = getBeamElements(uniqueElements);
-          state.beamTimes = [2, 2, 2, 2, 2, 2, 2, 2, 2];
-          
-          setTimeout(() => {
-            setFlyingPill({
-              pill,
-              x: feederX,
-              y: feederY - 20,
-              vy: -8,
-              vx: (Math.random() - 0.5) * 2,
-              rotation: 0,
-              rotationSpeed: (Math.random() - 0.5) * 0.3,
-              phase: 'rising'
-            });
-            audioManager.playSuccessSound();
-          }, 1000);
-          
-          ingredientsRef.current = [];
-          state.currentElements = [];
+      audioManager.updateFurnaceSound(furnaceRef.current.airflow, furnaceRef.current.temperature);
+
+      const outcome = result.outcome;
+      if (outcome && outcome.kind === 'pill' && outcome.pill) {
+        const pill = outcome.pill;
+        fx.beamElements = getBeamElements(pill.elements);
+        fx.beamTimes = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+
+        const furnaceId = furnaceRef.current.id;
+        setTimeout(() => {
+          if (furnaceRef.current.id !== furnaceId) return;
+          setFlyingPill({
+            pill,
+            x: feederX,
+            y: feederY - 20,
+            vy: -8,
+            vx: (Math.random() - 0.5) * 2,
+            rotation: 0,
+            rotationSpeed: (Math.random() - 0.5) * 0.3,
+            phase: 'rising'
+          });
+          audioManager.playSuccessSound();
+        }, 1000);
+      } else if (outcome && outcome.kind === 'explosion') {
+        fx.flashTime = 600;
+        fx.shakeTime = 900;
+        for (let i = 0; i < 30; i++) {
+          addParticle({
+            x: feederX + (Math.random() - 0.5) * 30,
+            y: feederY,
+            vx: (Math.random() - 0.5) * 10,
+            vy: Math.random() * -6 - 2,
+            life: 40,
+            maxLife: 40,
+            size: 4 + Math.random() * 5,
+            color: i % 2 === 0 ? '#e74c3c' : '#2c2c2c',
+            type: 'spark'
+          });
+        }
+      } else if (outcome && outcome.kind === 'waste') {
+        fx.shakeTime = 500;
+        for (let i = 0; i < 16; i++) {
+          addParticle({
+            x: feederX + (Math.random() - 0.5) * 20,
+            y: feederY,
+            vx: (Math.random() - 0.5) * 3,
+            vy: Math.random() * -2 - 1,
+            life: 50,
+            maxLife: 50,
+            size: 5 + Math.random() * 5,
+            color: 'rgba(127, 140, 141, 0.8)',
+            type: 'smoke'
+          });
         }
       }
     }
-  }, [dragState, airflow, addParticle, onIngredientAdded]);
+  }, [dragState, addParticle, onIngredientDrop]);
 
   useEffect(() => {
     if (!flyingPill) return;
@@ -1078,9 +1112,8 @@ const Furnace: React.FC<FurnaceProps> = ({
           setGlowPos({ x: newX, y: newY });
           setTimeout(() => {
             setShowGlow(false);
-            onPillCreated(prev.pill);
           }, 500);
-          
+
           return null;
         }
         
@@ -1100,7 +1133,7 @@ const Furnace: React.FC<FurnaceProps> = ({
     }, 16);
     
     return () => clearInterval(interval);
-  }, [flyingPill, addParticle, onPillCreated]);
+  }, [flyingPill, addParticle]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isDraggingBellows) {
@@ -1122,7 +1155,7 @@ const Furnace: React.FC<FurnaceProps> = ({
       );
       
       onAirflowChange(newValue);
-      audioManager.updateFurnaceSound(newValue, furnaceStateRef.current.temperature);
+      audioManager.updateFurnaceSound(newValue, furnaceRef.current.temperature);
     }
   }, [isDraggingBellows, bellowsDragStart, onAirflowChange]);
 
@@ -1138,9 +1171,9 @@ const Furnace: React.FC<FurnaceProps> = ({
     setIsDraggingBellows(true);
     setBellowsDragStart({
       x: e.clientX - (containerRef.current?.getBoundingClientRect().left || 0),
-      value: airflow
+      value: furnace.airflow
     });
-  }, [airflow]);
+  }, [furnace.airflow]);
 
   const handleJadeBoxClick = useCallback(() => {
     if (!jadeBoxOpen) {
@@ -1151,11 +1184,18 @@ const Furnace: React.FC<FurnaceProps> = ({
   }, [jadeBoxOpen]);
 
   useEffect(() => {
-    const state = furnaceStateRef.current;
-    state.airFlow = airflow;
-    state.flameHeight = calculateFlameHeight(80, airflow, state.currentElements);
-    audioManager.updateFurnaceSound(airflow, state.temperature);
-  }, [airflow]);
+    audioManager.updateFurnaceSound(furnace.airflow, furnace.temperature);
+  }, [furnace.airflow, furnace.temperature]);
+
+  useEffect(() => {
+    setFlyingPill(null);
+    particlesRef.current = [];
+    const fx = fxRef.current;
+    fx.shakeTime = 0;
+    fx.flashTime = 0;
+    fx.beamTimes = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    fx.beamElements = [null, null, null, null, null, null, null, null, null];
+  }, [furnace.id]);
 
   useEffect(() => {
     audioManager.init();
@@ -1186,6 +1226,45 @@ const Furnace: React.FC<FurnaceProps> = ({
         style={styles.canvas}
       />
       
+      <div style={styles.statusCard}>
+        <div style={styles.statusHeader}>
+          <span style={styles.furnaceName}>{furnace.name}</span>
+          <span style={{
+            ...styles.statusBadge,
+            color:
+              furnace.status === 'explosion' ? '#e74c3c' :
+              furnace.status === 'waste' ? '#95a5a6' :
+              furnace.status === 'pill' ? '#d4ac0d' : '#7fb069'
+          }}>
+            {furnace.status === 'pending'
+              ? (furnace.ingredients.length > 0 ? '炼制中' : '空炉待料')
+              : furnace.status === 'pill' ? '成丹'
+              : furnace.status === 'waste' ? '废丹'
+              : '炸炉'}
+          </span>
+        </div>
+        <div style={styles.readoutRow}>
+          <span style={styles.readoutLabel}>炉温</span>
+          <span style={styles.readoutValue}>{Math.round(furnace.temperature)}°</span>
+        </div>
+        <div style={styles.readoutRow}>
+          <span style={styles.readoutLabel}>炉中药</span>
+          <span style={styles.ingredientChips}>
+            {furnace.ingredients.length === 0
+              ? '—'
+              : furnace.ingredients.map((h, i) => (
+                  <span key={`${h.id}-${i}`} style={{
+                    ...styles.ingredientChip,
+                    borderColor: ELEMENT_COLORS[h.element],
+                    color: ELEMENT_COLORS[h.element]
+                  }}>
+                    {h.name}·{ELEMENT_NAMES[h.element]}
+                  </span>
+                ))}
+          </span>
+        </div>
+      </div>
+
       <div style={styles.airflowGauge}>
         <svg width="80" height="80" viewBox="0 0 80 80">
           <circle
@@ -1204,7 +1283,7 @@ const Furnace: React.FC<FurnaceProps> = ({
             stroke="#d4ac0d"
             strokeWidth="6"
             strokeLinecap="round"
-            strokeDasharray={`${(airflow / 100) * 201} 201`}
+            strokeDasharray={`${(furnace.airflow / 100) * 201} 201`}
             transform="rotate(-90 40 40)"
             style={{ filter: 'drop-shadow(0 0 4px rgba(212, 172, 13, 0.5))' }}
           />
@@ -1216,7 +1295,7 @@ const Furnace: React.FC<FurnaceProps> = ({
             fontSize="20"
             fontFamily="'Ma Shan Zheng', cursive"
           >
-            {Math.round(airflow)}
+            {Math.round(furnace.airflow)}
           </text>
           <text
             x="40"
@@ -1274,10 +1353,63 @@ const styles: Record<string, React.CSSProperties> = {
     maxHeight: '650px',
     cursor: 'default'
   },
+  statusCard: {
+    position: 'absolute',
+    top: '20px',
+    left: 'calc(50% - 30px)',
+    minWidth: '210px',
+    background: 'rgba(42, 26, 14, 0.9)',
+    borderRadius: '12px',
+    padding: '10px 14px',
+    border: '2px solid #6b4c3a',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.5)'
+  },
+  statusHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '6px'
+  },
+  furnaceName: {
+    fontFamily: "'Ma Shan Zheng', cursive",
+    fontSize: '18px',
+    color: '#d4ac0d'
+  },
+  statusBadge: {
+    fontFamily: "'ZCOOL KuaiLe', cursive",
+    fontSize: '13px'
+  },
+  readoutRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    marginBottom: '4px',
+    fontFamily: "'ZCOOL KuaiLe', cursive",
+    fontSize: '13px'
+  },
+  readoutLabel: {
+    color: '#8b7355',
+    minWidth: '34px'
+  },
+  readoutValue: {
+    color: '#e8c170'
+  },
+  ingredientChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px'
+  },
+  ingredientChip: {
+    border: '1px solid',
+    borderRadius: '6px',
+    padding: '0 6px',
+    fontSize: '12px',
+    background: 'rgba(0,0,0,0.3)'
+  },
   airflowGauge: {
     position: 'absolute',
     top: '20px',
-    right: '20px',
+    left: 'calc(50% - 130px)',
     background: 'rgba(42, 26, 14, 0.9)',
     borderRadius: '12px',
     padding: '10px',

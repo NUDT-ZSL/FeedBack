@@ -24,7 +24,8 @@ export const EFFECT_NAMES: Record<string, string> = {
   wisdom: '开悟增智',
   healing: '疗伤圣药',
   invisibility: '隐身',
-  flight: '腾云驾雾'
+  flight: '腾云驾雾',
+  none: '药性尽毁'
 };
 
 export const RARITY_NAMES: Record<PillRarity, string> = {
@@ -32,7 +33,8 @@ export const RARITY_NAMES: Record<PillRarity, string> = {
   uncommon: '良品',
   rare: '上品',
   epic: '极品',
-  legendary: '仙品'
+  legendary: '仙品',
+  waste: '废品'
 };
 
 export const RARITY_COLORS: Record<PillRarity, string> = {
@@ -40,7 +42,8 @@ export const RARITY_COLORS: Record<PillRarity, string> = {
   uncommon: '#27ae60',
   rare: '#2980b9',
   epic: '#8e44ad',
-  legendary: '#f39c12'
+  legendary: '#f39c12',
+  waste: '#7f8c8d'
 };
 
 export const HERBS: Herb[] = [

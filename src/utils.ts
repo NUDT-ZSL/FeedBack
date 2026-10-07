@@ -97,7 +97,8 @@ export function getParticleRate(temperature: number): number {
 export function createPill(
   ingredients: Herb[],
   temperature: number,
-  airflow: number
+  airflow: number,
+  random: () => number = Math.random
 ): Pill | null {
   const elements = [...new Set(ingredients.map(i => i.element))];
   
@@ -116,12 +117,12 @@ export function createPill(
   });
   
   if (matchingRecipes.length === 0) {
-    return createRandomPill(elements, ingredients, temperature, airflow);
+    return createRandomPill(elements, ingredients, temperature, airflow, random);
   }
   
-  const recipe = matchingRecipes[Math.floor(Math.random() * matchingRecipes.length)];
-  const name = recipe.names[Math.floor(Math.random() * recipe.names.length)];
-  const effect = recipe.effects[Math.floor(Math.random() * recipe.effects.length)];
+  const recipe = matchingRecipes[Math.floor(random() * matchingRecipes.length)];
+  const name = recipe.names[Math.floor(random() * recipe.names.length)];
+  const effect = recipe.effects[Math.floor(random() * recipe.effects.length)];
   const primaryElement = elements[0];
   
   return {
@@ -143,11 +144,12 @@ function createRandomPill(
   elements: Element[],
   ingredients: Herb[],
   temperature: number,
-  airflow: number
+  airflow: number,
+  random: () => number = Math.random
 ): Pill {
   const rarities: PillRarity[] = ['common', 'uncommon', 'rare', 'epic'];
   const weights = [0.4, 0.3, 0.2, 0.1];
-  let rand = Math.random();
+  let rand = random();
   let rarity: PillRarity = 'common';
   for (let i = 0; i < rarities.length; i++) {
     rand -= weights[i];
@@ -158,10 +160,10 @@ function createRandomPill(
   }
   
   const effects = Object.keys(ELEMENT_COLORS);
-  const effect = effects[Math.floor(Math.random() * effects.length)];
-  const primaryElement = elements[Math.floor(Math.random() * elements.length)];
+  const effect = effects[Math.floor(random() * effects.length)];
+  const primaryElement = elements[Math.floor(random() * elements.length)];
   const names = ['凝气丹', '聚灵丹', '培元丹', '固元丹', '淬体丹'];
-  const name = names[Math.floor(Math.random() * names.length)];
+  const name = names[Math.floor(random() * names.length)];
   
   return {
     id: generatePillId(),
@@ -195,4 +197,28 @@ export function clamp(value: number, min: number, max: number): number {
 
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+export function createWastePill(
+  ingredients: Herb[],
+  temperature: number,
+  airflow: number,
+  random: () => number = Math.random
+): Pill {
+  void random;
+  const elements = [...new Set(ingredients.map(i => i.element))];
+  return {
+    id: generatePillId(),
+    name: '废丹',
+    element: elements[0] || 'earth',
+    elements,
+    effect: 'none',
+    rarity: 'waste',
+    color: '#7f8c8d',
+    glowColor: RARITY_COLORS.waste,
+    ingredients: ingredients.map(i => i.name),
+    fireTemp: Math.round(temperature),
+    airFlow: Math.round(airflow),
+    basis: ['药性冲突，熬成药渣，不堪入葫芦']
+  };
 }
