@@ -95,6 +95,7 @@ export class TeaController {
   loadPreset(presetName: string): void {
     const preset = this.presets.find(p => p.name === presetName);
     if (preset) {
+      this.clearAllWarnings();
       this.currentPreset = preset;
       this.setWaterTemp(
         (preset.recommendedTemp[0] + preset.recommendedTemp[1]) / 2
@@ -134,13 +135,15 @@ export class TeaController {
 
     if (!isValid) {
       this.triggerWarning(paramKey);
+    } else {
+      this.stopWarning(paramKey);
     }
   }
 
   private triggerWarning(paramKey: string): void {
     const existingTimer = this.warningTimers.get(paramKey);
     if (existingTimer) {
-      window.clearTimeout(existingTimer);
+      window.clearInterval(existingTimer);
     }
 
     const element = document.querySelector(`[data-param="${paramKey}"]`);
@@ -158,6 +161,31 @@ export class TeaController {
       }, 500);
       this.warningTimers.set(paramKey, flashInterval as unknown as number);
     }
+  }
+
+  private stopWarning(paramKey: string): void {
+    const existingTimer = this.warningTimers.get(paramKey);
+    if (existingTimer) {
+      window.clearInterval(existingTimer);
+      this.warningTimers.delete(paramKey);
+    }
+
+    const element = document.querySelector(`[data-param="${paramKey}"]`);
+    if (element) {
+      element.classList.remove('warning-flash');
+    }
+  }
+
+  private clearAllWarnings(): void {
+    this.warningTimers.forEach(timer => window.clearInterval(timer));
+    this.warningTimers.clear();
+
+    (['waterTemp', 'pourAngle', 'brewDuration'] as const).forEach(paramKey => {
+      const element = document.querySelector(`[data-param="${paramKey}"]`);
+      if (element) {
+        element.classList.remove('warning-flash');
+      }
+    });
   }
 
   onParamsChange(callback: ParamsChangeCallback): void {
@@ -183,8 +211,7 @@ export class TeaController {
       brewDuration: 30
     };
     this.currentPreset = null;
-    this.warningTimers.forEach(timer => window.clearTimeout(timer));
-    this.warningTimers.clear();
+    this.clearAllWarnings();
     this.notifyParamsChange();
     this.notifyPresetChange();
   }
@@ -192,7 +219,6 @@ export class TeaController {
   dispose(): void {
     this.paramsChangeCallbacks = [];
     this.presetChangeCallbacks = [];
-    this.warningTimers.forEach(timer => window.clearTimeout(timer));
-    this.warningTimers.clear();
+    this.clearAllWarnings();
   }
 }
