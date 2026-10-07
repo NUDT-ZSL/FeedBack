@@ -1,5 +1,14 @@
 import * as THREE from 'three';
-import { HerbData, ElementType, HERB_TYPES } from '../types';
+import { HerbData, ElementType } from '../types';
+import { createHerbData } from '../core/herbs';
+import { systemRandom } from '../core/random';
+import type { RandomSource } from '../core/random';
+
+/** 采集动画的时间/帧驱动，可注入以便离线确定性复现。 */
+export interface CollectTiming {
+  now?: () => number;
+  raf?: (callback: () => void) => number | void;
+}
 
 export class Herb {
   private mesh: THREE.Group;
@@ -7,18 +16,11 @@ export class Herb {
   private particles: THREE.Points;
   private glowMesh: THREE.Mesh;
   private animationTime: number = 0;
+  private random: RandomSource;
 
-  constructor(position: THREE.Vector3) {
-    const herbType = HERB_TYPES[Math.floor(Math.random() * HERB_TYPES.length)];
-    
-    this.data = {
-      id: `herb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: herbType.name,
-      element: herbType.element,
-      color: herbType.color,
-      potency: 0.5 + Math.random() * 0.5,
-      position: { x: position.x, y: position.y, z: position.z }
-    };
+  constructor(position: THREE.Vector3, random: RandomSource = systemRandom, id?: string) {
+    this.random = random;
+    this.data = createHerbData(position, random, id ?? `herb_${random().toString(36).substr(2, 9)}`);
 
     this.mesh = new THREE.Group();
     this.mesh.position.copy(position);
@@ -81,9 +83,9 @@ export class Herb {
     const color = new THREE.Color(this.data.color);
     
     for (let i = 0; i < particleCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
-      const radius = 0.15 + Math.random() * 0.1;
+      const theta = this.random() * Math.PI * 2;
+      const phi = this.random() * Math.PI;
+      const radius = 0.15 + this.random() * 0.1;
       
       positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = 0.3 + radius * Math.sin(phi) * Math.sin(theta);
@@ -123,13 +125,15 @@ export class Herb {
     this.particles.geometry.attributes.position.needsUpdate = true;
   }
 
-  public collectAnimation(targetPos: THREE.Vector3, onComplete: () => void): void {
+  public collectAnimation(targetPos: THREE.Vector3, onComplete: () => void, timing: CollectTiming = {}): void {
     const startPos = this.mesh.position.clone();
     const duration = 1000;
-    const startTime = Date.now();
+    const now = timing.now ?? (() => Date.now());
+    const raf = timing.raf ?? ((callback: () => void) => requestAnimationFrame(callback));
+    const startTime = now();
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
+      const elapsed = now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeProgress = 1 - Math.pow(1 - progress, 3);
 
@@ -137,7 +141,7 @@ export class Herb {
       this.mesh.scale.setScalar(1 - easeProgress * 0.8);
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        raf(animate);
       } else {
         onComplete();
       }

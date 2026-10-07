@@ -5,6 +5,7 @@ import { Herb } from './Herb';
 import { Player } from './Player';
 import { Furnace } from './Furnace';
 import { Pill } from './Pill';
+import { canEnterRefining, dropHerbFromBasket } from '../core/rules';
 
 export class GameManager {
   private scene: THREE.Scene;
@@ -218,10 +219,10 @@ export class GameManager {
   }
 
   private switchToRefining(): void {
-    if (this.collectedHerbs.length < 5) {
+    if (!canEnterRefining(this.collectedHerbs.length)) {
       this.events.onUIUpdate({
         type: 'notification',
-        message: '至少需要5株草药才能炼丹！'
+        message: `至少需要5株草药才能炼丹（当前${this.collectedHerbs.length}株）！`
       });
       return;
     }
@@ -332,15 +333,10 @@ export class GameManager {
   }
 
   public dropHerbToSlot(herbId: string, slotIndex: number): boolean {
-    const herbIndex = this.collectedHerbs.findIndex(h => h.id === herbId);
-    if (herbIndex === -1) return false;
-    
-    const herbData = this.collectedHerbs[herbIndex];
-    const isCorrect = this.furnace.placeHerb(herbData, slotIndex);
-    
-    if (isCorrect) {
-      this.collectedHerbs.splice(herbIndex, 1);
-    }
+    const result = dropHerbFromBasket(this.collectedHerbs, herbId, herb =>
+      this.furnace.placeHerb(herb, slotIndex)
+    );
+    if (!result.found) return false;
     
     this.events.onFurnaceUpdate(this.furnace.getSlots(), this.furnace.getCurrentColor());
     this.updateUI();
@@ -349,7 +345,7 @@ export class GameManager {
       this.startRefining();
     }
     
-    return isCorrect;
+    return result.isCorrect;
   }
 
   private startRefining(): void {

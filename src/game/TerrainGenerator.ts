@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { Herb } from './Herb';
+import { generateHerbPositions, getTerrainHeight, HERB_COUNT } from '../core/terrain';
+import { systemRandom } from '../core/random';
+import type { RandomSource } from '../core/random';
 
 interface TerrainData {
   mesh: THREE.Group;
@@ -10,10 +13,12 @@ interface TerrainData {
 export class TerrainGenerator {
   private size: number;
   private resolution: number;
+  private random: RandomSource;
 
-  constructor(size: number = 100, resolution: number = 64) {
+  constructor(size: number = 100, resolution: number = 64, random: RandomSource = systemRandom) {
     this.size = size;
     this.resolution = resolution;
+    this.random = random;
   }
 
   public generate(): TerrainData {
@@ -70,18 +75,7 @@ export class TerrainGenerator {
   }
 
   private getTerrainHeight(x: number, z: number): number {
-    let height = 0;
-    
-    height += Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2;
-    height += Math.sin(x * 0.02 + 1) * Math.cos(z * 0.03) * 3;
-    height += Math.sin(x * 0.1) * 0.5;
-    
-    const distFromCenter = Math.sqrt(x * x + z * z);
-    if (distFromCenter > this.size * 0.35) {
-      height += (distFromCenter - this.size * 0.35) * 0.15;
-    }
-    
-    return height;
+    return getTerrainHeight(x, z, this.size);
   }
 
   private createMountains(): THREE.Group {
@@ -110,8 +104,8 @@ export class TerrainGenerator {
     const positions = geometry.attributes.position.array as Float32Array;
     
     for (let i = 0; i < positions.length; i += 3) {
-      positions[i] += (Math.random() - 0.5) * 2 * scale;
-      positions[i + 2] += (Math.random() - 0.5) * 2 * scale;
+      positions[i] += (this.random() - 0.5) * 2 * scale;
+      positions[i + 2] += (this.random() - 0.5) * 2 * scale;
     }
     
     geometry.computeVertexNormals();
@@ -213,34 +207,17 @@ export class TerrainGenerator {
   private createHerbs(): { herbs: Herb[]; positions: THREE.Vector3[] } {
     const herbs: Herb[] = [];
     const positions: THREE.Vector3[] = [];
-    const herbCount = 25;
 
-    for (let i = 0; i < herbCount; i++) {
-      let x, z, height;
-      let validPosition = false;
-      let attempts = 0;
+    // 核心放置逻辑保证：要么恰好 HERB_COUNT 个合法落点，要么抛出明确错误，
+    // 不会因采样被边界条件拒绝而静默减少草药数量。
+    const herbPositions = generateHerbPositions(HERB_COUNT, this.size, this.random);
 
-      while (!validPosition && attempts < 50) {
-        x = (Math.random() - 0.5) * (this.size - 20);
-        z = (Math.random() - 0.5) * (this.size - 20);
-        height = this.getTerrainHeight(x, z);
-        
-        const distFromStream = Math.abs(z - Math.sin((x + 30) / 60 * Math.PI * 1.5) * 8);
-        const distFromCenter = Math.sqrt(x * x + z * z);
-        
-        if (distFromStream > 3 && distFromCenter < this.size * 0.4 && height < 5) {
-          validPosition = true;
-        }
-        attempts++;
-      }
-
-      if (validPosition) {
-        const position = new THREE.Vector3(x!, height + 0.05, z!);
-        const herb = new Herb(position);
-        herbs.push(herb);
-        positions.push(position);
-      }
-    }
+    herbPositions.forEach((herbPosition, index) => {
+      const position = new THREE.Vector3(herbPosition.x, herbPosition.y, herbPosition.z);
+      const herb = new Herb(position, this.random, `herb_${index}`);
+      herbs.push(herb);
+      positions.push(position);
+    });
 
     return { herbs, positions };
   }
