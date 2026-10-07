@@ -201,3 +201,39 @@ export const PAINT_COLORS: PaintColor[] = [
     hex: '#fffff0',
   },
 ];
+
+export interface LanternWork {
+  id: string;
+  skeleton: string | null;
+  silkColor: string | null;
+  strokes: BrushStroke[];
+  lines: Line[];
+  isLit: boolean;
+  createdAt: number;
+  updatedAt: number;
+  randomId: string;
+  savedAt: number | null;
+}
+
+export interface StudioState {
+  works: Record<string, LanternWork>;
+  order: string[];
+  currentId: string | null;
+}
+
+export const createLanternWork = (
+  id: string,
+  randomId: string,
+  now: number
+): LanternWork => ({
+  id,
+  skeleton: null,
+  silkColor: null,
+  strokes: [],
+  lines: [],
+  isLit: false,
+  createdAt: now,
+  updatedAt: now,
+  randomId,
+  savedAt: null,
+});

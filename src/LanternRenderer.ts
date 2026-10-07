@@ -50,6 +50,8 @@ export class LanternRenderer {
   public lightProgress: number = 0;
   public lightColor: string = '#ffe8b0';
   public skeletonPaths: Path2D[] = [];
+  public isLit: boolean = false;
+  private unionPath: Path2D | null = null;
 
   private skeleton: Skeleton | null = null;
   private silkColor: SilkColor | null = null;
@@ -95,6 +97,10 @@ export class LanternRenderer {
     const key = skeleton.paths.join('|');
     if (key !== this.cachedSkeletonKey) {
       this.skeletonPaths = skeleton.paths.map(d => this.parsePathD(d));
+      this.unionPath = new Path2D();
+      for (const p of this.skeletonPaths) {
+        this.unionPath.addPath(p);
+      }
       this.cachedSkeletonKey = key;
     }
 
@@ -119,8 +125,8 @@ export class LanternRenderer {
     offCtx.clearRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
 
     offCtx.save();
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      offCtx.clip(this.skeletonPaths[i]);
+    if (this.unionPath) {
+      offCtx.clip(this.unionPath);
     }
 
     const rgb = this.hexToRgb(color.primary);
@@ -167,8 +173,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.unionPath) {
+      this.ctx.clip(this.unionPath);
     }
 
     for (let i = 0; i < strokes.length; i++) {
@@ -228,8 +234,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.unionPath) {
+      this.ctx.clip(this.unionPath);
     }
 
     this.ctx.fillStyle = color;
@@ -274,8 +280,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.unionPath) {
+      this.ctx.clip(this.unionPath);
     }
 
     this.ctx.strokeStyle = color;
@@ -362,8 +368,11 @@ export class LanternRenderer {
         this.animationId = requestAnimationFrame(animate);
       } else {
         this.isLighting = false;
+        this.isLit = true;
+        this.lightColor = '#ffe8b0';
         this.animationId = null;
         this.particles = [];
+        this.render();
         if (onComplete) {
           onComplete();
         }
@@ -380,6 +389,29 @@ export class LanternRenderer {
     }
     this.isLighting = false;
     this.particles = [];
+  }
+
+  public resetAll(): void {
+    this.stopAnimation();
+    this.skeleton = null;
+    this.silkColor = null;
+    this.strokes = [];
+    this.lines = [];
+    this.temporaryStroke = null;
+    this.temporaryLine = null;
+    this.skeletonPaths = [];
+    this.unionPath = null;
+    this.cachedSkeletonKey = '';
+    this.isLit = false;
+    this.lightProgress = 0;
+    this.clear();
+  }
+
+  public setLit(lit: boolean): void {
+    if (this.isLighting) {
+      this.stopAnimation();
+    }
+    this.isLit = lit;
   }
 
   public render(): void {
@@ -423,8 +455,10 @@ export class LanternRenderer {
       );
     }
 
-    if (this.isLighting && this.particles.length > 0) {
-      const rgb = this.hexToRgb(this.lightColor);
+    if (this.isLighting || this.isLit) {
+      const glowColor = this.isLighting ? this.lightColor : '#ffe8b0';
+      const glowIntensity = this.isLighting ? this.lightProgress : 1;
+      const rgb = this.hexToRgb(glowColor);
 
       this.ctx.save();
       this.ctx.globalCompositeOperation = 'lighter';
@@ -433,13 +467,14 @@ export class LanternRenderer {
       const centerY = LanternRenderer.CANVAS_SIZE / 2;
       const gradient = this.ctx.createRadialGradient(
         centerX, centerY, 0,
-        centerX, centerY, 200 * this.lightProgress
+        centerX, centerY, 200 * Math.max(glowIntensity, 0.3)
       );
-      gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.4 * this.lightProgress})`);
+      gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.4 * glowIntensity})`);
       gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
       this.ctx.fillStyle = gradient;
       this.ctx.fillRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
 
+      if (this.isLighting) {
       for (let i = 0; i < this.particles.length; i++) {
         const p = this.particles[i];
         this.ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${p.alpha * 0.8})`;
@@ -455,6 +490,7 @@ export class LanternRenderer {
         this.ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
         this.ctx.fill();
       }
+      }
 
       this.ctx.restore();
     }
@@ -464,7 +500,11 @@ export class LanternRenderer {
     this.ctx.clearRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
   }
 
-  public exportPNG(size = { w: 512, h: 512 }, transparent = true): string {
+  public exportPNG(
+    size = { w: 512, h: 512 },
+    transparent = true,
+    withGlow = this.isLit
+  ): string {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = size.w;
     tempCanvas.height = size.h;
@@ -499,8 +539,8 @@ export class LanternRenderer {
 
     if (this.silkColor && this.skeletonPaths.length > 0) {
       tempCtx.save();
-      for (let i = 0; i < this.skeletonPaths.length; i++) {
-        tempCtx.clip(this.skeletonPaths[i]);
+      if (this.unionPath) {
+        tempCtx.clip(this.unionPath);
       }
 
       const rgb = this.hexToRgb(this.silkColor.primary);
@@ -530,8 +570,8 @@ export class LanternRenderer {
 
     if (this.skeletonPaths.length > 0) {
       tempCtx.save();
-      for (let i = 0; i < this.skeletonPaths.length; i++) {
-        tempCtx.clip(this.skeletonPaths[i]);
+      if (this.unionPath) {
+        tempCtx.clip(this.unionPath);
       }
 
       for (let i = 0; i < this.strokes.length; i++) {
@@ -582,6 +622,24 @@ export class LanternRenderer {
     }
 
     tempCtx.restore();
+
+    if (withGlow) {
+      tempCtx.save();
+      tempCtx.scale(scaleX, scaleY);
+      tempCtx.globalCompositeOperation = 'lighter';
+      const rgb = this.hexToRgb('#ffe8b0');
+      const centerX = LanternRenderer.CANVAS_SIZE / 2;
+      const centerY = LanternRenderer.CANVAS_SIZE / 2;
+      const gradient = tempCtx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, 200
+      );
+      gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
+      gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+      tempCtx.fillStyle = gradient;
+      tempCtx.fillRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
+      tempCtx.restore();
+    }
 
     return tempCanvas.toDataURL('image/png');
   }
@@ -686,78 +744,222 @@ export class LanternRenderer {
 
   private parsePathD(d: string): Path2D {
     const path = new Path2D();
-    const commands = d.match(/[a-zA-Z][^a-zA-Z]*/g) || [];
+    const normalized = d.replace(/arc/gi, 'a');
+    const tokens = normalized.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
 
-    for (let i = 0; i < commands.length; i++) {
-      const cmd = commands[i];
-      const type = cmd[0];
-      const args = cmd.slice(1).trim().split(/[\s,]+/).map(Number);
+    let i = 0;
+    let cmd = '';
+    let cx = 0;
+    let cy = 0;
+    let sx = 0;
+    let sy = 0;
 
-      switch (type) {
-        case 'M':
-          path.moveTo(args[0], args[1]);
+    const readNum = (): number => {
+      const v = parseFloat(tokens[i]);
+      i += 1;
+      return v;
+    };
+    const hasNum = (): boolean =>
+      i < tokens.length && !/[a-zA-Z]/.test(tokens[i]);
+
+    while (i < tokens.length) {
+      if (/[a-zA-Z]/.test(tokens[i])) {
+        cmd = tokens[i];
+        i += 1;
+      }
+      const rel = cmd === cmd.toLowerCase();
+      const C = cmd.toUpperCase();
+
+      switch (C) {
+        case 'M': {
+          const x = readNum();
+          const y = readNum();
+          cx = rel ? cx + x : x;
+          cy = rel ? cy + y : y;
+          path.moveTo(cx, cy);
+          sx = cx;
+          sy = cy;
+          cmd = rel ? 'l' : 'L';
           break;
-        case 'm':
-          path.moveTo(args[0], args[1]);
-          break;
-        case 'L':
-          for (let j = 0; j < args.length; j += 2) {
-            path.lineTo(args[j], args[j + 1]);
+        }
+        case 'L': {
+          while (hasNum()) {
+            const x = readNum();
+            const y = readNum();
+            cx = rel ? cx + x : x;
+            cy = rel ? cy + y : y;
+            path.lineTo(cx, cy);
           }
           break;
-        case 'l':
-          for (let j = 0; j < args.length; j += 2) {
-            path.lineTo(args[j], args[j + 1]);
+        }
+        case 'H': {
+          while (hasNum()) {
+            const x = readNum();
+            cx = rel ? cx + x : x;
+            path.lineTo(cx, cy);
           }
           break;
-        case 'H':
-          for (let j = 0; j < args.length; j++) {
-            path.lineTo(args[j], 0);
+        }
+        case 'V': {
+          while (hasNum()) {
+            const y = readNum();
+            cy = rel ? cy + y : y;
+            path.lineTo(cx, cy);
           }
           break;
-        case 'h':
-          for (let j = 0; j < args.length; j++) {
-            path.lineTo(args[j], 0);
+        }
+        case 'C': {
+          while (hasNum()) {
+            const x1 = readNum();
+            const y1 = readNum();
+            const x2 = readNum();
+            const y2 = readNum();
+            const x = readNum();
+            const y = readNum();
+            if (rel) {
+              path.bezierCurveTo(cx + x1, cy + y1, cx + x2, cy + y2, cx + x, cy + y);
+              cx += x;
+              cy += y;
+            } else {
+              path.bezierCurveTo(x1, y1, x2, y2, x, y);
+              cx = x;
+              cy = y;
+            }
           }
           break;
-        case 'V':
-          for (let j = 0; j < args.length; j++) {
-            path.lineTo(0, args[j]);
+        }
+        case 'Q': {
+          while (hasNum()) {
+            const x1 = readNum();
+            const y1 = readNum();
+            const x = readNum();
+            const y = readNum();
+            if (rel) {
+              path.quadraticCurveTo(cx + x1, cy + y1, cx + x, cy + y);
+              cx += x;
+              cy += y;
+            } else {
+              path.quadraticCurveTo(x1, y1, x, y);
+              cx = x;
+              cy = y;
+            }
           }
           break;
-        case 'v':
-          for (let j = 0; j < args.length; j++) {
-            path.lineTo(0, args[j]);
+        }
+        case 'A': {
+          while (hasNum()) {
+            const rx = readNum();
+            const ry = readNum();
+            const rot = readNum();
+            const laf = readNum();
+            const sf = readNum();
+            const x = readNum();
+            const y = readNum();
+            const ex = rel ? cx + x : x;
+            const ey = rel ? cy + y : y;
+            this.appendArc(path, cx, cy, ex, ey, rx, ry, rot, laf !== 0, sf !== 0);
+            cx = ex;
+            cy = ey;
           }
           break;
-        case 'C':
-          for (let j = 0; j < args.length; j += 6) {
-            path.bezierCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3], args[j + 4], args[j + 5]);
-          }
-          break;
-        case 'c':
-          for (let j = 0; j < args.length; j += 6) {
-            path.bezierCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3], args[j + 4], args[j + 5]);
-          }
-          break;
-        case 'Q':
-          for (let j = 0; j < args.length; j += 4) {
-            path.quadraticCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3]);
-          }
-          break;
-        case 'q':
-          for (let j = 0; j < args.length; j += 4) {
-            path.quadraticCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3]);
-          }
-          break;
-        case 'Z':
-        case 'z':
+        }
+        case 'Z': {
           path.closePath();
+          cx = sx;
+          cy = sy;
           break;
+        }
+        default: {
+          i += 1;
+          break;
+        }
       }
     }
 
     return path;
+  }
+
+  private appendArc(
+    path: Path2D,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    rxIn: number,
+    ryIn: number,
+    angleDeg: number,
+    largeArc: boolean,
+    sweep: boolean
+  ): void {
+    let rx = Math.abs(rxIn);
+    let ry = Math.abs(ryIn);
+    if (rx === 0 || ry === 0 || (x0 === x1 && y0 === y1)) {
+      path.lineTo(x1, y1);
+      return;
+    }
+
+    const phi = (angleDeg * Math.PI) / 180;
+    const cosPhi = Math.cos(phi);
+    const sinPhi = Math.sin(phi);
+
+    const dx = (x0 - x1) / 2;
+    const dy = (y0 - y1) / 2;
+    const x1p = cosPhi * dx + sinPhi * dy;
+    const y1p = -sinPhi * dx + cosPhi * dy;
+
+    const lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if (lambda > 1) {
+      const scale = Math.sqrt(lambda);
+      rx *= scale;
+      ry *= scale;
+    }
+
+    const rx2 = rx * rx;
+    const ry2 = ry * ry;
+    const x1p2 = x1p * x1p;
+    const y1p2 = y1p * y1p;
+    let num = rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2;
+    if (num < 0) num = 0;
+    const den = rx2 * y1p2 + ry2 * x1p2;
+    let coef = den === 0 ? 0 : Math.sqrt(num / den);
+    if (largeArc === sweep) coef = -coef;
+
+    const cxp = (coef * rx * y1p) / ry;
+    const cyp = (-coef * ry * x1p) / rx;
+
+    const cx = cosPhi * cxp - sinPhi * cyp + (x0 + x1) / 2;
+    const cy = sinPhi * cxp + cosPhi * cyp + (y0 + y1) / 2;
+
+    const angleBetween = (
+      ux: number,
+      uy: number,
+      vx: number,
+      vy: number
+    ): number => {
+      const dot = ux * vx + uy * vy;
+      const len = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+      let ang = Math.acos(Math.min(1, Math.max(-1, len === 0 ? 0 : dot / len)));
+      if (ux * vy - uy * vx < 0) ang = -ang;
+      return ang;
+    };
+
+    const theta1 = angleBetween(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let dTheta = angleBetween(
+      (x1p - cxp) / rx,
+      (y1p - cyp) / ry,
+      (-x1p - cxp) / rx,
+      (-y1p - cyp) / ry
+    );
+    if (!sweep && dTheta > 0) dTheta -= Math.PI * 2;
+    if (sweep && dTheta < 0) dTheta += Math.PI * 2;
+
+    const segments = Math.max(2, Math.ceil(Math.abs(dTheta) / (Math.PI / 12)));
+    for (let k = 1; k <= segments; k++) {
+      const t = theta1 + (dTheta * k) / segments;
+      const px = cx + rx * Math.cos(t) * cosPhi - ry * Math.sin(t) * sinPhi;
+      const py = cy + rx * Math.cos(t) * sinPhi + ry * Math.sin(t) * cosPhi;
+      path.lineTo(px, py);
+    }
   }
 
   public setTemporaryStroke(stroke: { points: { x: number; y: number }[]; color: string; radius: number } | null): void {

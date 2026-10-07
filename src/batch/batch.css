@@ -1,0 +1,122 @@
+.batch-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+  color: #f4e2c1;
+}
+
+.batch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.batch-header h1 {
+  margin: 0;
+  color: #ffe08c;
+  letter-spacing: 4px;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.batch-btn {
+  display: inline-block;
+  background: #c04040;
+  color: #fff7e8;
+  border: 1px solid #8b3030;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.batch-btn.ghost {
+  background: transparent;
+  border-color: #b87333;
+  color: #f4e2c1;
+}
+
+.summary {
+  margin: 24px 0;
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+
+.summary.ok {
+  background: rgba(46, 139, 87, 0.18);
+  border: 1px solid #2e8b57;
+  color: #a8e6c1;
+}
+
+.summary.fail {
+  background: rgba(192, 64, 64, 0.18);
+  border: 1px solid #c04040;
+  color: #ffb3b3;
+}
+
+.scenario {
+  margin-bottom: 22px;
+  background: rgba(60, 35, 24, 0.6);
+  border: 1px solid #8a5a28;
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+
+.scenario h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  letter-spacing: 2px;
+}
+
+.scenario h2.ok {
+  color: #8fd9a8;
+}
+
+.scenario h2.fail {
+  color: #ff8a8a;
+}
+
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.check-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 15px;
+}
+
+.check-list li.ok {
+  color: #cfe8d4;
+}
+
+.check-list li.fail {
+  color: #ffc4c4;
+}
+
+.mark {
+  font-weight: bold;
+}
+
+.check-name {
+  flex: none;
+}
+
+.detail {
+  color: #c9a87a;
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+}

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build --config vite.main.config.js && vite build --config vite.batch.config.js && node scripts/inline-dist.mjs",
+    "preview": "vite preview",
+    "verify:batch": "node scripts/verify-batch.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
