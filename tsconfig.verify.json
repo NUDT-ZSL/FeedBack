@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/sim",
+    "src/gameStore.ts",
+    "src/types.ts",
+    "tests",
+    "scripts",
+    "scenarios",
+    "vitest.config.ts"
+  ],
+  "references": []
+}
