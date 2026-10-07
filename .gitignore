@@ -37,3 +37,7 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 离线验证产物
+dist-verify/
+tsconfig.tsbuildinfo

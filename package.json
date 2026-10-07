@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "verify": "tsc -p tsconfig.verify.json && echo \"{\\\"type\\\":\\\"commonjs\\\"}\" > dist-verify/package.json && node dist-verify/verify/run.js"
   },
   "dependencies": {
     "react": "^18.3.1",
