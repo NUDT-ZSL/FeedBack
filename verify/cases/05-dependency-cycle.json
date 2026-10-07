@@ -1,0 +1,96 @@
+{
+  "name": "05-dependency-cycle",
+  "shardSet": {
+    "vesselId": "vessel-cycle",
+    "shards": [
+      {
+        "id": "a",
+        "target": {
+          "position": {
+            "x": 3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "b",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "c",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 0
+        }
+      }
+    ],
+    "dependencies": {
+      "a": [
+        "c"
+      ],
+      "b": [
+        "a"
+      ],
+      "c": [
+        "b"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "kind": "place",
+      "shardId": "a",
+      "position": {
+        "x": 3.0,
+        "y": 0,
+        "z": 0.0
+      },
+      "rotationDeg": 0
+    },
+    {
+      "kind": "place",
+      "shardId": "b",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": 2.598
+      },
+      "rotationDeg": 0
+    },
+    {
+      "kind": "place",
+      "shardId": "c",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": -2.598
+      },
+      "rotationDeg": 0
+    }
+  ],
+  "expect": {
+    "valid": false,
+    "complete": false,
+    "placed": 0,
+    "errors": [
+      "DEPENDENCY_CYCLE"
+    ],
+    "eventsExclude": [
+      "placed",
+      "completed"
+    ]
+  }
+}

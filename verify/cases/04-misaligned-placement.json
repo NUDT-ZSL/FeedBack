@@ -1,0 +1,158 @@
+{
+  "name": "04-misaligned-placement",
+  "shardSet": {
+    "vesselId": "vessel-01",
+    "shards": [
+      {
+        "id": "s1",
+        "target": {
+          "position": {
+            "x": 3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "s2",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 10
+        }
+      },
+      {
+        "id": "s3",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 20
+        }
+      },
+      {
+        "id": "s4",
+        "target": {
+          "position": {
+            "x": -3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 30
+        }
+      },
+      {
+        "id": "s5",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 40
+        }
+      },
+      {
+        "id": "s6",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 50
+        }
+      }
+    ]
+  },
+  "operations": [
+    {
+      "kind": "place",
+      "shardId": "s1",
+      "position": {
+        "x": 3.0,
+        "y": 0,
+        "z": 0.0
+      },
+      "rotationDeg": 0
+    },
+    {
+      "kind": "place",
+      "shardId": "s2",
+      "position": {
+        "x": 1.5,
+        "y": 0,
+        "z": 2.598
+      },
+      "rotationDeg": 10
+    },
+    {
+      "kind": "place",
+      "shardId": "s3",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": 2.598
+      },
+      "rotationDeg": 20
+    },
+    {
+      "kind": "place",
+      "shardId": "s4",
+      "position": {
+        "x": -1.0,
+        "y": 0,
+        "z": 0
+      },
+      "rotationDeg": 30
+    },
+    {
+      "kind": "place",
+      "shardId": "s4",
+      "position": {
+        "x": -3.0,
+        "y": 0,
+        "z": 0.0
+      },
+      "rotationDeg": 45
+    },
+    {
+      "kind": "place",
+      "shardId": "s5",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": -2.598
+      },
+      "rotationDeg": 40
+    },
+    {
+      "kind": "place",
+      "shardId": "s6",
+      "position": {
+        "x": 1.5,
+        "y": 0,
+        "z": -2.598
+      },
+      "rotationDeg": 50
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "complete": false,
+    "placed": 5,
+    "errors": [],
+    "eventsInclude": [
+      "rejected"
+    ],
+    "eventsExclude": [
+      "completed"
+    ]
+  }
+}

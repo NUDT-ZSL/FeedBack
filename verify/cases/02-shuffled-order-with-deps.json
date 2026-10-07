@@ -1,0 +1,159 @@
+{
+  "name": "02-shuffled-order-with-deps",
+  "shardSet": {
+    "vesselId": "vessel-01",
+    "shards": [
+      {
+        "id": "s1",
+        "target": {
+          "position": {
+            "x": 3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "s2",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 10
+        }
+      },
+      {
+        "id": "s3",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 20
+        }
+      },
+      {
+        "id": "s4",
+        "target": {
+          "position": {
+            "x": -3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 30
+        }
+      },
+      {
+        "id": "s5",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 40
+        }
+      },
+      {
+        "id": "s6",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 50
+        }
+      }
+    ],
+    "dependencies": {
+      "s2": [
+        "s1"
+      ],
+      "s3": [
+        "s2"
+      ],
+      "s5": [
+        "s4"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "kind": "place",
+      "shardId": "s3",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": 2.598
+      },
+      "rotationDeg": 20
+    },
+    {
+      "kind": "place",
+      "shardId": "s2",
+      "position": {
+        "x": 1.5,
+        "y": 0,
+        "z": 2.598
+      },
+      "rotationDeg": 10
+    },
+    {
+      "kind": "place",
+      "shardId": "s1",
+      "position": {
+        "x": 3.0,
+        "y": 0,
+        "z": 0.0
+      },
+      "rotationDeg": 0
+    },
+    {
+      "kind": "place",
+      "shardId": "s5",
+      "position": {
+        "x": -1.5,
+        "y": 0,
+        "z": -2.598
+      },
+      "rotationDeg": 40
+    },
+    {
+      "kind": "place",
+      "shardId": "s4",
+      "position": {
+        "x": -3.0,
+        "y": 0,
+        "z": 0.0
+      },
+      "rotationDeg": 30
+    },
+    {
+      "kind": "place",
+      "shardId": "s6",
+      "position": {
+        "x": 1.5,
+        "y": 0,
+        "z": -2.598
+      },
+      "rotationDeg": 50
+    }
+  ],
+  "expect": {
+    "valid": true,
+    "complete": true,
+    "placed": 6,
+    "errors": [],
+    "eventsInclude": [
+      "dependency-waiting",
+      "placed",
+      "completed"
+    ],
+    "sameFinalStateAs": "01-basic-six-shards"
+  }
+}

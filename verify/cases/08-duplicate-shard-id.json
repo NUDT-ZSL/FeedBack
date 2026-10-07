@@ -1,0 +1,39 @@
+{
+  "name": "08-duplicate-shard-id",
+  "shardSet": {
+    "vesselId": "vessel-dup",
+    "shards": [
+      {
+        "id": "a",
+        "target": {
+          "position": {
+            "x": 3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "a",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 0
+        }
+      }
+    ]
+  },
+  "operations": [],
+  "expect": {
+    "valid": false,
+    "complete": false,
+    "placed": 0,
+    "errors": [
+      "DUPLICATE_SHARD_ID"
+    ]
+  }
+}

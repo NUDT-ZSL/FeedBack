@@ -55,3 +55,31 @@ export default tseslint.config({
   },
 })
 ```
+
+## 陶器碎片拼合链路：离线验证
+
+拼合核心与 UI 解耦，位于 `src/puzzle/`（纯 TypeScript，无 DOM / Three.js 依赖）：
+
+- `src/puzzle/types.ts`：碎片几何、操作、事件轨迹、拼合结论等类型与吸附阈值常量。
+- `src/puzzle/engine.ts`：拼合引擎（结构校验、吸附判定、进度推进、完成态结算、幂等/乱序处理）。
+- `src/puzzle/entries.ts`：两个驱动入口——交互入口（有状态会话）与批量/回放入口（事件轨迹重放）。
+- `src/puzzle/invariants.ts`：结论不变量审计（进度/完成态/事件轨迹/依赖一致性互相印证）。
+
+### 运行验证
+
+```bash
+npm run verify        # 等价于 node verify/run.ts，需 Node >= 22.18，零第三方依赖
+```
+
+批量执行 `verify/cases/*.json` 中的全部用例，逐组输出 `[PASS]` / `[FAIL]` 及失败原因，
+任一组失败时进程以退出码 1 结束，可直接接入 CI。
+
+### 用例格式
+
+- `run` 用例（默认）：`shardSet`（碎片几何 + 依赖）+ `operations`（操作序列）+ `expect`
+  （`valid` / `complete` / `placed` / `errors` / `eventsInclude` / `eventsExclude` /
+  `sameFinalStateAs` 跨用例最终状态基准）。
+- `audit` 用例：`type: "audit"` + 伪造/污染的 `conclusion` + `expect.invariantFailures`，
+  要求不变量审计精确报出指定失真。
+
+新增用例只需在 `verify/cases/` 下添加 JSON 文件，无需改动运行器。

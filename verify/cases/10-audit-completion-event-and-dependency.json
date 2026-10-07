@@ -1,0 +1,139 @@
+{
+  "name": "10-audit-completion-event-and-dependency",
+  "type": "audit",
+  "shardSet": {
+    "vesselId": "vessel-01",
+    "shards": [
+      {
+        "id": "s1",
+        "target": {
+          "position": {
+            "x": 3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "s2",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 10
+        }
+      },
+      {
+        "id": "s3",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": 2.598
+          },
+          "rotationDeg": 20
+        }
+      },
+      {
+        "id": "s4",
+        "target": {
+          "position": {
+            "x": -3.0,
+            "y": 0,
+            "z": 0.0
+          },
+          "rotationDeg": 30
+        }
+      },
+      {
+        "id": "s5",
+        "target": {
+          "position": {
+            "x": -1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 40
+        }
+      },
+      {
+        "id": "s6",
+        "target": {
+          "position": {
+            "x": 1.5,
+            "y": 0,
+            "z": -2.598
+          },
+          "rotationDeg": 50
+        }
+      }
+    ],
+    "dependencies": {
+      "s2": [
+        "s1"
+      ]
+    }
+  },
+  "conclusion": {
+    "vesselId": "vessel-01",
+    "valid": true,
+    "shards": {
+      "s1": "pending",
+      "s2": "placed",
+      "s3": "placed",
+      "s4": "placed",
+      "s5": "placed",
+      "s6": "placed"
+    },
+    "progress": {
+      "placed": 5,
+      "total": 6,
+      "ratio": 0.8333333333333334
+    },
+    "completion": {
+      "complete": false,
+      "settledAtStep": 3
+    },
+    "events": [
+      {
+        "kind": "placed",
+        "shardId": "s2",
+        "step": 0
+      },
+      {
+        "kind": "placed",
+        "shardId": "s3",
+        "step": 1
+      },
+      {
+        "kind": "placed",
+        "shardId": "s4",
+        "step": 2
+      },
+      {
+        "kind": "completed",
+        "step": 3
+      },
+      {
+        "kind": "placed",
+        "shardId": "s5",
+        "step": 4
+      },
+      {
+        "kind": "placed",
+        "shardId": "s6",
+        "step": 5
+      }
+    ],
+    "errors": []
+  },
+  "expect": {
+    "invariantFailures": [
+      "COMPLETION_EVENT_MISMATCH",
+      "DEPENDENCY_VIOLATION"
+    ]
+  }
+}
