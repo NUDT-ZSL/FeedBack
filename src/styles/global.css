@@ -495,3 +495,153 @@ body::before {
   margin-bottom: 10px;
   text-align: center;
 }
+
+/* ---------- 多场次管理 ---------- */
+
+.show-sidebar {
+  width: 220px;
+}
+
+.show-item {
+  padding: 8px 10px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-elastic);
+}
+
+.show-item:hover {
+  border-color: var(--gold);
+  background: rgba(128, 0, 0, 0.25);
+}
+
+.show-item.active {
+  border-color: var(--light-gold);
+  background: rgba(128, 0, 0, 0.45);
+  box-shadow: 0 0 8px rgba(255, 170, 0, 0.35);
+}
+
+.show-name {
+  color: var(--light-gold);
+  font-size: 15px;
+  font-family: 'Ma Shan Zheng', cursive;
+}
+
+.show-meta {
+  color: rgba(212, 175, 55, 0.65);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.control-btn.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.control-btn.validate {
+  border-color: var(--light-gold);
+}
+
+.sidebar-hint {
+  color: rgba(212, 175, 55, 0.5);
+  font-size: 12px;
+  text-align: center;
+}
+
+.prop-chip {
+  width: var(--prop-width);
+  height: var(--prop-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #a67c4f 0%, #8b5e3c 100%);
+  color: #fff8e0;
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Ma Shan Zheng', cursive;
+  pointer-events: none;
+}
+
+.ledger-row {
+  color: rgba(255, 248, 224, 0.85);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.ledger-row:hover {
+  background: rgba(128, 0, 0, 0.4);
+}
+
+.attach-badge {
+  position: absolute;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #3d2b1f;
+  background: var(--light-gold);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.validation-panel {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.validation-ok {
+  color: #7fd67f;
+  font-size: 13px;
+}
+
+.validation-issue {
+  font-size: 12px;
+  padding: 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.validation-issue.error {
+  border-left: 3px solid #e05555;
+}
+
+.validation-issue.warning {
+  border-left: 3px solid var(--backlight);
+}
+
+.issue-message {
+  color: #ffd9d9;
+}
+
+.validation-issue.warning .issue-message {
+  color: #ffe9b3;
+}
+
+.issue-evidence {
+  color: rgba(255, 248, 224, 0.6);
+  font-size: 11px;
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  padding: 6px 12px;
+  background: rgba(128, 0, 0, 0.85);
+  color: var(--light-gold);
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Ma Shan Zheng', cursive;
+  pointer-events: none;
+  z-index: 500;
+}

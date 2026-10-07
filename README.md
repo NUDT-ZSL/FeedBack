@@ -1,57 +1,59 @@
-# React + TypeScript + Vite
+# 皮影戏模拟器（多场次版）
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+在浏览器中模拟皮影戏班后台操纵影人即兴演出。支持**并行管理多场演出**：每场独立保存影人位姿、道具账本与锣鼓录音，可随时切换、复制、删除。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # 类型检查 + 产物构建
+npm test         # 自动化验证（vitest，离线可跑）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 多场次模型
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **场次（ShowState）**：一场演出的完整状态 —— 影人位置与关节姿态、道具归属与挂载点、录音事件序列与场次时长。
+- **切换**：`ShowStore.switchShow` 会先安全中断回放与录制，再把舞台与侧栏整体还原为目标场次状态，不残留上一场内容。
+- **复制**：`duplicateShow` 深拷贝某场作为新场次起点；录音事件重新归属新场次并标记 `source: 'duplicated'`。
+- **删除**：只清理该场次的道具归属与录音事件，其余场次原样保留；删空后自动补一个全新场次。
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 道具账本
+
+道具归属以 `Prop.attachedTo / attachmentPoint` 为账本，与影人携带列表互为镜像。同一道具在不同场次可有不同归属，互不影响；同一影人最多携带 2 件道具。
+
+## 锣鼓录音与回放隔离
+
+录音事件携带 `showId`（场次归属）与 `source`（来源标记）。回放只播放当前场次的事件序列；回放过程中切换场次会安全中断，旧场次已排程的定时器由 showId 守卫丢弃，不会混入新场次。单次录制上限 30 秒。
+
+## 整体校验
+
+`validateShow` 对当前场次做一次整体校验，问题定位到具体场次与对象：
+
+- 影人是否都在舞台范围内
+- 道具挂载点是否指向存在的影人
+- 录音事件时刻是否落在场次时长内、归属是否正确
+- 同一道具多处挂载的冲突（保留双方依据，不静默择一）
+- 影人携带道具数量超限（警告）
+
+`ValidationEngine` 支持增量重算：修正后只重算受影响场次，未受影响场次复用缓存，合并结果与整体重算一致。
+
+## 自动化验证
+
+`npm test` 覆盖四条链路（`tests/`）：
+
+- `tests/shows.test.ts`：多场次切换/复制/删除、道具账本一致性、录音归属与回放隔离、回放中切换安全中断、30 秒上限
+- `tests/validation.test.ts`：各类校验规则、冲突双方依据保留、增量重算与整体重算一致性
+
+## 代码结构
+
+| 文件 | 职责 |
+| --- | --- |
+| `src/state/showStore.ts` | 多场次存储：场次 CRUD、切换、道具账本、录音 |
+| `src/state/playback.ts` | 回放控制器：单场回放、切换中断、showId 守卫 |
+| `src/state/validation.ts` | 整体校验 + 增量校验引擎 |
+| `src/state/constants.ts` | 舞台尺寸、影人/道具规格、舞蹈联动映射 |
+| `src/pages/Home.tsx` | 主界面：舞台、侧栏、场次管理、校验面板 |
+| `src/puppet.tsx` | 影人剪影、关节动画、挂载徽标 |
+| `src/bells.tsx` | 编钟面板、录制/回放控制 |
+| `src/utils/audio.ts` | Web Audio 音效合成 |
