@@ -43,7 +43,7 @@ interface Task {
   departureTime: number;
   estimatedArrivalTime: number;
   actualArrivalTime: number | null;
-  status: 'in_progress' | 'completed' | 'delayed';
+  status: 'in_progress' | 'completed' | 'delayed' | 'cancelled';
   destination: string;
   urgency: string;
   weight: number;
@@ -318,6 +318,8 @@ const App: React.FC = () => {
         return '准时';
       case 'delayed':
         return '延迟';
+      case 'cancelled':
+        return '已取消';
       default:
         return '进行中';
     }
@@ -374,7 +376,11 @@ const App: React.FC = () => {
                   </div>
                   <span
                     className={`status-final ${
-                      task.status === 'delayed' ? 'status-delayed' : 'status-on-time'
+                      task.status === 'delayed'
+                        ? 'status-delayed'
+                        : task.status === 'cancelled'
+                          ? 'status-cancelled'
+                          : 'status-on-time'
                     }`}
                   >
                     {getStatusText(task.status)}

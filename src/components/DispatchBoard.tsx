@@ -30,7 +30,7 @@ interface Task {
   departureTime: number;
   estimatedArrivalTime: number;
   actualArrivalTime: number | null;
-  status: 'in_progress' | 'completed' | 'delayed';
+  status: 'in_progress' | 'completed' | 'delayed' | 'cancelled';
   destination: string;
   urgency: string;
   weight: number;
@@ -166,6 +166,7 @@ const DispatchBoard: React.FC<DispatchBoardProps> = ({
       case 'in_progress': return '进行中';
       case 'completed': return '已完成';
       case 'delayed': return '已延迟';
+      case 'cancelled': return '已取消';
       default: return status;
     }
   };

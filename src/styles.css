@@ -521,6 +521,10 @@ body {
   background: linear-gradient(135deg, #a31f34 0%, #c42e45 100%);
 }
 
+.status-cancelled {
+  background: linear-gradient(135deg, #9c9c9c 0%, #b0b0b0 100%);
+}
+
 .pagination-controls {
   display: flex;
   justify-content: center;
