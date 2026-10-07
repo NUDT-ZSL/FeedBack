@@ -28,8 +28,12 @@ export class UIManager {
   private onBindCallback: (() => void) | null = null;
   private materialShelf: HTMLElement | null = null;
   private bindButton: HTMLElement | null = null;
+  private bindReason: HTMLElement | null = null;
   private repairProgress: HTMLElement | null = null;
+  private hintElement: HTMLElement | null = null;
+  private hintTimeout: number | null = null;
   private lastMouseMoveTime: number = 0;
+  private lastStateSignature: string = '';
 
   constructor(
     uiContainer: HTMLElement,
@@ -69,6 +73,7 @@ export class UIManager {
     this.createMaterialShelf();
     this.createBindButton();
     this.createRepairProgress();
+    this.createHint();
     this.createDragGhost();
   }
 
@@ -258,6 +263,61 @@ export class UIManager {
       );
     });
     this.uiContainer.appendChild(this.bindButton);
+    this.bindReason = document.createElement('div');
+    this.bindReason.style.cssText = `
+      position: absolute;
+      right: 40px;
+      bottom: 34px;
+      padding: 4px 12px;
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: 13px;
+      color: #e8b4a0;
+      text-align: right;
+      letter-spacing: 1px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 100;
+      pointer-events: none;
+    `;
+    this.uiContainer.appendChild(this.bindReason);
+  }
+
+  private createHint(): void {
+    this.hintElement = document.createElement('div');
+    this.hintElement.style.cssText = `
+      position: absolute;
+      top: 84px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 24px;
+      background: rgba(40, 25, 15, 0.95);
+      border: 1px solid rgba(232, 180, 160, 0.6);
+      border-radius: 6px;
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: 14px;
+      color: #e8b4a0;
+      letter-spacing: 2px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 200;
+      pointer-events: none;
+    `;
+    this.uiContainer.appendChild(this.hintElement);
+  }
+
+  private showHint(message: string): void {
+    if (!this.hintElement) return;
+    this.hintElement.textContent = message;
+    this.hintElement.style.opacity = '1';
+    if (this.hintTimeout !== null) {
+      window.clearTimeout(this.hintTimeout);
+    }
+    this.hintTimeout = window.setTimeout(() => {
+      if (this.hintElement) {
+        this.hintElement.style.opacity = '0';
+      }
+      this.hintTimeout = null;
+    }, 2000);
   }
 
   private createRepairProgress(): void {
@@ -376,10 +436,17 @@ export class UIManager {
       this.raycaster.setFromCamera(this.mouse, this.camera);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.8);
       const intersectPoint = new THREE.Vector3();
-      this.raycaster.ray.intersectPlane(plane, intersectPoint);
-      const nearestDamage = this.bookManager.findNearestDamage(intersectPoint, 0.4);
-      if (nearestDamage) {
-        this.applyMaterialToDamage(nearestDamage, this.draggingMaterial);
+      const hit = this.raycaster.ray.intersectPlane(plane, intersectPoint);
+      if (hit) {
+        const nearestDamage = this.bookManager.findNearestDamage(intersectPoint, 0.4);
+        if (nearestDamage) {
+          this.applyMaterialToDamage(nearestDamage, this.draggingMaterial);
+        } else {
+          const repairedDamage = this.bookManager.findNearestDamage(intersectPoint, 0.4, true);
+          if (repairedDamage) {
+            this.showHint('该破损已修复完成，无需重复修补');
+          }
+        }
       }
       if (this.dragGhost) {
         this.dragGhost.style.opacity = '0';
@@ -397,9 +464,11 @@ export class UIManager {
   }
 
   private applyMaterialToDamage(damage: Damage, material: MaterialItem): void {
-    const success = this.bookManager.applyRepair(damage, material.name);
-    if (success) {
+    const result = this.bookManager.applyRepair(damage, material.name);
+    if (result.success) {
       this.updateProgress();
+    } else if (result.reason) {
+      this.showHint(result.reason);
     }
   }
 
@@ -415,10 +484,14 @@ export class UIManager {
       <span style="color: #d4c5a9;">(${percent}%)</span>
     `;
     if (this.bindButton) {
-      const isComplete = this.bookManager.isComplete();
-      this.bindButton.style.opacity = isComplete ? '1' : '0.5';
-      this.bindButton.style.pointerEvents = isComplete ? 'auto' : 'none';
-      if (isComplete) {
+      const bindCheck = this.bookManager.canBind();
+      this.bindButton.style.opacity = bindCheck.ok ? '1' : '0.5';
+      this.bindButton.style.pointerEvents = bindCheck.ok ? 'auto' : 'none';
+      if (this.bindReason) {
+        this.bindReason.textContent = bindCheck.ok ? '' : (bindCheck.reason || '');
+        this.bindReason.style.opacity = bindCheck.ok ? '0' : '1';
+      }
+      if (bindCheck.ok) {
         this.bindButton.style.animation = 'pulse 2s infinite';
         const style = document.createElement('style');
         style.textContent = `
@@ -456,6 +529,9 @@ export class UIManager {
       this.bindButton.style.opacity = '0';
       this.bindButton.style.pointerEvents = 'none';
     }
+    if (this.bindReason) {
+      this.bindReason.style.opacity = '0';
+    }
     if (this.repairProgress) {
       this.repairProgress.style.transition = 'opacity 0.5s';
       this.repairProgress.style.opacity = '0';
@@ -481,7 +557,17 @@ export class UIManager {
     }
   }
 
-  public update(deltaTime: number): void {
+  public update(_deltaTime: number): void {
+    const damages = this.bookManager.getDamages();
+    const damageSignature = damages
+      .map(d => (d.repaired ? '2' : d.repairProgress > 0 ? '1' : '0'))
+      .join('');
+    const bindCheck = this.bookManager.canBind();
+    const signature = `${damageSignature}|${bindCheck.ok}|${bindCheck.reason || ''}`;
+    if (signature !== this.lastStateSignature) {
+      this.lastStateSignature = signature;
+      this.updateProgress();
+    }
   }
 
   public dispose(): void {
@@ -493,6 +579,16 @@ export class UIManager {
     }
     if (this.bindButton) {
       this.uiContainer.removeChild(this.bindButton);
+    }
+    if (this.bindReason) {
+      this.uiContainer.removeChild(this.bindReason);
+    }
+    if (this.hintElement) {
+      this.uiContainer.removeChild(this.hintElement);
+    }
+    if (this.hintTimeout !== null) {
+      window.clearTimeout(this.hintTimeout);
+      this.hintTimeout = null;
     }
     if (this.repairProgress) {
       this.uiContainer.removeChild(this.repairProgress);

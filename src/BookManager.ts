@@ -22,6 +22,16 @@ export interface RepairRecord {
   timestamp: number;
 }
 
+export interface RepairResult {
+  success: boolean;
+  reason?: string;
+}
+
+export interface BindCheck {
+  ok: boolean;
+  reason?: string;
+}
+
 export class BookManager {
   private scene: THREE.Scene;
   private effectManager: EffectManager;
@@ -39,6 +49,7 @@ export class BookManager {
   private pageCanvas: HTMLCanvasElement | null = null;
   private pageTexture: THREE.CanvasTexture | null = null;
   private originalPageImageData: ImageData | null = null;
+  private beforeImageDataUrl: string = '';
 
   private readonly PAGE_WIDTH = 2.5;
   private readonly PAGE_HEIGHT = 1.8;
@@ -77,7 +88,32 @@ export class BookManager {
     this.pageMesh.position.y = 0.01;
     this.bookGroup.add(this.pageMesh);
     this.createDamages();
+    this.beforeImageDataUrl = this.captureBeforeImage();
     this.updatePageTexture();
+  }
+
+  private captureBeforeImage(): string {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 768;
+    const ctx = canvas.getContext('2d')!;
+    if (this.originalPageImageData) {
+      ctx.putImageData(this.originalPageImageData, 0, 0);
+    }
+    for (const damage of this.damages) {
+      const x = (damage.position.x / this.PAGE_WIDTH + 0.5) * 1024;
+      const y = (damage.position.y / this.PAGE_HEIGHT + 0.5) * 768;
+      const r = damage.radius * 300;
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+      gradient.addColorStop(0, 'rgba(30, 20, 10, 0.85)');
+      gradient.addColorStop(0.6, 'rgba(60, 45, 30, 0.5)');
+      gradient.addColorStop(1, 'rgba(80, 60, 40, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return canvas.toDataURL('image/png');
   }
 
   private drawPaperTexture(ctx: CanvasRenderingContext2D): void {
@@ -242,12 +278,12 @@ export class BookManager {
     return this.damages;
   }
 
-  public findNearestDamage(worldPos: THREE.Vector3, maxDistance: number = 0.3): Damage | null {
+  public findNearestDamage(worldPos: THREE.Vector3, maxDistance: number = 0.3, includeRepaired: boolean = false): Damage | null {
     const localPos = this.bookGroup.worldToLocal(worldPos.clone());
     let nearest: Damage | null = null;
     let minDist = Infinity;
     for (const damage of this.damages) {
-      if (damage.repaired) continue;
+      if (damage.repaired && !includeRepaired) continue;
       const dx = localPos.x - damage.position.x;
       const dz = localPos.z - damage.position.y;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -259,8 +295,15 @@ export class BookManager {
     return nearest;
   }
 
-  public applyRepair(damage: Damage, materialName: string): boolean {
-    if (damage.repaired || damage.repairProgress > 0) return false;
+  public applyRepair(damage: Damage, materialName: string): RepairResult {
+    if (damage.repaired) {
+      return { success: false, reason: '该破损已修复完成，无需重复修补' };
+    }
+    const repairInProgress = damage.repairProgress > 0
+      || this.repairAnimations.some(anim => anim.damage === damage);
+    if (repairInProgress) {
+      return { success: false, reason: '该破损正在修复中，请稍候' };
+    }
     damage.repairMaterial = materialName;
     this.repairAnimations.push({
       damage,
@@ -275,7 +318,30 @@ export class BookManager {
     } else {
       this.usedMaterials.push({ name: materialName, count: 1 });
     }
-    return true;
+    return { success: true };
+  }
+
+  public getUsedMaterials(): { name: string; count: number }[] {
+    return this.usedMaterials.map(m => ({ ...m }));
+  }
+
+  public isMaterialListValid(): boolean {
+    if (this.usedMaterials.length === 0) return false;
+    const totalCount = this.usedMaterials.reduce((sum, m) => sum + m.count, 0);
+    const repairedWithMaterial = this.damages.filter(d => d.repairMaterial).length;
+    if (totalCount !== repairedWithMaterial) return false;
+    return this.damages.every(d => !d.repaired || !!d.repairMaterial);
+  }
+
+  public canBind(): BindCheck {
+    const unrepaired = this.damages.filter(d => !d.repaired).length;
+    if (unrepaired > 0) {
+      return { ok: false, reason: `尚有 ${unrepaired} 处破损未修复` };
+    }
+    if (!this.isMaterialListValid()) {
+      return { ok: false, reason: '材料清单异常，无法装订' };
+    }
+    return { ok: true };
   }
 
   private updateRepairAnimations(): void {
@@ -332,6 +398,7 @@ export class BookManager {
 
   public startScrollAnimation(): void {
     if (!this.isComplete() || this.scrollAnimation) return;
+    this.generateRepairRecord();
     this.scrollAnimation = {
       active: true,
       startTime: performance.now(),
@@ -340,6 +407,16 @@ export class BookManager {
     };
     this.damageMeshes.visible = false;
     this.createScrollMesh();
+  }
+
+  private generateRepairRecord(): void {
+    this.repairRecord = {
+      beforeImage: this.beforeImageDataUrl,
+      afterImage: this.pageCanvas ? this.pageCanvas.toDataURL('image/png') : '',
+      materials: this.getUsedMaterials(),
+      restorerSignature: '古籍修复师',
+      timestamp: Date.now()
+    };
   }
 
   private createScrollMesh(): void {
@@ -406,13 +483,6 @@ export class BookManager {
     this.scrollMesh.position.copy(this.bookGroup.position);
     this.scrollMesh.visible = false;
     this.scene.add(this.scrollMesh);
-    this.repairRecord = {
-      beforeImage: '',
-      afterImage: '',
-      materials: [...this.usedMaterials],
-      restorerSignature: '古籍修复师',
-      timestamp: Date.now()
-    };
   }
 
   private drawScrollContent(ctx: CanvasRenderingContext2D): void {
@@ -434,9 +504,10 @@ export class BookManager {
     ctx.fillStyle = '#2a1a0f';
     ctx.fillText('【用材清单】', 150, 330);
     ctx.fillStyle = '#3d2817';
-    const materials = this.usedMaterials.length > 0 
-      ? this.usedMaterials.map(m => `${m.name} ×${m.count}`).join('、')
-      : '安徽宣纸、蚕丝线、小麦浆糊、松烟墨';
+    const recordMaterials = this.repairRecord ? this.repairRecord.materials : [];
+    const materials = recordMaterials.length > 0
+      ? recordMaterials.map(m => `${m.name} ×${m.count}`).join('、')
+      : '（无材料消耗记录）';
     this.wrapText(ctx, materials, 180, 370, 1700, 35);
     ctx.fillStyle = '#2a1a0f';
     ctx.textAlign = 'right';
