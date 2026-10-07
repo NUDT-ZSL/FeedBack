@@ -9,6 +9,7 @@ export interface Mold {
   id: string;
   name: string;
   shape: string;
+  maxFillings?: number;
 }
 
 export interface OrderData {
@@ -23,15 +24,31 @@ export interface OrderData {
 export interface OrderResponse {
   orderId: string;
   shareLink: string;
+  duplicated?: boolean;
 }
 
-export interface SavedOrder {
-  id: string;
-  orderId: string;
-  fillings: string;
-  mold: string;
+export interface OrderSnapshot {
+  fillings: Filling[];
+  mold: Mold;
   drawingData: string;
   recipientName: string;
   blessing: string;
+}
+
+export interface OrderDetail {
+  orderId: string;
   createdAt: string;
+  snapshot: OrderSnapshot;
+}
+
+export interface ApiErrorDetail {
+  field: string;
+  code: string;
+  message: string;
+}
+
+export interface ApiErrorResponse {
+  error: string;
+  code?: string;
+  details?: ApiErrorDetail[];
 }

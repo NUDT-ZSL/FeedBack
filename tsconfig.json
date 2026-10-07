@@ -18,6 +18,13 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS",
+      "moduleResolution": "Node",
+      "allowImportingTsExtensions": false
+    }
+  },
   "include": ["src", "server"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

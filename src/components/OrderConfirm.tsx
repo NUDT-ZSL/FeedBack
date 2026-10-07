@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { OrderData, OrderResponse } from '../types';
+import React, { useState, useRef } from 'react';
+import { OrderData, OrderResponse, ApiErrorResponse } from '../types';
 
 interface OrderConfirmProps {
   orderData: OrderData;
@@ -18,6 +18,16 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
   const [blessing, setBlessing] = useState(orderData.blessing);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const clientRequestIdRef = useRef<string>(generateClientRequestId());
+
+  function generateClientRequestId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+    return `req-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+  }
 
   const handleSubmit = async () => {
     if (!recipientName.trim()) {
@@ -29,7 +39,6 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
       return;
     }
 
-    onUpdateRecipient(recipientName, blessing);
     setIsSubmitting(true);
     setError('');
 
@@ -45,17 +54,30 @@ const OrderConfirm: React.FC<OrderConfirmProps> = ({
           drawingData: orderData.drawingData,
           recipientName: recipientName.trim(),
           blessing: blessing.trim(),
+          clientRequestId: clientRequestIdRef.current,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('提交订单失败');
+        let message = '提交订单失败，请稍后重试';
+        try {
+          const errorData: ApiErrorResponse = await response.json();
+          if (errorData.details && errorData.details.length > 0) {
+            message = errorData.details.map(detail => detail.message).join('；');
+          } else if (errorData.error) {
+            message = errorData.error;
+          }
+        } catch {
+          // keep fallback message
+        }
+        throw new Error(message);
       }
 
       const data: OrderResponse = await response.json();
+      onUpdateRecipient(recipientName, blessing);
       onOrderComplete(data.orderId);
     } catch (err) {
-      setError('提交订单失败，请重试');
+      setError(err instanceof Error ? err.message : '提交订单失败，请重试');
     } finally {
       setIsSubmitting(false);
     }
