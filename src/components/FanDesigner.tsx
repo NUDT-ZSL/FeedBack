@@ -196,4 +196,161 @@ export const FanDesigner: React.FC = () => {
     }
     setIsDrawing(true);
     lastPointRef.current = p;
-    addStroke({ id: `s-${Date.now()}`, points: [p],
+    addStroke({
+      id: `stroke-${Date.now()}`,
+      points: [p],
+      brushType: currentBrush,
+      color: currentColor,
+      size: brushSize,
+      opacity: 1,
+    });
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const p = getPoint(e);
+    if (isDraggingRef.current && selectedPattern && dragStartRef.current) {
+      const rotation = dragStartRef.current.rotation + (p.x - dragStartRef.current.x) / 2;
+      const updates = { x: p.x - 100, y: p.y - 100, rotation };
+      updateOverlay(selectedPattern.id, updates);
+      setSelectedPattern({ ...selectedPattern, ...updates });
+      return;
+    }
+    if (!isDrawing || !currentFanSurface || is定型) return;
+    if (!inFan(p)) return;
+    updateLastStroke(p);
+    lastPointRef.current = p;
+  };
+
+  const onMouseUp = () => {
+    setIsDrawing(false);
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+  };
+
+  const handleSelectPattern = (preset: (typeof PRESET_PATTERNS)[number]) => {
+    if (!currentFanSurface) {
+      return;
+    }
+    const overlay: OverlayPattern = {
+      ...preset,
+      id: `${preset.id}-${Date.now()}`,
+      x: CANVAS_SIZE / 2 - 100,
+      y: CANVAS_SIZE / 2 - 100,
+      scale: 1,
+      rotation: 0,
+      opacity: overlayOpacity,
+    };
+    addOverlay(overlay);
+    setSelectedPattern(overlay);
+  };
+
+  const handleOpacityChange = (value: number) => {
+    setOverlayOpacity(value);
+    if (selectedPattern) {
+      updateOverlay(selectedPattern.id, { opacity: value });
+      setSelectedPattern({ ...selectedPattern, opacity: value });
+    }
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6 justify-center">
+      <div className="w-full lg:w-64 space-y-5 rounded-lg border-4 p-4" style={{ borderColor: COLORS.wood, backgroundColor: COLORS.cream }}>
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>材料架</h3>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => createFanSurface('round')}
+              className="px-3 py-1 rounded text-sm text-white hover:opacity-90" style={{ backgroundColor: COLORS.azurite }}>
+              圆形团扇
+            </button>
+            <button onClick={() => createFanSurface('fan')}
+              className="px-3 py-1 rounded text-sm text-white hover:opacity-90" style={{ backgroundColor: COLORS.azurite }}>
+              折扇扇面
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>画笔</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {BRUSH_TYPES.map((b) => (
+              <button key={b.type} onClick={() => setCurrentBrush(b.type as BrushType)}
+                className="px-2 py-1 rounded text-sm text-white hover:opacity-90"
+                style={{ backgroundColor: currentBrush === b.type ? COLORS.cinnabar : COLORS.wood }}>
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>矿物颜料</h3>
+          <div className="flex flex-wrap gap-2">
+            {MINERAL_COLORS.map((c) => (
+              <button key={c.value} title={c.name} onClick={() => setCurrentColor(c.value)}
+                className="w-8 h-8 rounded-full border-2 hover:scale-110 transition-transform"
+                style={{ backgroundColor: c.value, borderColor: currentColor === c.value ? COLORS.goldDark : 'transparent' }} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>笔刷大小：{brushSize}</h3>
+          <input type="range" min={1} max={20} value={brushSize}
+            onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full" />
+        </div>
+
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>图样底稿（按住 Ctrl 拖动）</h3>
+          <div className="flex flex-wrap gap-2">
+            {PRESET_PATTERNS.map((p) => (
+              <button key={p.id} onClick={() => handleSelectPattern(p)}
+                className="px-3 py-1 rounded text-sm text-white hover:opacity-90" style={{ backgroundColor: COLORS.malachite }}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-bold mb-2" style={{ color: COLORS.wood }}>图样透明度：{overlayOpacity}</h3>
+          <input type="range" min={0} max={100} value={overlayOpacity}
+            onChange={(e) => handleOpacityChange(Number(e.target.value))} className="w-full" />
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={定型FanSurface} disabled={!currentFanSurface || is定型}
+            className="flex-1 px-3 py-2 rounded text-sm text-white hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: COLORS.cinnabar }}>
+            定型
+          </button>
+          <button onClick={resetAll}
+            className="px-3 py-2 rounded text-sm text-white hover:opacity-90" style={{ backgroundColor: COLORS.gray }}>
+            重置
+          </button>
+        </div>
+        {is定型 && <p className="text-sm font-medium" style={{ color: COLORS.malachite }}>扇面已定型，可进入组装页面</p>}
+      </div>
+
+      <div className="relative" style={{ width: CANVAS_SIZE }}>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
+          className="rounded-lg shadow-lg cursor-crosshair"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+        />
+        <canvas
+          ref={overlayCanvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
+          className="absolute inset-0 pointer-events-none"
+        />
+      </div>
+    </div>
+  );
+};
+
+export default FanDesigner;

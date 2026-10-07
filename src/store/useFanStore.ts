@@ -61,6 +61,7 @@ interface FanState {
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   updateOrder: (orderId: string, updates: Partial<Order>) => void;
+  applyOrderTransition: (order: Order, fanRibs: FanRib[]) => void;
   setCurrentOrderId: (id: string | null) => void;
   setSelectedOrderForDetail: (order: Order | null) => void;
 
@@ -271,6 +272,13 @@ export const useFanStore = create<FanState>((set, get) => ({
       orders: state.orders.map((o) =>
         o.id === orderId ? { ...o, ...updates, updatedAt: new Date() } : o
       ),
+    }));
+  },
+
+  applyOrderTransition: (order, fanRibs) => {
+    set((state) => ({
+      orders: state.orders.map((o) => (o.id === order.id ? order : o)),
+      fanRibs,
     }));
   },
 

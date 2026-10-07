@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { orderApi, inventoryApi } from '../api/orderApi';
+import { orderApi, inventoryApi, getApiErrorMessage } from '../api/orderApi';
 import { useFanStore } from '../store/useFanStore';
 import { Order, OrderStatus, FanRib, COLORS } from '../types';
 
@@ -8,6 +8,7 @@ const statusMap: Record<OrderStatus, { label: string; color: string }> = {
   in_progress: { label: '制作中', color: COLORS.azurite },
   completed: { label: '已完成', color: COLORS.malachite },
   shipped: { label: '已发货', color: COLORS.goldDark },
+  cancelled: { label: '已作废', color: COLORS.ochre },
 };
 
 const fanSurfaceTypes = [
@@ -25,10 +26,11 @@ const fanRibMaterials = [
 export default function OrderManager() {
   const {
     orders, fanRibs, selectedOrderForDetail, setOrders, setFanRibs,
-    updateOrderStatus, setCurrentOrderId, setSelectedOrderForDetail, showNotification,
+    applyOrderTransition, setCurrentOrderId, setSelectedOrderForDetail, showNotification,
   } = useFanStore();
 
   const [loading, setLoading] = useState(true);
+  const [transitioning, setTransitioning] = useState<Record<string, boolean>>({});
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [showLowStock, setShowLowStock] = useState(false);
   const [selectedRibForRestock, setSelectedRibForRestock] = useState<FanRib | null>(null);
@@ -52,15 +54,22 @@ export default function OrderManager() {
   }, [setOrders, setFanRibs, showNotification]);
 
   const handleStatusChange = async (order: Order, newStatus: OrderStatus) => {
+    if (transitioning[order.id]) return;
+    setTransitioning((prev) => ({ ...prev, [order.id]: true }));
     try {
-      await orderApi.updateOrderStatus(order.id, newStatus);
-      updateOrderStatus(order.id, newStatus);
+      const { fanRibs: latestRibs, ...updatedOrder } = await orderApi.transitionOrderStatus(order.id, newStatus);
+      applyOrderTransition(updatedOrder, latestRibs);
       showNotification(`订单#${order.orderNo}状态已更新`, 'success');
       if (newStatus === 'in_progress') {
         setCurrentOrderId(order.id);
         setTimeout(() => showNotification(`开始制作订单#${order.orderNo}，即将跳转到画扇页面`, 'info'), 300);
       }
-    } catch { showNotification('状态更新失败', 'error'); }
+    } catch (err) {
+      showNotification(getApiErrorMessage(err, '状态更新失败'), 'error');
+      try { setFanRibs(await inventoryApi.getFanRibs()); } catch { /* 忽略重新同步失败 */ }
+    } finally {
+      setTransitioning((prev) => ({ ...prev, [order.id]: false }));
+    }
   };
 
   const handleCreateOrder = async () => {
@@ -92,12 +101,12 @@ export default function OrderManager() {
   const handleRestock = async () => {
     if (!selectedRibForRestock) return;
     try {
-      await inventoryApi.restockFanRib(selectedRibForRestock.id, 24);
-      setFanRibs(await inventoryApi.getFanRibs());
+      const { fanRibs: latestRibs } = await inventoryApi.restockFanRib(selectedRibForRestock.id, 24);
+      setFanRibs(latestRibs);
       showNotification('库存补足成功', 'success');
       setShowLowStock(false);
       setSelectedRibForRestock(null);
-    } catch { showNotification('补足库存失败', 'error'); }
+    } catch (err) { showNotification(getApiErrorMessage(err, '补足库存失败'), 'error'); }
   };
 
   const getRibMaterialLabel = (ribIds: string[]) => {
@@ -122,12 +131,22 @@ export default function OrderManager() {
   const ActionButtons = ({ order }: { order: Order }) => (
     <div className="space-x-2" onClick={(e) => e.stopPropagation()}>
       {order.status === 'pending' && (
-        <button onClick={() => handleStatusChange(order, 'in_progress')}
-          className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">开始制作</button>
+        <>
+          <button onClick={() => handleStatusChange(order, 'in_progress')} disabled={transitioning[order.id]}
+            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50">开始制作</button>
+          <button onClick={() => handleStatusChange(order, 'cancelled')} disabled={transitioning[order.id]}
+            className="px-3 py-1 bg-red-700 text-white rounded text-sm hover:bg-red-800 disabled:opacity-50">作废</button>
+        </>
       )}
       {order.status === 'in_progress' && (
-        <button onClick={() => handleStatusChange(order, 'completed')}
-          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">完成制作</button>
+        <>
+          <button onClick={() => handleStatusChange(order, 'completed')} disabled={transitioning[order.id]}
+            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50">完成制作</button>
+          <button onClick={() => handleStatusChange(order, 'pending')} disabled={transitioning[order.id]}
+            className="px-3 py-1 bg-amber-600 text-white rounded text-sm hover:bg-amber-700 disabled:opacity-50">回退</button>
+          <button onClick={() => handleStatusChange(order, 'cancelled')} disabled={transitioning[order.id]}
+            className="px-3 py-1 bg-red-700 text-white rounded text-sm hover:bg-red-800 disabled:opacity-50">作废</button>
+        </>
       )}
       {order.status === 'completed' && (
         <>
@@ -217,3 +236,147 @@ export default function OrderManager() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold" style={{ color: COLORS.wood }}>订单管理</h2>
+        <button
+          onClick={() => setShowNewOrder(true)}
+          className="px-4 py-2 rounded-lg text-sm font-medium shadow hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: COLORS.wood, color: COLORS.cream }}
+        >
+          新建订单
+        </button>
+      </div>
+
+      {loading ? (
+        <Skeleton />
+      ) : orders.length === 0 ? (
+        <div className="text-center py-16 text-gray-500">暂无订单，点击右上角「新建订单」开始</div>
+      ) : (
+        <>
+          <TableView />
+          <CardView />
+        </>
+      )}
+
+      <Modal show={showNewOrder} onClose={() => setShowNewOrder(false)}>
+        <h3 className="text-lg font-bold mb-4" style={{ color: COLORS.wood }}>新建订单</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">客户姓名</label>
+            <input
+              type="text"
+              value={newOrder.customerName}
+              onChange={(e) => setNewOrder({ ...newOrder, customerName: e.target.value })}
+              className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="请输入客户姓名"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">扇面类型</label>
+            <select
+              value={newOrder.fanSurfaceType}
+              onChange={(e) => setNewOrder({ ...newOrder, fanSurfaceType: e.target.value })}
+              className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              {fanSurfaceTypes.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">扇骨材质</label>
+            <select
+              value={newOrder.fanRibMaterial}
+              onChange={(e) => setNewOrder({ ...newOrder, fanRibMaterial: e.target.value })}
+              className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              {fanRibMaterials.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={() => setShowNewOrder(false)}
+              className="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleCreateOrder}
+              className="px-4 py-2 rounded-lg text-sm text-white hover:opacity-90"
+              style={{ backgroundColor: COLORS.wood }}
+            >
+              创建订单
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal show={showLowStock} onClose={() => { setShowLowStock(false); setSelectedRibForRestock(null); }}>
+        <h3 className="text-lg font-bold mb-4" style={{ color: COLORS.cinnabar }}>库存不足</h3>
+        {selectedRibForRestock ? (
+          <p className="text-sm text-gray-700 mb-6">
+            扇骨 #{selectedRibForRestock.number}（{getRibMaterialLabel([selectedRibForRestock.id])}）
+            当前库存 {selectedRibForRestock.quantity} 件，制作一把绢扇需要 12 件，请先补足库存。
+          </p>
+        ) : (
+          <p className="text-sm text-gray-700 mb-6">该材质暂无可用扇骨，请选择其他材质或稍后再试。</p>
+        )}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={() => { setShowLowStock(false); setSelectedRibForRestock(null); }}
+            className="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300"
+          >
+            取消
+          </button>
+          {selectedRibForRestock && (
+            <button
+              onClick={handleRestock}
+              className="px-4 py-2 rounded-lg text-sm text-white hover:opacity-90"
+              style={{ backgroundColor: COLORS.malachite }}
+            >
+              补足库存（+24）
+            </button>
+          )}
+        </div>
+      </Modal>
+
+      <Modal show={!!selectedOrderForDetail} onClose={() => setSelectedOrderForDetail(null)}>
+        {selectedOrderForDetail && (
+          <div>
+            <h3 className="text-lg font-bold mb-4" style={{ color: COLORS.wood }}>订单详情</h3>
+            <div className="flex items-center gap-4 mb-4">
+              <img src={selectedOrderForDetail.thumbnail} alt="扇面" className="w-20 h-20 rounded object-cover" />
+              <div>
+                <p className="font-mono text-sm">{selectedOrderForDetail.orderNo}</p>
+                <p className="font-medium">{selectedOrderForDetail.customerName}</p>
+                <StatusBadge status={selectedOrderForDetail.status} />
+              </div>
+            </div>
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>扇骨材质：{getRibMaterialLabel(selectedOrderForDetail.fanRibIds)}</p>
+              <p>占用扇骨：{selectedOrderForDetail.fanRibIds.length} 件</p>
+              <p>提交时间：{new Date(selectedOrderForDetail.submittedAt).toLocaleString('zh-CN')}</p>
+              <p>更新时间：{new Date(selectedOrderForDetail.updatedAt).toLocaleString('zh-CN')}</p>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setSelectedOrderForDetail(null)}
+                className="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal show={!!thumbnailModal} onClose={() => setThumbnailModal(null)}>
+        {thumbnailModal && (
+          <img src={thumbnailModal} alt="扇面大图" className="w-full rounded-lg" onClick={() => setThumbnailModal(null)} />
+        )}
+      </Modal>
+    </div>
+  );
+}

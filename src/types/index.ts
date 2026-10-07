@@ -1,6 +1,6 @@
 export type FanSurfaceShape = 'round' | 'fan';
 export type FanSurfaceStatus = 'draft' | 'completed' | 'assembled';
-export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'shipped';
+export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'shipped' | 'cancelled';
 export type BrushType = 'fine' | 'splash' | 'dot' | 'row';
 
 export interface Point {
@@ -59,6 +59,7 @@ export interface Order {
   thumbnail: string;
   submittedAt: Date;
   updatedAt: Date;
+  reservedRibs?: Record<string, number>;
 }
 
 export interface Inventory {

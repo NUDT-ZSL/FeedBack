@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useFanStore } from '../store/useFanStore';
 import { inventoryApi } from '../api/orderApi';
 import { playBambooClick, playErrorSound, playPaperRub, playSuccessSound } from '../utils/audio';
-import { FanRib } from '../types';
+import { FanRib, COLORS } from '../types';
 
 const FAN_RADIUS = 200;
 const CENTER = { x: 250, y: 280 };
@@ -31,7 +31,6 @@ export default function FanAssembler() {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const [velocity, setVelocity] = useState({ x: 0, y: 0 });
   const [errorSlot, setErrorSlot] = useState<number | null>(null);
-  const [inventory, setInventory] = useState<Record<number, number>>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>();
@@ -40,24 +39,13 @@ export default function FanAssembler() {
   useEffect(() => {
     const loadInventory = async () => {
       try {
-        const ribs = await inventoryApi.getFanRibs();
-        const inv: Record<number, number> = {};
-        ribs.forEach((r) => (inv[r.number] = r.quantity));
-        setInventory(inv);
-        setFanRibs(ribs);
+        setFanRibs(await inventoryApi.getFanRibs());
       } catch {
-        const inv: Record<number, number> = {};
-        const ribs: FanRib[] = [];
-        for (let i = 1; i <= TOTAL_RIBS; i++) {
-          inv[i] = Math.floor(Math.random() * 5) + 1;
-          ribs.push({ id: `rib-${i}`, number: i, material: 'bamboo', color: '#a67c52', inStock: true, used: false, quantity: inv[i] });
-        }
-        setInventory(inv);
-        setFanRibs(ribs);
+        showNotification('扇骨库存加载失败，请稍后重试', 'error');
       }
     };
     loadInventory();
-  }, [setFanRibs]);
+  }, [setFanRibs, showNotification]);
 
   useEffect(() => {
     if (assemblyComplete && !show合扇Animation) {
@@ -78,7 +66,7 @@ export default function FanAssembler() {
       };
       animRef.current = requestAnimationFrame(animate);
     }
-    return () => animRef.current && cancelAnimationFrame(animRef.current);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [assemblyComplete, show合扇Animation, trigger合扇Animation, complete合扇Animation, setFan展开Angle]);
 
   const getSlotPosition = useCallback(
@@ -94,7 +82,7 @@ export default function FanAssembler() {
   const getExpectedNext = () => assembledRibs.length + 1;
 
   const handleDragStart = (e: React.PointerEvent, rib: FanRib) => {
-    if (inventory[rib.number] <= 0 || rib.used) return;
+    if (rib.quantity <= 0 || rib.used) return;
     e.preventDefault();
     setDraggingRib(rib);
     const rect = containerRef.current?.getBoundingClientRect();
@@ -143,14 +131,13 @@ export default function FanAssembler() {
         setTimeout(() => setErrorSlot(null), 300);
       } else {
         try {
-          await inventoryApi.useFanRib(draggingRib.id);
-          setInventory((prev) => ({ ...prev, [draggingRib.number]: prev[draggingRib.number] - 1 }));
+          const { fanRibs: latestRibs } = await inventoryApi.useFanRib(draggingRib.id);
+          setFanRibs(latestRibs);
           addAssembledRib(draggingRib.id, nearest);
           playBambooClick();
         } catch {
-          addAssembledRib(draggingRib.id, nearest);
-          setInventory((prev) => ({ ...prev, [draggingRib.number]: Math.max(0, prev[draggingRib.number] - 1) }));
-          playBambooClick();
+          showNotification('扇骨库存扣减失败，请重试', 'error');
+          playErrorSound();
         }
       }
     }
@@ -159,7 +146,7 @@ export default function FanAssembler() {
   };
 
   const renderRib = (rib: FanRib, isDragging = false, angle = 0, pos?: { x: number; y: number }) => {
-    const qty = inventory[rib.number] || 0;
+    const qty = rib.quantity;
     const disabled = qty <= 0 || rib.used;
     const rotate = isDragging ? 2 : angle * (180 / Math.PI);
     const x = pos?.x ?? 0;
@@ -202,4 +189,83 @@ export default function FanAssembler() {
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full paper-texture rounded-lg border-4 p-4 overflow-hidden" style={{
+    <div className="paper-texture rounded-lg border-4 p-4 overflow-hidden" style={{ borderColor: COLORS.wood }}>
+      <div ref={containerRef} className="relative mx-auto" style={{ width: 500, height: 560 }}>
+        <svg width={500} height={560} className="absolute inset-0">
+          <path
+            d={getFanPath()}
+            fill={currentFanSurface ? COLORS.cream : '#efe6d2'}
+            stroke={COLORS.wood}
+            strokeWidth={3}
+            opacity={currentFanSurface ? 1 : 0.5}
+          />
+        </svg>
+
+        {Array.from({ length: TOTAL_RIBS }).map((_, i) => {
+          if (assembledRibs.some((r) => r.positionIndex === i)) return null;
+          const slot = getSlotPosition(i);
+          return (
+            <div
+              key={`slot-${i}`}
+              className={`absolute w-5 h-5 rounded-full border-2 border-dashed transition-colors ${
+                errorSlot === i ? 'border-red-500 bg-red-100' : 'border-amber-700/40'
+              }`}
+              style={{ left: slot.x - 10, top: slot.y - 10 }}
+            />
+          );
+        })}
+
+        {assembledRibs.map(({ ribId, positionIndex }) => {
+          const slot = getSlotPosition(positionIndex);
+          return (
+            <div
+              key={ribId}
+              className="absolute w-3 rounded-sm"
+              style={{
+                left: CENTER.x - 6,
+                top: CENTER.y - FAN_RADIUS,
+                height: FAN_RADIUS,
+                transformOrigin: '50% 100%',
+                transform: `rotate(${(slot.angle * 180) / Math.PI}deg)`,
+                background: 'linear-gradient(90deg, #a67c52 0%, #c49a6c 30%, #a67c52 50%, #8b6914 70%, #a67c52 100%)',
+                boxShadow: 'inset 1px 0 2px rgba(0,0,0,0.2)',
+              }}
+            />
+          );
+        })}
+
+        <div
+          className="absolute w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold"
+          style={{ left: CENTER.x - 16, top: CENTER.y - 16, backgroundColor: COLORS.gold, borderColor: '#8b6914' }}
+        >
+          轴
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-1">
+          {fanRibs.map((rib) => (
+            <div key={rib.id} className="relative w-8 h-60">
+              {renderRib(rib)}
+            </div>
+          ))}
+        </div>
+
+        {draggingRib && renderRib(draggingRib, true, 0, dragPos)}
+      </div>
+
+      <div className="text-center text-sm font-medium mt-2" style={{ color: COLORS.wood }}>
+        {assemblyComplete
+          ? '扇骨组装完成，正在合扇…'
+          : `按顺序拖拽扇骨到对应点位（下一根：第 ${getExpectedNext()} 号）`}
+      </div>
+      {assembledRibs.length > 0 && !assemblyComplete && (
+        <button
+          onClick={clearAssembly}
+          className="absolute top-3 right-3 px-3 py-1 rounded text-sm text-white hover:opacity-90"
+          style={{ backgroundColor: COLORS.wood }}
+        >
+          重新组装
+        </button>
+      )}
+    </div>
+  );
+}
