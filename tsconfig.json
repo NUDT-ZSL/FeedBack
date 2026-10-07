@@ -27,11 +27,7 @@
       "@/*": [
         "./src/*"
       ]
-    },
-    "types": [
-      "node",
-      "express"
-    ]
+    }
   },
   "include": [
     "src"
