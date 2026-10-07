@@ -1,5 +1,36 @@
 # React + TypeScript + Vite
 
+## Offline layout inference engine
+
+The layout chain (constraints -> candidate derivation -> placement -> render/export)
+lives in `src/layout/` as a standalone, offline-verifiable module:
+
+- `src/layout/types.ts` — block/constraint/placement model and result types.
+- `src/layout/validate.ts` — structural validation: constraint cycles and missing
+  references are reported as explicit `unsatisfiable` issues naming the involved
+  blocks and constraints, never silently skipped.
+- `src/layout/solver.ts` — deterministic placement solver (canonical block order,
+  lexicographic candidate order). Rotation/alignment at boundary sizes (exact edge
+  fit, range overflow, zero-size blocks) yields deterministic accept/reject
+  conclusions; nothing is silently clamped.
+- `src/layout/incremental.ts` — `LayoutEngine.update(patch)` re-derives only the
+  affected suffix of the canonical order; unaffected blocks keep their exact
+  placements. Every incremental result is cross-checked against a full re-solve
+  (`consistentWithFullSolve`). A block whose candidates are blocked by two or more
+  mutex constraints keeps both parties in `conflicts` for manual adjudication;
+  adjudicating via `waiveMutex`/`enforceMutex` re-derives only affected blocks.
+- `src/layout/render.ts` — offline SVG rendering and JSON export.
+
+Batch verification entry (no browser, no network):
+
+```sh
+npm run verify
+```
+
+It covers constraint cycles, missing references, mutex multi-hit adjudication,
+incremental-vs-full consistency, boundary sizes, determinism, and offline
+render/export.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
