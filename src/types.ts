@@ -1,8 +1,10 @@
-export enum WoodType {
-  Pine = 'pine',
-  Rosewood = 'rosewood',
-  Boxwood = 'boxwood',
-}
+export const WoodType = {
+  Pine: 'pine',
+  Rosewood: 'rosewood',
+  Boxwood: 'boxwood',
+} as const;
+
+export type WoodType = (typeof WoodType)[keyof typeof WoodType];
 
 export interface WoodProperties {
   weight: number;
@@ -22,4 +24,12 @@ export const woodProperties: Record<WoodType, WoodProperties> = {
     weight: 850,
     toughness: 85,
     durability: 90,
-    hardness
+    hardness: 95,
+  },
+  [WoodType.Boxwood]: {
+    weight: 700,
+    toughness: 75,
+    durability: 80,
+    hardness: 70,
+  },
+};
