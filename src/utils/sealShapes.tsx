@@ -1,6 +1,9 @@
+import type { SealCharacter, SealColor } from '../types/index.ts';
+
 export interface SealShapeProps {
-  color?: string;
+  color?: SealColor | string;
   size?: number;
+  character?: SealCharacter;
 }
 
 const dropShadowFilter = `
@@ -17,7 +20,7 @@ const dropShadowFilter = `
   </filter>
 `;
 
-export function GourdSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
+export function GourdSeal({ color = '#c0392b', size = 64, character = '永' }: SealShapeProps) {
   return (
     <svg width={size} height={size * 1.2} viewBox="0 0 64 77" fill="none">
       <defs dangerouslySetInnerHTML={{ __html: dropShadowFilter }} />
@@ -26,129 +29,65 @@ export function GourdSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
         fill={color}
         filter="url(#seal-shadow)"
       />
-      <text
-        x="32"
-        y="52"
-        textAnchor="middle"
-        fill="white"
-        fontSize="28"
-        fontFamily="'Ma Shan Zheng', cursive"
-        style={{ fontWeight: 'bold' }}
-      >
-        永
+      <text x="32" y="52" textAnchor="middle" fill="white" fontSize="28"
+        fontFamily="'Ma Shan Zheng', cursive" style={{ fontWeight: 'bold' }}>
+        {character}
       </text>
     </svg>
   );
 }
 
-export function SquareSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
+export function SquareSeal({ color = '#c0392b', size = 64, character = '赏' }: SealShapeProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
       <defs dangerouslySetInnerHTML={{ __html: dropShadowFilter }} />
-      <rect
-        x="4"
-        y="4"
-        width="56"
-        height="56"
-        rx="4"
-        fill={color}
-        filter="url(#seal-shadow)"
-      />
+      <rect x="4" y="4" width="56" height="56" rx="4" fill={color} filter="url(#seal-shadow)" />
       <rect x="8" y="8" width="48" height="48" rx="2" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
-      <text
-        x="32"
-        y="44"
-        textAnchor="middle"
-        fill="white"
-        fontSize="32"
-        fontFamily="'Ma Shan Zheng', cursive"
-        style={{ fontWeight: 'bold' }}
-      >
-        赏
+      <text x="32" y="44" textAnchor="middle" fill="white" fontSize="32"
+        fontFamily="'Ma Shan Zheng', cursive" style={{ fontWeight: 'bold' }}>
+        {character}
       </text>
     </svg>
   );
 }
 
-export function CircleSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
+export function CircleSeal({ color = '#c0392b', size = 64, character = '藏' }: SealShapeProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
       <defs dangerouslySetInnerHTML={{ __html: dropShadowFilter }} />
-      <circle
-        cx="32"
-        cy="32"
-        r="28"
-        fill={color}
-        filter="url(#seal-shadow)"
-      />
+      <circle cx="32" cy="32" r="28" fill={color} filter="url(#seal-shadow)" />
       <circle cx="32" cy="32" r="24" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
-      <text
-        x="32"
-        y="42"
-        textAnchor="middle"
-        fill="white"
-        fontSize="30"
-        fontFamily="'Ma Shan Zheng', cursive"
-        style={{ fontWeight: 'bold' }}
-      >
-        藏
+      <text x="32" y="42" textAnchor="middle" fill="white" fontSize="30"
+        fontFamily="'Ma Shan Zheng', cursive" style={{ fontWeight: 'bold' }}>
+        {character}
       </text>
     </svg>
   );
 }
 
-export function OvalSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
+export function OvalSeal({ color = '#c0392b', size = 64, character = '鉴' }: SealShapeProps) {
   return (
     <svg width={size} height={size * 0.75} viewBox="0 0 64 48" fill="none">
       <defs dangerouslySetInnerHTML={{ __html: dropShadowFilter }} />
-      <ellipse
-        cx="32"
-        cy="24"
-        rx="28"
-        ry="20"
-        fill={color}
-        filter="url(#seal-shadow)"
-      />
+      <ellipse cx="32" cy="24" rx="28" ry="20" fill={color} filter="url(#seal-shadow)" />
       <ellipse cx="32" cy="24" rx="24" ry="16" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
-      <text
-        x="32"
-        y="33"
-        textAnchor="middle"
-        fill="white"
-        fontSize="26"
-        fontFamily="'Ma Shan Zheng', cursive"
-        style={{ fontWeight: 'bold' }}
-      >
-        鉴
+      <text x="32" y="33" textAnchor="middle" fill="white" fontSize="26"
+        fontFamily="'Ma Shan Zheng', cursive" style={{ fontWeight: 'bold' }}>
+        {character}
       </text>
     </svg>
   );
 }
 
-export function RectSeal({ color = '#c0392b', size = 64 }: SealShapeProps) {
+export function RectSeal({ color = '#c0392b', size = 64, character = '玩' }: SealShapeProps) {
   return (
     <svg width={size * 1.4} height={size} viewBox="0 0 90 64" fill="none">
       <defs dangerouslySetInnerHTML={{ __html: dropShadowFilter }} />
-      <rect
-        x="4"
-        y="4"
-        width="82"
-        height="56"
-        rx="4"
-        fill={color}
-        filter="url(#seal-shadow)"
-      />
+      <rect x="4" y="4" width="82" height="56" rx="4" fill={color} filter="url(#seal-shadow)" />
       <rect x="8" y="8" width="74" height="48" rx="2" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
-      <text
-        x="45"
-        y="44"
-        textAnchor="middle"
-        fill="white"
-        fontSize="32"
-        fontFamily="'Ma Shan Zheng', cursive"
-        style={{ fontWeight: 'bold' }}
-      >
-        玩
+      <text x="45" y="44" textAnchor="middle" fill="white" fontSize="32"
+        fontFamily="'Ma Shan Zheng', cursive" style={{ fontWeight: 'bold' }}>
+        {character}
       </text>
     </svg>
   );
@@ -159,5 +98,5 @@ export const sealComponents = {
   square: SquareSeal,
   circle: CircleSeal,
   oval: OvalSeal,
-  rect: RectSeal,
+  rectangle: RectSeal,
 };

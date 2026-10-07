@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#efe6cf"/>
+  <rect x="38.4" y="21.599999999999998" width="1203.1999999999998" height="676.8" fill="none" stroke="#8d6e63" stroke-width="10.24"/>
+  
+    <rect x="230.39999999999998" y="86.39999999999999" width="204.8" height="547.2" fill="none" stroke="#8d6e63" stroke-width="1.5" opacity="0.5"/><rect x="537.6" y="86.39999999999999" width="204.8" height="547.2" fill="none" stroke="#8d6e63" stroke-width="1.5" opacity="0.5"/><rect x="844.8" y="86.39999999999999" width="204.8" height="547.2" fill="none" stroke="#8d6e63" stroke-width="1.5" opacity="0.5"/>
+    <path d="M307.2 216 h102.4 M358.40000000000003 144 v180 M281.6 360 q76.8 57.6 153.6 0" stroke="#2c2c2c" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M588.8000000000001 180 q76.8 72 0 144 M537.6 288 h128 M665.6 158.4 v216" stroke="#2c2c2c" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M921.5999999999999 201.60000000000002 h102.4 M896 302.4 q76.8 -43.199999999999996 128 0 M972.8 144 v251.99999999999997" stroke="#2c2c2c" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <rect x="896" y="446.4" width="128" height="128" fill="#c0392b" opacity="0.9"/>
+</svg>
