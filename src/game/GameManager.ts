@@ -5,6 +5,15 @@ import { Herb } from './Herb';
 import { Player } from './Player';
 import { Furnace } from './Furnace';
 import { Pill } from './Pill';
+import { canEnterRefining, MIN_HERBS_FOR_REFINING } from './core/furnaceCore';
+import { RandomSource, mathRandomSource } from './core/random';
+import { Clock, systemClock, FrameRunner, animationFrameRunner } from './core/clock';
+
+export interface GameManagerOptions {
+  random?: RandomSource;
+  clock?: Clock;
+  frameRunner?: FrameRunner;
+}
 
 export class GameManager {
   private scene: THREE.Scene;
@@ -31,15 +40,25 @@ export class GameManager {
   private screenVignette: THREE.Mesh | null = null;
   private vignetteActive: boolean = false;
   private vignetteTime: number = 0;
+  private clock: Clock;
+  private frameRunner: FrameRunner;
 
-  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, events: GameEvents) {
+  constructor(
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    events: GameEvents,
+    options: GameManagerOptions = {}
+  ) {
     this.scene = scene;
     this.camera = camera;
     this.events = events;
+    this.clock = options.clock ?? systemClock;
+    this.frameRunner = options.frameRunner ?? animationFrameRunner;
+    const random = options.random ?? mathRandomSource;
     
-    this.terrainGenerator = new TerrainGenerator(100, 64);
+    this.terrainGenerator = new TerrainGenerator(100, 64, random);
     this.player = new Player();
-    this.furnace = new Furnace();
+    this.furnace = new Furnace(random);
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     
@@ -214,14 +233,14 @@ export class GameManager {
       this.player.finishPicking();
       this.events.onHerbCollected(herbData);
       this.updateUI();
-    });
+    }, this.clock, this.frameRunner);
   }
 
   private switchToRefining(): void {
-    if (this.collectedHerbs.length < 5) {
+    if (!canEnterRefining(this.collectedHerbs.length)) {
       this.events.onUIUpdate({
         type: 'notification',
-        message: '至少需要5株草药才能炼丹！'
+        message: `至少需要${MIN_HERBS_FOR_REFINING}株草药才能炼丹！`
       });
       return;
     }
@@ -336,11 +355,18 @@ export class GameManager {
     if (herbIndex === -1) return false;
     
     const herbData = this.collectedHerbs[herbIndex];
-    const isCorrect = this.furnace.placeHerb(herbData, slotIndex);
-    
-    if (isCorrect) {
-      this.collectedHerbs.splice(herbIndex, 1);
+    const result = this.furnace.placeHerb(herbData, slotIndex);
+
+    // 槽位被占用/非法：拒绝，药篓与炉体状态均不变。
+    // 接受投料（无论元素是否匹配）：该草药从药篓消耗，
+    // 保证炉体颜色与槽位状态始终与"已正确放入的草药集合"一致，且草药不会被重复投放。
+    if (!result.ok) {
+      this.events.onFurnaceUpdate(this.furnace.getSlots(), this.furnace.getCurrentColor());
+      this.updateUI();
+      return false;
     }
+
+    this.collectedHerbs.splice(herbIndex, 1);
     
     this.events.onFurnaceUpdate(this.furnace.getSlots(), this.furnace.getCurrentColor());
     this.updateUI();
@@ -349,7 +375,7 @@ export class GameManager {
       this.startRefining();
     }
     
-    return isCorrect;
+    return result.correct;
   }
 
   private startRefining(): void {
@@ -438,7 +464,7 @@ export class GameManager {
     if (this.refiningRoomScene) {
       this.refiningRoomScene.traverse((child) => {
         if (child.userData.isFire) {
-          child.scale.y = child.userData.baseScale + Math.sin(Date.now() * 0.01) * 0.1;
+          child.scale.y = child.userData.baseScale + Math.sin(this.clock.now() * 0.01) * 0.1;
         }
       });
     }
@@ -452,7 +478,7 @@ export class GameManager {
     }
     
     if (this.refiningRoomCamera) {
-      const time = Date.now() * 0.0005;
+      const time = this.clock.now() * 0.0005;
       this.refiningRoomCamera.position.x = Math.sin(time) * 10;
       this.refiningRoomCamera.position.z = Math.cos(time) * 10;
       this.refiningRoomCamera.lookAt(0, 1, 0);

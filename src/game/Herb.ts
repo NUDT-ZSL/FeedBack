@@ -1,22 +1,31 @@
 import * as THREE from 'three';
 import { HerbData, ElementType, HERB_TYPES } from '../types';
+import { RandomSource, mathRandomSource, createIdGenerator } from './core/random';
+import { Clock, systemClock, FrameRunner, animationFrameRunner } from './core/clock';
 
 export class Herb {
   private mesh: THREE.Group;
   private data: HerbData;
-  private particles: THREE.Points;
-  private glowMesh: THREE.Mesh;
+  private particles!: THREE.Points;
+  private glowMesh!: THREE.Mesh;
   private animationTime: number = 0;
+  private random: RandomSource;
 
-  constructor(position: THREE.Vector3) {
-    const herbType = HERB_TYPES[Math.floor(Math.random() * HERB_TYPES.length)];
+  constructor(
+    position: THREE.Vector3,
+    random: RandomSource = mathRandomSource,
+    idGenerator?: () => string
+  ) {
+    this.random = random;
+    const herbType = HERB_TYPES[Math.floor(random.next() * HERB_TYPES.length)];
+    const makeId = idGenerator ?? createIdGenerator('herb', random);
     
     this.data = {
-      id: `herb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: makeId(),
       name: herbType.name,
       element: herbType.element,
       color: herbType.color,
-      potency: 0.5 + Math.random() * 0.5,
+      potency: 0.5 + random.next() * 0.5,
       position: { x: position.x, y: position.y, z: position.z }
     };
 
@@ -81,9 +90,9 @@ export class Herb {
     const color = new THREE.Color(this.data.color);
     
     for (let i = 0; i < particleCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
-      const radius = 0.15 + Math.random() * 0.1;
+      const theta = this.random.next() * Math.PI * 2;
+      const phi = this.random.next() * Math.PI;
+      const radius = 0.15 + this.random.next() * 0.1;
       
       positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = 0.3 + radius * Math.sin(phi) * Math.sin(theta);
@@ -123,13 +132,23 @@ export class Herb {
     this.particles.geometry.attributes.position.needsUpdate = true;
   }
 
-  public collectAnimation(targetPos: THREE.Vector3, onComplete: () => void): void {
+  /**
+   * 采集飞行动画（持续 1 秒）。时间与帧调度均可注入：
+   * 浏览器默认使用 Date.now/requestAnimationFrame；
+   * 离线验证注入 ManualClock/ManualFrameRunner 后可确定性地立即跑完。
+   */
+  public collectAnimation(
+    targetPos: THREE.Vector3,
+    onComplete: () => void,
+    clock: Clock = systemClock,
+    frameRunner: FrameRunner = animationFrameRunner
+  ): void {
     const startPos = this.mesh.position.clone();
     const duration = 1000;
-    const startTime = Date.now();
+    const startTime = clock.now();
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
+      const elapsed = clock.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeProgress = 1 - Math.pow(1 - progress, 3);
 
@@ -137,7 +156,7 @@ export class Herb {
       this.mesh.scale.setScalar(1 - easeProgress * 0.8);
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        frameRunner.requestFrame(animate);
       } else {
         onComplete();
       }

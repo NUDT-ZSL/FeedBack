@@ -124,7 +124,7 @@ export class Pill {
     this.inscriptionMesh.rotation.y -= deltaTime * 1.5;
 
     const pulseIntensity = 0.3 + Math.sin(this.animationTime * 3) * 0.1;
-    this.glowMesh.material.opacity = pulseIntensity;
+    (this.glowMesh.material as THREE.MeshBasicMaterial).opacity = pulseIntensity;
 
     const floatOffset = Math.sin(this.animationTime * 2) * 0.1;
     this.mesh.position.y = 1.5 + floatOffset;

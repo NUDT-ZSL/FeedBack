@@ -1,9 +1,13 @@
 import * as THREE from 'three';
-import { FurnaceSlot, ElementType, ELEMENT_COLORS, ELEMENT_NAMES, HerbData, PillData, PillQuality } from '../types';
+import { FurnaceSlot, ELEMENT_COLORS, HerbData, PillData } from '../types';
+import { FurnaceCore, PlaceResult, EMPTY_FURNACE_COLOR } from './core/furnaceCore';
+import { RandomSource, mathRandomSource, createIdGenerator } from './core/random';
 
 export class Furnace {
   private mesh: THREE.Group;
-  private slots: FurnaceSlot[];
+  private core: FurnaceCore;
+  private random: RandomSource;
+  private pillIdGenerator: () => string;
   private furnaceBody: THREE.Mesh;
   private furnaceGlow: THREE.Mesh;
   private currentColor: number;
@@ -13,15 +17,12 @@ export class Furnace {
   private isRefining: boolean = false;
   private refiningProgress: number = 0;
 
-  constructor() {
+  constructor(random: RandomSource = mathRandomSource) {
     this.mesh = new THREE.Group();
-    this.currentColor = 0x333333;
-    
-    this.slots = ELEMENT_NAMES.map(element => ({
-      element,
-      herb: null,
-      isCorrect: false
-    }));
+    this.random = random;
+    this.core = new FurnaceCore();
+    this.pillIdGenerator = createIdGenerator('pill', random);
+    this.currentColor = EMPTY_FURNACE_COLOR;
 
     this.furnaceBody = this.createFurnaceBody();
     this.mesh.add(this.furnaceBody);
@@ -117,7 +118,7 @@ export class Furnace {
   private createElementSlots(): void {
     const slotRadius = 3;
     
-    this.slots.forEach((slot, index) => {
+    this.core.getSlots().forEach((slot, index) => {
       const angle = (index / 5) * Math.PI * 2 - Math.PI / 2;
       const x = Math.cos(angle) * slotRadius;
       const z = Math.sin(angle) * slotRadius;
@@ -175,19 +176,18 @@ export class Furnace {
     });
   }
 
-  public placeHerb(herbData: HerbData, slotIndex: number): boolean {
-    const slot = this.slots[slotIndex];
-    
-    if (slot.herb) return false;
-
-    const isCorrect = herbData.element === slot.element;
-    slot.herb = herbData;
-    slot.isCorrect = isCorrect;
+  /**
+   * 投料。返回结构化的 PlaceResult：
+   * 槽位被占用/索引非法时拒绝且状态不变；否则放入并标记元素是否匹配。
+   */
+  public placeHerb(herbData: HerbData, slotIndex: number): PlaceResult {
+    const result = this.core.placeHerb(herbData, slotIndex);
+    if (!result.ok) return result;
 
     this.updateFurnaceColor();
-    this.updateSlotVisual(slotIndex, isCorrect);
+    this.updateSlotVisual(slotIndex, result.correct);
 
-    return isCorrect;
+    return result;
   }
 
   private updateSlotVisual(slotIndex: number, isCorrect: boolean): void {
@@ -205,7 +205,7 @@ export class Furnace {
         if (isCorrect) {
           const glowGeometry = new THREE.SphereGeometry(0.3, 16, 16);
           const glowMaterial = new THREE.MeshBasicMaterial({
-            color: this.slots[slotIndex].herb!.color,
+            color: this.core.getSlots()[slotIndex].herb!.color,
             transparent: true,
             opacity: 0.6
           });
@@ -218,23 +218,7 @@ export class Furnace {
   }
 
   private updateFurnaceColor(): void {
-    const filledSlots = this.slots.filter(s => s.herb && s.isCorrect);
-    if (filledSlots.length === 0) {
-      this.currentColor = 0x333333;
-    } else {
-      let r = 0, g = 0, b = 0;
-      filledSlots.forEach(slot => {
-        const color = new THREE.Color(ELEMENT_COLORS[slot.element]);
-        r += color.r;
-        g += color.g;
-        b += color.b;
-      });
-      r /= filledSlots.length;
-      g /= filledSlots.length;
-      b /= filledSlots.length;
-      this.currentColor = new THREE.Color().setRGB(r, g, b).getHex();
-    }
-
+    this.currentColor = this.core.getFurnaceColor();
     (this.furnaceBody.material as THREE.MeshStandardMaterial).color.setHex(this.currentColor);
     (this.furnaceGlow.material as THREE.MeshBasicMaterial).color.setHex(this.currentColor);
   }
@@ -252,22 +236,22 @@ export class Furnace {
     const velocities = new Float32Array(particleCount * 3);
 
     for (let i = 0; i < particleCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const radius = Math.random() * 2;
+      const theta = this.random.next() * Math.PI * 2;
+      const radius = this.random.next() * 2;
       
       positions[i * 3] = Math.cos(theta) * radius;
-      positions[i * 3 + 1] = Math.random() * 3;
+      positions[i * 3 + 1] = this.random.next() * 3;
       positions[i * 3 + 2] = Math.sin(theta) * radius;
 
-      const slot = this.slots[i % 5];
+      const slot = this.core.getSlots()[i % 5];
       const color = new THREE.Color(ELEMENT_COLORS[slot.element]);
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      velocities[i * 3] = (Math.random() - 0.5) * 2;
-      velocities[i * 3 + 1] = Math.random() * 3 + 1;
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 2;
+      velocities[i * 3] = (this.random.next() - 0.5) * 2;
+      velocities[i * 3 + 1] = this.random.next() * 3 + 1;
+      velocities[i * 3 + 2] = (this.random.next() - 0.5) * 2;
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -308,9 +292,9 @@ export class Furnace {
 
           if (positions[i + 1] < 0) {
             positions[i + 1] = 0;
-            velocities[i + 1] = Math.random() * 2 + 1;
-            const theta = Math.random() * Math.PI * 2;
-            const radius = Math.random() * 1.5;
+            velocities[i + 1] = this.random.next() * 2 + 1;
+            const theta = this.random.next() * Math.PI * 2;
+            const radius = this.random.next() * 1.5;
             positions[i] = Math.cos(theta) * radius;
             positions[i + 2] = Math.sin(theta) * radius;
           }
@@ -327,7 +311,7 @@ export class Furnace {
         if (this.particles) {
           this.mesh.remove(this.particles);
           this.particles.geometry.dispose();
-          this.particles.material.dispose();
+          (this.particles.material as THREE.Material).dispose();
           this.particles = null;
         }
         return true;
@@ -338,68 +322,23 @@ export class Furnace {
   }
 
   public isAllSlotsFilled(): boolean {
-    return this.slots.every(slot => slot.herb !== null);
+    return this.core.isAllSlotsFilled();
   }
 
   public calculateMatchScore(): number {
-    const correctCount = this.slots.filter(s => s.isCorrect).length;
-    return correctCount / 5;
+    return this.core.calculateMatchScore();
   }
 
+  /**
+   * 成丹：品质、匹配度、丹名全部由槽内草药的元素构成唯一决定，
+   * 不依赖随机数与帧时序（委托 FurnaceCore）。
+   */
   public generatePill(): PillData {
-    const matchScore = this.calculateMatchScore();
-    let quality: PillQuality;
-    let effects: string[];
-    let color: number;
-
-    if (matchScore >= 0.9) {
-      quality = '仙品';
-      color = 0xffd700;
-      effects = [
-        '起死回生，肉白骨',
-        '飞升成仙，长生不老',
-        '灵力充沛，修为大增'
-      ];
-    } else if (matchScore >= 0.6) {
-      quality = '灵品';
-      color = 0x9966ff;
-      effects = [
-        '修为大增五十年',
-        '百病不侵，益寿延年',
-        '灵力精纯，修炼加速'
-      ];
-    } else {
-      quality = '凡品';
-      color = 0x888888;
-      effects = [
-        '强身健体，气力倍增',
-        '治愈外伤，恢复元气',
-        '小补气血，精神焕发'
-      ];
-    }
-
-    const herbNames = this.slots
-      .filter(s => s.herb)
-      .map(s => s.herb!.name)
-      .join('、');
-
-    return {
-      id: `pill_${Date.now()}`,
-      name: `${quality}${this.getPillName()}`,
-      quality,
-      effects,
-      matchScore,
-      color
-    };
-  }
-
-  private getPillName(): string {
-    const names = ['九转还魂丹', '混元益气丹', '太清辟谷丹', '凝神聚气丹', '太素丹'];
-    return names[Math.floor(Math.random() * names.length)];
+    return this.core.generatePill(this.pillIdGenerator);
   }
 
   public getSlots(): FurnaceSlot[] {
-    return this.slots.map(s => ({ ...s, herb: s.herb ? { ...s.herb } : null }));
+    return this.core.getSlots();
   }
 
   public getCurrentColor(): number {
@@ -420,12 +359,9 @@ export class Furnace {
   }
 
   public reset(): void {
-    this.slots.forEach(slot => {
-      slot.herb = null;
-      slot.isCorrect = false;
-    });
-    this.currentColor = 0x333333;
-    (this.furnaceBody.material as THREE.MeshStandardMaterial).color.setHex(0x333333);
+    this.core.reset();
+    this.currentColor = EMPTY_FURNACE_COLOR;
+    (this.furnaceBody.material as THREE.MeshStandardMaterial).color.setHex(EMPTY_FURNACE_COLOR);
     (this.furnaceGlow.material as THREE.MeshBasicMaterial).opacity = 0.2;
     this.isRefining = false;
     this.refiningProgress = 0;

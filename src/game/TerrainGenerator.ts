@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import { Herb } from './Herb';
+import { RandomSource, mathRandomSource } from './core/random';
+import { createValleyHeightFunction } from './core/height';
+import {
+  generateHerbPlacements,
+  PlacementConfig,
+  DEFAULT_PLACEMENT_CONFIG
+} from './core/placement';
 
 interface TerrainData {
   mesh: THREE.Group;
@@ -10,10 +17,26 @@ interface TerrainData {
 export class TerrainGenerator {
   private size: number;
   private resolution: number;
+  private random: RandomSource;
+  private placementConfig: PlacementConfig;
+  private heightFn: (x: number, z: number) => number;
 
-  constructor(size: number = 100, resolution: number = 64) {
+  constructor(
+    size: number = 100,
+    resolution: number = 64,
+    random: RandomSource = mathRandomSource,
+    placementConfig?: Partial<PlacementConfig>
+  ) {
     this.size = size;
     this.resolution = resolution;
+    this.random = random;
+    this.heightFn = createValleyHeightFunction(size);
+    this.placementConfig = {
+      ...DEFAULT_PLACEMENT_CONFIG,
+      size,
+      maxCenterDistance: size * 0.4,
+      ...placementConfig
+    };
   }
 
   public generate(): TerrainData {
@@ -70,18 +93,7 @@ export class TerrainGenerator {
   }
 
   private getTerrainHeight(x: number, z: number): number {
-    let height = 0;
-    
-    height += Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2;
-    height += Math.sin(x * 0.02 + 1) * Math.cos(z * 0.03) * 3;
-    height += Math.sin(x * 0.1) * 0.5;
-    
-    const distFromCenter = Math.sqrt(x * x + z * z);
-    if (distFromCenter > this.size * 0.35) {
-      height += (distFromCenter - this.size * 0.35) * 0.15;
-    }
-    
-    return height;
+    return this.heightFn(x, z);
   }
 
   private createMountains(): THREE.Group {
@@ -110,8 +122,8 @@ export class TerrainGenerator {
     const positions = geometry.attributes.position.array as Float32Array;
     
     for (let i = 0; i < positions.length; i += 3) {
-      positions[i] += (Math.random() - 0.5) * 2 * scale;
-      positions[i + 2] += (Math.random() - 0.5) * 2 * scale;
+      positions[i] += (this.random.next() - 0.5) * 2 * scale;
+      positions[i + 2] += (this.random.next() - 0.5) * 2 * scale;
     }
     
     geometry.computeVertexNormals();
@@ -210,36 +222,26 @@ export class TerrainGenerator {
     return streamGroup;
   }
 
+  /**
+   * 草药布点：委托给确定性核心 placement 模块。
+   * 数量严格等于配置值 —— 拒绝采样耗尽时走确定性兜底，仍失败则抛错，
+   * 绝不静默跳过导致草药数量与预期不符。
+   */
   private createHerbs(): { herbs: Herb[]; positions: THREE.Vector3[] } {
+    const result = generateHerbPlacements(
+      this.random,
+      (x, z) => this.getTerrainHeight(x, z),
+      this.placementConfig
+    );
+
     const herbs: Herb[] = [];
     const positions: THREE.Vector3[] = [];
-    const herbCount = 25;
 
-    for (let i = 0; i < herbCount; i++) {
-      let x, z, height;
-      let validPosition = false;
-      let attempts = 0;
-
-      while (!validPosition && attempts < 50) {
-        x = (Math.random() - 0.5) * (this.size - 20);
-        z = (Math.random() - 0.5) * (this.size - 20);
-        height = this.getTerrainHeight(x, z);
-        
-        const distFromStream = Math.abs(z - Math.sin((x + 30) / 60 * Math.PI * 1.5) * 8);
-        const distFromCenter = Math.sqrt(x * x + z * z);
-        
-        if (distFromStream > 3 && distFromCenter < this.size * 0.4 && height < 5) {
-          validPosition = true;
-        }
-        attempts++;
-      }
-
-      if (validPosition) {
-        const position = new THREE.Vector3(x!, height + 0.05, z!);
-        const herb = new Herb(position);
-        herbs.push(herb);
-        positions.push(position);
-      }
+    for (const point of result.points) {
+      const position = new THREE.Vector3(point.x, point.y, point.z);
+      const herb = new Herb(position, this.random);
+      herbs.push(herb);
+      positions.push(position);
     }
 
     return { herbs, positions };
