@@ -5,14 +5,21 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, '..', 'auction.db');
+export const defaultDbPath = path.join(__dirname, '..', 'auction.db');
 
-const db = new Database(dbPath);
+export function createDatabase(filePath: string): Database.Database {
+  const db = new Database(filePath);
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
-export function initDatabase(): void {
+  initSchema(db);
+  seedItems(db);
+
+  return db;
+}
+
+function initSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS items (
       id TEXT PRIMARY KEY,
@@ -62,7 +69,9 @@ export function initDatabase(): void {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+}
 
+function seedItems(db: Database.Database): void {
   const itemCount = db.prepare('SELECT COUNT(*) as count FROM items').get() as { count: number };
   if (itemCount.count === 0) {
     const insertItem = db.prepare(`
@@ -92,5 +101,3 @@ export function initDatabase(): void {
     insertMany(items);
   }
 }
-
-export default db;
