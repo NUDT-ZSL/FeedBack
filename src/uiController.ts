@@ -32,7 +32,6 @@ export class UIController {
   private inscriptionInput: HTMLInputElement;
   private inscriptionSubmit: HTMLElement;
   
-  private isDragging: boolean = false;
   private dragMaterialType: MaterialType | null = null;
   private isGrinding: boolean = false;
   private lastMouseY: number = 0;
@@ -136,7 +135,6 @@ export class UIController {
   private handleDragEnd(e: DragEvent): void {
     const target = e.target as HTMLElement;
     target.classList.remove('dragging');
-    this.isDragging = false;
     this.dragMaterialType = null;
   }
 
@@ -235,7 +233,6 @@ export class UIController {
       const success = this.forgeCore.addGrindingProgress(progress, true);
       
       if (success) {
-        this.sceneManager.updateGrindProgress(state.grindingProgress);
         this.playGrindSound();
       }
       

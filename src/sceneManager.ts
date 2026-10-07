@@ -27,19 +27,14 @@ export class SceneManager {
   private anvilShakeTime: number = 0;
   
   private ingotScale: { x: number; y: number; z: number } = { x: 1, y: 1, z: 1 };
-  private ingotTemperature: number = 1200;
   
   private waterTime: number = 0;
   private steamTimer: number = 0;
-  
-  private grindProgress: number = 0;
-  private sharpenProgress: number = 0;
   
   private swordRotationTime: number = 0;
   private swordFloatTime: number = 0;
   
   private currentState: ForgeState = 'idle';
-  private materialType: MaterialType | null = null;
   
   private responsiveScale: number = 1;
   
@@ -299,8 +294,6 @@ export class SceneManager {
   }
 
   createMaterialBlock(type: MaterialType): void {
-    this.materialType = type;
-    
     const colors: Record<MaterialType, number> = {
       mystery: 0x555555,
       meteorite: 0x8844aa,
@@ -394,7 +387,6 @@ export class SceneManager {
     this.scene.add(this.heatedIngot);
     
     this.ingotScale = { x: 1, y: 1, z: 1 };
-    this.ingotTemperature = 1200;
   }
 
   moveIngotToAnvil(): void {
@@ -436,8 +428,6 @@ export class SceneManager {
   }
 
   updateIngotTemperature(temp: number): void {
-    this.ingotTemperature = temp;
-    
     if (!this.heatedIngot) return;
     
     const ingotMesh = this.heatedIngot.getObjectByName('ingotMesh') as THREE.Mesh;
@@ -557,13 +547,9 @@ export class SceneManager {
     
     this.swordBlade.position.set(0, 0, 1);
     this.scene.add(this.swordBlade);
-    
-    this.grindProgress = 0;
   }
 
   updateGrindProgress(progress: number): void {
-    this.grindProgress = progress;
-    
     if (!this.swordBlade) return;
     
     const bladeMesh = this.swordBlade.getObjectByName('swordBladeMesh') as THREE.Mesh;
@@ -605,8 +591,6 @@ export class SceneManager {
   }
 
   updateSharpenProgress(progress: number): void {
-    this.sharpenProgress = progress;
-    
     if (!this.swordBlade) return;
     
     const bladeMesh = this.swordBlade.getObjectByName('swordBladeMesh') as THREE.Mesh;

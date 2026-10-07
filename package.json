@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "tsc src/forgeCore.ts --outDir .verify-build --module ES2022 --target ES2022 --skipLibCheck && node scripts/verifyForgeFlow.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.160.0",
