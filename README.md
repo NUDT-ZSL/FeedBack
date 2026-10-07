@@ -55,3 +55,20 @@ export default tseslint.config({
   },
 })
 ```
+
+## 胶囊生命周期离线验证
+
+核心领域逻辑位于 `src/core/capsule/`（类型、可注入时钟、生命周期服务、JSON 持久化），不依赖网络与外部账号，时间通过 `ManualClock` 精确控制。
+
+统一批量运行入口（无需安装依赖，Node >= 22.18 直接运行 TypeScript）：
+
+```bash
+npm run verify
+```
+
+测试位于 `tests/`，覆盖：
+
+- `tests/lifecycle.test.ts`：创建/编辑/投递/解锁全链路的状态、内容、时间戳一致性，状态不回退
+- `tests/boundary.test.ts`：投递时间与开启条件的边界时刻（恰好等于、差 1ms）确定结论
+- `tests/conflict.test.ts`：重复提交幂等（operationId）、过期版本冲突拒绝（expectedVersion）、顺序可预测
+- `tests/persistence.test.ts`：保存/重载一致性，缺失、损坏、字段级缺陷与重复 id 的显式识别
