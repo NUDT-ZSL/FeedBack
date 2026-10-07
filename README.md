@@ -1,57 +1,41 @@
-# React + TypeScript + Vite
+# 背压分级处置推演台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+在浏览器中离线导入事件流、按消费速率档位推进时间、展示积压曲线，并对背压调节做**可推演、可追溯、可增量重推**的分级处置。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev      # 浏览器界面
+npm run batch    # 离线批量验证（内置 7 组场景 / 12 组变更）
+npm run batch -- cases.json --out report.json   # 自定义批量文件并导出报告
+npm run check    # 类型检查
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 数据模型
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **事件**：`{ id, source, tick, payload }` —— 来源标识 + 到达时刻（整数 tick）+ 事件体。
+- **档位**：`{ id, rate, upThreshold, downThreshold?, action?, allowedNext? }` —— 消费速率 + 触发阈值（含滞回）+ 处置动作 + 可选显式切换边。
+- **处置动作**：`drop`（按比例丢弃最新到达）、`downsample`（每 K 条留 1）、`expand`（缓冲扩容）、`pause`（暂停来源摄入，暂存事件恢复后按序补入）。
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 核心语义（确定性规则）
+
+- 每个 tick 顺序：恢复暂停 → 准入（动作门控 + 容量）→ 消费 → 档位评估；评估在 tick `t` 结束发生，切换自 `t+1` 生效。
+- 档位可选条件：`backlog > upThreshold`，或当前档 `backlog >= downThreshold`（滞回）；多档同时可选时取阈值最高者。
+- **冲突**：并列最高优先级的多个候选（阈值相同）→ 该次判定标记为冲突，默认按配置顺序择一，可在切换记录中逐次**人工裁决**改选，仅重推受影响部分。
+- **阈值重叠**：保留全部档位并显式记录 issue，运行期按上条冲突规则处理，不静默择一。
+- **切换成环**：对显式切换边做 SCC 检测，环内仅保留指向更高优先级档位的边，被禁用的边记录 issue。
+- **乱序/同刻**：按 `(tick, 原始序号)` 稳定排序；**缺来源**归入 `__unknown__`；**重复 id / 负时刻 / 越界**显式排除并记录 issue，绝不静默跳过。
+- **最终结论**：同一事件被多次决策覆盖时，人工裁决 > 时间序最后的自动决策；已被消费 > 丢弃 > 保留；每条事件保留完整决策链。
+
+## 增量推导
+
+- 事件流按 `blockSize` 分块，块间以进位状态（队列、容量、档位、计数器、未关闭窗口）拼接；复用条件为「块输入指纹相同 ∧ 进位一致」，严格保证 `增量结果 ≡ 整体重推`。
+- 影响面：来源事件/速率变更 → 仅该来源自首个受影响块起（收敛后自动复用后缀）；档位配置变更 → 全部来源；人工裁决 → 仅该来源自裁决生效块起。
+- 批量入口对每组变更自动核对「增量重推 == 整体重推」，并校验事件守恒、切换窗口连续有序、决策引用有效。
+
+## 目录
+
+- `src/engine/` —— 推演引擎（`types` / `validate` / `simulate` / `incremental` / `resolve` / `batch` / `sample` / `sampleBatch`）
+- `scripts/batch.ts` —— 离线批量 CLI（`npm run batch`）
+- `src/components/` —— 积压曲线图、切换记录（含裁决）、事件结论表、配置面板、批量面板
