@@ -495,3 +495,255 @@ body::before {
   margin-bottom: 10px;
   text-align: center;
 }
+
+.scene-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  max-width: 1400px;
+  justify-content: center;
+}
+
+.scene-bar-label {
+  color: var(--gold);
+  font-size: 16px;
+  font-family: 'Ma Shan Zheng', cursive;
+  margin-right: 4px;
+}
+
+.scene-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(212, 175, 55, 0.75);
+  border: 2px solid rgba(212, 175, 55, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 15px;
+  transition: all 0.2s var(--ease-elastic);
+}
+
+.scene-tab:hover {
+  border-color: var(--gold);
+}
+
+.scene-tab.active {
+  background: linear-gradient(180deg, var(--chinese-red) 0%, #600000 100%);
+  color: var(--light-gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
+}
+
+.scene-tab-meta {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.scene-action {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--gold);
+  border: 2px dashed rgba(212, 175, 55, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 14px;
+  transition: all 0.2s var(--ease-elastic);
+}
+
+.scene-action:hover {
+  border-style: solid;
+  border-color: var(--gold);
+}
+
+.scene-action.danger:hover {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.scene-nameplate {
+  position: absolute;
+  bottom: 10px;
+  right: 14px;
+  color: rgba(212, 175, 55, 0.6);
+  font-size: 16px;
+  font-family: 'Ma Shan Zheng', cursive;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.playback-banner {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--light-gold);
+  background: rgba(128, 0, 0, 0.7);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  padding: 4px 14px;
+  font-size: 14px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.slot-label {
+  color: var(--gold);
+  font-size: 13px;
+  font-family: 'Ma Shan Zheng', cursive;
+  pointer-events: none;
+}
+
+.puppet-slot {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prop-slot {
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid rgba(212, 175, 55, 0.25);
+}
+
+.prop-slot.disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.prop-holder {
+  font-size: 11px;
+  color: rgba(255, 215, 0, 0.75);
+  pointer-events: none;
+}
+
+.attached-prop {
+  position: absolute;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #1a120b;
+  background: var(--light-gold);
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.attached-prop[data-point='leftHand'] {
+  left: -34px;
+  top: 46px;
+}
+
+.attached-prop[data-point='rightHand'] {
+  right: -34px;
+  top: 46px;
+}
+
+.attached-prop[data-point='back'] {
+  left: 50%;
+  transform: translateX(-50%);
+  top: 6px;
+}
+
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  padding: 6px 14px;
+  background: rgba(128, 0, 0, 0.85);
+  color: var(--light-gold);
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 15px;
+  pointer-events: none;
+  z-index: 500;
+}
+
+.flash-message {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 22px;
+  background: rgba(26, 18, 11, 0.95);
+  color: var(--light-gold);
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 16px;
+  z-index: 600;
+  animation: flashIn 0.25s var(--ease-elastic);
+}
+
+@keyframes flashIn {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.validation-panel {
+  margin-top: 18px;
+  width: min(1060px, 90vw);
+  background: rgba(26, 18, 11, 0.92);
+  border: 3px solid var(--gold);
+  border-radius: 8px;
+  padding: 14px 18px;
+  color: var(--gold);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.validation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 18px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.4);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.validation-close {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.validation-ok {
+  color: #9acd7a;
+  font-size: 15px;
+}
+
+.validation-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.validation-item {
+  border-left: 3px solid #cc4444;
+  padding-left: 10px;
+}
+
+.validation-kind {
+  font-size: 14px;
+  color: #ffb3b3;
+}
+
+.validation-item ul {
+  list-style: none;
+  margin-top: 4px;
+}
+
+.validation-ref {
+  font-size: 12px;
+  color: rgba(212, 175, 55, 0.8);
+  font-family: monospace;
+}
