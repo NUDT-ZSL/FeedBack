@@ -378,3 +378,20 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+.water-notice {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background-color: rgba(198, 40, 40, 0.92);
+  color: #ffffff;
+  font-size: 13px;
+  font-family: 'Noto Serif SC', serif;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}

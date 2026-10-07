@@ -8,15 +8,23 @@ import {
   Ripple,
   ToolType,
   Point,
-  POT_RADIUS,
   POT_CENTER,
   generateBranches,
   generateInitialRocks,
   calculateCompositionScore,
   createLeafParticles,
   createGoldParticles,
-  calculatePathLength
+  calculatePathLength,
+  collectSubtreeBranchIds,
+  seededRandom
 } from './utils/pots';
+import {
+  drawPot,
+  drawBranch,
+  drawRock,
+  drawWaterFlow,
+  drawCalligraphy
+} from './utils/draw';
 import { v4 as uuidv4 } from 'uuid';
 import Workspace from './components/Workspace';
 import ToolPanel from './components/ToolPanel';
@@ -80,37 +88,18 @@ const App: React.FC = () => {
     const branchToTrim = branches.find(b => b.id === selectedBranchId);
     if (!branchToTrim) return;
     
-    const branchEndX = branchToTrim.endX;
-    const branchEndY = branchToTrim.endY;
-    
-    const removeBranchAndChildren = (branchId: string): Branch[] => {
-      return branches.filter(b => {
-        if (b.id === branchId) return false;
-        const isChild = branches.some(parent => 
-          parent.id === branchId && 
-          Math.abs(b.startX - parent.endX) < 5 && 
-          Math.abs(b.startY - parent.endY) < 5
-        );
-        if (isChild) {
-          removeBranchAndChildren(b.id);
-        }
-        return !isChild;
-      });
-    };
-    
-    const newBranches = branches.filter(b => {
-      if (b.id === selectedBranchId) return false;
-      
-      const connectsToTrimmed = 
-        Math.abs(b.startX - branchToTrim.endX) < 5 && 
-        Math.abs(b.startY - branchToTrim.endY) < 5;
-      
-      return !connectsToTrimmed;
-    });
+    const removedIds = collectSubtreeBranchIds(selectedBranchId, branches);
+    const newBranches = branches.filter(b => !removedIds.has(b.id));
     
     setBranches(newBranches);
     
-    const newParticles = createLeafParticles(branchEndX, branchEndY, 20);
+    const newParticles: Particle[] = [];
+    newParticles.push(...createLeafParticles(branchToTrim.endX, branchToTrim.endY, 20));
+    for (const branch of branches) {
+      if (!removedIds.has(branch.id)) continue;
+      if (!branch.hasLeaves) continue;
+      newParticles.push(...createLeafParticles(branch.endX, branch.endY, 5));
+    }
     setParticles(prev => {
       const maxParticles = 50;
       const combined = [...prev, ...newParticles];
@@ -141,6 +130,10 @@ const App: React.FC = () => {
     setWaterStartPoint(null);
     setScale(1);
     setPanOffset({ x: 0, y: 0 });
+    setActiveTool('scissors');
+    setCurrentCalligraphy(null);
+    setIsDragging(false);
+    setDragStart(null);
   }, []);
 
   const handleScroll = useCallback(async () => {
@@ -185,10 +178,10 @@ const App: React.FC = () => {
       patternCtx.fillRect(0, 0, 200, 200);
       patternCtx.globalAlpha = 0.03;
       for (let i = 0; i < 1000; i++) {
-        patternCtx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+        patternCtx.fillStyle = seededRandom(i * 3 + 1) > 0.5 ? '#000' : '#fff';
         patternCtx.fillRect(
-          Math.random() * 200,
-          Math.random() * 200,
+          seededRandom(i * 3 + 2) * 200,
+          seededRandom(i * 3 + 3) * 200,
           1, 1
         );
       }
@@ -202,127 +195,25 @@ const App: React.FC = () => {
     ctx.save();
     ctx.translate(canvas.width / 2 - 200, canvas.height / 2 - 200);
     
-    ctx.fillStyle = '#6b4423';
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = '#3e2723';
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 12, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.strokeStyle = '#5d4037';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 6, 0, Math.PI * 2);
-    ctx.stroke();
+    drawPot(ctx);
     
     for (const flow of waterFlows) {
-      if (flow.path.length < 2) continue;
-      ctx.strokeStyle = '#1e88e5';
-      ctx.lineWidth = 8;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.globalAlpha = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(flow.path[0].x, flow.path[0].y);
-      for (let i = 1; i < flow.path.length; i++) {
-        ctx.lineTo(flow.path[i].x, flow.path[i].y);
-      }
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+      drawWaterFlow(ctx, { ...flow, flowProgress: 0 }, 0);
     }
     
     for (const branch of branches) {
-      ctx.strokeStyle = branch.color;
-      ctx.lineWidth = branch.thickness;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(branch.startX, branch.startY);
-      ctx.lineTo(branch.endX, branch.endY);
-      ctx.stroke();
-      
-      if (branch.hasLeaves) {
-        ctx.fillStyle = '#4caf50';
-        const leafCount = 3 + Math.floor(branch.thickness / 2);
-        for (let i = 0; i < leafCount; i++) {
-          const t = (i + 1) / (leafCount + 1);
-          const lx = branch.startX + (branch.endX - branch.startX) * t;
-          const ly = branch.startY + (branch.endY - branch.startY) * t;
-          
-          const angle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
-          const offsetAngle = angle + Math.PI / 2;
-          const offsetDist = branch.thickness + 3;
-          
-          const leafX = lx + Math.cos(offsetAngle) * offsetDist * (i % 2 === 0 ? 1 : -1);
-          const leafY = ly + Math.sin(offsetAngle) * offsetDist * (i % 2 === 0 ? 1 : -1);
-          
-          ctx.beginPath();
-          ctx.ellipse(leafX, leafY, 5, 2.5, offsetAngle, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      drawBranch(ctx, branch, false, false);
     }
     
     for (const rock of rocks) {
-      const gradient = ctx.createRadialGradient(
-        rock.x - rock.diameter * 0.2,
-        rock.y - rock.diameter * 0.2,
-        0,
-        rock.x,
-        rock.y,
-        rock.diameter / 2
-      );
-      gradient.addColorStop(0, rock.color === '#607d8b' ? '#90a4ae' : '#a1887f');
-      gradient.addColorStop(0.7, rock.color);
-      gradient.addColorStop(1, rock.color === '#607d8b' ? '#455a64' : '#6d4c41');
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      const points = 8;
-      for (let i = 0; i < points; i++) {
-        const angle = (i / points) * Math.PI * 2;
-        const r = (rock.diameter / 2) * (0.8 + Math.sin(angle * 3 + rock.id.charCodeAt(0)) * 0.2);
-        const px = rock.x + Math.cos(angle) * r;
-        const py = rock.y + Math.sin(angle) * r;
-        if (i === 0) {
-          ctx.moveTo(px, py);
-        } else {
-          ctx.lineTo(px, py);
-        }
-      }
-      ctx.closePath();
-      ctx.fill();
+      drawRock(ctx, rock, false, false);
+    }
+    
+    for (const calligraphy of calligraphies) {
+      drawCalligraphy(ctx, calligraphy);
     }
     
     ctx.restore();
-    
-    for (const calligraphy of calligraphies) {
-      if (calligraphy.points.length < 2) continue;
-      ctx.save();
-      ctx.strokeStyle = calligraphy.color;
-      ctx.lineWidth = calligraphy.thickness;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.globalAlpha = 0.85;
-      
-      ctx.beginPath();
-      ctx.moveTo(
-        calligraphy.points[0].x + canvas.width / 2 - 200,
-        calligraphy.points[0].y + canvas.height / 2 - 200
-      );
-      
-      for (let i = 1; i < calligraphy.points.length; i++) {
-        ctx.lineTo(
-          calligraphy.points[i].x + canvas.width / 2 - 200,
-          calligraphy.points[i].y + canvas.height / 2 - 200
-        );
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
     
     ctx.font = '48px "Ma Shan Zheng", cursive';
     ctx.fillStyle = '#4e342e';

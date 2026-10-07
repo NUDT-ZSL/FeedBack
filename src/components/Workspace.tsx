@@ -14,8 +14,16 @@ import {
   findNearestBranch,
   findNearestRock,
   findWaterPath,
-  checkCollision
+  checkCollision,
+  rerouteFlows
 } from '../utils/pots';
+import {
+  drawPot,
+  drawBranch,
+  drawRock,
+  drawWaterFlow,
+  drawCalligraphy
+} from '../utils/draw';
 import { v4 as uuidv4 } from 'uuid';
 
 interface WorkspaceProps {
@@ -93,6 +101,67 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const [hoveredBranchId, setHoveredBranchId] = useState<string | null>(null);
   const [hoveredRockId, setHoveredRockId] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState<Point | null>(null);
+  const [waterNotice, setWaterNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  const showNotice = useCallback((message: string) => {
+    setWaterNotice(message);
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    noticeTimerRef.current = window.setTimeout(() => {
+      setWaterNotice(null);
+      noticeTimerRef.current = null;
+    }, 2500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const commitRocks = useCallback((nextRocks: Rock[]) => {
+    onRocksChange(nextRocks);
+
+    const rerouted = rerouteFlows(waterFlows, nextRocks);
+    const blockedCount = rerouted.filter(f => f.blocked).length;
+    const prevBlockedCount = waterFlows.filter(f => f.blocked).length;
+
+    if (blockedCount !== prevBlockedCount) {
+      showNotice(blockedCount > 0 ? '水流受阻，无法绕行' : '水流恢复畅通');
+    }
+
+    onWaterFlowsChange(rerouted);
+  }, [onRocksChange, onWaterFlowsChange, waterFlows, showNotice]);
+
+  const deleteSelectedRock = useCallback(() => {
+    if (!selectedRockId) return;
+    const rock = rocks.find(r => r.id === selectedRockId);
+    if (!rock) return;
+    commitRocks(rocks.filter(r => r.id !== selectedRockId));
+    onSelectRock(null);
+  }, [selectedRockId, rocks, commitRocks, onSelectRock]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeTool !== 'rock' || !selectedRockId) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelectedRock();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTool, selectedRockId, deleteSelectedRock]);
+
+  useEffect(() => {
+    if (waterFlows.length === 0 && waterNotice) {
+      setWaterNotice(null);
+    }
+  }, [waterFlows.length, waterNotice]);
 
   const getCanvasCoords = useCallback((clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -103,225 +172,6 @@ const Workspace: React.FC<WorkspaceProps> = ({
     const y = (clientY - rect.top) / scale - panOffset.y;
     return { x, y };
   }, [scale, panOffset]);
-
-  const drawPot = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.save();
-    ctx.fillStyle = '#6b4423';
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = '#3e2723';
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 12, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.strokeStyle = '#5d4037';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 6, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    const gradient = ctx.createRadialGradient(
-      POT_CENTER.x, POT_CENTER.y, 0,
-      POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 12
-    );
-    gradient.addColorStop(0, 'rgba(139, 119, 101, 0.3)');
-    gradient.addColorStop(1, 'rgba(62, 39, 35, 0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(POT_CENTER.x, POT_CENTER.y, POT_RADIUS - 12, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.restore();
-  }, []);
-
-  const drawBranch = useCallback((ctx: CanvasRenderingContext2D, branch: Branch, isSelected: boolean, isHovered: boolean) => {
-    ctx.save();
-    
-    ctx.strokeStyle = branch.color;
-    ctx.lineWidth = branch.thickness;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    if (isSelected) {
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 15;
-    } else if (isHovered) {
-      ctx.shadowColor = '#81c784';
-      ctx.shadowBlur = 10;
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(branch.startX, branch.startY);
-    ctx.lineTo(branch.endX, branch.endY);
-    ctx.stroke();
-    
-    if (branch.hasLeaves) {
-      ctx.fillStyle = '#4caf50';
-      ctx.shadowBlur = 0;
-      
-      const leafCount = 3 + Math.floor(branch.thickness / 2);
-      for (let i = 0; i < leafCount; i++) {
-        const t = (i + 1) / (leafCount + 1);
-        const lx = branch.startX + (branch.endX - branch.startX) * t;
-        const ly = branch.startY + (branch.endY - branch.startY) * t;
-        
-        const angle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
-        const offsetAngle = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.5;
-        const offsetDist = branch.thickness + 2 + Math.random() * 4;
-        
-        const leafX = lx + Math.cos(offsetAngle) * offsetDist * (Math.random() > 0.5 ? 1 : -1);
-        const leafY = ly + Math.sin(offsetAngle) * offsetDist * (Math.random() > 0.5 ? 1 : -1);
-        
-        ctx.beginPath();
-        ctx.ellipse(leafX, leafY, 4 + Math.random() * 2, 2 + Math.random() * 2, offsetAngle, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    
-    ctx.restore();
-  }, []);
-
-  const drawRock = useCallback((ctx: CanvasRenderingContext2D, rock: Rock, isSelected: boolean, isHovered: boolean) => {
-    ctx.save();
-    
-    if (isSelected) {
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 15;
-    } else if (isHovered) {
-      ctx.shadowColor = '#90a4ae';
-      ctx.shadowBlur = 10;
-    }
-    
-    const gradient = ctx.createRadialGradient(
-      rock.x - rock.diameter * 0.2,
-      rock.y - rock.diameter * 0.2,
-      0,
-      rock.x,
-      rock.y,
-      rock.diameter / 2
-    );
-    gradient.addColorStop(0, rock.color === '#607d8b' ? '#90a4ae' : '#a1887f');
-    gradient.addColorStop(0.7, rock.color);
-    gradient.addColorStop(1, rock.color === '#607d8b' ? '#455a64' : '#6d4c41');
-    
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    
-    const points = 8;
-    for (let i = 0; i < points; i++) {
-      const angle = (i / points) * Math.PI * 2;
-      const r = (rock.diameter / 2) * (0.8 + Math.sin(angle * 3 + rock.id.charCodeAt(0)) * 0.2);
-      const px = rock.x + Math.cos(angle) * r;
-      const py = rock.y + Math.sin(angle) * r;
-      if (i === 0) {
-        ctx.moveTo(px, py);
-      } else {
-        ctx.lineTo(px, py);
-      }
-    }
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.strokeStyle = rock.color === '#607d8b' ? '#37474f' : '#5d4037';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    
-    ctx.restore();
-  }, []);
-
-  const drawWaterFlow = useCallback((ctx: CanvasRenderingContext2D, flow: WaterFlow, time: number) => {
-    if (flow.path.length < 2) return;
-    
-    ctx.save();
-    ctx.lineWidth = 8;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    ctx.strokeStyle = '#1e88e5';
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(flow.path[0].x, flow.path[0].y);
-    for (let i = 1; i < flow.path.length; i++) {
-      ctx.lineTo(flow.path[i].x, flow.path[i].y);
-    }
-    ctx.stroke();
-    
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 15]);
-    ctx.lineDashOffset = -time * 30;
-    ctx.beginPath();
-    ctx.moveTo(flow.path[0].x, flow.path[0].y);
-    for (let i = 1; i < flow.path.length; i++) {
-      ctx.lineTo(flow.path[i].x, flow.path[i].y);
-    }
-    ctx.stroke();
-    
-    const progress = (flow.flowProgress + time * 0.5) % 1;
-    const totalLength = flow.path.reduce((sum, p, i) => {
-      if (i === 0) return 0;
-      const dx = p.x - flow.path[i - 1].x;
-      const dy = p.y - flow.path[i - 1].y;
-      return sum + Math.sqrt(dx * dx + dy * dy);
-    }, 0);
-    
-    const targetDist = progress * totalLength;
-    let currentDist = 0;
-    for (let i = 1; i < flow.path.length; i++) {
-      const dx = flow.path[i].x - flow.path[i - 1].x;
-      const dy = flow.path[i].y - flow.path[i - 1].y;
-      const segLength = Math.sqrt(dx * dx + dy * dy);
-      
-      if (currentDist + segLength >= targetDist) {
-        const t = (targetDist - currentDist) / segLength;
-        const x = flow.path[i - 1].x + dx * t;
-        const y = flow.path[i - 1].y + dy * t;
-        
-        ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      currentDist += segLength;
-    }
-    
-    ctx.restore();
-  }, []);
-
-  const drawCalligraphy = useCallback((ctx: CanvasRenderingContext2D, calligraphy: Calligraphy) => {
-    if (calligraphy.points.length < 2) return;
-    
-    ctx.save();
-    ctx.strokeStyle = calligraphy.color;
-    ctx.lineWidth = calligraphy.thickness;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.85;
-    
-    ctx.beginPath();
-    ctx.moveTo(calligraphy.points[0].x, calligraphy.points[0].y);
-    
-    for (let i = 1; i < calligraphy.points.length; i++) {
-      const prev = calligraphy.points[i - 1];
-      const curr = calligraphy.points[i];
-      const cpx = (prev.x + curr.x) / 2;
-      const cpy = (prev.y + curr.y) / 2;
-      ctx.quadraticCurveTo(prev.x, prev.y, cpx, cpy);
-    }
-    
-    if (calligraphy.points.length >= 2) {
-      const last = calligraphy.points[calligraphy.points.length - 1];
-      const prev = calligraphy.points[calligraphy.points.length - 2];
-      ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-    }
-    
-    ctx.stroke();
-    ctx.restore();
-  }, []);
 
   const drawParticle = useCallback((ctx: CanvasRenderingContext2D, particle: Particle) => {
     ctx.save();
@@ -496,7 +346,6 @@ const Workspace: React.FC<WorkspaceProps> = ({
     scale, panOffset, branches, rocks, waterFlows, calligraphies, particles, ripples,
     selectedBranchId, selectedRockId, hoveredBranchId, hoveredRockId,
     waterStartPoint, mousePos, currentCalligraphy,
-    drawPot, drawBranch, drawRock, drawWaterFlow, drawCalligraphy,
     drawParticle, drawRipple, drawWaterPreview, drawCalligraphyPreview,
     onParticlesChange, onRipplesChange, onWaterFlowsChange
   ]);
@@ -552,7 +401,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
         );
         
         if (!hasCollision) {
-          onRocksChange([...rocks, newRock]);
+          commitRocks([...rocks, newRock]);
         }
       }
     } else if (activeTool === 'water') {
@@ -561,13 +410,18 @@ const Workspace: React.FC<WorkspaceProps> = ({
           onWaterStartPointChange(coords);
         } else {
           const path = findWaterPath(waterStartPoint, coords, rocks, POT_RADIUS, POT_CENTER);
-          if (path.length > 2) {
+          if (path.length >= 2) {
             const newFlow: WaterFlow = {
               id: uuidv4(),
               path,
-              flowProgress: 0
+              flowProgress: 0,
+              start: waterStartPoint,
+              end: coords,
+              blocked: false
             };
             onWaterFlowsChange([...waterFlows, newFlow]);
+          } else {
+            showNotice('水流受阻，无法绕行');
           }
           onWaterStartPointChange(null);
         }
@@ -614,7 +468,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
           return r;
         });
         
-        onRocksChange(updatedRocks);
+        commitRocks(updatedRocks);
         onDragStartChange({ x: e.clientX, y: e.clientY });
       }
     } else if (activeTool === 'brush' && isDragging && currentCalligraphy) {
@@ -678,6 +532,9 @@ const Workspace: React.FC<WorkspaceProps> = ({
           onWheel={handleWheel}
           style={{ display: 'block', width: '100%', height: '100%' }}
         />
+        {waterNotice && (
+          <div className="water-notice">{waterNotice}</div>
+        )}
       </div>
     </div>
   );

@@ -43,7 +43,7 @@ const ToolPanel: React.FC<ToolPanelProps> = ({
       <div className="instructions">
         <h3>使用说明</h3>
         <p>✂️ <strong>剪刀</strong>：点击选中枝叶，再点击修剪</p>
-        <p>🪨 <strong>山石</strong>：点击放置山石，拖拽移动</p>
+        <p>🪨 <strong>山石</strong>：点击放置山石，拖拽移动，Delete 删除选中</p>
         <p>💧 <strong>水瓢</strong>：点击起点和终点绘制水流</p>
         <p>🖌️ <strong>毛笔</strong>：在空白处书写题字</p>
         <p style={{ marginTop: '10px', color: '#8d6e63' }}>滚轮缩放视图，拖拽调整布局</p>

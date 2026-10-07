@@ -28,6 +28,9 @@ export interface WaterFlow {
   id: string;
   path: Point[];
   flowProgress: number;
+  start: Point;
+  end: Point;
+  blocked?: boolean;
 }
 
 export interface Calligraphy {
@@ -65,6 +68,97 @@ export type ToolType = 'scissors' | 'rock' | 'water' | 'brush';
 export const POT_RADIUS = 200;
 export const POT_CENTER = { x: 200, y: 200 };
 export const GRID_SIZE = 15;
+
+export function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+export function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+export interface LeafMark {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  rotation: number;
+}
+
+export function getLeafMarks(branch: Branch): LeafMark[] {
+  const leafCount = 3 + Math.floor(branch.thickness / 2);
+  const marks: LeafMark[] = [];
+  const branchAngle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
+
+  for (let i = 0; i < leafCount; i++) {
+    const seedBase = hashString(branch.id) + i * 977;
+    const t = (i + 1) / (leafCount + 1);
+    const lx = branch.startX + (branch.endX - branch.startX) * t;
+    const ly = branch.startY + (branch.endY - branch.startY) * t;
+
+    const offsetAngle = branchAngle + Math.PI / 2 + (seededRandom(seedBase + 1) - 0.5) * 0.5;
+    const offsetDist = branch.thickness + 2 + seededRandom(seedBase + 2) * 4;
+    const side = seededRandom(seedBase + 3) > 0.5 ? 1 : -1;
+
+    marks.push({
+      x: lx + Math.cos(offsetAngle) * offsetDist * side,
+      y: ly + Math.sin(offsetAngle) * offsetDist * side,
+      rx: 4 + seededRandom(seedBase + 4) * 2,
+      ry: 2 + seededRandom(seedBase + 5) * 2,
+      rotation: offsetAngle
+    });
+  }
+
+  return marks;
+}
+
+export function collectSubtreeBranchIds(rootId: string, branches: Branch[]): Set<string> {
+  const removed = new Set<string>();
+  const queue = [rootId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    if (removed.has(currentId)) continue;
+
+    const parent = branches.find(b => b.id === currentId);
+    if (!parent) continue;
+
+    removed.add(currentId);
+
+    for (const candidate of branches) {
+      if (removed.has(candidate.id)) continue;
+      if (candidate.id === currentId) continue;
+      const connects =
+        Math.abs(candidate.startX - parent.endX) < 5 &&
+        Math.abs(candidate.startY - parent.endY) < 5;
+      if (connects) {
+        queue.push(candidate.id);
+      }
+    }
+  }
+
+  return removed;
+}
+
+export function rerouteFlows(flows: WaterFlow[], rocks: Rock[]): WaterFlow[] {
+  return flows.map(flow => {
+    const start = flow.start ?? flow.path[0];
+    const end = flow.end ?? flow.path[flow.path.length - 1];
+    const path = findWaterPath(start, end, rocks, POT_RADIUS, POT_CENTER);
+
+    if (path.length < 2) {
+      return { ...flow, blocked: true };
+    }
+
+    return { ...flow, path, blocked: false };
+  });
+}
 
 export function generateBranches(): Branch[] {
   const branches: Branch[] = [];
