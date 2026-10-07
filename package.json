@@ -1,0 +1,33 @@
+{
+  "name": "yulu-pastry-shop",
+  "version": "1.0.0",
+  "description": "Virtual ancient Chinese pastry shop",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "ts-node server/index.ts",
+    "client": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "multer": "^1.4.5-lts.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.0",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.27",
+    "@types/react-dom": "^18.0.10",
+    "@types/express": "^4.17.17",
+    "@types/uuid": "^9.0.0",
+    "@types/multer": "^1.4.7",
+    "@types/node": "^18.14.0",
+    "@vitejs/plugin-react": "^3.1.0",
+    "typescript": "^4.9.5",
+    "vite": "^4.1.0",
+    "concurrently": "^7.6.0",
+    "ts-node": "^10.9.1"
+  }
+}

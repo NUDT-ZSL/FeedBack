@@ -1,0 +1,80 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.page-transition {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-ancient {
+  background: linear-gradient(180deg, #c0392b 0%, #8b0000 100%);
+  color: #d4ac0d;
+  border: 2px solid #d4ac0d;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 18px;
+  font-family: 'Ma Shan Zheng', cursive;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  opacity: 0.9;
+}
+
+.btn-ancient:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.btn-ancient:active {
+  transform: translateY(2px);
+}
+
+.btn-ancient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes checkmarkPop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@media (max-width: 768px) {
+  .filling-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .filling-grid > div {
+    transform: scale(0.8) !important;
+    transform-origin: center;
+  }
+  
+  .mold-container {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    justify-content: flex-start !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  h1 {
+    font-size: 48px !important;
+  }
+  
+  h2 {
+    font-size: 28px !important;
+  }
+}
