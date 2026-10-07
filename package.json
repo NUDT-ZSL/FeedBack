@@ -7,21 +7,24 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "deduce": "tsx scripts/batch-deduce.ts",
+    "verify-parity": "tsx scripts/verify-parity.ts"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.160.0",
-    "uuid": "^9.0.0",
-    "html2canvas": "^1.4.1"
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@types/three": "^0.160.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.160.0",
     "@types/uuid": "^9.0.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "tsx": "^4.23.15",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }
