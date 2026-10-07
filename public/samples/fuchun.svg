@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260" width="400" height="260">
+  <defs>
+    <radialGradient id="paper" cx="50%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#f5ecd4"/>
+      <stop offset="100%" stop-color="#c9c0a4"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="260" fill="url(#paper)"/>
+  <path d="M0,101 L28,154 L56,117 L84,170 L112,133 L140,96 L168,149 L196,112 L224,165 L252,128 L280,91 L308,144 L336,107 L364,160 L392,123 L420,86 L400,139 L400,260 L0,260 Z" fill="#7d7354" opacity="0.28"/>
+  <path d="M0,122 L32,85 L64,138 L96,101 L128,154 L160,117 L192,170 L224,133 L256,96 L288,149 L320,112 L352,165 L384,128 L416,91 L400,144 L400,260 L0,260 Z" fill="#7d7354" opacity="0.18" transform="translate(0,40)"/>
+  <text x="200" y="120" text-anchor="middle" font-family="serif" font-size="34" fill="#7d7354" opacity="0.55">富春山居图</text>
+  <rect x="10" y="10" width="380" height="240" fill="none" stroke="#7d7354" stroke-opacity="0.35" stroke-width="2"/>
+</svg>

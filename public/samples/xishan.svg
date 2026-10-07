@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260" width="400" height="260">
+  <defs>
+    <radialGradient id="paper" cx="50%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#f5ecd4"/>
+      <stop offset="100%" stop-color="#b9c4a6"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="260" fill="url(#paper)"/>
+  <path d="M0,154 L38,117 L76,170 L114,133 L152,96 L190,149 L228,112 L266,165 L304,128 L342,91 L380,144 L418,107 L400,160 L400,260 L0,260 Z" fill="#6b7a5a" opacity="0.28"/>
+  <path d="M0,85 L25,138 L50,101 L75,154 L100,117 L125,170 L150,133 L175,96 L200,149 L225,112 L250,165 L275,128 L300,91 L325,144 L350,107 L375,160 L400,123 L400,86 L400,260 L0,260 Z" fill="#6b7a5a" opacity="0.18" transform="translate(0,40)"/>
+  <text x="200" y="120" text-anchor="middle" font-family="serif" font-size="34" fill="#6b7a5a" opacity="0.55">溪山行旅图</text>
+  <rect x="10" y="10" width="380" height="240" fill="none" stroke="#6b7a5a" stroke-opacity="0.35" stroke-width="2"/>
+</svg>

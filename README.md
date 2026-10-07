@@ -55,3 +55,21 @@ export default tseslint.config({
   },
 })
 ```
+
+## 收藏链路（collection domain）
+
+收藏状态集中在 `src/collection/`，与 React 完全解耦、可离线推导：
+
+- `constants.ts`：印章形状/印色/印文、旋转与位置合法区间、题跋上限等既有可选范围。
+- `validate.ts`：印章、题跋、卷轴的裁决逻辑；越界或缺失取值一律产出 `AdjudicationRecord`（含输入、裁决决定、理由），不静默吞掉。
+- `derive.ts`：整体重推 `deriveAll` 与顺序归一 `normalizeOrder`（冲突按收藏时间再按 id 字典序确定性裁决）。
+- `store.ts`：`CollectionStore` 单状态源；局部重推只重算被修改记录与受影响顺序位，结果与整体重推一致。
+- 页面通过 `src/hooks/useCollection.ts` 的 `useSyncExternalStore` 订阅同一份状态，不再各存副本。
+
+### 批量验证（离线）
+
+```bash
+npm run verify:collection
+```
+
+覆盖：正常收藏、印章越界（形状/颜色/旋转/位置）、题跋为空与超长、顺序冲突与非法顺序归一、单条修改/调序/清除后局部重推与整体重推的一致性。卷轴素材为 `public/samples/` 本地样例，验证不发起任何网络请求。
