@@ -1,0 +1,13 @@
+{
+  "name": "10-empty-fragment-set",
+  "description": "空碎片集合不得被结算为完成态，必须暴露为结论失真",
+  "fragments": [],
+  "operations": [],
+  "expect": {
+    "status": "distorted",
+    "placedCount": 0,
+    "distortions": [
+      "empty-fragment-set"
+    ]
+  }
+}

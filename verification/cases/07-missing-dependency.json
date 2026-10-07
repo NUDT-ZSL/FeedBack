@@ -1,0 +1,44 @@
+{
+  "name": "07-missing-dependency",
+  "description": "碎片依赖指向不存在的 id 时必须暴露为结论失真",
+  "fragments": [
+    {
+      "id": "p1",
+      "targetPosition": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": [
+        "ghost"
+      ]
+    },
+    {
+      "id": "p2",
+      "targetPosition": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": []
+    }
+  ],
+  "operations": [],
+  "expect": {
+    "status": "distorted",
+    "placedCount": 0,
+    "distortions": [
+      "missing-dependency"
+    ]
+  }
+}

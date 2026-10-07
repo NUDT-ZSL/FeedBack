@@ -1,0 +1,143 @@
+{
+  "name": "05-dependency-chain",
+  "description": "依赖未满足时的提交必须被拒绝并指明待拼合依赖，依赖按序满足后正常完成",
+  "fragments": [
+    {
+      "id": "rim",
+      "targetPosition": {
+        "x": 0.0,
+        "y": 6.0,
+        "z": 0.0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "body",
+      "targetPosition": {
+        "x": 0.0,
+        "y": 4.0,
+        "z": 0.0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": [
+        "rim"
+      ]
+    },
+    {
+      "id": "base",
+      "targetPosition": {
+        "x": 0.0,
+        "y": 2.0,
+        "z": 0.0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": [
+        "body"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "type": "place",
+      "fragmentId": "base",
+      "position": {
+        "x": 0.4,
+        "y": 1.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "body",
+      "position": {
+        "x": 0.4,
+        "y": 3.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "rim",
+      "position": {
+        "x": 0.4,
+        "y": 5.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "body",
+      "position": {
+        "x": 0.4,
+        "y": 3.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "base",
+      "position": {
+        "x": 0.4,
+        "y": 1.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    }
+  ],
+  "expect": {
+    "status": "completed",
+    "placedCount": 3,
+    "trajectory": [
+      1,
+      2,
+      3
+    ],
+    "rejections": [
+      {
+        "fragmentId": "base",
+        "reason": "dependency-unmet"
+      },
+      {
+        "fragmentId": "body",
+        "reason": "dependency-unmet"
+      }
+    ]
+  }
+}

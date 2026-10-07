@@ -1,0 +1,230 @@
+{
+  "name": "03-duplicate-submission",
+  "description": "已拼合碎片被重复提交（含 place 与 drag+submit 两种入口）时必须显式拒绝且不覆盖既有结果",
+  "fragments": [
+    {
+      "id": "f1",
+      "targetPosition": {
+        "x": 2.1,
+        "y": 2.0,
+        "z": 0.0
+      },
+      "targetRotation": {
+        "x": 0.0,
+        "y": 0.3,
+        "z": 0.0
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "f2",
+      "targetPosition": {
+        "x": 1.05,
+        "y": 4.0,
+        "z": 1.82
+      },
+      "targetRotation": {
+        "x": 0.2,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "f3",
+      "targetPosition": {
+        "x": -1.05,
+        "y": 6.0,
+        "z": 1.82
+      },
+      "targetRotation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.2
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "f4",
+      "targetPosition": {
+        "x": -2.1,
+        "y": 2.0,
+        "z": 0.0
+      },
+      "targetRotation": {
+        "x": 0.0,
+        "y": -0.3,
+        "z": 0.0
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "f5",
+      "targetPosition": {
+        "x": -1.05,
+        "y": 4.0,
+        "z": -1.82
+      },
+      "targetRotation": {
+        "x": -0.2,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "f6",
+      "targetPosition": {
+        "x": 1.05,
+        "y": 6.0,
+        "z": -1.82
+      },
+      "targetRotation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.2
+      },
+      "dependsOn": []
+    }
+  ],
+  "operations": [
+    {
+      "type": "place",
+      "fragmentId": "f1",
+      "position": {
+        "x": 2.5,
+        "y": 1.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0.3,
+        "z": 0.0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "f1",
+      "position": {
+        "x": 2.5,
+        "y": 1.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0.3,
+        "z": 0.0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "f2",
+      "position": {
+        "x": 1.4500000000000002,
+        "y": 3.8,
+        "z": 1.9200000000000002
+      },
+      "rotation": {
+        "x": 0.30000000000000004,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "type": "drag",
+      "fragmentId": "f1",
+      "position": {
+        "x": 9.0,
+        "y": 9.0,
+        "z": 9.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "submit",
+      "fragmentId": "f1"
+    },
+    {
+      "type": "place",
+      "fragmentId": "f3",
+      "position": {
+        "x": -0.65,
+        "y": 5.8,
+        "z": 1.9200000000000002
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0.0,
+        "z": 0.2
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "f4",
+      "position": {
+        "x": -1.7000000000000002,
+        "y": 1.8,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": -0.3,
+        "z": 0.0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "f5",
+      "position": {
+        "x": -0.65,
+        "y": 3.8,
+        "z": -1.72
+      },
+      "rotation": {
+        "x": -0.1,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "type": "place",
+      "fragmentId": "f6",
+      "position": {
+        "x": 1.4500000000000002,
+        "y": 5.8,
+        "z": -1.72
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0.0,
+        "z": -0.2
+      }
+    }
+  ],
+  "expect": {
+    "status": "completed",
+    "placedCount": 6,
+    "trajectory": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "rejections": [
+      {
+        "fragmentId": "f1",
+        "reason": "duplicate-placement"
+      },
+      {
+        "fragmentId": "f1",
+        "reason": "duplicate-placement"
+      }
+    ]
+  }
+}

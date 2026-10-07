@@ -1,0 +1,68 @@
+{
+  "name": "06-dependency-cycle",
+  "description": "拼合依赖成环时必须暴露为结论失真，任何提交都不得被当作正常结果",
+  "fragments": [
+    {
+      "id": "x",
+      "targetPosition": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": [
+        "y"
+      ]
+    },
+    {
+      "id": "y",
+      "targetPosition": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "targetRotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "dependsOn": [
+        "x"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "type": "place",
+      "fragmentId": "x",
+      "position": {
+        "x": 0.4,
+        "y": -0.2,
+        "z": 0.1
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0,
+        "z": 0
+      }
+    }
+  ],
+  "expect": {
+    "status": "distorted",
+    "placedCount": 0,
+    "trajectory": [],
+    "rejections": [
+      {
+        "fragmentId": "x",
+        "reason": "session-distorted"
+      }
+    ],
+    "distortions": [
+      "dependency-cycle"
+    ]
+  }
+}
