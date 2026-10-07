@@ -5,12 +5,16 @@ import Panel from './Panel';
 import type {
   Piece,
   FormationType,
-  GamePhase,
   SimulationResult,
   HistoryItem,
 } from './types';
-import { COLORS, BOARD_SIZE, CELL_SIZE } from './types';
-import { initializePieces } from './GameSimulation';
+import { COLORS, BOARD_SIZE, CELL_SIZE, GamePhase } from './types';
+import { initializePieces, MORALE_INITIAL } from './GameSimulation';
+import {
+  buildHistoryItem,
+  appendHistory,
+  restoreHistoryState,
+} from './campaign';
 import { loadFromUrl } from './ExportTool';
 import '@/index.css';
 
@@ -19,14 +23,15 @@ const App: React.FC = () => {
   const [phase, setPhase] = useState<GamePhase>(GamePhase.IDLE);
   const [playerFormation, setPlayerFormation] = useState<FormationType | null>(null);
   const [aiFormation, setAiFormation] = useState<FormationType | null>(null);
-  const [playerMorale, setPlayerMorale] = useState<number>(100);
-  const [aiMorale, setAiMorale] = useState<number>(100);
+  const [playerMorale, setPlayerMorale] = useState<number>(MORALE_INITIAL);
+  const [aiMorale, setAiMorale] = useState<number>(MORALE_INITIAL);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [formationToApply, setFormationToApply] = useState<FormationType | null>(null);
   const [scale, setScale] = useState<number>(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const suppressHistoryRef = useRef<boolean>(false);
 
   useEffect(() => {
     const savedData = loadFromUrl();
@@ -66,30 +71,21 @@ const App: React.FC = () => {
     setResult(null);
   }, []);
 
+  const handleMoraleChange = useCallback((nextPlayerMorale: number, nextAiMorale: number) => {
+    setPlayerMorale(nextPlayerMorale);
+    setAiMorale(nextAiMorale);
+  }, []);
+
   useEffect(() => {
     if (result && phase === GamePhase.FINISHED) {
-      const historyItem: HistoryItem = {
-        id: uuidv4(),
-        playerFormation: result.playerFormation,
-        aiFormation: result.aiFormation,
-        result: result.winner === 'player' ? 'win' : result.winner === 'ai' ? 'lose' : 'draw',
-        remaining: result.playerRemaining,
-        timestamp: result.timestamp,
-        snapshot: result.snapshot,
-      };
-      setHistory((prev) => {
-        const updated = [historyItem, ...prev].slice(0, 20);
-        return updated;
-      });
-
-      setPlayerMorale((prev) => {
-        const change = result.winner === 'player' ? 10 : result.winner === 'ai' ? -10 : 0;
-        return Math.max(0, Math.min(100, prev + change));
-      });
-      setAiMorale((prev) => {
-        const change = result.winner === 'ai' ? 10 : result.winner === 'player' ? -10 : 0;
-        return Math.max(0, Math.min(100, prev + change));
-      });
+      if (suppressHistoryRef.current) {
+        suppressHistoryRef.current = false;
+        return;
+      }
+      const historyItem = buildHistoryItem(result, uuidv4());
+      setHistory((prev) => appendHistory(prev, historyItem));
+      setPlayerMorale(result.playerMoraleEnd);
+      setAiMorale(result.aiMoraleEnd);
     }
   }, [result, phase]);
 
@@ -102,16 +98,16 @@ const App: React.FC = () => {
     setFormationToApply(null);
   }, []);
 
-  const handleRestoreHistory = useCallback((snapshot: Piece[]) => {
-    const restored = snapshot.map((p) => ({
-      ...p,
-      status: 'alive' as const,
-    }));
-    setPieces(restored);
-    setPhase(GamePhase.IDLE);
-    setPlayerFormation(null);
-    setAiFormation(null);
-    setResult(null);
+  const handleRestoreHistory = useCallback((item: HistoryItem) => {
+    const restored = restoreHistoryState(item);
+    suppressHistoryRef.current = true;
+    setPieces(restored.pieces);
+    setPlayerMorale(restored.playerMorale);
+    setAiMorale(restored.aiMorale);
+    setPlayerFormation(restored.playerFormation);
+    setAiFormation(restored.aiFormation);
+    setResult(restored.result);
+    setPhase(GamePhase.FINISHED);
   }, []);
 
   return (
@@ -183,6 +179,9 @@ const App: React.FC = () => {
               setPlayerFormation={setPlayerFormation}
               aiFormation={aiFormation}
               setAiFormation={setAiFormation}
+              playerMorale={playerMorale}
+              aiMorale={aiMorale}
+              onMoraleChange={handleMoraleChange}
               result={result}
               setResult={setResult}
               formationToApply={formationToApply}

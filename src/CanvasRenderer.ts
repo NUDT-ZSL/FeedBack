@@ -142,8 +142,7 @@ export function drawHalo(
 
 export function drawParticle(
   ctx: CanvasRenderingContext2D,
-  particle: Particle,
-  currentTime: number
+  particle: Particle
 ): void {
   const progress = 1 - particle.life / particle.maxLife;
   const alpha = 1 - progress;

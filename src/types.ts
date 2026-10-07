@@ -37,9 +37,16 @@ export interface SimulationResult {
   aiRemaining: number;
   playerFormation: FormationType;
   aiFormation: FormationType;
+  playerMoraleStart: number;
+  playerMoraleEnd: number;
+  aiMoraleStart: number;
+  aiMoraleEnd: number;
+  endReason: BattleEndReason;
   timestamp: number;
   snapshot: Piece[];
 }
+
+export type BattleEndReason = 'annihilation' | 'rout' | 'mutual-destruction';
 
 export interface DragState {
   isDragging: boolean;
@@ -68,6 +75,13 @@ export interface HistoryItem {
   aiFormation: string;
   result: 'win' | 'lose' | 'draw';
   remaining: number;
+  playerRemaining: number;
+  aiRemaining: number;
+  playerMoraleStart: number;
+  playerMoraleEnd: number;
+  aiMoraleStart: number;
+  aiMoraleEnd: number;
+  endReason: BattleEndReason;
   timestamp: number;
   snapshot: Piece[];
 }

@@ -5,7 +5,7 @@ import type {
   Side,
   FormationType,
   SimulationResult,
-  PieceStatus,
+  BattleEndReason,
 } from './types';
 import {
   BOARD_SIZE,
@@ -15,6 +15,28 @@ import {
   FORMATION_NAMES,
 } from './types';
 import { FORMATIONS } from './formations';
+
+export const MORALE_MIN = 0;
+export const MORALE_MAX = 100;
+export const MORALE_INITIAL = 100;
+export const MORALE_LOSS_PER_DEATH = 6;
+export const MORALE_GAIN_PER_KILL = 3;
+const MORALE_SPEED_BASE = 0.7;
+const MORALE_SPEED_SPAN = 0.6;
+const MORALE_COMBAT_BASE = 0.8;
+const MORALE_COMBAT_SPAN = 0.4;
+
+export function clampMorale(value: number): number {
+  return Math.max(MORALE_MIN, Math.min(MORALE_MAX, Math.round(value)));
+}
+
+export function moraleSpeedFactor(morale: number): number {
+  return MORALE_SPEED_BASE + (MORALE_SPEED_SPAN * clampMorale(morale)) / MORALE_MAX;
+}
+
+export function moraleCombatFactor(morale: number): number {
+  return MORALE_COMBAT_BASE + (MORALE_COMBAT_SPAN * clampMorale(morale)) / MORALE_MAX;
+}
 
 export function createPiece(
   type: PieceType,
@@ -154,9 +176,15 @@ export interface CollisionEvent {
   deadPieceId: string;
 }
 
-export function checkCollisions(pieces: Piece[]): CollisionEvent[] {
+function checkCollisions(
+  pieces: Piece[],
+  playerMorale: number,
+  aiMorale: number
+): CollisionEvent[] {
   const events: CollisionEvent[] = [];
   const alivePieces = pieces.filter((p) => p.status === 'alive');
+  const combatFactor = (side: Side) =>
+    moraleCombatFactor(side === 'player' ? playerMorale : aiMorale);
 
   for (let i = 0; i < alivePieces.length; i++) {
     for (let j = i + 1; j < alivePieces.length; j++) {
@@ -169,17 +197,21 @@ export function checkCollisions(pieces: Piece[]): CollisionEvent[] {
       );
 
       if (dist < PIECE_RADIUS * 2) {
-        const p1EffectiveAttack = p1.attack;
-        const p2EffectiveAttack = p2.attack;
+        const p1Factor = combatFactor(p1.side);
+        const p2Factor = combatFactor(p2.side);
+        const p1EffectiveAttack = p1.attack * p1Factor;
+        const p2EffectiveAttack = p2.attack * p2Factor;
+        const p1EffectiveDefense = p1.defense * p1Factor;
+        const p2EffectiveDefense = p2.defense * p2Factor;
         let deadPieceId: string;
-        if (p1EffectiveAttack >= p2.defense && p2EffectiveAttack >= p1.defense) {
-          deadPieceId = p1.defense <= p2.defense ? p1.id : p2.id;
-        } else if (p1EffectiveAttack >= p2.defense) {
+        if (p1EffectiveAttack >= p2EffectiveDefense && p2EffectiveAttack >= p1EffectiveDefense) {
+          deadPieceId = p1EffectiveDefense <= p2EffectiveDefense ? p1.id : p2.id;
+        } else if (p1EffectiveAttack >= p2EffectiveDefense) {
           deadPieceId = p2.id;
-        } else if (p2EffectiveAttack >= p1.defense) {
+        } else if (p2EffectiveAttack >= p1EffectiveDefense) {
           deadPieceId = p1.id;
         } else {
-          deadPieceId = p1.defense < p2.defense ? p1.id : p2.id;
+          deadPieceId = p1EffectiveDefense < p2EffectiveDefense ? p1.id : p2.id;
         }
         events.push({
           piece1Id: p1.id,
@@ -194,17 +226,21 @@ export function checkCollisions(pieces: Piece[]): CollisionEvent[] {
   return events;
 }
 
-export function calculateMovement(
+function calculateMovement(
   pieces: Piece[],
   playerFormation: FormationType | null,
   aiFormation: FormationType | null,
-  deltaTime: number
+  deltaTime: number,
+  playerMorale: number,
+  aiMorale: number
 ): Piece[] {
   const updatedPieces = pieces.map((p) => ({ ...p }));
   const speed = 40 * deltaTime;
 
   const playerBonus = playerFormation ? FORMATIONS[playerFormation].attackBonus : 1;
   const aiBonus = aiFormation ? FORMATIONS[aiFormation].attackBonus : 1;
+  const playerSpeedFactor = moraleSpeedFactor(playerMorale);
+  const aiSpeedFactor = moraleSpeedFactor(aiMorale);
 
   const alivePlayers = updatedPieces.filter(
     (p) => p.side === 'player' && p.status === 'alive'
@@ -216,8 +252,8 @@ export function calculateMovement(
   alivePlayers.forEach((player) => {
     let nearestEnemy: Piece | null = null;
     let minDist = Infinity;
-    aliveAis.forEach((ai) => {
-      if (ai.status !== 'alive') return;
+    for (const ai of aliveAis) {
+      if (ai.status !== 'alive') continue;
       const dist = Math.sqrt(
         Math.pow(ai.x - player.x, 2) + Math.pow(ai.y - player.y, 2)
       );
@@ -225,23 +261,23 @@ export function calculateMovement(
         minDist = dist;
         nearestEnemy = ai;
       }
-    });
+    }
     if (nearestEnemy && minDist > PIECE_RADIUS * 2) {
       const dx = nearestEnemy.x - player.x;
       const dy = nearestEnemy.y - player.y;
       const len = Math.sqrt(dx * dx + dy * dy);
-      const pieceSpeed = speed * (player.type === 'cavalry' ? 1.3 : 1) * playerBonus;
+      const pieceSpeed =
+        speed * (player.type === 'cavalry' ? 1.3 : 1) * playerBonus * playerSpeedFactor;
       player.x += (dx / len) * pieceSpeed;
       player.y += (dy / len) * pieceSpeed;
-      player.status = 'moving';
     }
   });
 
   aliveAis.forEach((ai) => {
     let nearestEnemy: Piece | null = null;
     let minDist = Infinity;
-    alivePlayers.forEach((player) => {
-      if (player.status !== 'alive') return;
+    for (const player of alivePlayers) {
+      if (player.status !== 'alive') continue;
       const dist = Math.sqrt(
         Math.pow(player.x - ai.x, 2) + Math.pow(player.y - ai.y, 2)
       );
@@ -249,60 +285,197 @@ export function calculateMovement(
         minDist = dist;
         nearestEnemy = player;
       }
-    });
+    }
     if (nearestEnemy && minDist > PIECE_RADIUS * 2) {
       const dx = nearestEnemy.x - ai.x;
       const dy = nearestEnemy.y - ai.y;
       const len = Math.sqrt(dx * dx + dy * dy);
-      const pieceSpeed = speed * (ai.type === 'cavalry' ? 1.3 : 1) * aiBonus;
+      const pieceSpeed =
+        speed * (ai.type === 'cavalry' ? 1.3 : 1) * aiBonus * aiSpeedFactor;
       ai.x += (dx / len) * pieceSpeed;
       ai.y += (dy / len) * pieceSpeed;
-      ai.status = 'moving';
     }
   });
 
   return updatedPieces;
 }
 
-export function isSimulationComplete(pieces: Piece[]): boolean {
-  const alivePlayers = pieces.filter(
-    (p) => p.side === 'player' && p.status === 'alive'
-  );
-  const aliveAis = pieces.filter(
-    (p) => p.side === 'ai' && p.status === 'alive'
-  );
-  return alivePlayers.length === 0 || aliveAis.length === 0;
+export interface BattleState {
+  pieces: Piece[];
+  playerFormation: FormationType;
+  aiFormation: FormationType;
+  playerMorale: number;
+  aiMorale: number;
+  playerMoraleStart: number;
+  aiMoraleStart: number;
+  finished: boolean;
+  winner: Side | 'draw' | null;
+  endReason: BattleEndReason | null;
 }
 
-export function getSimulationResult(
+export function createBattle(
   pieces: Piece[],
   playerFormation: FormationType,
-  aiFormation: FormationType
-): SimulationResult {
-  const alivePlayers = pieces.filter(
-    (p) => p.side === 'player' && p.status === 'alive'
-  );
-  const aliveAis = pieces.filter(
-    (p) => p.side === 'ai' && p.status === 'alive'
+  aiFormation: FormationType,
+  playerMorale: number,
+  aiMorale: number
+): BattleState {
+  return {
+    pieces: pieces.map((p) => ({ ...p })),
+    playerFormation,
+    aiFormation,
+    playerMorale: clampMorale(playerMorale),
+    aiMorale: clampMorale(aiMorale),
+    playerMoraleStart: clampMorale(playerMorale),
+    aiMoraleStart: clampMorale(aiMorale),
+    finished: false,
+    winner: null,
+    endReason: null,
+  };
+}
+
+export interface BattleEnd {
+  winner: Side | 'draw';
+  reason: BattleEndReason;
+}
+
+export function countAlive(pieces: Piece[], side: Side): number {
+  return pieces.filter((p) => p.side === side && p.status === 'alive').length;
+}
+
+export function resolveBattleEnd(
+  pieces: Piece[],
+  playerMorale: number,
+  aiMorale: number
+): BattleEnd | null {
+  const playerOut = countAlive(pieces, 'player') === 0 || playerMorale <= MORALE_MIN;
+  const aiOut = countAlive(pieces, 'ai') === 0 || aiMorale <= MORALE_MIN;
+
+  if (!playerOut && !aiOut) return null;
+  if (playerOut && aiOut) {
+    return { winner: 'draw', reason: 'mutual-destruction' };
+  }
+  if (playerOut) {
+    return { winner: 'ai', reason: playerMorale <= MORALE_MIN ? 'rout' : 'annihilation' };
+  }
+  return { winner: 'player', reason: aiMorale <= MORALE_MIN ? 'rout' : 'annihilation' };
+}
+
+function applyCasualtyMorale(
+  pieces: Piece[],
+  deadIds: Set<string>,
+  playerMorale: number,
+  aiMorale: number
+): { playerMorale: number; aiMorale: number } {
+  let nextPlayer = playerMorale;
+  let nextAi = aiMorale;
+  pieces.forEach((piece) => {
+    if (!deadIds.has(piece.id)) return;
+    if (piece.side === 'player') {
+      nextPlayer -= MORALE_LOSS_PER_DEATH;
+      nextAi += MORALE_GAIN_PER_KILL;
+    } else {
+      nextAi -= MORALE_LOSS_PER_DEATH;
+      nextPlayer += MORALE_GAIN_PER_KILL;
+    }
+  });
+  return {
+    playerMorale: clampMorale(nextPlayer),
+    aiMorale: clampMorale(nextAi),
+  };
+}
+
+export interface BattleStep {
+  state: BattleState;
+  events: CollisionEvent[];
+}
+
+export function stepBattle(state: BattleState, deltaTime: number): BattleStep {
+  if (state.finished) {
+    return { state, events: [] };
+  }
+
+  const opening = resolveBattleEnd(state.pieces, state.playerMorale, state.aiMorale);
+  if (opening) {
+    return {
+      state: {
+        ...state,
+        finished: true,
+        winner: opening.winner,
+        endReason: opening.reason,
+      },
+      events: [],
+    };
+  }
+
+  let pieces = calculateMovement(
+    state.pieces,
+    state.playerFormation,
+    state.aiFormation,
+    deltaTime,
+    state.playerMorale,
+    state.aiMorale
   );
 
-  let winner: 'player' | 'ai' | 'draw';
-  if (alivePlayers.length > aliveAis.length) {
+  const events = checkCollisions(pieces, state.playerMorale, state.aiMorale);
+  const deadIds = new Set(events.map((event) => event.deadPieceId));
+  if (events.length > 0) {
+    pieces = pieces.map((p) =>
+      deadIds.has(p.id) ? { ...p, status: 'dead' as const } : p
+    );
+  }
+
+  const morale = applyCasualtyMorale(state.pieces, deadIds, state.playerMorale, state.aiMorale);
+
+  const end = resolveBattleEnd(pieces, morale.playerMorale, morale.aiMorale);
+
+  return {
+    state: {
+      ...state,
+      pieces,
+      playerMorale: morale.playerMorale,
+      aiMorale: morale.aiMorale,
+      finished: end !== null,
+      winner: end ? end.winner : null,
+      endReason: end ? end.reason : null,
+    },
+    events,
+  };
+}
+
+export function getBattleResult(state: BattleState): SimulationResult {
+  const playerRemaining = countAlive(state.pieces, 'player');
+  const aiRemaining = countAlive(state.pieces, 'ai');
+
+  let winner: Side | 'draw';
+  let endReason: BattleEndReason;
+  if (state.finished && state.winner !== null && state.endReason !== null) {
+    winner = state.winner;
+    endReason = state.endReason;
+  } else if (playerRemaining > aiRemaining) {
     winner = 'player';
-  } else if (aliveAis.length > alivePlayers.length) {
+    endReason = 'annihilation';
+  } else if (aiRemaining > playerRemaining) {
     winner = 'ai';
+    endReason = 'annihilation';
   } else {
     winner = 'draw';
+    endReason = 'mutual-destruction';
   }
 
   return {
     winner,
-    playerRemaining: alivePlayers.length,
-    aiRemaining: aliveAis.length,
-    playerFormation,
-    aiFormation,
+    playerRemaining,
+    aiRemaining,
+    playerFormation: state.playerFormation,
+    aiFormation: state.aiFormation,
+    playerMoraleStart: state.playerMoraleStart,
+    playerMoraleEnd: state.playerMorale,
+    aiMoraleStart: state.aiMoraleStart,
+    aiMoraleEnd: state.aiMorale,
+    endReason,
     timestamp: Date.now(),
-    snapshot: JSON.parse(JSON.stringify(pieces)),
+    snapshot: JSON.parse(JSON.stringify(state.pieces)),
   };
 }
 

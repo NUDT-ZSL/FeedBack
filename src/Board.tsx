@@ -5,7 +5,7 @@ import type {
   Particle,
   HaloEffect,
   FormationType,
-  GamePhase,
+  SimulationResult,
 } from './types';
 import {
   BOARD_SIZE,
@@ -13,6 +13,7 @@ import {
   PIECE_RADIUS,
   SNAP_DISTANCE,
   COLORS,
+  GamePhase,
 } from './types';
 import {
   drawFeltBackground,
@@ -31,15 +32,14 @@ import {
 import {
   snapToGrid,
   isValidPosition,
-  checkCollisions,
-  calculateMovement,
-  isSimulationComplete,
-  getSimulationResult,
+  createBattle,
+  stepBattle,
+  getBattleResult,
   selectAiFormation,
   getFormationCenter,
   rearrangeFormation,
 } from './GameSimulation';
-import type { SimulationResult, CollisionEvent } from './GameSimulation';
+import type { BattleState } from './GameSimulation';
 
 interface BoardProps {
   pieces: Piece[];
@@ -50,13 +50,16 @@ interface BoardProps {
   setPlayerFormation: React.Dispatch<React.SetStateAction<FormationType | null>>;
   aiFormation: FormationType | null;
   setAiFormation: React.Dispatch<React.SetStateAction<FormationType | null>>;
+  playerMorale: number;
+  aiMorale: number;
+  onMoraleChange: (playerMorale: number, aiMorale: number) => void;
   result: SimulationResult | null;
   setResult: React.Dispatch<React.SetStateAction<SimulationResult | null>>;
   formationToApply: FormationType | null;
   onFormationApplied: () => void;
   onSimulationStart: () => void;
   scale: number;
-  boardRef: React.RefObject<HTMLDivElement | null>;
+  boardRef: React.RefObject<HTMLDivElement>;
 }
 
 const Board: React.FC<BoardProps> = ({
@@ -68,7 +71,9 @@ const Board: React.FC<BoardProps> = ({
   setPlayerFormation,
   aiFormation,
   setAiFormation,
-  result,
+  playerMorale,
+  aiMorale,
+  onMoraleChange,
   setResult,
   formationToApply,
   onFormationApplied,
@@ -80,6 +85,14 @@ const Board: React.FC<BoardProps> = ({
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+  const battleRef = useRef<BattleState | null>(null);
+  const piecesRef = useRef<Piece[]>(pieces);
+  const moraleRef = useRef<{ player: number; ai: number }>({
+    player: playerMorale,
+    ai: aiMorale,
+  });
+  piecesRef.current = pieces;
+  moraleRef.current = { player: playerMorale, ai: aiMorale };
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
     pieceId: null,
@@ -340,65 +353,71 @@ const Board: React.FC<BoardProps> = ({
   useEffect(() => {
     if (phase !== GamePhase.SIMULATING) return;
 
+    battleRef.current = createBattle(
+      piecesRef.current,
+      playerFormation!,
+      aiFormation!,
+      moraleRef.current.player,
+      moraleRef.current.ai
+    );
+    let lastMorale = { ...moraleRef.current };
+
     const simulationStep = () => {
-      setPieces((currentPieces) => {
-        const dt = 1 / 60;
-        let updated = calculateMovement(
-          currentPieces,
-          playerFormation,
-          aiFormation,
-          dt
-        );
+      const current = battleRef.current;
+      if (!current || current.finished) return;
 
-        const collisions = checkCollisions(updated);
+      const { state, events } = stepBattle(current, 1 / 60);
+      battleRef.current = state;
+      setPieces(state.pieces);
+
+      if (
+        state.playerMorale !== lastMorale.player ||
+        state.aiMorale !== lastMorale.ai
+      ) {
+        lastMorale = { player: state.playerMorale, ai: state.aiMorale };
+        onMoraleChange(state.playerMorale, state.aiMorale);
+      }
+
+      if (events.length > 0) {
         const newParticles: Particle[] = [];
-
-        collisions.forEach((event: CollisionEvent) => {
-          updated = updated.map((p) =>
-            p.id === event.deadPieceId ? { ...p, status: 'dead' as const } : p
-          );
+        events.forEach((event) => {
           newParticles.push(...createInkParticles(event.x, event.y, 15));
         });
+        setParticles((prev) => [...prev, ...newParticles]);
+      }
 
-        if (newParticles.length > 0) {
-          setParticles((prev) => [...prev, ...newParticles]);
-        }
+      if (state.finished) {
+        const simResult = getBattleResult(state);
+        setResult(simResult);
 
-        if (isSimulationComplete(updated)) {
-          const simResult = getSimulationResult(
-            updated,
-            playerFormation!,
-            aiFormation!
-          );
-          setResult(simResult);
+        const resultText =
+          simResult.winner === 'player'
+            ? '胜 利！'
+            : simResult.winner === 'ai'
+            ? '失 败！'
+            : '平 局';
+        const routNote =
+          simResult.endReason === 'rout'
+            ? '（一方士气崩溃）'
+            : simResult.endReason === 'mutual-destruction'
+            ? '（同归于尽）'
+            : '';
+        const subText = `剩余兵力：我方 ${simResult.playerRemaining} / 敌方 ${simResult.aiRemaining} · 士气：我方 ${simResult.playerMoraleEnd} / 敌方 ${simResult.aiMoraleEnd}${routNote}`;
+        setResultBanner({
+          text: resultText,
+          subText,
+          startTime: Date.now(),
+        });
 
-          const resultText =
-            simResult.winner === 'player'
-              ? '胜 利！'
-              : simResult.winner === 'ai'
-              ? '失 败！'
-              : '平 局';
-          const subText = `剩余兵力：我方 ${simResult.playerRemaining} / 敌方 ${simResult.aiRemaining}`;
-          setResultBanner({
-            text: resultText,
-            subText,
-            startTime: Date.now(),
-          });
-
-          setTimeout(() => {
-            setPhase(GamePhase.FINISHED);
-          }, 2000);
-
-          return updated;
-        }
-
-        return updated;
-      });
+        setTimeout(() => {
+          setPhase(GamePhase.FINISHED);
+        }, 2000);
+      }
     };
 
     const interval = setInterval(simulationStep, 1000 / 60);
     return () => clearInterval(interval);
-  }, [phase, playerFormation, aiFormation, setPieces, setResult, setPhase]);
+  }, [phase, playerFormation, aiFormation, setPieces, setResult, setPhase, onMoraleChange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -453,7 +472,7 @@ const Board: React.FC<BoardProps> = ({
       }
 
       setParticles((prev) => updateParticles(prev, deltaTime));
-      particles.forEach((p) => drawParticle(ctx, p, now));
+      particles.forEach((p) => drawParticle(ctx, p));
 
       if (formationText) {
         const t = (now - formationText.startTime) / 2000;
@@ -535,7 +554,7 @@ const Board: React.FC<BoardProps> = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
-      {phase === GamePhase.IDLE && result && (
+      {phase === GamePhase.IDLE && playerFormation && aiFormation && (
         <button
           onClick={handleStartSimulation}
           className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-8 py-3 text-white font-bold rounded shadow-lg transition-all duration-100 hover:-translate-y-0.5 active:translate-y-0.5"

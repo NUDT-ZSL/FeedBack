@@ -1,4 +1,22 @@
-# React + TypeScript + Vite
+# 古代阵法推演
+
+基于 React + TypeScript + Vite 的古代阵法推演应用。
+
+## 士气规则
+
+- 士气范围 0–100，初始 100；同一局内士气随战损同步推导：己方每损失一子 -6，每歼灭一子 +3。
+- 士气影响推演：移动速度系数 0.7–1.3、交战攻防系数 0.8–1.2（随士气线性变化）。
+- 一方士气归零立即判负（溃败）且不再继续结算；双方同时归零或同时清零兵力按平局处理。
+- 连续多局推演时，每局起点士气承接上一局结束士气；重置沙盘不会重置士气。
+- 历史记录包含该局士气区间、双方最终兵力与棋子快照；点击历史条目可将棋盘、士气、阵型与结果恢复到该局结束状态。历史上限 20 条，旧记录被淘汰不影响士气承接链。
+
+## 常用命令
+
+- `npm run dev`：本地开发。
+- `npm run build`：生产构建。
+- `npm run verify`：离线验证入口。编译并运行 `scripts/verify-campaign.ts`，批量复现 25 局连续推演，核对每局士气承接、战损同步、历史淘汰与快照恢复一致性，以及士气归零判负、双方同归零平局等边界；全部确定可重复，失败时以非零码退出。
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

@@ -16,7 +16,7 @@ interface PanelProps {
   phase: string;
   onSelectFormation: (formation: FormationType) => void;
   onReset: () => void;
-  onRestoreHistory: (snapshot: Piece[]) => void;
+  onRestoreHistory: (item: HistoryItem) => void;
 }
 
 const Panel: React.FC<PanelProps> = ({
@@ -25,16 +25,12 @@ const Panel: React.FC<PanelProps> = ({
   aiFormation,
   playerMorale,
   aiMorale,
-  result,
   history,
   phase,
   onSelectFormation,
   onReset,
   onRestoreHistory,
 }) => {
-  const playerPieces = pieces.filter((p) => p.side === 'player' && p.status === 'alive');
-  const aiPieces = pieces.filter((p) => p.side === 'ai' && p.status === 'alive');
-
   const countByType = (side: 'player' | 'ai') => {
     const filtered = pieces.filter((p) => p.side === side && p.status === 'alive');
     return {
@@ -45,7 +41,6 @@ const Panel: React.FC<PanelProps> = ({
   };
 
   const playerCounts = countByType('player');
-  const aiCounts = countByType('ai');
 
   const handleDownload = () => {
     downloadJSON(pieces, playerFormation, aiFormation);
@@ -129,7 +124,7 @@ const Panel: React.FC<PanelProps> = ({
               fontFamily: '"Ma Shan Zheng", serif',
             }}
           >
-            士气
+            我方士气
           </div>
           <div
             className="h-4 rounded-full overflow-hidden"
@@ -148,6 +143,36 @@ const Panel: React.FC<PanelProps> = ({
             style={{ color: COLORS.gold }}
           >
             {playerMorale}%
+          </div>
+        </div>
+
+        <div className="mt-2">
+          <div
+            className="text-sm mb-1"
+            style={{
+              color: COLORS.parchment,
+              fontFamily: '"Ma Shan Zheng", serif',
+            }}
+          >
+            敌方士气
+          </div>
+          <div
+            className="h-4 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+          >
+            <div
+              className="h-full transition-all duration-500"
+              style={{
+                width: `${aiMorale}%`,
+                background: `linear-gradient(to right, ${COLORS.deepBlue}, ${COLORS.gold})`,
+              }}
+            />
+          </div>
+          <div
+            className="text-right text-sm mt-1"
+            style={{ color: COLORS.gold }}
+          >
+            {aiMorale}%
           </div>
         </div>
 
@@ -372,7 +397,7 @@ const Panel: React.FC<PanelProps> = ({
               history.map((item) => (
                 <div
                   key={item.id}
-                  onClick={() => onRestoreHistory(item.snapshot)}
+                  onClick={() => onRestoreHistory(item)}
                   className="p-2 rounded cursor-pointer transition-all duration-200 hover:scale-105"
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -392,6 +417,17 @@ const Panel: React.FC<PanelProps> = ({
                       item.result,
                       item.remaining
                     )}
+                  </div>
+                  <div
+                    className="text-xs mt-1"
+                    style={{
+                      color: 'rgba(245, 230, 200, 0.75)',
+                      fontFamily: '"Ma Shan Zheng", serif',
+                    }}
+                  >
+                    余兵 我{item.playerRemaining}·敌{item.aiRemaining} · 士气{' '}
+                    {item.playerMoraleStart}→{item.playerMoraleEnd}·
+                    {item.aiMoraleStart}→{item.aiMoraleEnd}
                   </div>
                   <div
                     className="text-xs mt-1"
