@@ -22,7 +22,7 @@ const DeerSkin: React.FC<DeerSkinProps> = ({ mirrorRef, initialX, initialY }) =>
   const lastTime = useRef(0);
   const dragStartPos = useRef({ x: 0, y: 0 });
 
-  const { startPolishing, updatePolishing, stopPolishing, fixScratch } = useGrindingStore();
+  const { startPolishing, updatePolishing, stopPolishing } = useGrindingStore();
 
   const calculateForce = useCallback((clientX: number, clientY: number) => {
     const now = performance.now();
@@ -89,13 +89,8 @@ const DeerSkin: React.FC<DeerSkinProps> = ({ mirrorRef, initialX, initialY }) =>
       const force = calculateForce(clientX, clientY);
       updatePolishing(force);
       updatePolishingSound(force);
-
-      const fixChance = 0.05 * force;
-      if (Math.random() < fixChance) {
-        fixScratch();
-      }
     }
-  }, [isDragging, isOnMirror, checkMirrorCollision, calculateForce, updatePolishing, fixScratch]);
+  }, [isDragging, isOnMirror, checkMirrorCollision, calculateForce, updatePolishing]);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);

@@ -11,6 +11,13 @@ export interface Scratch {
   opacity: number;
 }
 
+/** 单步演进产生的副作用，供界面层播放音效 / 动画。 */
+export interface StepEffects {
+  scratchesAdded: Scratch[];
+  repairedCount: number;
+  becameDamaged: boolean;
+}
+
 export interface GrindingState {
   grindingProgress: number;
   uniformity: number;
@@ -26,14 +33,16 @@ export interface GrindingState {
   polishProgress: number;
 
   startGrinding: (grit: GritType) => void;
-  updateGrinding: (force: number, direction: number) => void;
+  updateGrinding: (
+    force: number,
+    direction: number,
+    position?: { x: number; y: number }
+  ) => StepEffects;
   stopGrinding: () => void;
   startPolishing: () => void;
-  updatePolishing: (force: number) => void;
+  updatePolishing: (force: number) => StepEffects;
   stopPolishing: () => void;
   setLightPosition: (position: LightPosition) => void;
-  addScratch: (scratch: Omit<Scratch, 'id'>) => void;
-  fixScratch: () => void;
   reset: () => void;
 }
 

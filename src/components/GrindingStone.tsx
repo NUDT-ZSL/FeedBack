@@ -33,8 +33,6 @@ const GrindingStone: React.FC<GrindingStoneProps> = ({ grit, label, initialX, in
     startGrinding,
     updateGrinding,
     stopGrinding,
-    addScratch,
-    currentGrit,
     isDamaged,
   } = useGrindingStore();
 
@@ -84,28 +82,14 @@ const GrindingStone: React.FC<GrindingStoneProps> = ({ grit, label, initialX, in
     return distance <= radius + 10;
   }, [mirrorRef]);
 
-  const createScratch = useCallback((clientX: number, clientY: number) => {
-    if (!mirrorRef.current) return;
+  const normalizeMirrorPoint = useCallback((clientX: number, clientY: number) => {
+    if (!mirrorRef.current) return undefined;
     const rect = mirrorRef.current.getBoundingClientRect();
-    
-    const angle = Math.random() * Math.PI * 2;
-    const length = 0.05 + Math.random() * 0.1;
-    
-    const x1 = (clientX - rect.left) / rect.width;
-    const y1 = (clientY - rect.top) / rect.height;
-    const x2 = x1 + Math.cos(angle) * length;
-    const y2 = y1 + Math.sin(angle) * length;
-
-    addScratch({
-      x1: Math.max(0, Math.min(1, x1)),
-      y1: Math.max(0, Math.min(1, y1)),
-      x2: Math.max(0, Math.min(1, x2)),
-      y2: Math.max(0, Math.min(1, y2)),
-      opacity: 0.6 + Math.random() * 0.3,
-    });
-
-    playScratchSound();
-  }, [mirrorRef, addScratch]);
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height,
+    };
+  }, [mirrorRef]);
 
   const handleDragStart = useCallback(async (e: React.MouseEvent | React.TouchEvent) => {
     await initAudio();
@@ -143,17 +127,14 @@ const GrindingStone: React.FC<GrindingStoneProps> = ({ grit, label, initialX, in
     if (onMirror) {
       const force = calculateForce(clientX, clientY);
       const direction = calculateDirection(clientX, clientY);
-      updateGrinding(force, direction);
+      const effects = updateGrinding(force, direction, normalizeMirrorPoint(clientX, clientY));
       updateGrindingSound(force);
 
-      if (currentGrit === 120 && force > 1.5) {
-        const scratchChance = (force - 1.5) * 0.3;
-        if (Math.random() < scratchChance) {
-          createScratch(clientX, clientY);
-        }
+      if (effects.scratchesAdded.length > 0) {
+        playScratchSound();
       }
     }
-  }, [isDragging, isOnMirror, checkMirrorCollision, calculateForce, calculateDirection, updateGrinding, currentGrit, createScratch]);
+  }, [isDragging, isOnMirror, checkMirrorCollision, calculateForce, calculateDirection, normalizeMirrorPoint, updateGrinding]);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);

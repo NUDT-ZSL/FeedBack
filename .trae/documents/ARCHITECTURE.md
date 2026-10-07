@@ -40,14 +40,18 @@ src/
 │   ├── ProgressPanel.tsx   # 进度面板（数据展示）
 │   └── Workshop.tsx        # 工坊场景容器
 ├── store/
-│   └── useGrindingStore.ts # 全局状态管理
+│   └── useGrindingStore.ts # 全局状态管理（仅同步引擎快照，不含演进逻辑）
+├── simulation/
+│   ├── grindingEngine.ts   # 研磨/抛光纯逻辑引擎（时间积分、种子随机、可重放）
+│   └── random.ts           # 确定性随机源（mulberry32）
 ├── utils/
 │   ├── audio.ts            # 音频工具
-│   └── grinding.ts         # 研磨算法工具
 ├── types/
 │   └── index.ts            # 类型定义
 ├── App.tsx                 # 根组件
 └── main.tsx                # 入口文件
+scripts/
+└── verify-simulation.ts    # 离线批量验证入口（npm run verify）
 ```
 
 ## 4. 状态管理设计
