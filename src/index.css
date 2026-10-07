@@ -1,0 +1,122 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-primary: #f5f0e8;
+  --wood-dark: #4a2c1a;
+  --wood-light: #5c3a21;
+  --gold: #ffd700;
+  --ink-black: #1a1a1a;
+  --brick: #6b5b47;
+  --stone: #7a8b8b;
+  --bamboo: #d4a373;
+  --divider: #d4c9b3;
+  --panel-bg: rgba(44, 44, 44, 0.95);
+  --smoke: #2a2a2a;
+  --oil: #c8a96a;
+}
+
+body {
+  font-family: 'Ma Shan Zheng', cursive, serif;
+  background-color: var(--bg-primary);
+  color: var(--ink-black);
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.3s ease-out;
+}
+
+button:hover {
+  transform: scale(1.05);
+}
+
+button:active {
+  transform: scale(0.95);
+}
+
+@keyframes shimmer {
+  0% { transform: rotate(0deg); opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { transform: rotate(360deg); opacity: 0.5; }
+}
+
+@keyframes float-up {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-30px); opacity: 0; }
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 20px 5px rgba(255, 0, 0, 0.6); }
+}
+
+@keyframes count-float {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  50% { transform: translateY(-15px) scale(1.2); opacity: 0.8; }
+  100% { transform: translateY(-30px) scale(0.8); opacity: 0; }
+}
+
+@keyframes expand {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fade-out {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.particle {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  z-index: 1000;
+  animation: fade-out 3s ease-out forwards;
+}
+
+@media (max-width: 1200px) {
+  .workshop-room {
+    transform: scale(0.9);
+  }
+}
+
+@media (max-width: 900px) {
+  .workshop-room {
+    transform: scale(0.75);
+  }
+  .material-card {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  .mold-card {
+    width: 90px !important;
+    height: 90px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .workshop-room {
+    transform: scale(0.6);
+  }
+}
