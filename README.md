@@ -55,3 +55,20 @@ export default tseslint.config({
   },
 })
 ```
+
+## 工序状态机架构（视图与逻辑解耦）
+
+宣纸制作流程的核心逻辑已从视图层抽离到 `src/core/`，均为无框架依赖的纯 TypeScript 模块，可在无浏览器环境下独立运行与批量验证：
+
+- `src/core/processMachine.ts` — 工序状态机。`reduce(state, event)` 为纯函数状态转移，所有外部操作（拖拽、点击、切换阶段）收敛为语义事件，每个事件基于上一份状态原子推进，快速连续操作（如捞纸连续拖拽与晒纸 tick 交错）不会互相覆盖 `uniformity` / `dryness` 等质量字段。
+- `src/core/particleSystem.ts` — 粒子系统内核。保持既有约束（蒸汽 30 颗/秒、打浆粒子上限 200、对象池回收复用）；canvas 仅通过 `attachCanvas` 显式绑定，`dispose()` 统一释放粒子、对象池与渲染目标引用。
+- `src/hooks/useProcessMachine.ts` / `src/hooks/useParticleSystem.ts` — React 薄适配层，仅负责订阅状态与在组件卸载时 `dispose()`，不含业务逻辑。
+
+### 无浏览器批量验证
+
+```bash
+npm test        # vitest（Node 环境），覆盖状态推进、质量计算、状态覆盖与资源释放回归
+npm run check   # 类型检查
+```
+
+回归测试位于 `src/core/__tests__/`，包括：快速连续拖拽下 `uniformity`/`dryness` 不互相覆盖、粒子数量上限与回收、组件卸载后粒子系统不再持有 canvas 引用等场景。
