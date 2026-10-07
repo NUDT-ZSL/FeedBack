@@ -1,5 +1,21 @@
 # React + TypeScript + Vite
 
+## 押运推演结算链路离线验证
+
+结算链路核心逻辑位于 `src/escort/`（纯 TypeScript，不依赖 DOM / React / 网络）：
+
+- `applyEncounter`：途中遭遇事件，货物损耗与队伍状态在既有值上累积
+- `settleArrival`：到达结算，幂等，同一镖队重复提交返回同一结果
+- `traverseRoute`：路线推演，遇无法通行 / 缺失节点返回带失败码、节点与路径的可追溯失败结论
+
+验证用例位于 `tests/escort/`，基于 Node 内置测试运行器，无需安装任何依赖、无需网络：
+
+```sh
+npm test
+```
+
+一次批量运行即可得到事件累积、结算幂等、路线失败可追溯三方面的全部结论。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
