@@ -21,6 +21,17 @@ export interface EmbroideryData {
   segments: StitchSegment[];
   name: string;
   createdAt: number;
+  stitchType?: StitchType;
+  threadColor?: ThreadColor;
+}
+
+export interface EmbroideryPiece {
+  id: string;
+  name: string;
+  segments: StitchSegment[];
+  stitchType: StitchType;
+  threadColor: ThreadColor;
+  createdAt: number;
 }
 
 export const THREAD_COLORS: ThreadColor[] = [
