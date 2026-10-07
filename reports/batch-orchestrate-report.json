@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-10-07T16:54:38.243Z",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "基线：多场次各自结果与单场单独编排一致",
+      "passed": true,
+      "details": [
+        "场次 s1 digest=96406baf 一致",
+        "场次 s2 digest=1a3294e4 一致",
+        "场次 s3 digest=aa8bde5a 一致",
+        "场次 s4 digest=16aebf60 一致"
+      ]
+    },
+    {
+      "name": "边界：空场次与仅含单一资源项的场次不报错",
+      "passed": true,
+      "details": [
+        "空场次 s4: assignments=0 conflicts=0",
+        "单资源场次 s3: assignments=1 digest=aa8bde5a"
+      ]
+    },
+    {
+      "name": "切换场次：不触发任何场次的重推",
+      "passed": true,
+      "details": [
+        "依次切换 s2 -> s3 -> s4 -> s1 -> s2 -> s1，全部场次结果对象与 runVersion 保持不变"
+      ]
+    },
+    {
+      "name": "共享池：移除参与者后受影响场次正确重推、无失效引用",
+      "passed": true,
+      "details": [
+        "removeParticipant(p-shen) 重推场次: [s1, s2]",
+        "场次 s1: runVersion 1 -> 2, 拒绝 1 条失效请求",
+        "场次 s2: runVersion 1 -> 2, 拒绝 2 条失效请求",
+        "未引用场次 s3/s4 结果对象保持不变"
+      ]
+    },
+    {
+      "name": "共享池：回补参与者后受影响场次恢复一致",
+      "passed": true,
+      "details": [
+        "upsertParticipant(p-shen) 重推场次: [s1, s2]",
+        "场次 s1 digest=96406baf 一致",
+        "场次 s2 digest=1a3294e4 一致",
+        "场次 s3 digest=aa8bde5a 一致",
+        "场次 s4 digest=16aebf60 一致"
+      ]
+    },
+    {
+      "name": "共享池：资源容量变更后受影响场次重推并暴露新冲突",
+      "passed": true,
+      "details": [
+        "upsertResource(r-qipan capacity=1) 重推场次: [s1, s2]",
+        "场次 s1 新冲突: cf-resource-overlap-r-qipan-0 涉及分配 [asg-q3, asg-q4]"
+      ]
+    },
+    {
+      "name": "共享池：资源类型变更后属性约束不满足的请求被拒",
+      "passed": true,
+      "details": [
+        "upsertResource(r-yubei kind=ritual) 重推场次: [s1, s2]",
+        "kind-mismatch 拒绝: s1=[q1] s2=[q7]"
+      ]
+    },
+    {
+      "name": "跨场次冲突：按场次归属分别呈现且互不复写",
+      "passed": true,
+      "details": [
+        "归属记录数: s1=2 s2=2 s3=0",
+        "r-qipan 冲突归属: s1 记录 xs-r-qipan-0@s1, s2 记录 xs-r-qipan-0@s2, 区间 [0, 150]"
+      ]
+    },
+    {
+      "name": "边界：场次增删与非法切换保持稳定",
+      "passed": true,
+      "details": [
+        "删除激活场次 s5 后，激活场次顺延为 s1",
+        "空 Store 增删场次后状态稳定"
+      ]
+    },
+    {
+      "name": "终态：全部共享池变更后仍与单场单独编排一致",
+      "passed": true,
+      "details": [
+        "场次 s1 digest=b1ab0884 一致",
+        "场次 s2 digest=0ad1dab3 一致",
+        "场次 s3 digest=aa8bde5a 一致",
+        "场次 s4 digest=16aebf60 一致"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "sessionId": "s1",
+      "name": "春分宴",
+      "runVersion": 5,
+      "digest": "b1ab0884",
+      "assignments": 4,
+      "rejections": 1,
+      "conflicts": 1
+    },
+    {
+      "sessionId": "s2",
+      "name": "秋分宴",
+      "runVersion": 5,
+      "digest": "0ad1dab3",
+      "assignments": 3,
+      "rejections": 1,
+      "conflicts": 1
+    },
+    {
+      "sessionId": "s3",
+      "name": "冬至宴",
+      "runVersion": 1,
+      "digest": "aa8bde5a",
+      "assignments": 1,
+      "rejections": 0,
+      "conflicts": 0
+    },
+    {
+      "sessionId": "s4",
+      "name": "空场次",
+      "runVersion": 1,
+      "digest": "16aebf60",
+      "assignments": 0,
+      "rejections": 0,
+      "conflicts": 0
+    }
+  ]
+}
