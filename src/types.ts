@@ -1,37 +1,39 @@
-export interface CopperCoin {
-  id: number;
-  isFlipping: boolean;
-  face: 'zheng' | 'bei';
-  rotation: number;
-  jumpOffset: number;
-}
+export type CoinSide = 'zheng' | 'bei';
 
-export interface Yao {
-  position: 1 | 2 | 3 | 4 | 5 | 6;
-  type: 'lao-yang' | 'lao-yin' | 'shao-yang' | 'shao-yin';
+export type YaoType = 'lao-yang' | 'lao-yin' | 'shao-yang' | 'shao-yin';
+
+export interface YaoResult {
+  type: YaoType;
   isMoving: boolean;
-  coinResult: ['zheng' | 'bei', 'zheng' | 'bei', 'zheng' | 'bei'];
+  isYang: boolean;
 }
 
-export interface Hexagram {
+/** 一爻的完整记录，position 1 为初爻（最下），6 为上爻（最上） */
+export interface Yao extends YaoResult {
+  position: 1 | 2 | 3 | 4 | 5 | 6;
+  coins: [CoinSide, CoinSide, CoinSide];
+}
+
+/** 一条起卦归档记录 */
+export interface DivinationRecord {
+  /** 全局唯一 ID（时间戳 + 递增序号 + 随机后缀，同一毫秒连续起卦也不会冲突） */
   id: string;
-  name: string;
-  yaoArray: Yao[];
-  guaCi: string;
-  xiangCi: string;
-  movingYaoIndices: number[];
-  fortuneLevel: '大吉' | '吉' | '中' | '凶' | '大凶';
-  upperTrigram: string;
-  lowerTrigram: string;
-  timestamp: number;
+  /** 起卦时刻（毫秒时间戳） */
+  createdAt: number;
+  /** 用户补充的所问之事 */
+  question: string;
+  /** 六爻，索引 0 为初爻 */
+  yaos: Yao[];
+  /** 本卦二进制爻序（初爻在前，阳 1 阴 0） */
+  benBinary: string;
+  /** 变卦二进制爻序（无动爻时与本卦一致） */
+  bianBinary: string;
+  /** 动爻位置（1-6，自下而上） */
+  movingPositions: number[];
 }
 
-export interface TrigramDirection {
-  name: string;
-  angle: number;
-  color: string;
-  element: '金' | '木' | '水' | '火' | '土';
-  unicodeSymbol: string;
+export interface AnimationParams {
+  rotation: number;
+  bounce: number;
+  duration: number;
 }
-
-export type { CopperCoin, Yao, Hexagram, TrigramDirection };

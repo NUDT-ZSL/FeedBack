@@ -13,7 +13,13 @@ class AudioManager {
 
   private getContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) {
+        throw new Error('当前浏览器不支持 Web Audio API');
+      }
+      this.audioContext = new Ctor();
     }
     if (this.audioContext.state === 'suspended') {
       this.audioContext.resume();

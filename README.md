@@ -1,57 +1,38 @@
-# React + TypeScript + Vite
+# 六爻占卜 · 起卦归档与断卦推演
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于浏览器的六爻起卦应用：三枚铜钱摇六次成卦，结果自动存入本地归档，
+支持离线回看与断卦推演。纯前端实现，无需后端，刷新后归档不丢失。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **投币起卦**：点击摇卦，三枚铜钱翻转落定，按「字背」数定老少阴阳，六次成卦（初爻至上爻）
+- **本地归档**：成卦即自动存档（localStorage），记录六爻阴阳动静、本卦/变卦、动爻位置、
+  卦辞象辞、起卦时刻与可补充的所问之事；列表按时间倒序，支持单条删除与清空全部
+- **记录回看**：点开记录还原当时卦象，动爻红色 ○/× 标记，本卦与变卦对照展示
+- **断卦推演**：按动爻数量依《易学启蒙》考变之法推导——
+  - 无动爻：变卦同本卦，以本卦卦辞断，无变爻结论
+  - 一爻动：取本卦变爻爻辞
+  - 二爻动：取本卦两变爻，上爻为主
+  - 三爻动：参断本卦（贞）与变卦（悔）卦辞
+  - 四爻动：取变卦两个静爻，下爻为主
+  - 五爻动：取变卦唯一静爻
+  - 六爻全动：整体以变卦卦辞断，乾坤二卦另以用九/用六断
 
-## Expanding the ESLint configuration
+## 技术
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+React 18 + TypeScript + Vite + Zustand + Tailwind CSS。
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+- `src/data/hexagrams.ts`：六十四卦完整数据（卦名、卦辞、象辞、六爻爻辞、用九用六），
+  以六位二进制爻序（初爻在前，阳 1 阴 0）为键
+- `src/utils/hexagramCalc.ts`：爻序↔卦象换算、变卦推导（逐位翻转，爻位严格对应）
+- `src/utils/divination.ts`：断卦推演规则
+- `src/utils/archive.ts`：localStorage 持久化与唯一记录 ID（时间戳+序号+随机后缀，
+  同一毫秒连续起卦互不覆盖）
+- `src/store.ts`：Zustand 全局状态（摇卦流程 + 归档增删改）
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 运行
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev
 ```
