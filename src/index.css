@@ -1,0 +1,380 @@
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&display=swap');
+
+:root {
+  --bg-color: #f5f0e8;
+  --pot-rim: #6b4423;
+  --pot-inner: #3e2723;
+  --text-light: #ffffff;
+  --text-dark: #4e342e;
+  --accent-gold: #ffd700;
+  --border-gray: #d7ccc8;
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Serif SC', serif;
+  background-color: var(--bg-color);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.top-bar {
+  height: 50px;
+  background-color: var(--text-dark);
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 24px;
+  letter-spacing: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow);
+  position: relative;
+  z-index: 100;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 20px;
+}
+
+.workspace-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.workspace {
+  width: 440px;
+  height: 440px;
+  border: 2px solid var(--border-gray);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.3);
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-canvas {
+  cursor: crosshair;
+  position: relative;
+}
+
+.workspace-canvas.rock-tool {
+  cursor: copy;
+}
+
+.workspace-canvas.brush-tool {
+  cursor: crosshair;
+}
+
+.workspace-canvas.water-tool {
+  cursor: crosshair;
+}
+
+.workspace-canvas.scissors-tool {
+  cursor: not-allowed;
+}
+
+.workspace-canvas.scissors-tool.has-selection {
+  cursor: pointer;
+}
+
+.pot-container {
+  position: relative;
+  width: 400px;
+  height: 400px;
+}
+
+.pot-container.scroll-mode {
+  animation: scrollAnimation 1.2s ease-out forwards;
+  transform-origin: center center;
+}
+
+@keyframes scrollAnimation {
+  0% {
+    transform: scale(1, 1);
+  }
+  100% {
+    transform: scale(0.125, 1);
+  }
+}
+
+.tool-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  min-width: 100px;
+}
+
+.tool-button {
+  width: 60px;
+  height: 60px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-color: var(--bg-color);
+  cursor: pointer;
+  font-size: 28px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+}
+
+.tool-button:hover {
+  transform: scale(1.05);
+}
+
+.tool-button.active {
+  transform: scale(1.1);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 10px var(--accent-gold), var(--shadow);
+  background-color: #fff8e1;
+}
+
+.tool-label {
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-dark);
+  margin-top: 4px;
+  font-family: 'Noto Serif SC', serif;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.action-button {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--pot-rim);
+  color: var(--text-light);
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow);
+}
+
+.action-button:hover {
+  background-color: #8d6e63;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:active {
+  transform: translateY(0);
+}
+
+.action-button.primary {
+  background-color: var(--accent-gold);
+  color: var(--text-dark);
+  font-weight: bold;
+}
+
+.action-button.primary:hover {
+  background-color: #ffeb3b;
+}
+
+.bottom-bar {
+  height: 60px;
+  background-color: var(--text-dark);
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 30px;
+  font-family: 'Noto Serif SC', serif;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--accent-gold);
+}
+
+.ripple {
+  position: absolute;
+  border: 2px solid #c8e6c9;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: rippleExpand 0.4s ease-out forwards;
+}
+
+@keyframes rippleExpand {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.hoverable {
+  transition: transform 0.15s ease;
+  transform-origin: center center;
+}
+
+.hoverable:hover {
+  transform: scale(1.05);
+}
+
+.instructions {
+  max-width: 300px;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-dark);
+}
+
+.instructions h3 {
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 20px;
+  margin-bottom: 10px;
+  color: var(--pot-rim);
+}
+
+.instructions p {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .workspace {
+    width: 320px;
+    height: 320px;
+  }
+  
+  .pot-container {
+    width: 280px;
+    height: 280px;
+  }
+  
+  .tool-panel {
+    flex-direction: row;
+    overflow-x: auto;
+    min-width: auto;
+    width: 100%;
+    max-width: 320px;
+    padding: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .tool-panel::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .tool-panel::-webkit-scrollbar-thumb {
+    background-color: var(--border-gray);
+    border-radius: 2px;
+  }
+  
+  .instructions {
+    max-width: 320px;
+    font-size: 12px;
+  }
+  
+  .bottom-bar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .stat-item {
+    min-width: 70px;
+  }
+  
+  .stat-value {
+    font-size: 16px;
+  }
+}
+
+.hidden-canvas {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  pointer-events: none;
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 32px;
+  color: var(--text-dark);
+  transition: opacity 0.5s ease;
+}
+
+.loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
