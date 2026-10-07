@@ -26,6 +26,8 @@ export interface Rock {
 
 export interface WaterFlow {
   id: string;
+  start: Point;
+  end: Point;
   path: Point[];
   flowProgress: number;
 }
@@ -541,4 +543,157 @@ export function createGoldParticles(centerX: number, centerY: number, count: num
   }
   
   return particles;
+}
+
+export function hashString(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export interface Leaf {
+  x: number;
+  y: number;
+  angle: number;
+  rx: number;
+  ry: number;
+}
+
+export function getBranchLeaves(branch: Branch): Leaf[] {
+  if (!branch.hasLeaves) return [];
+  
+  const rand = mulberry32(hashString(branch.id));
+  const leaves: Leaf[] = [];
+  const leafCount = 3 + Math.floor(branch.thickness / 2);
+  
+  for (let i = 0; i < leafCount; i++) {
+    const t = (i + 1) / (leafCount + 1);
+    const lx = branch.startX + (branch.endX - branch.startX) * t;
+    const ly = branch.startY + (branch.endY - branch.startY) * t;
+    
+    const angle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
+    const offsetAngle = angle + Math.PI / 2 + (rand() - 0.5) * 0.5;
+    const offsetDist = branch.thickness + 2 + rand() * 4;
+    const side = rand() > 0.5 ? 1 : -1;
+    
+    leaves.push({
+      x: lx + Math.cos(offsetAngle) * offsetDist * side,
+      y: ly + Math.sin(offsetAngle) * offsetDist * side,
+      angle: offsetAngle,
+      rx: 4 + rand() * 2,
+      ry: 2 + rand() * 2
+    });
+  }
+  
+  return leaves;
+}
+
+export function drawBranchLeaves(ctx: CanvasRenderingContext2D, branch: Branch): void {
+  const leaves = getBranchLeaves(branch);
+  if (leaves.length === 0) return;
+  
+  ctx.fillStyle = '#4caf50';
+  for (const leaf of leaves) {
+    ctx.beginPath();
+    ctx.ellipse(leaf.x, leaf.y, leaf.rx, leaf.ry, leaf.angle, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+export function strokeCalligraphyPath(ctx: CanvasRenderingContext2D, points: Point[]): void {
+  if (points.length < 2) return;
+  
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    const cpy = (prev.y + curr.y) / 2;
+    ctx.quadraticCurveTo(prev.x, prev.y, cpx, cpy);
+  }
+  
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
+  
+  ctx.stroke();
+}
+
+export function collectSubtreeBranchIds(branches: Branch[], rootId: string): Set<string> {
+  const childrenByParentEnd = new Map<string, Branch[]>();
+  for (const branch of branches) {
+    const key = `${Math.round(branch.startX)},${Math.round(branch.startY)}`;
+    const list = childrenByParentEnd.get(key);
+    if (list) {
+      list.push(branch);
+    } else {
+      childrenByParentEnd.set(key, [branch]);
+    }
+  }
+  
+  const result = new Set<string>([rootId]);
+  let current = branches.find(b => b.id === rootId);
+  const queue: Branch[] = current ? [current] : [];
+  
+  while (queue.length > 0) {
+    current = queue.shift()!;
+    const key = `${Math.round(current.endX)},${Math.round(current.endY)}`;
+    const children = childrenByParentEnd.get(key);
+    if (!children) continue;
+    for (const child of children) {
+      if (!result.has(child.id)) {
+        result.add(child.id);
+        queue.push(child);
+      }
+    }
+  }
+  
+  return result;
+}
+
+export function isWaterPathBlocked(path: Point[], rocks: Rock[]): boolean {
+  if (path.length < 2) return false;
+  
+  const isPointBlocked = (x: number, y: number): boolean => {
+    for (const rock of rocks) {
+      const dx = x - rock.x;
+      const dy = y - rock.y;
+      if (Math.sqrt(dx * dx + dy * dy) < rock.diameter / 2 + 8) return true;
+    }
+    return false;
+  };
+  
+  for (let i = 0; i < path.length; i++) {
+    if (isPointBlocked(path[i].x, path[i].y)) return true;
+    
+    if (i > 0) {
+      const prev = path[i - 1];
+      const curr = path[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const segLength = Math.sqrt(dx * dx + dy * dy);
+      const steps = Math.floor(segLength / (GRID_SIZE / 2));
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        if (isPointBlocked(prev.x + dx * t, prev.y + dy * t)) return true;
+      }
+    }
+  }
+  
+  return false;
 }

@@ -15,7 +15,13 @@ import {
   calculateCompositionScore,
   createLeafParticles,
   createGoldParticles,
-  calculatePathLength
+  calculatePathLength,
+  collectSubtreeBranchIds,
+  drawBranchLeaves,
+  strokeCalligraphyPath,
+  findWaterPath,
+  isWaterPathBlocked,
+  mulberry32
 } from './utils/pots';
 import { v4 as uuidv4 } from 'uuid';
 import Workspace from './components/Workspace';
@@ -47,6 +53,7 @@ const App: React.FC = () => {
   
   const [isLoading, setIsLoading] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [waterNotice, setWaterNotice] = useState<string | null>(null);
 
   const compositionScore = calculateCompositionScore(branches, rocks, waterFlows);
   
@@ -83,30 +90,8 @@ const App: React.FC = () => {
     const branchEndX = branchToTrim.endX;
     const branchEndY = branchToTrim.endY;
     
-    const removeBranchAndChildren = (branchId: string): Branch[] => {
-      return branches.filter(b => {
-        if (b.id === branchId) return false;
-        const isChild = branches.some(parent => 
-          parent.id === branchId && 
-          Math.abs(b.startX - parent.endX) < 5 && 
-          Math.abs(b.startY - parent.endY) < 5
-        );
-        if (isChild) {
-          removeBranchAndChildren(b.id);
-        }
-        return !isChild;
-      });
-    };
-    
-    const newBranches = branches.filter(b => {
-      if (b.id === selectedBranchId) return false;
-      
-      const connectsToTrimmed = 
-        Math.abs(b.startX - branchToTrim.endX) < 5 && 
-        Math.abs(b.startY - branchToTrim.endY) < 5;
-      
-      return !connectsToTrimmed;
-    });
+    const subtreeIds = collectSubtreeBranchIds(branches, selectedBranchId);
+    const newBranches = branches.filter(b => !subtreeIds.has(b.id));
     
     setBranches(newBranches);
     
@@ -128,6 +113,59 @@ const App: React.FC = () => {
     });
   }, [branches, selectedBranchId]);
 
+  useEffect(() => {
+    if (!waterNotice) return;
+    const timer = setTimeout(() => setWaterNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [waterNotice]);
+
+  useEffect(() => {
+    if (waterFlows.length === 0) return;
+    
+    let removedCount = 0;
+    let reroutedCount = 0;
+    const nextFlows: WaterFlow[] = [];
+    
+    for (const flow of waterFlows) {
+      if (!isWaterPathBlocked(flow.path, rocks)) {
+        nextFlows.push(flow);
+        continue;
+      }
+      
+      const newPath = findWaterPath(flow.start, flow.end, rocks, POT_RADIUS, POT_CENTER);
+      if (newPath.length >= 2) {
+        nextFlows.push({ ...flow, path: newPath });
+        reroutedCount++;
+      } else {
+        removedCount++;
+        for (let i = 0; i < flow.path.length; i += 4) {
+          addRipple(flow.path[i].x, flow.path[i].y);
+        }
+      }
+    }
+    
+    if (removedCount > 0 || reroutedCount > 0) {
+      setWaterFlows(nextFlows);
+      setWaterNotice(
+        removedCount > 0
+          ? '山石阻断去路，水流无路可通，已然消散'
+          : '山石移位，水流已绕行新道'
+      );
+    }
+  }, [rocks]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedRockId) {
+        e.preventDefault();
+        setRocks(prev => prev.filter(r => r.id !== selectedRockId));
+        setSelectedRockId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRockId]);
+
   const handleReset = useCallback(() => {
     setBranches(generateBranches());
     setRocks(generateInitialRocks());
@@ -139,6 +177,10 @@ const App: React.FC = () => {
     setSelectedRockId(null);
     setTrimCount(0);
     setWaterStartPoint(null);
+    setWaterNotice(null);
+    setCurrentCalligraphy(null);
+    setIsDragging(false);
+    setDragStart(null);
     setScale(1);
     setPanOffset({ x: 0, y: 0 });
   }, []);
@@ -184,11 +226,12 @@ const App: React.FC = () => {
       patternCtx.fillStyle = '#f5f0e8';
       patternCtx.fillRect(0, 0, 200, 200);
       patternCtx.globalAlpha = 0.03;
+      const noiseRand = mulberry32(0xB05A1);
       for (let i = 0; i < 1000; i++) {
-        patternCtx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+        patternCtx.fillStyle = noiseRand() > 0.5 ? '#000' : '#fff';
         patternCtx.fillRect(
-          Math.random() * 200,
-          Math.random() * 200,
+          noiseRand() * 200,
+          noiseRand() * 200,
           1, 1
         );
       }
@@ -231,6 +274,17 @@ const App: React.FC = () => {
         ctx.lineTo(flow.path[i].x, flow.path[i].y);
       }
       ctx.stroke();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 15]);
+      ctx.beginPath();
+      ctx.moveTo(flow.path[0].x, flow.path[0].y);
+      for (let i = 1; i < flow.path.length; i++) {
+        ctx.lineTo(flow.path[i].x, flow.path[i].y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
     
@@ -245,24 +299,7 @@ const App: React.FC = () => {
       ctx.stroke();
       
       if (branch.hasLeaves) {
-        ctx.fillStyle = '#4caf50';
-        const leafCount = 3 + Math.floor(branch.thickness / 2);
-        for (let i = 0; i < leafCount; i++) {
-          const t = (i + 1) / (leafCount + 1);
-          const lx = branch.startX + (branch.endX - branch.startX) * t;
-          const ly = branch.startY + (branch.endY - branch.startY) * t;
-          
-          const angle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
-          const offsetAngle = angle + Math.PI / 2;
-          const offsetDist = branch.thickness + 3;
-          
-          const leafX = lx + Math.cos(offsetAngle) * offsetDist * (i % 2 === 0 ? 1 : -1);
-          const leafY = ly + Math.sin(offsetAngle) * offsetDist * (i % 2 === 0 ? 1 : -1);
-          
-          ctx.beginPath();
-          ctx.ellipse(leafX, leafY, 5, 2.5, offsetAngle, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        drawBranchLeaves(ctx, branch);
       }
     }
     
@@ -308,19 +345,11 @@ const App: React.FC = () => {
       ctx.lineJoin = 'round';
       ctx.globalAlpha = 0.85;
       
-      ctx.beginPath();
-      ctx.moveTo(
-        calligraphy.points[0].x + canvas.width / 2 - 200,
-        calligraphy.points[0].y + canvas.height / 2 - 200
-      );
-      
-      for (let i = 1; i < calligraphy.points.length; i++) {
-        ctx.lineTo(
-          calligraphy.points[i].x + canvas.width / 2 - 200,
-          calligraphy.points[i].y + canvas.height / 2 - 200
-        );
-      }
-      ctx.stroke();
+      const offsetPoints = calligraphy.points.map(p => ({
+        x: p.x + canvas.width / 2 - 200,
+        y: p.y + canvas.height / 2 - 200
+      }));
+      strokeCalligraphyPath(ctx, offsetPoints);
       ctx.restore();
     }
     
@@ -396,6 +425,11 @@ const App: React.FC = () => {
         </div>
         
         <div className="workspace-wrapper">
+          {waterNotice && (
+            <div className="water-notice" role="status">
+              {waterNotice}
+            </div>
+          )}
           <div className="workspace">
             <Workspace
               branches={branches}

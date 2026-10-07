@@ -14,7 +14,9 @@ import {
   findNearestBranch,
   findNearestRock,
   findWaterPath,
-  checkCollision
+  checkCollision,
+  drawBranchLeaves,
+  strokeCalligraphyPath
 } from '../utils/pots';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -158,26 +160,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
     ctx.stroke();
     
     if (branch.hasLeaves) {
-      ctx.fillStyle = '#4caf50';
       ctx.shadowBlur = 0;
-      
-      const leafCount = 3 + Math.floor(branch.thickness / 2);
-      for (let i = 0; i < leafCount; i++) {
-        const t = (i + 1) / (leafCount + 1);
-        const lx = branch.startX + (branch.endX - branch.startX) * t;
-        const ly = branch.startY + (branch.endY - branch.startY) * t;
-        
-        const angle = Math.atan2(branch.endY - branch.startY, branch.endX - branch.startX);
-        const offsetAngle = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.5;
-        const offsetDist = branch.thickness + 2 + Math.random() * 4;
-        
-        const leafX = lx + Math.cos(offsetAngle) * offsetDist * (Math.random() > 0.5 ? 1 : -1);
-        const leafY = ly + Math.sin(offsetAngle) * offsetDist * (Math.random() > 0.5 ? 1 : -1);
-        
-        ctx.beginPath();
-        ctx.ellipse(leafX, leafY, 4 + Math.random() * 2, 2 + Math.random() * 2, offsetAngle, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      drawBranchLeaves(ctx, branch);
     }
     
     ctx.restore();
@@ -302,24 +286,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     ctx.lineJoin = 'round';
     ctx.globalAlpha = 0.85;
     
-    ctx.beginPath();
-    ctx.moveTo(calligraphy.points[0].x, calligraphy.points[0].y);
-    
-    for (let i = 1; i < calligraphy.points.length; i++) {
-      const prev = calligraphy.points[i - 1];
-      const curr = calligraphy.points[i];
-      const cpx = (prev.x + curr.x) / 2;
-      const cpy = (prev.y + curr.y) / 2;
-      ctx.quadraticCurveTo(prev.x, prev.y, cpx, cpy);
-    }
-    
-    if (calligraphy.points.length >= 2) {
-      const last = calligraphy.points[calligraphy.points.length - 1];
-      const prev = calligraphy.points[calligraphy.points.length - 2];
-      ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-    }
-    
-    ctx.stroke();
+    strokeCalligraphyPath(ctx, calligraphy.points);
     ctx.restore();
   }, []);
 
@@ -564,6 +531,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
           if (path.length > 2) {
             const newFlow: WaterFlow = {
               id: uuidv4(),
+              start: waterStartPoint,
+              end: coords,
               path,
               flowProgress: 0
             };
@@ -651,6 +620,19 @@ const Workspace: React.FC<WorkspaceProps> = ({
     setHoveredRockId(null);
   };
 
+  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isScrolling || activeTool !== 'rock') return;
+    
+    const coords = getCanvasCoords(e.clientX, e.clientY);
+    const rock = findNearestRock(coords.x, coords.y, rocks);
+    if (rock) {
+      onRocksChange(rocks.filter(r => r.id !== rock.id));
+      if (selectedRockId === rock.id) {
+        onSelectRock(null);
+      }
+    }
+  };
+
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -675,6 +657,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
+          onDoubleClick={handleDoubleClick}
           onWheel={handleWheel}
           style={{ display: 'block', width: '100%', height: '100%' }}
         />
