@@ -7,10 +7,12 @@ import type { Ingredient } from '@/types';
 const IngredientRack = () => {
   const currentRecipe = useStore(state => state.currentRecipe);
   const addIngredient = useStore(state => state.addIngredient);
+  const phase = useStore(state => state.phase);
   const [draggedIngredient, setDraggedIngredient] = useState<Ingredient | null>(null);
   const [hoveredIngredient, setHoveredIngredient] = useState<string | null>(null);
 
   const totalGrams = currentRecipe.reduce((sum, item) => sum + item.grams, 0);
+  const locked = phase !== 'mixing';
 
   const handleDragStart = (ingredient: Ingredient, e: React.DragEvent) => {
     setDraggedIngredient(ingredient);
@@ -24,7 +26,7 @@ const IngredientRack = () => {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (draggedIngredient) {
+    if (draggedIngredient && !locked) {
       addIngredient(draggedIngredient.name, 1, draggedIngredient.color, draggedIngredient.powderColor);
     }
     setDraggedIngredient(null);
@@ -36,6 +38,7 @@ const IngredientRack = () => {
   };
 
   const handleClick = (ingredient: Ingredient) => {
+    if (locked) return;
     addIngredient(ingredient.name, 1, ingredient.color, ingredient.powderColor);
   };
 
@@ -52,10 +55,10 @@ const IngredientRack = () => {
       }}
     >
       <h2 className="text-center text-xl font-bold" style={{ color: '#d4a017', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>
-        香料架
+        香料架{locked ? '（已锁定）' : ''}
       </h2>
       
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4" style={{ opacity: locked ? 0.5 : 1 }}>
         {INGREDIENTS.map((ingredient) => {
           const grams = getIngredientGrams(ingredient.name);
           return (
@@ -142,7 +145,7 @@ const IngredientRack = () => {
         
         {currentRecipe.length === 0 ? (
           <div className="text-center text-xs" style={{ color: 'rgba(245,245,220,0.5)' }}>
-            点击或拖动香料到此处
+            {locked ? '配方槽已锁定，香品状态不可更改（点击“重新开始”解锁）' : '点击或拖动香料到此处'}
           </div>
         ) : (
           <div className="space-y-2">

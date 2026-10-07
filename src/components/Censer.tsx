@@ -23,6 +23,7 @@ const Censer = () => {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
+      lastTickRef.current = 0;
       return;
     }
 

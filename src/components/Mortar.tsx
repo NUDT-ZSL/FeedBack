@@ -12,7 +12,7 @@ interface GrindTrail {
 
 const Mortar = () => {
   const grindLevel = useStore(state => state.grindLevel);
-  const setGrind = useStore(state => state.setGrind);
+  const addGrind = useStore(state => state.addGrind);
   const currentRecipe = useStore(state => state.currentRecipe);
   const hasIncense = useStore(state => state.hasIncense);
   const createIncense = useStore(state => state.createIncense);
@@ -92,9 +92,9 @@ const Mortar = () => {
 
     if (distance > 20) {
       const incrementalGrind = 0.15;
-      setGrind(Math.min(100, grindLevel + incrementalGrind));
+      addGrind(incrementalGrind);
     }
-  }, [isDragging, grindLevel, setGrind, addTrail, mortarRadius]);
+  }, [isDragging, addGrind, addTrail, mortarRadius]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -315,7 +315,7 @@ const Mortar = () => {
           {hasIncense && !incenseOnCenser && (
             <motion.div
               draggable
-              onDragStart={handleIncenseDragStart}
+              onDragStart={(e) => handleIncenseDragStart(e as unknown as React.DragEvent)}
               onDragEnd={handleIncenseDragEnd}
               className="absolute cursor-grab z-20"
               initial={{ opacity: 0, scale: 0, y: 20 }}

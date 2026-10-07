@@ -24,7 +24,10 @@ export interface Ingredient {
   maxGrams: number;
 }
 
+export type IncensePhase = 'mixing' | 'synthesized' | 'placed' | 'burning' | 'burnt';
+
 export interface StoreState {
+  phase: IncensePhase;
   currentRecipe: RecipeItem[];
   grindLevel: number;
   burntime: number;
@@ -35,7 +38,7 @@ export interface StoreState {
   incenseOnCenser: boolean;
   aromaScore: number;
   addIngredient: (name: string, grams: number, color: string, powderColor: string) => void;
-  setGrind: (level: number) => void;
+  addGrind: (delta: number) => void;
   createIncense: () => void;
   placeIncenseOnCenser: () => void;
   ignite: () => void;
