@@ -1,0 +1,60 @@
+{
+  "id": "case-shire-tanshi",
+  "description": "脾胃湿热、痰湿体质、胃疾：首选连朴饮，黄连/黄芩因胃疾寒凉减量",
+  "records": [
+    {
+      "kind": "symptom",
+      "key": "stomachache",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "constipation",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "bad-breath",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "tongue",
+      "key": "yellow-greasy",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 2
+    },
+    {
+      "kind": "pulse",
+      "key": "slippery",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "constitution",
+      "key": "tanshi",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    },
+    {
+      "kind": "history",
+      "key": "weiji",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    }
+  ],
+  "adjudications": [],
+  "expect": {
+    "topSyndrome": "piwei-shire",
+    "topFormula": "lianpo-yin"
+  }
+}

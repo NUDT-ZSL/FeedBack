@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "deduction:run": "tsx scripts/run-deduction.ts",
+    "deduction:verify": "tsx scripts/verify-deduction.ts",
+    "deduction:smoke": "tsx scripts/smoke-ui.tsx",
     "server:dev": "node server/index.js",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
   },
@@ -39,7 +42,7 @@
     "autoprefixer": "^10.4.21",
     "babel-plugin-react-dev-locator": "^1.0.0",
     "concurrently": "^9.2.0",
-    "postcss": "^85.3",
+    "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",

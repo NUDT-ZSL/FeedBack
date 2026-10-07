@@ -1,0 +1,57 @@
+{
+  "id": "case-pulse-conflict",
+  "description": "同一脉象被两次切诊采集到相反取值：未裁决时冲突挂起、浮脉不参与辨证，风寒不成立；裁决采信浮脉后风寒成立并首推桂枝汤",
+  "records": [
+    {
+      "kind": "symptom",
+      "key": "fever",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1,
+      "note": "问：发热"
+    },
+    {
+      "kind": "tongue",
+      "key": "thin-white",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 2
+    },
+    {
+      "kind": "pulse",
+      "key": "floating",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 3,
+      "note": "初按：浮"
+    },
+    {
+      "kind": "pulse",
+      "key": "floating",
+      "value": "false",
+      "source": "qie",
+      "recordedAt": 4,
+      "note": "复按：不浮"
+    }
+  ],
+  "adjudications": [],
+  "incremental": {
+    "adjudicate": {
+      "kind": "pulse",
+      "key": "floating",
+      "decision": "pick",
+      "recordId": "rec-0003"
+    },
+    "changedGroupKeys": [
+      "pulse:floating"
+    ],
+    "expectBefore": {
+      "topSyndrome": null,
+      "unresolvedConflict": "pulse:floating"
+    },
+    "expectAfter": {
+      "topSyndrome": "waigan-fenghan",
+      "topFormula": "guizhi-tang"
+    }
+  }
+}

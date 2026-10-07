@@ -1,0 +1,68 @@
+{
+  "id": "case-fenghan-yangxu",
+  "description": "外感风寒、阳虚体质、既往肺疾：期望判定外感风寒，首选桂枝汤，温热药随体质/病史微调剂量",
+  "records": [
+    {
+      "kind": "symptom",
+      "key": "fever",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1,
+      "note": "问：发热恶寒"
+    },
+    {
+      "kind": "symptom",
+      "key": "headache",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "aversion-cold",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "pulse",
+      "key": "floating",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "pulse",
+      "key": "tight",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "tongue",
+      "key": "thin-white",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 2
+    },
+    {
+      "kind": "constitution",
+      "key": "yangxu",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    },
+    {
+      "kind": "history",
+      "key": "feiji",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    }
+  ],
+  "adjudications": [],
+  "expect": {
+    "topSyndrome": "waigan-fenghan",
+    "topFormula": "guizhi-tang"
+  }
+}

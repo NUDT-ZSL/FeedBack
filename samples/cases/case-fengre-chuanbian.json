@@ -1,0 +1,67 @@
+{
+  "id": "case-fengre-chuanbian",
+  "description": "风热外感兼肺热：外感风热成立后向肺热壅肺传变加分，银翘散与白虎清金煎同时入列",
+  "records": [
+    {
+      "kind": "symptom",
+      "key": "fever",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "sore-throat",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "cough",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "yellow-phlegm",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 2
+    },
+    {
+      "kind": "pulse",
+      "key": "floating",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "pulse",
+      "key": "rapid",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "tongue",
+      "key": "thin-yellow",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 2
+    },
+    {
+      "kind": "constitution",
+      "key": "yinxu",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    }
+  ],
+  "adjudications": [],
+  "expect": {
+    "topSyndrome": "waigan-fengre",
+    "topFormula": "yinqiao-san"
+  }
+}

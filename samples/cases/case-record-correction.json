@@ -1,0 +1,75 @@
+{
+  "id": "case-record-correction",
+  "description": "初记易怒指向肝郁气滞，后修正为无：只重推受影响的肝郁证候及其方剂，结果应与全量重推一致（肺气亏虚仍为首选）",
+  "records": [
+    {
+      "kind": "symptom",
+      "key": "insomnia",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1
+    },
+    {
+      "kind": "symptom",
+      "key": "irritability",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 1,
+      "note": "问诊初记：易怒"
+    },
+    {
+      "kind": "pulse",
+      "key": "wiry",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 2
+    },
+    {
+      "kind": "symptom",
+      "key": "short-breath",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 3
+    },
+    {
+      "kind": "pulse",
+      "key": "weak",
+      "value": "true",
+      "source": "qie",
+      "recordedAt": 4
+    },
+    {
+      "kind": "tongue",
+      "key": "pale",
+      "value": "true",
+      "source": "wang",
+      "recordedAt": 4
+    },
+    {
+      "kind": "constitution",
+      "key": "qixu",
+      "value": "true",
+      "source": "wenwen",
+      "recordedAt": 5
+    }
+  ],
+  "adjudications": [],
+  "incremental": {
+    "correct": {
+      "recordId": "rec-0002",
+      "newValue": "false"
+    },
+    "changedGroupKeys": [
+      "symptom:irritability"
+    ],
+    "expectBefore": {
+      "topSyndrome": "feiqi-kuisun",
+      "formulaPresent": "chaihu-shugan-san"
+    },
+    "expectAfter": {
+      "topSyndrome": "feiqi-kuisun",
+      "topFormula": "buzhong-yiqi-jian",
+      "formulaAbsent": "chaihu-shugan-san"
+    }
+  }
+}
