@@ -16,6 +16,7 @@ export default function ControlPanel() {
     highlightedShichen,
     shadowLength,
     gnomonShadowLength,
+    shadowBeyondDial,
     setGnomonElevation,
     setGnomonRotation,
     animateToSeason,
@@ -149,6 +150,11 @@ export default function ControlPanel() {
         <div className="shadow-display">
           晷针影长：{gnomonShadowLength.toFixed(2)} 单位
         </div>
+        {shadowBeyondDial && (
+          <div className="shadow-display" style={{ color: '#ff8a6b' }}>
+            影尖已超出晷面，时辰按实际指向推算
+          </div>
+        )}
         <div className="shadow-display">
           影表投影：{shadowLength.toFixed(2)} 单位
         </div>

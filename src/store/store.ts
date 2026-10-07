@@ -1,29 +1,19 @@
 import { create } from 'zustand'
 import * as TWEEN from '@tweenjs/tween.js'
+import {
+  Season,
+  SEASONS,
+  SHICHEN,
+  deriveSundial,
+} from '../lib/sundialMath'
 
-export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+export { SHICHEN, SEASONS }
+export type { Season }
 
-export const SHICHEN = [
-  { name: '子时', angle: 270, hours: '23:00-01:00' },
-  { name: '丑时', angle: 300, hours: '01:00-03:00' },
-  { name: '寅时', angle: 330, hours: '03:00-05:00' },
-  { name: '卯时', angle: 0, hours: '05:00-07:00' },
-  { name: '辰时', angle: 30, hours: '07:00-09:00' },
-  { name: '巳时', angle: 60, hours: '09:00-11:00' },
-  { name: '午时', angle: 90, hours: '11:00-13:00' },
-  { name: '未时', angle: 120, hours: '13:00-15:00' },
-  { name: '申时', angle: 150, hours: '15:00-17:00' },
-  { name: '酉时', angle: 180, hours: '17:00-19:00' },
-  { name: '戌时', angle: 210, hours: '19:00-21:00' },
-  { name: '亥时', angle: 240, hours: '21:00-23:00' },
-]
-
-export const SEASONS: Record<Season, { name: string; sunHeight: number; sunAngle: number }> = {
-  spring: { name: '春分', sunHeight: 45, sunAngle: 90 },
-  summer: { name: '夏至', sunHeight: 70, sunAngle: 90 },
-  autumn: { name: '秋分', sunHeight: 45, sunAngle: 90 },
-  winter: { name: '冬至', sunHeight: 20, sunAngle: 90 },
-}
+const INITIAL_ELEVATION = 45
+const INITIAL_ROTATION = 0
+const INITIAL_SEASON: Season = 'spring'
+const TWEEN_DURATION = 500
 
 interface SundialState {
   gnomonElevation: number
@@ -32,52 +22,95 @@ interface SundialState {
   highlightedShichen: string
   shadowLength: number
   gnomonShadowLength: number
+  shadowBeyondDial: boolean
   setGnomonElevation: (angle: number) => void
   setGnomonRotation: (angle: number) => void
-  setCurrentSeason: (season: Season) => void
-  setHighlightedShichen: (shichen: string) => void
-  setShadowLength: (length: number) => void
-  setGnomonShadowLength: (length: number) => void
-  resetView: () => void
   animateToSeason: (season: Season) => void
+  resetView: () => void
 }
 
-export const useSundialStore = create<SundialState>((set, get) => ({
-  gnomonElevation: 45,
-  gnomonRotation: 0,
-  currentSeason: 'spring',
-  highlightedShichen: '卯时',
-  shadowLength: 0,
-  gnomonShadowLength: 0,
+// 姿态补间按通道管理：手动输入只取消对应通道的补间，以最后一次用户输入为准。
+type PoseChannel = 'elevation' | 'rotation'
+const activeTweens: { channel: PoseChannel; tween: TWEEN.Tween<object> }[] = []
 
-  setGnomonElevation: (angle: number) => set({ gnomonElevation: angle }),
-  setGnomonRotation: (angle: number) => set({ gnomonRotation: angle }),
-  setCurrentSeason: (season: Season) => set({ currentSeason: season }),
-  setHighlightedShichen: (shichen: string) => set({ highlightedShichen: shichen }),
-  setShadowLength: (length: number) => set({ shadowLength: length }),
-  setGnomonShadowLength: (length: number) => set({ gnomonShadowLength: length }),
+function stopTweens(channel?: PoseChannel) {
+  const stopping = activeTweens.filter((e) => !channel || e.channel === channel)
+  stopping.forEach((e) => e.tween.stop())
+  const stopped = new Set(stopping.map((e) => e.tween))
+  for (let i = activeTweens.length - 1; i >= 0; i--) {
+    if (stopped.has(activeTweens[i].tween)) activeTweens.splice(i, 1)
+  }
+}
 
-  resetView: () => {
-    const state = get()
-    new TWEEN.Tween({ elevation: state.gnomonElevation, rotation: state.gnomonRotation })
-      .to({ elevation: 45, rotation: 0 }, 500)
-      .easing(TWEEN.Easing.Quadratic.InOut)
-      .onUpdate((obj) => {
-        set({ gnomonElevation: obj.elevation, gnomonRotation: obj.rotation })
-      })
-      .start()
-  },
+function registerTween(channel: PoseChannel, tween: TWEEN.Tween<object>) {
+  activeTweens.push({ channel, tween })
+  tween.onComplete(() => {
+    const i = activeTweens.findIndex((e) => e.tween === tween)
+    if (i >= 0) activeTweens.splice(i, 1)
+  })
+}
 
-  animateToSeason: (season: Season) => {
-    const targetHeight = SEASONS[season].sunHeight
-    set({ currentSeason: season })
-    
-    new TWEEN.Tween({ elevation: get().gnomonElevation })
-      .to({ elevation: targetHeight }, 500)
-      .easing(TWEEN.Easing.Quadratic.InOut)
-      .onUpdate((obj) => {
-        set({ gnomonElevation: obj.elevation })
-      })
-      .start()
-  },
-}))
+export const useSundialStore = create<SundialState>((set, get) => {
+  // 单条推演链路：任何输入变化都在同一次 set 中同步更新姿态、影长与时辰高亮。
+  const commit = (patch: {
+    gnomonElevation?: number
+    gnomonRotation?: number
+    currentSeason?: Season
+  }) => {
+    const s = get()
+    const gnomonElevation = patch.gnomonElevation ?? s.gnomonElevation
+    const gnomonRotation = patch.gnomonRotation ?? s.gnomonRotation
+    const currentSeason = patch.currentSeason ?? s.currentSeason
+    const derived = deriveSundial(gnomonElevation, gnomonRotation, currentSeason)
+    set({ gnomonElevation, gnomonRotation, currentSeason, ...derived })
+  }
+
+  const initialDerived = deriveSundial(INITIAL_ELEVATION, INITIAL_ROTATION, INITIAL_SEASON)
+
+  return {
+    gnomonElevation: INITIAL_ELEVATION,
+    gnomonRotation: INITIAL_ROTATION,
+    currentSeason: INITIAL_SEASON,
+    ...initialDerived,
+
+    setGnomonElevation: (angle: number) => {
+      stopTweens('elevation')
+      commit({ gnomonElevation: angle })
+    },
+
+    setGnomonRotation: (angle: number) => {
+      stopTweens('rotation')
+      commit({ gnomonRotation: angle })
+    },
+
+    animateToSeason: (season: Season) => {
+      stopTweens('elevation')
+      commit({ currentSeason: season })
+      const obj = { elevation: get().gnomonElevation }
+      const tween = new TWEEN.Tween(obj)
+        .to({ elevation: SEASONS[season].sunHeight }, TWEEN_DURATION)
+        .easing(TWEEN.Easing.Quadratic.InOut)
+        .onUpdate(() => commit({ gnomonElevation: obj.elevation }))
+      registerTween('elevation', tween)
+      tween.start()
+    },
+
+    resetView: () => {
+      stopTweens()
+      commit({ currentSeason: INITIAL_SEASON })
+      const obj = {
+        elevation: get().gnomonElevation,
+        rotation: get().gnomonRotation,
+      }
+      const tween = new TWEEN.Tween(obj)
+        .to({ elevation: INITIAL_ELEVATION, rotation: INITIAL_ROTATION }, TWEEN_DURATION)
+        .easing(TWEEN.Easing.Quadratic.InOut)
+        .onUpdate(() =>
+          commit({ gnomonElevation: obj.elevation, gnomonRotation: obj.rotation })
+        )
+      registerTween('elevation', tween)
+      registerTween('rotation', tween)
+      tween.start()
+    },
+  }
+})
