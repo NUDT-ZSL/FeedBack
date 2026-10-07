@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ForgeCore, ForgeStateData, MaterialType } from './forgeCore';
+import { ForgeCore, ForgeStateData, MaterialType, HAMMER_TARGET } from './forgeCore';
 import { SceneManager } from './sceneManager';
 import { ParticleSystem } from './particleSystem';
 
@@ -32,7 +32,6 @@ export class UIController {
   private inscriptionInput: HTMLInputElement;
   private inscriptionSubmit: HTMLElement;
   
-  private isDragging: boolean = false;
   private dragMaterialType: MaterialType | null = null;
   private isGrinding: boolean = false;
   private lastMouseY: number = 0;
@@ -136,7 +135,6 @@ export class UIController {
   private handleDragEnd(e: DragEvent): void {
     const target = e.target as HTMLElement;
     target.classList.remove('dragging');
-    this.isDragging = false;
     this.dragMaterialType = null;
   }
 
@@ -235,7 +233,6 @@ export class UIController {
       const success = this.forgeCore.addGrindingProgress(progress, true);
       
       if (success) {
-        this.sceneManager.updateGrindProgress(state.grindingProgress);
         this.playGrindSound();
       }
       
@@ -253,7 +250,7 @@ export class UIController {
     this.playHammerSound();
     
     const state = this.forgeCore.getState();
-    if (state.hammerCount >= 60) {
+    if (state.hammerCount >= HAMMER_TARGET) {
       this.showMessage('锤炼完成，准备淬火', 2000);
     }
   }
@@ -266,7 +263,7 @@ export class UIController {
     
     switch (state.currentState) {
       case 'hammering':
-        this.showProgress(state.hammerCount / 60 * 100, `锤击次数: ${state.hammerCount} / 60`);
+        this.showProgress(state.hammerCount / HAMMER_TARGET * 100, `锤击次数: ${state.hammerCount} / ${HAMMER_TARGET}`);
         this.hammerHint.classList.add('visible');
         this.materialRack.style.opacity = '0.3';
         this.materialRack.style.pointerEvents = 'none';
@@ -309,6 +306,8 @@ export class UIController {
         
       default:
         this.hideProgress();
+        this.inscriptionPanel.classList.remove('visible');
+        this.inscriptionInput.value = '';
         this.materialRack.style.opacity = '1';
         this.materialRack.style.pointerEvents = 'auto';
         break;
@@ -322,7 +321,7 @@ export class UIController {
         break;
         
       case 'hammering':
-        this.showProgress(state.hammerCount / 60 * 100, `锤击次数: ${state.hammerCount} / 60  温度: ${Math.floor(state.temperature)}℃`);
+        this.showProgress(state.hammerCount / HAMMER_TARGET * 100, `锤击次数: ${state.hammerCount} / ${HAMMER_TARGET}  温度: ${Math.floor(state.temperature)}℃`);
         break;
         
       case 'grinding':

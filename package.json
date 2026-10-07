@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:forge": "node scripts/verifyForgeFlow.ts"
   },
   "devDependencies": {
     "@types/three": "^0.160.0",

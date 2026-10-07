@@ -5,7 +5,7 @@ import { UIController } from './uiController';
 class App {
   private forgeCore: ForgeCore;
   private sceneManager: SceneManager;
-  private uiController: UIController;
+  uiController: UIController;
   private animationId: number = 0;
   private lastTime: number = 0;
   private frameCount: number = 0;
@@ -13,7 +13,7 @@ class App {
 
   constructor() {
     this.forgeCore = new ForgeCore();
-    this.sceneManager = new SceneManager('canvas-container');
+    this.sceneManager = new SceneManager('canvas-container', this.forgeCore);
     this.uiController = new UIController(
       this.forgeCore,
       this.sceneManager,

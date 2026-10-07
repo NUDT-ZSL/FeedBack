@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ParticleSystem } from './particleSystem';
-import { ForgeState, ForgeStateData, MaterialType } from './forgeCore';
+import { ForgeCore, ForgeStateData, MaterialType } from './forgeCore';
 
 export class SceneManager {
   private container: HTMLElement;
@@ -27,31 +27,27 @@ export class SceneManager {
   private anvilShakeTime: number = 0;
   
   private ingotScale: { x: number; y: number; z: number } = { x: 1, y: 1, z: 1 };
-  private ingotTemperature: number = 1200;
   
   private waterTime: number = 0;
   private steamTimer: number = 0;
   
-  private grindProgress: number = 0;
-  private sharpenProgress: number = 0;
-  
   private swordRotationTime: number = 0;
   private swordFloatTime: number = 0;
-  
-  private currentState: ForgeState = 'idle';
-  private materialType: MaterialType | null = null;
+
+  private forgeCore: ForgeCore;
   
   private responsiveScale: number = 1;
   
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
 
-  constructor(containerId: string) {
+  constructor(containerId: string, forgeCore: ForgeCore) {
     const container = document.getElementById(containerId);
     if (!container) {
       throw new Error(`Container with id "${containerId}" not found`);
     }
     this.container = container;
+    this.forgeCore = forgeCore;
     
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
@@ -299,8 +295,6 @@ export class SceneManager {
   }
 
   createMaterialBlock(type: MaterialType): void {
-    this.materialType = type;
-    
     const colors: Record<MaterialType, number> = {
       mystery: 0x555555,
       meteorite: 0x8844aa,
@@ -394,7 +388,6 @@ export class SceneManager {
     this.scene.add(this.heatedIngot);
     
     this.ingotScale = { x: 1, y: 1, z: 1 };
-    this.ingotTemperature = 1200;
   }
 
   moveIngotToAnvil(): void {
@@ -436,8 +429,6 @@ export class SceneManager {
   }
 
   updateIngotTemperature(temp: number): void {
-    this.ingotTemperature = temp;
-    
     if (!this.heatedIngot) return;
     
     const ingotMesh = this.heatedIngot.getObjectByName('ingotMesh') as THREE.Mesh;
@@ -557,13 +548,9 @@ export class SceneManager {
     
     this.swordBlade.position.set(0, 0, 1);
     this.scene.add(this.swordBlade);
-    
-    this.grindProgress = 0;
   }
 
   updateGrindProgress(progress: number): void {
-    this.grindProgress = progress;
-    
     if (!this.swordBlade) return;
     
     const bladeMesh = this.swordBlade.getObjectByName('swordBladeMesh') as THREE.Mesh;
@@ -605,8 +592,6 @@ export class SceneManager {
   }
 
   updateSharpenProgress(progress: number): void {
-    this.sharpenProgress = progress;
-    
     if (!this.swordBlade) return;
     
     const bladeMesh = this.swordBlade.getObjectByName('swordBladeMesh') as THREE.Mesh;
@@ -795,15 +780,72 @@ export class SceneManager {
   }
 
   updateState(state: ForgeStateData): void {
-    this.currentState = state.currentState;
-    
+    if (state.currentState === 'idle') {
+      this.clearForgeArtifacts();
+    }
+
     if (state.currentState === 'hammering') {
       this.updateIngotTemperature(state.temperature);
     }
   }
 
+  private clearForgeArtifacts(): void {
+    if (this.materialBlock) {
+      this.scene.remove(this.materialBlock);
+      this.materialBlock.geometry.dispose();
+      (this.materialBlock.material as THREE.Material).dispose();
+      this.materialBlock = null;
+    }
+
+    if (this.heatedIngot) {
+      this.scene.remove(this.heatedIngot);
+      this.heatedIngot.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
+      this.heatedIngot = null;
+    }
+
+    if (this.swordBlade) {
+      this.scene.remove(this.swordBlade);
+      this.swordBlade.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
+      this.swordBlade = null;
+    }
+
+    if (this.finalSword) {
+      this.scene.remove(this.finalSword);
+      this.finalSword.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
+      this.finalSword = null;
+    }
+
+    if (this.grindstone) {
+      this.grindstone.visible = false;
+    }
+
+    this.ingotScale = { x: 1, y: 1, z: 1 };
+    this.anvilShakeTime = 0;
+    if (this.anvil) {
+      this.anvil.position.copy(this.anvilOriginalPosition);
+    }
+    this.waterTime = 0;
+    this.steamTimer = 0;
+  }
+
   render(): void {
     const delta = this.clock.getDelta();
+    const currentState = this.forgeCore.getState().currentState;
     
     this.particleSystem.update(delta);
     
@@ -818,7 +860,7 @@ export class SceneManager {
       }
     }
     
-    if (this.currentState === 'quenching') {
+    if (currentState === 'quenching') {
       this.waterTime += delta;
       this.steamTimer += delta;
       
@@ -835,11 +877,11 @@ export class SceneManager {
       }
     }
     
-    if (this.grindstone && this.currentState === 'sharpening') {
+    if (this.grindstone && currentState === 'sharpening') {
       this.grindstone.rotation.x += delta * 5;
     }
     
-    if (this.finalSword && this.currentState === 'showing') {
+    if (this.finalSword && currentState === 'showing') {
       this.swordRotationTime += delta;
       this.swordFloatTime += delta;
       
@@ -855,7 +897,7 @@ export class SceneManager {
     }
     
     const fireIntensity = 1.5 + Math.sin(this.clock.elapsedTime * 10) * 0.3;
-    this.forgeLight.intensity = Math.max(0.5, fireIntensity * (this.currentState === 'heating' ? 1.5 : 0.8));
+    this.forgeLight.intensity = Math.max(0.5, fireIntensity * (currentState === 'heating' ? 1.5 : 0.8));
     
     this.renderer.render(this.scene, this.camera);
   }
