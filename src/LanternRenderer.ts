@@ -50,6 +50,7 @@ export class LanternRenderer {
   public lightProgress: number = 0;
   public lightColor: string = '#ffe8b0';
   public skeletonPaths: Path2D[] = [];
+  public combinedSkeletonPath: Path2D | null = null;
 
   private skeleton: Skeleton | null = null;
   private silkColor: SilkColor | null = null;
@@ -57,6 +58,7 @@ export class LanternRenderer {
   private lines: Line[] = [];
   private temporaryStroke: { points: { x: number; y: number }[]; color: string; radius: number } | null = null;
   private temporaryLine: { start: { x: number; y: number }; end: { x: number; y: number }; color: string; radius: number } | null = null;
+  private litGlow: boolean = false;
   private currentAudioContext: AudioContext | null = null;
   private audioBuffer: AudioBuffer | null = null;
   private cachedSkeletonKey: string = '';
@@ -95,6 +97,10 @@ export class LanternRenderer {
     const key = skeleton.paths.join('|');
     if (key !== this.cachedSkeletonKey) {
       this.skeletonPaths = skeleton.paths.map(d => this.parsePathD(d));
+      this.combinedSkeletonPath = new Path2D();
+      for (let i = 0; i < this.skeletonPaths.length; i++) {
+        this.combinedSkeletonPath.addPath(this.skeletonPaths[i]);
+      }
       this.cachedSkeletonKey = key;
     }
 
@@ -119,8 +125,8 @@ export class LanternRenderer {
     offCtx.clearRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
 
     offCtx.save();
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      offCtx.clip(this.skeletonPaths[i]);
+    if (this.combinedSkeletonPath) {
+      offCtx.clip(this.combinedSkeletonPath);
     }
 
     const rgb = this.hexToRgb(color.primary);
@@ -167,8 +173,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.combinedSkeletonPath) {
+      this.ctx.clip(this.combinedSkeletonPath);
     }
 
     for (let i = 0; i < strokes.length; i++) {
@@ -228,8 +234,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.combinedSkeletonPath) {
+      this.ctx.clip(this.combinedSkeletonPath);
     }
 
     this.ctx.fillStyle = color;
@@ -274,8 +280,8 @@ export class LanternRenderer {
 
     this.ctx.save();
 
-    for (let i = 0; i < this.skeletonPaths.length; i++) {
-      this.ctx.clip(this.skeletonPaths[i]);
+    if (this.combinedSkeletonPath) {
+      this.ctx.clip(this.combinedSkeletonPath);
     }
 
     this.ctx.strokeStyle = color;
@@ -335,7 +341,7 @@ export class LanternRenderer {
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
-      this.lightProgress = Math.min(elapsed / duration, 1);
+      this.lightProgress = Math.min(Math.max(elapsed / duration, 0), 1);
 
       if (this.lightProgress < 0.33) {
         const t = this.lightProgress / 0.33;
@@ -382,6 +388,26 @@ export class LanternRenderer {
     this.particles = [];
   }
 
+  public setLitGlow(on: boolean): void {
+    this.litGlow = on;
+  }
+
+  public reset(): void {
+    this.stopAnimation();
+    this.skeleton = null;
+    this.silkColor = null;
+    this.strokes = [];
+    this.lines = [];
+    this.temporaryStroke = null;
+    this.temporaryLine = null;
+    this.skeletonPaths = [];
+    this.combinedSkeletonPath = null;
+    this.cachedSkeletonKey = '';
+    this.litGlow = false;
+    this.clear();
+    this.offscreenCtx.clearRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
+  }
+
   public render(): void {
     this.clear();
 
@@ -423,6 +449,28 @@ export class LanternRenderer {
       );
     }
 
+    if (this.litGlow) {
+      const glowRgb = this.hexToRgb('#ffe8b0');
+
+      this.ctx.save();
+      this.ctx.globalCompositeOperation = 'lighter';
+
+      const glowGradient = this.ctx.createRadialGradient(
+        LanternRenderer.CANVAS_SIZE / 2,
+        LanternRenderer.CANVAS_SIZE / 2,
+        0,
+        LanternRenderer.CANVAS_SIZE / 2,
+        LanternRenderer.CANVAS_SIZE / 2,
+        LanternRenderer.CANVAS_SIZE / 2
+      );
+      glowGradient.addColorStop(0, `rgba(${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}, 0.4)`);
+      glowGradient.addColorStop(1, `rgba(${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}, 0)`);
+      this.ctx.fillStyle = glowGradient;
+      this.ctx.fillRect(0, 0, LanternRenderer.CANVAS_SIZE, LanternRenderer.CANVAS_SIZE);
+
+      this.ctx.restore();
+    }
+
     if (this.isLighting && this.particles.length > 0) {
       const rgb = this.hexToRgb(this.lightColor);
 
@@ -433,7 +481,7 @@ export class LanternRenderer {
       const centerY = LanternRenderer.CANVAS_SIZE / 2;
       const gradient = this.ctx.createRadialGradient(
         centerX, centerY, 0,
-        centerX, centerY, 200 * this.lightProgress
+        centerX, centerY, Math.max(0, 200 * this.lightProgress)
       );
       gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.4 * this.lightProgress})`);
       gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
@@ -499,8 +547,8 @@ export class LanternRenderer {
 
     if (this.silkColor && this.skeletonPaths.length > 0) {
       tempCtx.save();
-      for (let i = 0; i < this.skeletonPaths.length; i++) {
-        tempCtx.clip(this.skeletonPaths[i]);
+      if (this.combinedSkeletonPath) {
+        tempCtx.clip(this.combinedSkeletonPath);
       }
 
       const rgb = this.hexToRgb(this.silkColor.primary);
@@ -530,8 +578,8 @@ export class LanternRenderer {
 
     if (this.skeletonPaths.length > 0) {
       tempCtx.save();
-      for (let i = 0; i < this.skeletonPaths.length; i++) {
-        tempCtx.clip(this.skeletonPaths[i]);
+      if (this.combinedSkeletonPath) {
+        tempCtx.clip(this.combinedSkeletonPath);
       }
 
       for (let i = 0; i < this.strokes.length; i++) {
@@ -686,78 +734,211 @@ export class LanternRenderer {
 
   private parsePathD(d: string): Path2D {
     const path = new Path2D();
-    const commands = d.match(/[a-zA-Z][^a-zA-Z]*/g) || [];
+    const normalized = d.replace(/arc/gi, 'a');
+    const commands = normalized.match(/[a-zA-Z][^a-zA-Z]*/g) || [];
+
+    let curX = 0;
+    let curY = 0;
+    let startX = 0;
+    let startY = 0;
 
     for (let i = 0; i < commands.length; i++) {
       const cmd = commands[i];
       const type = cmd[0];
-      const args = cmd.slice(1).trim().split(/[\s,]+/).map(Number);
+      const args = cmd.slice(1).trim().split(/[\s,]+/).filter(s => s.length > 0).map(Number);
 
       switch (type) {
         case 'M':
-          path.moveTo(args[0], args[1]);
+          curX = args[0];
+          curY = args[1];
+          path.moveTo(curX, curY);
+          startX = curX;
+          startY = curY;
+          for (let j = 2; j + 1 < args.length; j += 2) {
+            curX = args[j];
+            curY = args[j + 1];
+            path.lineTo(curX, curY);
+          }
           break;
         case 'm':
-          path.moveTo(args[0], args[1]);
+          curX += args[0];
+          curY += args[1];
+          path.moveTo(curX, curY);
+          startX = curX;
+          startY = curY;
+          for (let j = 2; j + 1 < args.length; j += 2) {
+            curX += args[j];
+            curY += args[j + 1];
+            path.lineTo(curX, curY);
+          }
           break;
         case 'L':
           for (let j = 0; j < args.length; j += 2) {
-            path.lineTo(args[j], args[j + 1]);
+            curX = args[j];
+            curY = args[j + 1];
+            path.lineTo(curX, curY);
           }
           break;
         case 'l':
           for (let j = 0; j < args.length; j += 2) {
-            path.lineTo(args[j], args[j + 1]);
+            curX += args[j];
+            curY += args[j + 1];
+            path.lineTo(curX, curY);
           }
           break;
         case 'H':
           for (let j = 0; j < args.length; j++) {
-            path.lineTo(args[j], 0);
+            curX = args[j];
+            path.lineTo(curX, curY);
           }
           break;
         case 'h':
           for (let j = 0; j < args.length; j++) {
-            path.lineTo(args[j], 0);
+            curX += args[j];
+            path.lineTo(curX, curY);
           }
           break;
         case 'V':
           for (let j = 0; j < args.length; j++) {
-            path.lineTo(0, args[j]);
+            curY = args[j];
+            path.lineTo(curX, curY);
           }
           break;
         case 'v':
           for (let j = 0; j < args.length; j++) {
-            path.lineTo(0, args[j]);
+            curY += args[j];
+            path.lineTo(curX, curY);
           }
           break;
         case 'C':
           for (let j = 0; j < args.length; j += 6) {
             path.bezierCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3], args[j + 4], args[j + 5]);
+            curX = args[j + 4];
+            curY = args[j + 5];
           }
           break;
         case 'c':
           for (let j = 0; j < args.length; j += 6) {
-            path.bezierCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3], args[j + 4], args[j + 5]);
+            path.bezierCurveTo(
+              curX + args[j], curY + args[j + 1],
+              curX + args[j + 2], curY + args[j + 3],
+              curX + args[j + 4], curY + args[j + 5]
+            );
+            curX += args[j + 4];
+            curY += args[j + 5];
           }
           break;
         case 'Q':
           for (let j = 0; j < args.length; j += 4) {
             path.quadraticCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3]);
+            curX = args[j + 2];
+            curY = args[j + 3];
           }
           break;
         case 'q':
           for (let j = 0; j < args.length; j += 4) {
-            path.quadraticCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3]);
+            path.quadraticCurveTo(
+              curX + args[j], curY + args[j + 1],
+              curX + args[j + 2], curY + args[j + 3]
+            );
+            curX += args[j + 2];
+            curY += args[j + 3];
           }
           break;
+        case 'A':
+        case 'a': {
+          for (let j = 0; j + 6 < args.length; j += 7) {
+            const endX = type === 'a' ? curX + args[j + 5] : args[j + 5];
+            const endY = type === 'a' ? curY + args[j + 6] : args[j + 6];
+            this.arcTo(path, curX, curY, args[j], args[j + 1], args[j + 2], args[j + 3] !== 0, args[j + 4] !== 0, endX, endY);
+            curX = endX;
+            curY = endY;
+          }
+          break;
+        }
         case 'Z':
         case 'z':
           path.closePath();
+          curX = startX;
+          curY = startY;
           break;
       }
     }
 
     return path;
+  }
+
+  private arcTo(
+    path: Path2D,
+    x1: number,
+    y1: number,
+    rx: number,
+    ry: number,
+    angleDeg: number,
+    largeArc: boolean,
+    sweep: boolean,
+    x2: number,
+    y2: number
+  ): void {
+    if (rx === 0 || ry === 0 || (x1 === x2 && y1 === y2)) {
+      path.lineTo(x2, y2);
+      return;
+    }
+
+    rx = Math.abs(rx);
+    ry = Math.abs(ry);
+
+    const phi = (angleDeg * Math.PI) / 180;
+    const cosPhi = Math.cos(phi);
+    const sinPhi = Math.sin(phi);
+
+    const dx = (x1 - x2) / 2;
+    const dy = (y1 - y2) / 2;
+    const x1p = cosPhi * dx + sinPhi * dy;
+    const y1p = -sinPhi * dx + cosPhi * dy;
+
+    const lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if (lambda > 1) {
+      const scale = Math.sqrt(lambda);
+      rx *= scale;
+      ry *= scale;
+    }
+
+    const num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    let coef = den === 0 ? 0 : Math.sqrt(Math.max(0, num / den));
+    if (largeArc === sweep) {
+      coef = -coef;
+    }
+
+    const cxp = (coef * rx * y1p) / ry;
+    const cyp = (-coef * ry * x1p) / rx;
+    const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+    const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+
+    const vectorAngle = (ux: number, uy: number, vx: number, vy: number): number => {
+      const dot = ux * vx + uy * vy;
+      const len = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+      let ang = Math.acos(Math.min(1, Math.max(-1, dot / len)));
+      if (ux * vy - uy * vx < 0) {
+        ang = -ang;
+      }
+      return ang;
+    };
+
+    const theta1 = vectorAngle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let dTheta = vectorAngle(
+      (x1p - cxp) / rx, (y1p - cyp) / ry,
+      (-x1p - cxp) / rx, (-y1p - cyp) / ry
+    );
+    if (!sweep && dTheta > 0) {
+      dTheta -= Math.PI * 2;
+    }
+    if (sweep && dTheta < 0) {
+      dTheta += Math.PI * 2;
+    }
+
+    path.ellipse(cx, cy, rx, ry, phi, theta1, theta1 + dTheta, !sweep);
   }
 
   public setTemporaryStroke(stroke: { points: { x: number; y: number }[]; color: string; radius: number } | null): void {

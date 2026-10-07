@@ -56,6 +56,18 @@ export interface Lantern {
   randomId: string;
 }
 
+export interface Work {
+  id: string;
+  skeletonId: string | null;
+  silkColorId: string | null;
+  strokes: BrushStroke[];
+  lines: Line[];
+  isLit: boolean;
+  createdAt: number;
+  randomId: string;
+  saved: boolean;
+}
+
 export const SKELETONS: Skeleton[] = [
   {
     id: 'rabbit',
