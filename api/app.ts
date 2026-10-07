@@ -15,7 +15,7 @@ import authRoutes from './routes/auth.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const _dirname = path.dirname(__filename)
 
 // load env
 dotenv.config()
@@ -36,7 +36,7 @@ app.use('/api/auth', authRoutes)
  */
 app.use(
   '/api/health',
-  (req: Request, res: Response, next: NextFunction): void => {
+  (_req: Request, res: Response, _next: NextFunction): void => {
     res.status(200).json({
       success: true,
       message: 'ok',
@@ -47,7 +47,7 @@ app.use(
 /**
  * error handler middleware
  */
-app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({
     success: false,
     error: 'Server internal error',

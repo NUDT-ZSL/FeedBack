@@ -36,6 +36,7 @@
   "include": [
     "src",
     "server",
-    "api"
+    "api",
+    "verification"
   ]
 }

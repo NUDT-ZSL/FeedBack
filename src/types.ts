@@ -41,6 +41,8 @@ export interface IronCertChange {
   operationTime: string;
   operator: string;
   result: string;
+  fromStatus?: IronCertificateStatus;
+  toStatus?: IronCertificateStatus;
 }
 
 export interface DailyStats {
@@ -65,6 +67,10 @@ export interface ReportAnomaly {
   type: string;
   description: string;
   severity: 'low' | 'medium' | 'high';
+  evidence: string[];
 }
- 'medium' | 'high';
+
+export interface SearchResult {
+  type: 'salt' | 'iron';
+  data: SaltCertificate | IronCertificate;
 }
