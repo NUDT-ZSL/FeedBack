@@ -1,0 +1,48 @@
+{
+  "name": "三场次并行筹备",
+  "participants": [
+    { "id": "p1", "name": "一品大臣", "grade": 1 },
+    { "id": "p2", "name": "三品御史", "grade": 3 },
+    { "id": "p3", "name": "六品主事", "grade": 6 }
+  ],
+  "resources": [
+    { "id": "r1", "name": "玉杯", "minGrade": 1 },
+    { "id": "r2", "name": "银箸", "minGrade": 3 },
+    { "id": "r3", "name": "瓷碗", "minGrade": 8 }
+  ],
+  "sessions": [
+    {
+      "id": "banquet-east",
+      "name": "东苑宴",
+      "participantIds": ["p1", "p2"],
+      "resourceIds": ["r1", "r3"],
+      "slots": [
+        { "id": "e1", "startsAt": 0, "endsAt": 10 },
+        { "id": "e2", "startsAt": 10, "endsAt": 20 }
+      ]
+    },
+    {
+      "id": "banquet-west",
+      "name": "西苑宴",
+      "participantIds": ["p1", "p3"],
+      "resourceIds": ["r1", "r2", "r3"],
+      "slots": [
+        { "id": "w1", "startsAt": 5, "endsAt": 15 },
+        { "id": "w2", "startsAt": 15, "endsAt": 25 }
+      ]
+    },
+    {
+      "id": "banquet-empty",
+      "name": "空宴（边界）",
+      "participantIds": [],
+      "resourceIds": ["r3"],
+      "slots": []
+    }
+  ],
+  "operations": [
+    { "op": "switchSession", "id": "banquet-west" },
+    { "op": "switchSession", "id": "banquet-east" },
+    { "op": "upsertResource", "resource": { "id": "r1", "name": "玉杯", "minGrade": 3 } },
+    { "op": "removeParticipant", "id": "p3" }
+  ]
+}
