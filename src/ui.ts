@@ -226,11 +226,18 @@ export class UIManager {
     ctx.textBaseline = 'top';
     ctx.fillText(timeStr, x + 30, y + 6);
 
+    if (log.ruleLabel) {
+      ctx.fillStyle = '#7a8fa8';
+      ctx.font = '10px "Georgia", serif';
+      const label = this.truncateText(ctx, log.ruleLabel, w - 100);
+      ctx.fillText(label, x + 30, y + 18);
+    }
+
     ctx.fillStyle = '#e8dcc8';
     ctx.font = '12px "Georgia", serif';
     const maxTextWidth = w - 40;
     const text = this.truncateText(ctx, log.result, maxTextWidth);
-    ctx.fillText(text, x + 30, y + 24);
+    ctx.fillText(text, x + 30, y + (log.ruleLabel ? 30 : 24));
 
     ctx.restore();
   }

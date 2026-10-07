@@ -2,6 +2,7 @@ import { ElementBall, ElementType } from './elements';
 import { Cauldron, SynthesisLog } from './cauldron';
 import { ParticleSystem } from './particles';
 import { UIManager } from './ui';
+import { RulePanel } from './panel';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -13,6 +14,7 @@ class Game {
   private cauldron: Cauldron;
   private balls: ElementBall[] = [];
   private ui: UIManager;
+  private panel!: RulePanel;
 
   private draggingBall: ElementBall | null = null;
 
@@ -41,6 +43,21 @@ class Game {
       this.particles
     );
     this.cauldron.setOnSynthesis((log: SynthesisLog) => this.ui.addLog(log));
+
+    const panelRoot = document.getElementById('rule-panel');
+    if (panelRoot) {
+      this.panel = new RulePanel(panelRoot, {
+        getCounts: () => this.cauldron.getCounts(),
+        onRulesChanged: (rules) => this.cauldron.setRules(rules)
+      });
+      this.cauldron.setRules(this.panel.getRules());
+      this.cauldron.setOnContentsChange(() => this.panel.refreshDeduction());
+      const toggle = document.getElementById('panel-toggle');
+      toggle?.addEventListener('click', () => {
+        panelRoot.classList.toggle('hidden');
+        this.panel.refreshDeduction();
+      });
+    }
 
     this.bindEvents();
     this.lastTime = performance.now();

@@ -23,10 +23,259 @@
         height: 100vh;
         cursor: default;
       }
+
+      #panel-toggle {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 20;
+        padding: 8px 16px;
+        background: rgba(65, 48, 30, 0.95);
+        color: #d4b896;
+        border: 1px solid rgba(120, 90, 60, 0.8);
+        border-radius: 8px;
+        font-family: 'Georgia', serif;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      #panel-toggle:hover {
+        background: rgba(85, 64, 40, 0.95);
+      }
+
+      #rule-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 360px;
+        height: 100vh;
+        overflow-y: auto;
+        z-index: 10;
+        padding: 56px 16px 24px;
+        background: rgba(30, 22, 14, 0.96);
+        border-left: 1px solid rgba(120, 90, 60, 0.6);
+        color: #e8dcc8;
+        font-size: 13px;
+        transition: transform 0.25s ease;
+      }
+      #rule-panel.hidden {
+        transform: translateX(100%);
+      }
+
+      .rp-title {
+        font-size: 18px;
+        color: #d4b896;
+        margin-bottom: 12px;
+      }
+      .rp-section {
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(120, 90, 60, 0.35);
+      }
+      .rp-subtitle {
+        font-size: 15px;
+        color: #d4b896;
+        margin-bottom: 10px;
+      }
+      .rp-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+      }
+      .rp-row-head {
+        margin-top: 10px;
+      }
+      .rp-label {
+        color: #b09a7c;
+        flex-shrink: 0;
+      }
+      .rp-value {
+        color: #e8dcc8;
+      }
+      .rp-hint {
+        color: #8a7560;
+        font-size: 12px;
+      }
+      .rp-input, .rp-select {
+        background: rgba(20, 15, 10, 0.8);
+        color: #e8dcc8;
+        border: 1px solid rgba(120, 90, 60, 0.6);
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-family: inherit;
+        font-size: 13px;
+      }
+      .rp-input:focus, .rp-select:focus {
+        outline: none;
+        border-color: rgba(180, 140, 90, 0.9);
+      }
+      .rp-threshold {
+        width: 64px;
+      }
+      .rp-btn {
+        background: rgba(80, 60, 40, 0.9);
+        color: #e8dcc8;
+        border: 1px solid rgba(120, 90, 60, 0.7);
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-family: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .rp-btn:hover:not(:disabled) {
+        background: rgba(105, 80, 52, 0.95);
+      }
+      .rp-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .rp-btn-danger {
+        color: #e89a8a;
+      }
+      .rp-add-pair {
+        margin-top: 6px;
+        width: 100%;
+      }
+
+      .rp-pair {
+        background: rgba(50, 38, 25, 0.55);
+        border: 1px solid rgba(120, 90, 60, 0.4);
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 8px;
+      }
+      .rp-pair-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .rp-pair-index {
+        color: #8a7560;
+        font-size: 12px;
+        min-width: 24px;
+      }
+      .rp-times {
+        color: #8a7560;
+      }
+      .rp-color {
+        width: 30px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid rgba(120, 90, 60, 0.6);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+      }
+      .rp-reaction {
+        width: 100%;
+      }
+
+      .rp-warning {
+        color: #e8c26a;
+        background: rgba(120, 90, 20, 0.18);
+        border: 1px solid rgba(200, 160, 60, 0.35);
+        border-radius: 6px;
+        padding: 6px 8px;
+        margin-bottom: 6px;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .rp-empty {
+        color: #8a7560;
+        font-size: 12px;
+        padding: 6px 0;
+        line-height: 1.6;
+      }
+
+      .rp-next {
+        margin-bottom: 10px;
+      }
+      .rp-next-hit {
+        color: #a8d8a0;
+        margin-bottom: 4px;
+        line-height: 1.5;
+      }
+      .rp-next-reason {
+        color: #8a7560;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .rp-chain {
+        margin-top: 10px;
+        border-radius: 8px;
+        padding: 8px 10px;
+        border: 1px solid rgba(120, 90, 60, 0.4);
+        background: rgba(50, 38, 25, 0.55);
+      }
+      .rp-chain-ok .rp-chain-verdict {
+        color: #a8d8a0;
+      }
+      .rp-chain-fail .rp-chain-verdict {
+        color: #e89a8a;
+      }
+      .rp-chain-verdict {
+        font-weight: bold;
+        margin-bottom: 6px;
+        line-height: 1.5;
+      }
+      .rp-steps {
+        list-style: none;
+        margin-bottom: 6px;
+      }
+      .rp-step {
+        font-size: 12px;
+        line-height: 1.7;
+        color: #cbb89a;
+      }
+      .rp-step-trigger {
+        color: #e8c26a;
+      }
+      .rp-rules-used {
+        font-size: 12px;
+        color: #8a9ab0;
+        line-height: 1.5;
+      }
+
+      .rp-snap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .rp-snap-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rp-snap-time {
+        color: #8a7560;
+        font-size: 11px;
+      }
+      .rp-diff {
+        margin-top: 8px;
+      }
+      .rp-diff-item {
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .rp-diff-add {
+        color: #a8d8a0;
+      }
+      .rp-diff-del {
+        color: #e89a8a;
+      }
+      .rp-diff-mod {
+        color: #e8c26a;
+      }
     </style>
   </head>
   <body>
     <canvas id="game-canvas"></canvas>
+    <button id="panel-toggle">规则配置</button>
+    <div id="rule-panel" class="hidden"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

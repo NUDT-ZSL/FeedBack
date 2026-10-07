@@ -1,5 +1,15 @@
 import { ElementBall, ElementType } from './elements';
 import { ParticleSystem } from './particles';
+import {
+  ConflictPair,
+  Counts,
+  RuleSet,
+  TriggerResult,
+  defaultRules,
+  emptyCounts,
+  findTrigger,
+  pairKey
+} from './rules';
 
 export interface SynthesisLog {
   id: string;
@@ -7,29 +17,8 @@ export interface SynthesisLog {
   elements: ElementType[];
   result: string;
   color: string;
+  ruleLabel?: string;
 }
-
-interface ConflictPair {
-  a: ElementType;
-  b: ElementType;
-  reaction: string;
-  color: string;
-}
-
-const CONFLICT_PAIRS: ConflictPair[] = [
-  { a: 'water', b: 'fire', reaction: '水与火碰撞，产生浓密的蒸汽云', color: '#ffffff' },
-  { a: 'wind', b: 'earth', reaction: '风与土交汇，卷起漫天沙尘暴', color: '#d4a54a' },
-  { a: 'light', b: 'dark', reaction: '光与暗交融，形成黑洞漩涡', color: '#9932cc' }
-];
-
-const FUSION_RESULTS: Record<ElementType, { result: string; color: string }> = {
-  fire: { result: '三火合一，召唤出火焰精灵！', color: '#ff6600' },
-  water: { result: '三水凝结，生成璀璨冰晶！', color: '#88ddff' },
-  wind: { result: '三风凝聚，形成旋风风暴！', color: '#3cb371' },
-  earth: { result: '三土聚合，凝聚成坚硬巨石！', color: '#8b5a2b' },
-  light: { result: '三光合聚，绽放神圣光芒！', color: '#fffacd' },
-  dark: { result: '三暗融合，诞生幽暗深渊！', color: '#8a2be2' }
-};
 
 export class Cauldron {
   x: number;
@@ -39,7 +28,9 @@ export class Cauldron {
   private breathePhase: number = 0;
   private breatheSpeed: number = 0.8;
   private particles: ParticleSystem;
+  private rules: RuleSet = defaultRules();
   private onSynthesisCallback: ((log: SynthesisLog) => void) | null = null;
+  private onContentsChangeCallback: (() => void) | null = null;
 
   constructor(x: number, y: number, radius: number, particles: ParticleSystem) {
     this.x = x;
@@ -50,6 +41,24 @@ export class Cauldron {
 
   setOnSynthesis(callback: (log: SynthesisLog) => void): void {
     this.onSynthesisCallback = callback;
+  }
+
+  setOnContentsChange(callback: () => void): void {
+    this.onContentsChangeCallback = callback;
+  }
+
+  setRules(rules: RuleSet): void {
+    this.rules = rules;
+  }
+
+  getRules(): RuleSet {
+    return this.rules;
+  }
+
+  getCounts(): Counts {
+    const counts = emptyCounts();
+    for (const ball of this.balls) counts[ball.type] += 1;
+    return counts;
   }
 
   update(deltaTime: number): void {
@@ -76,39 +85,39 @@ export class Cauldron {
     this.balls.push(ball);
 
     this.particles.createSplash(ball.x, ball.y, ball.config.colorEnd);
+    this.notifyContentsChange();
 
     setTimeout(() => this.checkReactions(), 100);
   }
 
-  private checkReactions(): void {
-    if (this.balls.length < 2) return;
-
-    const typeCounts = new Map<ElementType, ElementBall[]>();
-    for (const ball of this.balls) {
-      if (!typeCounts.has(ball.type)) typeCounts.set(ball.type, []);
-      typeCounts.get(ball.type)!.push(ball);
-    }
-
-    for (const [type, balls] of typeCounts) {
-      if (balls.length >= 3) {
-        this.triggerFusion(type, balls.slice(0, 3));
-        return;
-      }
-    }
-
-    for (const pair of CONFLICT_PAIRS) {
-      const ballsA = typeCounts.get(pair.a);
-      const ballsB = typeCounts.get(pair.b);
-      if (ballsA && ballsA.length > 0 && ballsB && ballsB.length > 0) {
-        this.triggerConflict(pair, ballsA[0], ballsB[0]);
-        return;
-      }
-    }
+  private notifyContentsChange(): void {
+    if (this.onContentsChangeCallback) this.onContentsChangeCallback();
   }
 
-  private triggerFusion(type: ElementType, balls: ElementBall[]): void {
-    const info = FUSION_RESULTS[type];
-    this.particles.createFusionAura(this.x, this.y, info.color);
+  private checkReactions(): void {
+    if (this.balls.length === 0) return;
+    const trigger = findTrigger(this.rules, this.getCounts());
+    if (!trigger) return;
+
+    if (trigger.rule.kind === 'fusion') {
+      this.triggerFusion(trigger);
+    } else {
+      const pair = this.rules.pairs.find(p => p.id === trigger.rule.pairId);
+      if (pair) this.triggerConflict(pair, trigger);
+    }
+    this.notifyContentsChange();
+  }
+
+  private ballsOfType(type: ElementType, count: number): ElementBall[] {
+    return this.balls.filter(b => b.type === type).slice(0, count);
+  }
+
+  private triggerFusion(trigger: TriggerResult): void {
+    const type = trigger.rule.element as ElementType;
+    const balls = this.ballsOfType(type, trigger.consume[type]);
+    if (balls.length === 0) return;
+
+    this.particles.createFusionAura(this.x, this.y, trigger.color);
 
     switch (type) {
       case 'fire':
@@ -126,34 +135,45 @@ export class Cauldron {
       case 'light':
         this.particles.createFireSpirit(this.x, this.y);
         break;
-      case 'dark':
+      case 'dark': {
         const posBalls = balls.map(b => ({ x: b.x, y: b.y }));
         this.particles.createBlackhole(this.x, this.y, posBalls);
         break;
+      }
     }
 
     this.removeBalls(balls);
-    this.addLog(balls.map(b => b.type), info.result, info.color);
+    this.addLog(balls.map(b => b.type), trigger.result, trigger.color, trigger.rule.label);
   }
 
-  private triggerConflict(pair: ConflictPair, ballA: ElementBall, ballB: ElementBall): void {
-    if (pair.a === 'water' && pair.b === 'fire') {
+  private triggerConflict(pair: ConflictPair, trigger: TriggerResult): void {
+    const key = pairKey(pair.a, pair.b);
+
+    if (key === 'fire|water') {
       this.particles.createSteam(this.x, this.y);
-    } else if (pair.a === 'wind' && pair.b === 'earth') {
+    } else if (key === 'earth|wind') {
       this.particles.createSandstorm(this.x, this.y);
-    } else if (pair.a === 'light' && pair.b === 'dark') {
+    } else if (key === 'dark|light') {
       const posBalls = this.balls.map(b => ({ x: b.x, y: b.y }));
       this.particles.createBlackhole(this.x, this.y, posBalls);
-      this.balls.forEach(b => {
-        setTimeout(() => b.reset(), 2000);
-      });
+      this.balls.forEach(b => setTimeout(() => b.reset(), 2000));
       this.balls = [];
-      this.addLog([pair.a, pair.b], pair.reaction, pair.color);
+      this.addLog([pair.a, pair.b], trigger.result, trigger.color, trigger.rule.label);
       return;
+    } else {
+      this.particles.createFusionAura(this.x, this.y, pair.color);
     }
 
-    this.removeBalls([ballA, ballB]);
-    this.addLog([pair.a, pair.b], pair.reaction, pair.color);
+    const ballA = this.balls.find(b => b.type === pair.a);
+    let ballB: ElementBall | undefined;
+    if (pair.a === pair.b) {
+      ballB = this.balls.find(b => b.type === pair.b && b !== ballA);
+    } else {
+      ballB = this.balls.find(b => b.type === pair.b);
+    }
+    const consumed = [ballA, ballB].filter((b): b is ElementBall => Boolean(b));
+    this.removeBalls(consumed);
+    this.addLog([pair.a, pair.b], trigger.result, trigger.color, trigger.rule.label);
   }
 
   private removeBalls(balls: ElementBall[]): void {
@@ -166,14 +186,15 @@ export class Cauldron {
     }
   }
 
-  private addLog(elements: ElementType[], result: string, color: string): void {
+  private addLog(elements: ElementType[], result: string, color: string, ruleLabel?: string): void {
     if (this.onSynthesisCallback) {
       this.onSynthesisCallback({
         id: Math.random().toString(36).slice(2),
         timestamp: Date.now(),
         elements,
         result,
-        color
+        color,
+        ruleLabel
       });
     }
   }
