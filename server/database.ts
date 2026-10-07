@@ -5,14 +5,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, '..', 'auction.db');
+const defaultDbPath = path.join(__dirname, '..', 'auction.db');
 
-const db = new Database(dbPath);
-
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-export function initDatabase(): void {
+export function initDatabase(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS items (
       id TEXT PRIMARY KEY,
@@ -83,7 +78,7 @@ export function initDatabase(): void {
       ['jade-imperial-seal', '传国玉玺', '和氏璧镌刻，受命于天既寿永昌', 50000, 50000, 'jade', '#00ff7f', '{"frequency":2.1,"amplitude":0.99,"resonance":100,"historicalKeys":["和氏璧","秦始皇","传国玉玺"]}', '["楚人和氏三献璞玉，历三代终成国宝，名曰和氏璧","秦始皇统一六国，命李斯以虫鸟篆书\\"受命于天，既寿永昌\\"","传国玉玺历经秦汉魏晋南北朝，辗转流传千年，象征正统皇权"]']
     ];
 
-    const insertMany = db.transaction((itemList) => {
+    const insertMany = db.transaction((itemList: any[][]) => {
       for (const item of itemList) {
         insertItem.run(...item);
       }
@@ -93,4 +88,29 @@ export function initDatabase(): void {
   }
 }
 
-export default db;
+export function createDatabase(dbPath: string = defaultDbPath): Database.Database {
+  const database = new Database(dbPath);
+  database.pragma('journal_mode = WAL');
+  database.pragma('foreign_keys = ON');
+  initDatabase(database);
+  return database;
+}
+
+let singleton: Database.Database | null = null;
+
+export function getDb(): Database.Database {
+  if (singleton === null) {
+    singleton = createDatabase(defaultDbPath);
+  }
+  return singleton;
+}
+
+const lazyDb = new Proxy({} as Database.Database, {
+  get(_target, property) {
+    const real = getDb() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(real, property);
+    return typeof value === 'function' ? (value as Function).bind(real) : value;
+  }
+});
+
+export default lazyDb;
