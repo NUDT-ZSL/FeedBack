@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "verify": "node --disable-warning=ExperimentalWarning --experimental-strip-types verify/run.ts",
     "check": "tsc -b --noEmit"
   },
   "dependencies": {
