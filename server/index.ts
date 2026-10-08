@@ -12,13 +12,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
-const db = new Database(path.join(__dirname, '../tea_collection.db'));
+const db = new Database(process.env.TEA_DB_PATH ?? path.join(__dirname, '../tea_collection.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -194,33 +193,27 @@ app.get('/api/teas', (req, res) => {
     const maxYear = req.query.maxYear as string;
     const origin = req.query.origin as string;
 
-    let sql = `
-      SELECT DISTINCT t.*, 
-             (SELECT AVG(score) FROM tasting_notes tn WHERE tn.tea_id = t.id) as avg_score
-      FROM teas t
-      LEFT JOIN tasting_notes tn ON t.tea_id = tn.id
-      WHERE t.user_id = ?
-    `;
+    let whereSql = ' WHERE t.user_id = ?';
     const params: (string | number)[] = [userId];
 
     if (category) {
-      sql += ' AND t.category = ?';
+      whereSql += ' AND t.category = ?';
       params.push(category);
     }
     if (minYear) {
-      sql += ' AND t.year >= ?';
+      whereSql += ' AND t.year >= ?';
       params.push(parseInt(minYear));
     }
     if (maxYear) {
-      sql += ' AND t.year <= ?';
+      whereSql += ' AND t.year <= ?';
       params.push(parseInt(maxYear));
     }
     if (origin) {
-      sql += ' AND t.origin LIKE ?';
+      whereSql += ' AND t.origin LIKE ?';
       params.push(`%${origin}%`);
     }
     if (minScore || maxScore) {
-      sql += ' AND t.id IN (SELECT tea_id FROM tasting_notes GROUP BY tea_id';
+      whereSql += ' AND t.id IN (SELECT tea_id FROM tasting_notes GROUP BY tea_id';
       const having: string[] = [];
       if (minScore) {
         having.push('AVG(score) >= ?');
@@ -230,17 +223,17 @@ app.get('/api/teas', (req, res) => {
         having.push('AVG(score) <= ?');
         params.push(parseInt(maxScore));
       }
-      sql += ` HAVING ${having.join(' AND ')})`;
+      whereSql += ` HAVING ${having.join(' AND ')})`;
     }
 
-    sql += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
+    const teas = db.prepare(
+      `SELECT t.*,
+              (SELECT AVG(score) FROM tasting_notes tn WHERE tn.tea_id = t.id) as avg_score
+       FROM teas t ${whereSql}
+       ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset) as Tea[];
 
-    const teas = db.prepare(sql).all(...params) as Tea[];
-
-    const countSql = 'SELECT COUNT(*) as total FROM teas t WHERE t.user_id = ?';
-    const countParams: (string | number)[] = [userId];
-    const result = db.prepare(countSql).get(...countParams) as { total: number };
+    const result = db.prepare(`SELECT COUNT(*) as total FROM teas t ${whereSql}`).get(...params) as { total: number };
 
     res.json({ success: true, teas, total: result.total });
   } catch (error) {
@@ -450,8 +443,12 @@ app.get('/api/export', (req, res) => {
       }))
     };
 
-    const fileName = `我的茶品收藏_${new Date().toISOString().split('T')[0]}.json`;
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileName = `我的茶品收藏_${dateStr}.json`;
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="tea-collection_${dateStr}.json"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
     res.setHeader('Content-Type', 'application/json');
     res.json(exportData);
   } catch (error) {
@@ -459,6 +456,12 @@ app.get('/api/export', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
-});
+export { app, db };
+
+const isMainModule = process.argv[1] ? path.resolve(process.argv[1]) === __filename : false;
+if (isMainModule) {
+  const PORT = Number(process.env.PORT) || 3001;
+  app.listen(PORT, () => {
+    console.log(`服务器运行在 http://localhost:${PORT}`);
+  });
+}
