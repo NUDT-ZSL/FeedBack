@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Color, Vector3 } from 'three'
+import { computeReflectionSpots } from '../core/lanternCore'
 
 interface LampData {
   id: string
@@ -181,17 +182,17 @@ function CompassRose({ lamps, showReflections }: CompassRoseProps) {
         )
       })}
 
-      {lamps.filter(l => showReflections && l.position.y > 2).map((lamp, i) => (
+      {computeReflectionSpots(lamps, showReflections).map((spot) => (
         <mesh
-          key={`reflection-${lamp.id}`}
-          position={[lamp.position.x, -lamp.position.y * 0.3 + 0.05, lamp.position.z]}
+          key={`reflection-${spot.id}`}
+          position={spot.position}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <circleGeometry args={[lamp.glowRadius * 0.8, 32]} />
+          <circleGeometry args={[spot.radius, 32]} />
           <meshBasicMaterial 
-            color={lamp.color} 
-            transparent 
-            opacity={0.15 * lamp.glowRadius / 2} 
+            color={spot.color}
+            transparent
+            opacity={spot.opacity}
             side={THREE.DoubleSide}
           />
         </mesh>

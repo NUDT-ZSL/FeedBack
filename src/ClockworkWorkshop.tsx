@@ -2,10 +2,11 @@ import { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { Vector3, Color } from 'three'
+import { Vector3 } from 'three'
 import CompassRose from './components/compassRose'
 import CompassRoseLamp from './components/compassRoseLamp'
 import { LanternInstance, LanternType, LANTERN_CONFIGS } from './types'
+import { advanceLanterns, computeLampData, shouldShowReflections } from './core/lanternCore'
 
 interface ClockworkWorkshopProps {
   lanterns: LanternInstance[]
@@ -237,8 +238,7 @@ function Scene({
   const { gl, scene, camera } = useThree()
   const [stars, setStars] = useState<{ position: [number, number, number]; size: number }[]>([])
 
-  const floatingLampCount = lanterns.filter(l => l.currentHeight > 2 && l.state !== 'fallen').length
-  const shouldShowReflections = floatingLampCount >= 3
+  const showReflections = shouldShowReflections(lanterns)
 
   useEffect(() => {
     const generateStars = () => {
@@ -265,94 +265,11 @@ function Scene({
     return () => clearInterval(interval)
   }, [])
 
-  const lampData = useMemo(() => {
-    return lanterns
-      .filter(l => l.state !== 'fallen' && l.currentHeight > 0)
-      .map(l => ({
-        id: l.id,
-        position: l.position,
-        color: new Color(LANTERN_CONFIGS[l.type].color),
-        glowRadius: LANTERN_CONFIGS[l.type].glowRadius * l.glowIntensity,
-      }))
-  }, [lanterns])
+  const lampData = useMemo(() => computeLampData(lanterns), [lanterns])
 
   useFrame((state, delta) => {
-    const now = performance.now()
-    let hasChanges = false
-    const updated = lanterns.map(lantern => {
-      const config = LANTERN_CONFIGS[lantern.type]
-      const l = { ...lantern }
-
-      if (l.state === 'hovering') {
-        const flicker = Math.sin(now * 0.005 + l.swayOffset) * 0.1
-        l.glowIntensity = 0.3 + flicker
-        l.position.y = 3 + Math.sin(now * 0.003 + l.swayOffset) * 0.1
-      }
-
-      if (l.state === 'ignited' && l.igniteTime) {
-        const elapsed = (now - l.igniteTime) / 1000
-        if (elapsed > 0.5) {
-          l.state = 'rising'
-        }
-        l.glowIntensity = Math.min(1, elapsed * 2)
-      }
-
-      if (l.state === 'rising') {
-        l.currentHeight += 0.5 * delta
-        l.position.y = l.currentHeight
-        l.glowIntensity = Math.min(1, l.glowIntensity + delta * 0.5)
-
-        if (l.currentHeight >= l.targetHeight) {
-          if (l.targetHeight > config.maxHeight) {
-            l.state = 'falling'
-            l.fallTime = now
-          } else {
-            l.state = 'floating'
-            l.glowIntensity = 1
-          }
-        }
-
-        if (l.currentHeight > config.maxHeight + 1) {
-          l.state = 'falling'
-          l.fallTime = now
-        }
-      }
-
-      if (l.state === 'floating') {
-        const sway = Math.sin(now * 0.002 + l.swayOffset) * 0.05
-        l.position.x += sway * delta
-        l.position.z += Math.cos(now * 0.002 + l.swayOffset) * 0.03 * delta
-      }
-
-      if (l.state === 'falling' && l.fallTime) {
-        const fallElapsed = (now - l.fallTime) / 1000
-        const flicker = Math.sin(now * 0.02) * 0.5 + 0.5
-        l.glowIntensity = flicker * (1 - fallElapsed / 2)
-        
-        if (fallElapsed > 2) {
-          l.currentHeight -= 2 * delta
-          l.position.y = l.currentHeight
-          
-          if (l.currentHeight <= 0.5) {
-            l.state = 'fallen'
-            l.glowIntensity = 0
-          }
-        }
-      }
-
-      if (l.state !== lantern.state || 
-          l.currentHeight !== lantern.currentHeight ||
-          l.glowIntensity !== lantern.glowIntensity ||
-          l.position.x !== lantern.position.x ||
-          l.position.z !== lantern.position.z ||
-          l.position.y !== lantern.position.y) {
-        hasChanges = true
-      }
-
-      return l
-    })
-
-    if (hasChanges) {
+    const { lanterns: updated, changed } = advanceLanterns(lanterns, delta, performance.now())
+    if (changed) {
       updateLanterns(updated)
     }
   })
@@ -377,7 +294,7 @@ function Scene({
         </mesh>
       ))}
 
-      <CompassRose lamps={lampData} showReflections={shouldShowReflections} />
+      <CompassRose lamps={lampData} showReflections={showReflections} />
 
       <Boat boatRef={boatRef} />
 

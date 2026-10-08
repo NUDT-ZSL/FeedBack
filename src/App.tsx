@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ClockworkWorkshop from './ClockworkWorkshop'
 import { LanternType, LANTERN_CONFIGS, LanternInstance } from './types'
+import { placeLantern, igniteLantern } from './core/lanternCore'
 import { v4 as uuidv4 } from 'uuid'
 import { Vector3 } from 'three'
 
@@ -15,33 +16,16 @@ function App() {
   const glRef = useRef<any>(null)
 
   const handleDragLantern = useCallback((type: LanternType, position: Vector3) => {
-    if (lanterns.filter(l => l.state !== 'fallen').length >= 10) {
-      return
-    }
-    const newLantern: LanternInstance = {
-      id: uuidv4(),
-      type,
-      position: position.clone(),
-      targetHeight: 5,
-      currentHeight: position.y,
-      state: 'hovering',
-      igniteTime: null,
-      fallTime: null,
-      glowIntensity: 0.3,
-      swayOffset: Math.random() * Math.PI * 2,
-    }
-    setLanterns(prev => [...prev, newLantern])
-    setSelectedLanternId(newLantern.id)
+    const result = placeLantern(lanterns, type, position, uuidv4(), Math.random() * Math.PI * 2)
+    if (!result) return
+    setLanterns(prev => [...prev, result.lantern])
+    setSelectedLanternId(result.lantern.id)
     setShowLanternPanel(false)
   }, [lanterns])
 
   const handleIgnite = useCallback(() => {
     if (!selectedLanternId) return
-    setLanterns(prev => prev.map(l => 
-      l.id === selectedLanternId 
-        ? { ...l, state: 'ignited' as const, igniteTime: performance.now(), targetHeight }
-        : l
-    ))
+    setLanterns(prev => igniteLantern(prev, selectedLanternId, targetHeight, performance.now()))
     setSelectedLanternId(null)
   }, [selectedLanternId, targetHeight])
 
