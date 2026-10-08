@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Color, Vector3 } from 'three'
+import { computeReflections } from '../lanternLogic'
 
 interface LampData {
   id: string
@@ -18,6 +19,7 @@ interface CompassRoseProps {
 function CompassRose({ lamps, showReflections }: CompassRoseProps) {
   const waterRef = useRef<THREE.Mesh>(null)
   const materialRef = useRef<THREE.ShaderMaterial>(null)
+  const reflections = computeReflections(lamps, showReflections)
 
   const waterShader = useMemo(() => ({
     uniforms: {
@@ -181,17 +183,17 @@ function CompassRose({ lamps, showReflections }: CompassRoseProps) {
         )
       })}
 
-      {lamps.filter(l => showReflections && l.position.y > 2).map((lamp, i) => (
+      {reflections.map((reflection) => (
         <mesh
-          key={`reflection-${lamp.id}`}
-          position={[lamp.position.x, -lamp.position.y * 0.3 + 0.05, lamp.position.z]}
+          key={`reflection-${reflection.id}`}
+          position={reflection.position}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <circleGeometry args={[lamp.glowRadius * 0.8, 32]} />
+          <circleGeometry args={[reflection.glowRadius * 0.8, 32]} />
           <meshBasicMaterial 
-            color={lamp.color} 
+            color={reflection.color} 
             transparent 
-            opacity={0.15 * lamp.glowRadius / 2} 
+            opacity={reflection.opacity} 
             side={THREE.DoubleSide}
           />
         </mesh>
