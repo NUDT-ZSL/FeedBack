@@ -1,4 +1,5 @@
-import { v4 as uuidv4 } from 'uuid'
+import { createId } from './lib/id.ts'
+import { resetAssembly } from './Assembly.ts'
 
 export interface WoodMaterial {
   id: string
@@ -13,7 +14,7 @@ export interface WoodMaterial {
 
 const woodMaterials: WoodMaterial[] = [
   {
-    id: uuidv4(),
+    id: createId(),
     name: '直纹紫檀',
     texture: 'straight',
     color: '#4a1c0e',
@@ -23,7 +24,7 @@ const woodMaterials: WoodMaterial[] = [
     selected: false
   },
   {
-    id: uuidv4(),
+    id: createId(),
     name: '水波纹紫檀',
     texture: 'wave',
     color: '#5c2313',
@@ -33,7 +34,7 @@ const woodMaterials: WoodMaterial[] = [
     selected: false
   },
   {
-    id: uuidv4(),
+    id: createId(),
     name: '牛毛纹紫檀',
     texture: 'oxhair',
     color: '#6b2a16',
@@ -43,7 +44,7 @@ const woodMaterials: WoodMaterial[] = [
     selected: false
   },
   {
-    id: uuidv4(),
+    id: createId(),
     name: '金星纹紫檀',
     texture: 'gold',
     color: '#7a2c14',
@@ -58,14 +59,19 @@ export function getMaterials(): WoodMaterial[] {
   return [...woodMaterials]
 }
 
+/**
+ * 选择木料。任何成功的重选都视为开始一个新项目：
+ * 先清空旧选择并复位加工/组装状态，再标记新木料，
+ * 避免上一轮的加工进度与组装结果残留。
+ * 传入不存在的 id 时不产生任何副作用。
+ */
 export function selectMaterial(id: string): WoodMaterial | null {
-  woodMaterials.forEach(m => m.selected = false)
   const material = woodMaterials.find(m => m.id === id)
-  if (material) {
-    material.selected = true
-    return { ...material }
-  }
-  return null
+  if (!material) return null
+  resetAssembly()
+  woodMaterials.forEach(m => m.selected = false)
+  material.selected = true
+  return { ...material }
 }
 
 export function getSelectedMaterial(): WoodMaterial | null {

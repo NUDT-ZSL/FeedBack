@@ -13,8 +13,7 @@ import {
   AssemblyStep,
   getComponents,
   markAllProcessed,
-  assembleComponent,
-  checkSnapDistance,
+  tryAssembleComponent,
   isAssemblyComplete,
   setCurrentStep,
   getCurrentStep,
@@ -79,19 +78,14 @@ export default function App() {
   }, [])
   
   const handleDrop = useCallback((componentId: string, position: [number, number, number]): boolean => {
-    const comp = components.find(c => c.id === componentId)
-    if (!comp) return false
-    
-    if (checkSnapDistance(position, comp.targetPosition, 1.5)) {
-      const success = assembleComponent(componentId)
-      if (success) {
-        setComponents(getComponents())
-        playWoodSound()
-        return true
-      }
+    const success = tryAssembleComponent(componentId, position, 1.5)
+    if (success) {
+      setComponents(getComponents())
+      playWoodSound()
+      return true
     }
     return false
-  }, [components])
+  }, [])
   
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

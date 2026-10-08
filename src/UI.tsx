@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import { WoodMaterial } from './Materials'
-import { FurnitureComponent, ComponentType, checkSnapDistance, assembleComponent } from './Assembly'
+import { FurnitureComponent, ComponentType, canDragComponent } from './Assembly'
 
 interface MaterialPanelProps {
   materials: WoodMaterial[]
@@ -141,7 +141,7 @@ export function ComponentPanel({ components, onDragStart, onDrop }: ComponentPan
   const [draggedId, setDraggedId] = useState<string | null>(null)
   
   const handleDragStart = (e: React.DragEvent, component: FurnitureComponent) => {
-    if (!component.processed) {
+    if (!canDragComponent(component)) {
       e.preventDefault()
       return
     }
@@ -171,13 +171,13 @@ export function ComponentPanel({ components, onDragStart, onDrop }: ComponentPan
         {components.map(component => (
           <div
             key={component.id}
-            draggable={component.processed && !component.assembled}
+            draggable={canDragComponent(component)}
             onDragStart={(e) => handleDragStart(e, component)}
             onDragEnd={handleDragEnd}
             style={{
               ...styles.componentCard,
               opacity: component.assembled ? 0.3 : component.processed ? 1 : 0.4,
-              cursor: component.processed && !component.assembled ? 'grab' : 'not-allowed',
+              cursor: canDragComponent(component) ? 'grab' : 'not-allowed',
               transform: draggedId === component.id ? 'scale(0.95)' : 'scale(1)',
               boxShadow: component.assembled 
                 ? 'inset 0 0 10px rgba(0, 255, 0, 0.3)' 
