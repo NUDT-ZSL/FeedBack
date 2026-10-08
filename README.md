@@ -1,57 +1,48 @@
-# React + TypeScript + Vite
+# 古籍修复工坊
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 React + TypeScript + Express 的古籍修复工坊应用。工序推进、材料领用、
+修复记录三个模块共享同一份可追溯状态来源（`src/workshop/`），任一操作提交后，
+所有入口读到的进度、材料余量与记录条数立即一致。
 
-Currently, two official plugins are available:
+## 状态一致性设计
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **统一状态来源**：`src/workshop/store.ts` 以操作日志（event log）为唯一事实，
+  工序进度、材料余量、修复记录均为同一日志的物化视图，不存在各模块私有副本。
+- **幂等**：每个操作携带 `opId`，重复提交（网络重试、工序切换后重发）返回
+  `duplicate`，不会重复扣减材料。
+- **冲突留痕**：操作可携带 `baseVersion`（提交方读到的状态版本）。版本不匹配时
+  操作不生效，完整冲突痕迹写入该册书的冲突列表，当前有效状态由日志确定性决定。
+- **材料账目**：余量由领用/退回收支事件推导；退回不得超过该册已领未退数量，
+  余量不足拒绝领用，均不产生半落账。
+- **历史迁移**：`src/workshop/migrate.ts` 把旧架构下三模块分散的快照归并为
+  有序事件流回放进统一存储；旧模块余量与流水不符时以旧展示值为准补校正事件，
+  保证迁移后各模块读取结果与迁移前一致。
 
-## Expanding the ESLint configuration
+## 常用命令
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm run dev                 # 前端 + 后端并发开发
+npm run verify:consistency  # 离线批量一致性验证（无需启动服务）
+npm run build               # 类型检查 + 前端构建
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 离线一致性验证
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+`npm run verify:consistency`（即 `tsx scripts/verify-consistency.ts`）覆盖：
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+1. 工序来回切换 —— 三模块读取一致，切换不丢材料账、不丢记录
+2. 材料重复领用与退回 —— 幂等重试不重复扣减，余量精确还原
+3. 并发冲突操作 —— 不静默择一，冲突留痕且有效状态可判定
+4. 历史数据迁移 —— 迁移后各模块读取结果与迁移前一致
+
+## API
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| `/api/workshop/books` | GET | 古籍列表 |
+| `/api/workshop/books/:id/snapshot` | GET | 某册书三模块一致性快照 |
+| `/api/workshop/books/:id/records` | GET | 修复记录 |
+| `/api/workshop/books/:id/conflicts` | GET | 冲突痕迹 |
+| `/api/workshop/materials` | GET | 材料清单 |
+| `/api/workshop/materials/movements?bookId=` | GET | 领用/退回流水 |
+| `/api/workshop/operations` | POST | 提交操作（工序推进/领用/退回/记录），冲突返回 409 |
