@@ -1,5 +1,8 @@
 import { RepairRegion } from '@/types';
 
+export const REPAIR_DURATION_SECONDS = 1.5;
+export const COMPLETE_THRESHOLD = 1;
+
 export const initialRepairRegions: RepairRegion[] = [
   {
     id: 'region-1',
@@ -9,6 +12,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'brush',
     description: '鼎腹正面铜绿覆盖区',
+    progress: 0,
   },
   {
     id: 'region-2',
@@ -18,6 +22,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'brush',
     description: '鼎腹背面铜绿覆盖区',
+    progress: 0,
   },
   {
     id: 'region-3',
@@ -27,6 +32,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'sandpaper',
     description: '右鼎耳锈蚀区域',
+    progress: 0,
   },
   {
     id: 'region-4',
@@ -36,6 +42,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'sandpaper',
     description: '左鼎耳锈蚀区域',
+    progress: 0,
   },
   {
     id: 'region-5',
@@ -45,6 +52,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'chisel',
     description: '兽面纹右侧缺失',
+    progress: 0,
   },
   {
     id: 'region-6',
@@ -54,6 +62,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'chisel',
     description: '兽面纹左侧缺失',
+    progress: 0,
   },
   {
     id: 'region-7',
@@ -63,6 +72,7 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'putty',
     description: '右鼎足缺口修复',
+    progress: 0,
   },
   {
     id: 'region-8',
@@ -72,11 +82,12 @@ export const initialRepairRegions: RepairRegion[] = [
     status: 'pending',
     requiredTool: 'putty',
     description: '左鼎足缺口修复',
+    progress: 0,
   },
 ];
 
 export const calculateCompletionRate = (regions: RepairRegion[]): number => {
   if (regions.length === 0) return 0;
-  const completed = regions.filter(r => r.status === 'completed').length;
-  return Math.round((completed / regions.length) * 100);
+  const total = regions.reduce((sum, r) => sum + (r.status === 'completed' ? 1 : r.progress), 0);
+  return Math.round((total / regions.length) * 100);
 };

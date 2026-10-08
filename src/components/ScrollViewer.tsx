@@ -248,6 +248,7 @@ export default function ScrollViewer({ records, isOpen, onClose, completionRate 
                         </div>
                       </div>
                     </div>
+                    </motion.div>
                   ))}
                 </div>
 

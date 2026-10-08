@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useRepairStore } from '@/store/useRepairStore';
 import RepairWorkshop from '@/components/RepairWorkshop';
 import ToolPanel from '@/components/ToolPanel';
@@ -7,13 +8,15 @@ import { getToolName } from '@/utils/tools';
 
 export default function App() {
   const {
-    regions,
     records,
     selectedTool,
     isDragging,
     dragPosition,
     showScrollViewer,
     completionRate,
+    startDrag,
+    endDrag,
+    setDragPosition,
     setShowScrollViewer,
     resetRepair,
   } = useRepairStore();
@@ -21,15 +24,40 @@ export default function App() {
   const currentTool = tools.find((t) => t.type === selectedTool);
   const latestRecords = records.slice(-3).reverse();
 
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMove = (e: PointerEvent) => {
+      setDragPosition({ x: e.clientX, y: e.clientY });
+    };
+    const handleUp = () => {
+      endDrag();
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+  }, [isDragging, endDrag, setDragPosition]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!selectedTool) return;
+    if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
+    startDrag();
+    setDragPosition({ x: e.clientX, y: e.clientY });
+  };
+
   return (
-    <div className="app-container">
+    <div className="app-container" onPointerDown={handlePointerDown}>
       <div className="top-bar">
         <h1>青铜器修复模拟器</h1>
         <p className="subtitle">传承古法 · 修复国之重器</p>
       </div>
 
       <div className="canvas-container">
-        <RepairWorkshop regions={regions} />
+        <RepairWorkshop />
       </div>
 
       <div className="tool-panel">
@@ -112,7 +140,12 @@ export default function App() {
         </div>
       )}
 
-      {showScrollViewer && <ScrollViewer onClose={() => setShowScrollViewer(false)} />}
+      <ScrollViewer
+        records={records}
+        isOpen={showScrollViewer}
+        onClose={() => setShowScrollViewer(false)}
+        completionRate={completionRate}
+      />
     </div>
   );
 }

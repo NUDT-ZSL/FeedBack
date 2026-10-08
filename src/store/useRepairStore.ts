@@ -1,17 +1,24 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { RepairState, RepairRegion, RepairRecord, ToolType } from '@/types';
-import { initialRepairRegions, calculateCompletionRate } from '@/utils/repairRegions';
+import {
+  initialRepairRegions,
+  calculateCompletionRate,
+  REPAIR_DURATION_SECONDS,
+  COMPLETE_THRESHOLD,
+} from '@/utils/repairRegions';
 import { getToolName, getRegionTypeName } from '@/utils/tools';
 
 interface RepairActions {
   setSelectedTool: (tool: ToolType | null) => void;
-  setIsDragging: (dragging: boolean) => void;
+  startDrag: () => void;
+  endDrag: () => void;
   setDragPosition: (pos: { x: number; y: number } | null) => void;
   setShowScrollViewer: (show: boolean) => void;
-  setErrorRegionId: (id: string | null) => void;
-  setGlowRegionId: (id: string | null) => void;
-  completeRegion: (regionId: string, toolType: ToolType) => void;
+  pressRegion: (regionId: string) => void;
+  enterRegion: (regionId: string) => void;
+  advanceRegion: (regionId: string, deltaSeconds: number) => void;
+  settleRegion: (regionId: string) => void;
   addRepairRecord: (region: RepairRegion, toolType: ToolType) => void;
   resetRepair: () => void;
 }
@@ -41,6 +48,9 @@ const generateRepairDescription = (region: RepairRegion, toolType: ToolType): st
   return options[Math.floor(Math.random() * options.length)];
 };
 
+let errorTimer: ReturnType<typeof setTimeout> | null = null;
+let glowTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useRepairStore = create<RepairState & RepairActions>((set, get) => ({
   regions: initialRepairRegions,
   records: [],
@@ -52,28 +62,90 @@ export const useRepairStore = create<RepairState & RepairActions>((set, get) => 
   errorRegionId: null,
   glowRegionId: null,
 
-  setSelectedTool: (tool) => set({ selectedTool: tool }),
-  setIsDragging: (dragging) => set({ isDragging: dragging }),
+  setSelectedTool: (tool) => {
+    if (get().isDragging) return;
+    set({ selectedTool: tool });
+  },
+
+  startDrag: () => set(state => (state.isDragging ? {} : { isDragging: true })),
+
+  endDrag: () => {
+    const { regions, isDragging } = get();
+    if (!isDragging) return;
+    regions
+      .filter(r => r.status === 'in-progress')
+      .forEach(r => get().settleRegion(r.id));
+    set({ isDragging: false, dragPosition: null });
+  },
+
   setDragPosition: (pos) => set({ dragPosition: pos }),
   setShowScrollViewer: (show) => set({ showScrollViewer: show }),
-  setErrorRegionId: (id) => set({ errorRegionId: id }),
-  setGlowRegionId: (id) => set({ glowRegionId: id }),
 
-  completeRegion: (regionId, toolType) => {
+  pressRegion: (regionId) => {
+    if (!get().selectedTool) return;
+    get().startDrag();
+    get().enterRegion(regionId);
+  },
+
+  enterRegion: (regionId) => {
+    const { regions, isDragging, selectedTool } = get();
+    const region = regions.find(r => r.id === regionId);
+    if (!isDragging || !selectedTool || !region || region.status !== 'pending') return;
+
+    if (region.requiredTool === selectedTool) {
+      const updatedRegions = regions.map(r =>
+        r.id === regionId ? { ...r, status: 'in-progress' as const } : r
+      );
+      set({ regions: updatedRegions });
+      return;
+    }
+
+    if (errorTimer) clearTimeout(errorTimer);
+    set({ errorRegionId: regionId });
+    errorTimer = setTimeout(() => set({ errorRegionId: null }), 1000);
+  },
+
+  advanceRegion: (regionId, deltaSeconds) => {
     const { regions } = get();
     const region = regions.find(r => r.id === regionId);
-    if (!region || region.status === 'completed') return;
+    if (!region || region.status !== 'in-progress') return;
 
+    const progress = Math.min(1, region.progress + deltaSeconds / REPAIR_DURATION_SECONDS);
     const updatedRegions = regions.map(r =>
-      r.id === regionId ? { ...r, status: 'completed' as const } : r
+      r.id === regionId ? { ...r, progress } : r
     );
+    set({
+      regions: updatedRegions,
+      completionRate: calculateCompletionRate(updatedRegions),
+    });
+  },
 
+  settleRegion: (regionId) => {
+    const { regions, selectedTool } = get();
+    const region = regions.find(r => r.id === regionId);
+    if (!region || region.status !== 'in-progress') return;
+
+    const completed = region.progress >= COMPLETE_THRESHOLD;
+    const updatedRegions = regions.map(r =>
+      r.id === regionId
+        ? completed
+          ? { ...r, status: 'completed' as const, progress: 1 }
+          : { ...r, status: 'pending' as const, progress: 0 }
+        : r
+    );
     set({
       regions: updatedRegions,
       completionRate: calculateCompletionRate(updatedRegions),
     });
 
-    get().addRepairRecord(region, toolType);
+    if (completed && selectedTool) {
+      const completedRegion = { ...region, status: 'completed' as const, progress: 1 };
+      get().addRepairRecord(completedRegion, selectedTool);
+
+      if (glowTimer) clearTimeout(glowTimer);
+      set({ glowRegionId: regionId });
+      glowTimer = setTimeout(() => set({ glowRegionId: null }), 1000);
+    }
   },
 
   addRepairRecord: (region, toolType) => {
@@ -91,8 +163,17 @@ export const useRepairStore = create<RepairState & RepairActions>((set, get) => 
     }));
   },
 
-  resetRepair: () => set({
-    regions: initialRepairRegions.map(r => ({ ...r, status: 'pending' as const })),
+  resetRepair: () => {
+    if (errorTimer) {
+      clearTimeout(errorTimer);
+      errorTimer = null;
+    }
+    if (glowTimer) {
+      clearTimeout(glowTimer);
+      glowTimer = null;
+    }
+    set({
+    regions: initialRepairRegions.map(r => ({ ...r, status: 'pending' as const, progress: 0 })),
     records: [],
     selectedTool: null,
     isDragging: false,
@@ -101,5 +182,10 @@ export const useRepairStore = create<RepairState & RepairActions>((set, get) => 
     completionRate: 0,
     errorRegionId: null,
     glowRegionId: null,
-  }),
+    });
+  },
 }));
+
+if (typeof window !== 'undefined') {
+  (window as unknown as { __repairStore?: typeof useRepairStore }).__repairStore = useRepairStore;
+}

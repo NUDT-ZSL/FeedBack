@@ -21,6 +21,7 @@ export interface RepairRegion {
   status: RepairStatus;
   requiredTool: ToolType;
   description: string;
+  progress: number;
 }
 
 export interface RepairRecord {
