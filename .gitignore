@@ -37,3 +37,7 @@ node_modules/
 __pycache__/
 dist/
 build/
+
+# 验证脚本编译产物
+scripts/dist/
+.trash/
