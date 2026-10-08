@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useStar } from '../context/StarContext';
 import { SHICHEN, SHICHEN_HOURS } from '../types';
+import { hourToShichen } from '../utils';
 
 const ShichenController: React.FC = () => {
   const { currentHour, setCurrentHour } = useStar();
@@ -39,7 +40,7 @@ const ShichenController: React.FC = () => {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  const shichenIndex = Math.floor((currentHour + 1) / 2) % 12;
+  const shichenIndex = hourToShichen(currentHour);
   const displayHour = Math.floor(currentHour) % 24;
   const displayMin = Math.floor((currentHour % 1) * 60);
 

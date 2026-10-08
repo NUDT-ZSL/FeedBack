@@ -1,13 +1,10 @@
 import React from 'react';
 import { useStar } from '../context/StarContext';
-import { cartesianToSpherical } from '../utils';
 
 const StarInfoPanel: React.FC = () => {
-  const { selectedStar } = useStar();
+  const { selectedStar, ra, dec } = useStar();
 
   if (!selectedStar) return null;
-
-  const { ra, dec } = cartesianToSpherical(...selectedStar.position);
 
   return (
     <div

@@ -8,21 +8,17 @@ const ControlButtons: React.FC = () => {
   const [recordAnimating, setRecordAnimating] = useState(false);
 
   const handleRecord = () => {
-    if (!selectedStar) {
-      setShowToast('请先选择一颗星体');
-      setTimeout(() => setShowToast(null), 3000);
-      return;
+    if (selectedStar) {
+      setRecordAnimating(true);
+      setTimeout(() => setRecordAnimating(false), 100);
     }
-    setRecordAnimating(true);
-    addRecord(selectedStar, currentHour, ra, dec);
-    setTimeout(() => setRecordAnimating(false), 100);
+    addRecord();
   };
 
   const handlePaint = () => {
     const canvas = document.querySelector('canvas');
     if (!canvas) {
       setShowToast('无法获取画布');
-      setTimeout(() => setShowToast(null), 3000);
       return;
     }
 

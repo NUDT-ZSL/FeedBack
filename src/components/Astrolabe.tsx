@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStar } from '../context/StarContext';
-import { degToRad, clamp, lerp } from '../utils';
+import { degToRad, lerp } from '../utils';
 
 const RADIUS = 3;
 const TUBE_RADIUS = 0.05;
@@ -33,7 +33,7 @@ const ScaleMark: React.FC<{
 };
 
 const AstrolabeRings: React.FC = () => {
-  const { ra, dec, setRa, setDec } = useStar();
+  const { ra, dec, adjustRa, adjustDec } = useStar();
   const [isDragging, setIsDragging] = useState(false);
   const [dragAxis, setDragAxis] = useState<'ra' | 'dec' | null>(null);
   const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
@@ -77,8 +77,7 @@ const AstrolabeRings: React.FC = () => {
     if (dragAxis === 'ra') {
       const delta = Math.round(dx * 0.5);
       if (Math.abs(delta) >= 1) {
-        const newRa = ((ra + delta) % 360 + 360) % 360;
-        setRa(newRa);
+        const newRa = adjustRa(delta);
         setHighlightedRa(Math.round(newRa / 10) * 10);
         setTimeout(() => setHighlightedRa(null), 500);
         setLastPos({ x: e.clientX, y: e.clientY });
@@ -86,8 +85,7 @@ const AstrolabeRings: React.FC = () => {
     } else {
       const delta = Math.round(dy * 0.5);
       if (Math.abs(delta) >= 1) {
-        const newDec = clamp(dec + delta, -90, 90);
-        setDec(newDec);
+        const newDec = adjustDec(delta);
         setHighlightedDec(Math.round(newDec / 10) * 10);
         setTimeout(() => setHighlightedDec(null), 500);
         setLastPos({ x: e.clientX, y: e.clientY });

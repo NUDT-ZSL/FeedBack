@@ -310,16 +310,11 @@ const StarChart: React.FC = () => {
   const handleStarClick = useCallback((star: CelestialBody) => {
     const { ra, dec } = cartesianToSpherical(...star.position);
     const adjustedRa = (ra - currentRotation.current * (180 / Math.PI) + 360) % 360;
-    const adjustedStar: CelestialBody = {
+    setSelectedStar({
       ...star,
       position: sphericalToCartesian(SKY_RADIUS, adjustedRa, dec),
-    };
-    if (selectedStar?.name === star.name) {
-      setSelectedStar(null);
-    } else {
-      setSelectedStar(adjustedStar);
-    }
-  }, [selectedStar, setSelectedStar, currentRotation.current]);
+    });
+  }, [setSelectedStar]);
 
   const handleStarHover = useCallback((star: CelestialBody | null, e?: React.PointerEvent) => {
     if (star && e) {
@@ -347,12 +342,8 @@ const StarChart: React.FC = () => {
       description: planet.description,
       type: 'planet',
     };
-    if (selectedStar?.name === planet.name) {
-      setSelectedStar(null);
-    } else {
-      setSelectedStar(planetBody);
-    }
-  }, [selectedStar, setSelectedStar, currentRotation.current]);
+    setSelectedStar(planetBody);
+  }, [setSelectedStar]);
 
   const handleMoonClick = useCallback(() => {
     const angle = (currentHour / 24) * Math.PI * 2;
@@ -372,12 +363,8 @@ const StarChart: React.FC = () => {
       description: '地球的天然卫星',
       type: 'moon',
     };
-    if (selectedStar?.name === '月亮') {
-      setSelectedStar(null);
-    } else {
-      setSelectedStar(moonBody);
-    }
-  }, [currentHour, selectedStar, setSelectedStar, currentRotation.current]);
+    setSelectedStar(moonBody);
+  }, [currentHour, setSelectedStar]);
 
   const getPlanetBody = useCallback((planet: typeof PLANET_DATA[0], angle: number): CelestialBody => {
     const x = planet.orbitRadius * Math.cos(angle);

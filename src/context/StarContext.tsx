@@ -1,88 +1,55 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { ObservationRecord, CelestialBody } from '../types';
+import React, { createContext, useContext, useMemo, useRef, useSyncExternalStore } from 'react';
+import type { CelestialBody } from '../types';
+import {
+  createObservationStore,
+  type ObservationState,
+  type ObservationStore,
+} from '../store/observationStore';
 
-interface StarContextType {
-  currentHour: number;
+interface StarContextType extends Omit<ObservationState, 'toast'> {
+  showToast: string | null;
   setCurrentHour: (hour: number) => void;
-  ra: number;
-  dec: number;
   setRa: (ra: number) => void;
   setDec: (dec: number) => void;
-  selectedStar: CelestialBody | null;
+  adjustRa: (delta: number) => number;
+  adjustDec: (delta: number) => number;
   setSelectedStar: (star: CelestialBody | null) => void;
-  records: ObservationRecord[];
-  addRecord: (star: CelestialBody, hour: number, ra: number, dec: number) => boolean;
+  addRecord: () => boolean;
   deleteRecord: (id: string) => void;
   clearRecords: () => void;
-  showToast: string | null;
-  setShowToast: (msg: string | null) => void;
+  setShowToast: (message: string | null) => void;
 }
 
 const StarContext = createContext<StarContextType | undefined>(undefined);
 
 export const StarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentHour, setCurrentHour] = useState(21);
-  const [ra, setRa] = useState(0);
-  const [dec, setDec] = useState(0);
-  const [selectedStar, setSelectedStar] = useState<CelestialBody | null>(null);
-  const [records, setRecords] = useState<ObservationRecord[]>([]);
-  const [showToast, setShowToast] = useState<string | null>(null);
+  const storeRef = useRef<ObservationStore | null>(null);
+  if (storeRef.current === null) {
+    storeRef.current = createObservationStore();
+  }
+  const store = storeRef.current;
 
-  const addRecord = useCallback((star: CelestialBody, hour: number, currentRa: number, currentDec: number) => {
-    if (records.length >= 50) {
-      setShowToast('观星册已满，请先删除旧录');
-      setTimeout(() => setShowToast(null), 3000);
-      return false;
-    }
-    const now = new Date();
-    const h = Math.floor(hour);
-    const m = Math.floor((hour - h) * 60);
-    const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    const newRecord: ObservationRecord = {
-      id: uuidv4(),
-      timestamp: now,
-      time: timeStr,
-      starName: star.name,
-      starColor: star.color,
-      ra: currentRa,
-      dec: currentDec,
-      hour: hour,
+  const state = useSyncExternalStore(store.subscribe, store.getState);
+
+  const value = useMemo<StarContextType>(() => {
+    const { toast, ...rest } = state;
+    return {
+      ...rest,
+      showToast: toast,
+      setCurrentHour: store.setHour,
+      setRa: store.setRa,
+      setDec: store.setDec,
+      adjustRa: store.adjustRa,
+      adjustDec: store.adjustDec,
+      setSelectedStar: store.selectStar,
+      addRecord: store.addRecord,
+      deleteRecord: store.deleteRecord,
+      clearRecords: store.clearRecords,
+      setShowToast: store.showToast,
     };
-    setRecords(prev => [...prev, newRecord]);
-    return true;
-  }, [records.length]);
+  }, [state, store]);
 
-  const deleteRecord = useCallback((id: string) => {
-    setRecords(prev => prev.filter(r => r.id !== id));
-  }, []);
-
-  const clearRecords = useCallback(() => {
-    setRecords([]);
-  }, []);
-
-  const value = useMemo(() => ({
-    currentHour,
-    setCurrentHour,
-    ra,
-    dec,
-    setRa,
-    setDec,
-    selectedStar,
-    setSelectedStar,
-    records,
-    addRecord,
-    deleteRecord,
-    clearRecords,
-    showToast,
-    setShowToast,
-  }), [currentHour, ra, dec, selectedStar, records, addRecord, deleteRecord, clearRecords, showToast]);
-
-  return (
-    <StarContext.Provider value={value}>
-      {children}
-    </StarContext.Provider>
-  );
+  return <StarContext.Provider value={value}>{children}</StarContext.Provider>;
 };
 
 export const useStar = () => {
