@@ -98,24 +98,15 @@ export const createStrokeFromDrag = (
   glazeId: string,
   thickness: number
 ): GlazeStroke | null => {
-  const validStart = isInGlazeArea(startUV)
-  const validEnd = isInGlazeArea(endUV)
-  
-  if (!validStart && !validEnd) {
+  if (!isInGlazeArea(startUV) && !isInGlazeArea(endUV)) {
     return null
   }
-  
-  const clampedStart: [number, number] = [
-    Math.max(MIN_U, Math.min(MAX_U, startUV[0])),
-    Math.max(MIN_V, Math.min(MAX_V, startUV[1])),
-  ]
-  
-  const clampedEnd: [number, number] = [
-    Math.max(MIN_U, Math.min(MAX_U, endUV[0])),
-    Math.max(MIN_V, Math.min(MAX_V, endUV[1])),
-  ]
-  
-  const uvCoords = interpolateStroke(clampedStart, clampedEnd, 15)
+
+  const uvCoords = interpolateStroke(startUV, endUV, 15).filter(isInGlazeArea)
+
+  if (uvCoords.length === 0) {
+    return null
+  }
   
   return {
     id: '',

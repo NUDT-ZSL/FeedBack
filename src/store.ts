@@ -21,7 +21,29 @@ export interface TextureData {
   type: 'rabbit' | 'oil' | 'yohen' | 'none'
   intensity: number
   colorVariation: number[]
-  spots: { x: number; y: number; size: number; color: string }[]
+  spots: TextureSpot[]
+  contributions: GlazeContribution[]
+  seed: number
+}
+
+export interface TextureSpot {
+  x: number
+  y: number
+  size: number
+  color: string
+  glazeId: string
+  layerOrder: number
+  thickness: number
+  activation: number
+}
+
+export interface GlazeContribution {
+  glazeId: string
+  name: string
+  activation: number
+  coverage: number
+  avgThickness: number
+  spotCount: number
 }
 
 export interface TempPoint {
@@ -99,7 +121,7 @@ export interface Store {
   setFps: (fps: number) => void
 }
 
-const defaultGlazes: GlazeType[] = [
+export const DEFAULT_GLAZES: GlazeType[] = [
   { id: '1', name: '天青釉', color: '#6ba7c4', viscosity: 0.6, tempRange: [1200, 1300] },
   { id: '2', name: '月白釉', color: '#e0e8e8', viscosity: 0.5, tempRange: [1150, 1250] },
   { id: '3', name: '梅子青釉', color: '#5d8a6b', viscosity: 0.7, tempRange: [1180, 1280] },
@@ -117,6 +139,8 @@ const defaultPot: PotState = {
     intensity: 0,
     colorVariation: [0, 0, 0],
     spots: [],
+    contributions: [],
+    seed: 0,
   },
 }
 
@@ -131,7 +155,7 @@ export const useStore = create<Store>((set) => ({
   camera: defaultCamera,
   setCamera: (camera) => set((state) => ({ camera: { ...state.camera, ...camera } })),
   
-  glazes: defaultGlazes,
+  glazes: DEFAULT_GLAZES,
   selectedGlaze: null,
   selectGlaze: (id) => set({ selectedGlaze: id }),
   

@@ -3,8 +3,16 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore, GlazeStroke } from './store'
-import { calculateTemperatureCurve, calculateCoolingCurve, generateTextureData, getFireColor } from './kilnSimulation'
-import { hexToRgb, getGlazeColorWithThickness } from './glazeInteraction'
+import {
+  calculateTemperatureCurve,
+  calculateCoolingCurve,
+  buildCanonicalFiringHistory,
+  deriveFiringSeed,
+  simulateFiringFromStrokes,
+  getFireColor,
+  mulberry32,
+} from './kilnSimulation'
+import { buildGlazeComposition } from './glazeComposition'
 
 const ROOM_WIDTH = 10
 const ROOM_DEPTH = 8
@@ -185,49 +193,38 @@ const Pot = ({ onPointerDown, onPointerMove, onPointerUp }: PotProps) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     
     if (pot.hasGlaze || glazeStrokes.length > 0) {
-      const usedGlazes = new Map<string, { count: number; thickness: number }>()
-      
-      glazeStrokes.forEach(stroke => {
-        const existing = usedGlazes.get(stroke.glazeId) || { count: 0, thickness: 0 }
-        usedGlazes.set(stroke.glazeId, {
-          count: existing.count + 1,
-          thickness: Math.max(existing.thickness, stroke.thickness),
-        })
-      })
-      
-      if (usedGlazes.size > 0) {
-        const entries = Array.from(usedGlazes.entries())
-        const mainGlaze = glazes.find(g => g.id === entries[0][0])
-        if (mainGlaze) {
-          const baseColor = getGlazeColorWithThickness(mainGlaze.color, entries[0][1].thickness)
-          ctx.fillStyle = baseColor
-          ctx.fillRect(0, 150, canvas.width, canvas.height - 300)
-        }
-        
-        entries.forEach(([glazeId, data]) => {
-          const glaze = glazes.find(g => g.id === glazeId)
-          if (!glaze) return
-          
-          const stroke = glazeStrokes.find(s => s.glazeId === glazeId)
-          if (!stroke) return
-          
-          const color = getGlazeColorWithThickness(glaze.color, data.thickness)
-          
-          stroke.uvCoords.forEach((uv, i) => {
-            const x = uv[0] * canvas.width
-            const y = uv[1] * canvas.height
-            const radius = 15 + data.thickness * 30
-            
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius)
-            gradient.addColorStop(0, color + 'cc')
-            gradient.addColorStop(0.5, color + '88')
-            gradient.addColorStop(1, color + '00')
-            
-            ctx.fillStyle = gradient
-            ctx.beginPath()
-            ctx.arc(x, y, radius, 0, Math.PI * 2)
-            ctx.fill()
+      const composition = buildGlazeComposition(glazeStrokes, glazes)
+      const glazeById = new Map(glazes.map(g => [g.id, g]))
+
+      if (composition.cells.length > 0) {
+        const cellPx = canvas.width / composition.gridSize
+
+        composition.cells.forEach(cell => {
+          let r = 0xe8 / 255
+          let g = 0xe0 / 255
+          let b = 0xd0 / 255
+
+          cell.layers.forEach(layer => {
+            const glaze = glazeById.get(layer.glazeId)
+            if (!glaze) return
+            const hex = glaze.color.replace('#', '')
+            const lr = parseInt(hex.slice(0, 2), 16) / 255
+            const lg = parseInt(hex.slice(2, 4), 16) / 255
+            const lb = parseInt(hex.slice(4, 6), 16) / 255
+            const alpha = Math.max(0, Math.min(0.95, 0.25 + layer.thickness * 1.2))
+            r = r * (1 - alpha) + lr * alpha
+            g = g * (1 - alpha) + lg * alpha
+            b = b * (1 - alpha) + lb * alpha
           })
+
+          const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255)
+          ctx.fillStyle = `rgb(${toByte(r)}, ${toByte(g)}, ${toByte(b)})`
+          ctx.fillRect(
+            (cell.u - 0.5 / composition.gridSize) * canvas.width,
+            (cell.v - 0.5 / composition.gridSize) * canvas.height,
+            cellPx + 0.5,
+            cellPx + 0.5
+          )
         })
       }
     }
@@ -249,7 +246,10 @@ const Pot = ({ onPointerDown, onPointerMove, onPointerUp }: PotProps) => {
           
           ctx.save()
           ctx.translate(x, y)
-          ctx.rotate(Math.random() * Math.PI)
+          ctx.rotate(
+            ((Math.round(spot.x * 10000) * 977 + Math.round(spot.y * 10000) * 613 + spot.layerOrder * 31) % 360) *
+              (Math.PI / 180)
+          )
           ctx.scale(1, 0.3)
           ctx.fillStyle = gradient
           ctx.beginPath()
@@ -298,16 +298,17 @@ const Pot = ({ onPointerDown, onPointerMove, onPointerUp }: PotProps) => {
       if (pot.currentTemp < 300) {
         ctx.strokeStyle = '#00000022'
         ctx.lineWidth = 0.5
+        const crackleRng = mulberry32((pot.textureData.seed || 1) ^ 0x5f3759df)
         for (let i = 0; i < 50; i++) {
-          const startX = Math.random() * canvas.width
-          const startY = 150 + Math.random() * (canvas.height - 300)
+          const startX = crackleRng() * canvas.width
+          const startY = 150 + crackleRng() * (canvas.height - 300)
           ctx.beginPath()
           ctx.moveTo(startX, startY)
           let x = startX
           let y = startY
           for (let j = 0; j < 10; j++) {
-            x += (Math.random() - 0.5) * 30
-            y += Math.random() * 15
+            x += (crackleRng() - 0.5) * 30
+            y += crackleRng() * 15
             ctx.lineTo(x, y)
           }
           ctx.stroke()
@@ -422,6 +423,9 @@ const Kiln = () => {
   const [firingTime, setFiringTime] = useState(0)
   const [coolingTime, setCoolingTime] = useState(0)
   const [peakTemp, setPeakTemp] = useState(25)
+  const canonicalHistoryRef = useRef<{ time: number; temp: number }[]>([])
+  const firingSeedRef = useRef(0)
+  const tempSampleIndexRef = useRef(0)
   
   const particleCount = 200
   const firePositions = useMemo(() => new Float32Array(particleCount * 3), [])
@@ -441,24 +445,34 @@ const Kiln = () => {
     if (firingStage === 'heating') {
       const newTime = firingTime + delta
       setFiringTime(newTime)
-      
-      const currentTemp = calculateTemperatureCurve(newTime, kilnTargetTemp, 10)
-      setPotTemp(currentTemp)
-      setPeakTemp(Math.max(peakTemp, currentTemp))
-      addTempPoint({ time: newTime, temp: currentTemp })
-      
-      const usedGlazeColors = [...new Set(glazeStrokes.map(s => s.glazeId))]
-        .map(id => glazes.find(g => g.id === id)?.color || '#ffffff')
-      
-      const textureData = generateTextureData(
-        currentTemp,
-        kilnTargetTemp,
-        usedGlazeColors.length > 0 ? usedGlazeColors : ['#b56e7d'],
-        newTime
+
+      if (canonicalHistoryRef.current.length === 0) {
+        canonicalHistoryRef.current = buildCanonicalFiringHistory(kilnTargetTemp)
+        firingSeedRef.current = deriveFiringSeed(glazeStrokes, canonicalHistoryRef.current)
+        tempSampleIndexRef.current = 0
+      }
+
+      const canonical = canonicalHistoryRef.current
+      while (
+        tempSampleIndexRef.current < canonical.length - 1 &&
+        canonical[tempSampleIndexRef.current + 1].time <= newTime
+      ) {
+        tempSampleIndexRef.current++
+      }
+      const sample = canonical[Math.min(tempSampleIndexRef.current, canonical.length - 1)]
+      setPotTemp(sample.temp)
+      setPeakTemp(Math.max(peakTemp, sample.temp))
+      addTempPoint({ time: sample.time, temp: sample.temp })
+
+      const prefix = canonical.slice(0, tempSampleIndexRef.current + 1)
+      setTextureData(
+        simulateFiringFromStrokes(glazeStrokes, glazes, prefix, firingSeedRef.current)
       )
-      setTextureData(textureData)
-      
+
       if (newTime >= 10) {
+        setTextureData(
+          simulateFiringFromStrokes(glazeStrokes, glazes, canonical, firingSeedRef.current)
+        )
         useStore.getState().stopFiring()
         setCoolingTime(0)
       }
@@ -467,15 +481,32 @@ const Kiln = () => {
     if (firingStage === 'cooling') {
       const newTime = coolingTime + delta
       setCoolingTime(newTime)
+
+      const canonical = canonicalHistoryRef.current
+      const coolSample =
+        canonical.length > 0
+          ? canonical.reduce(
+              (prev, curr) =>
+                Math.abs(curr.time - (10 + newTime)) < Math.abs(prev.time - (10 + newTime))
+                  ? curr
+                  : prev,
+              canonical[0]
+            )
+          : { time: 10 + newTime, temp: calculateCoolingCurve(newTime, peakTemp, 8) }
+      setPotTemp(coolSample.temp)
+      addTempPoint({ time: coolSample.time, temp: coolSample.temp })
       
-      const currentTemp = calculateCoolingCurve(newTime, peakTemp, 8)
-      setPotTemp(currentTemp)
-      addTempPoint({ time: firingTime + newTime, temp: currentTemp })
-      
-      if (currentTemp <= 200) {
+      if (coolSample.temp <= 200) {
+        setTextureData(
+          simulateFiringFromStrokes(glazeStrokes, glazes, canonical, firingSeedRef.current)
+        )
         useStore.setState({ firingStage: 'finished' })
         setKilnDoorOpen(true)
         markFired()
+        canonicalHistoryRef.current = []
+        setFiringTime(0)
+        setCoolingTime(0)
+        setPeakTemp(25)
       }
     }
     
@@ -585,8 +616,8 @@ const DisplayStand = () => {
         <cylinderGeometry args={[0.75, 0.75, 0.1, 32]} />
         <meshStandardMaterial color="#6b4c3b" roughness={0.7} />
       </mesh>
-      <mesh position={[0, 0.55, 0]}>
-        <circleGeometry args={[0.7, 32]} rotation={[-Math.PI / 2, 0, 0]} />
+      <mesh position={[0, 0.55, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.7, 32]} />
         <meshStandardMaterial color="#8b0000" roughness={0.8} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 0.25, 0]} castShadow>
