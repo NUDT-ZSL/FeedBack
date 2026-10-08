@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/*.test.ts",
+    "verify": "tsc && node --test test/*.test.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
