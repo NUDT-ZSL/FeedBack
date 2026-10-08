@@ -92,13 +92,36 @@ const Workshop: React.FC<WorkshopProps> = ({
   }, [poundingCount, currentStage, onPound]);
 
   useEffect(() => {
-    if (poundingCount >= 50 && !poundingCompleteTriggered.current) {
+    if (
+      poundingCount >= 50 &&
+      !poundingCompleteTriggered.current &&
+      currentStage === 'pounding'
+    ) {
       poundingCompleteTriggered.current = true;
       setTimeout(() => {
         onPoundingComplete();
       }, 2000);
     }
-  }, [poundingCount, onPoundingComplete]);
+  }, [poundingCount, currentStage, onPoundingComplete]);
+
+  // 新批次开始（捣练次数清零）后允许完成逻辑再次触发，保证连续制作
+  useEffect(() => {
+    if (poundingCount < 50) poundingCompleteTriggered.current = false;
+  }, [poundingCount]);
+
+  // 阶段切换或中断重开时，清理所有残留的计时与粒子效果
+  useEffect(() => {
+    if (currentStage !== 'pounding') {
+      setParticles([]);
+      setFloatingNumbers([]);
+      setIsPressed(false);
+    }
+    if (currentStage !== 'molding' || !selectedMold) {
+      setCountdown(null);
+      setShowMoldOpen(false);
+      setGoldParticles([]);
+    }
+  }, [currentStage, selectedMold]);
 
   useEffect(() => {
     if (particles.length === 0) return;
@@ -121,12 +144,18 @@ const Workshop: React.FC<WorkshopProps> = ({
   }, [particles.length]);
 
   useEffect(() => {
-    if (selectedMold && countdown === null) {
+    if (
+      currentStage === 'molding' &&
+      selectedMold &&
+      countdown === null &&
+      !showMoldOpen
+    ) {
       setCountdown(10);
     }
-  }, [selectedMold, countdown]);
+  }, [currentStage, selectedMold, countdown, showMoldOpen]);
 
   useEffect(() => {
+    if (currentStage !== 'molding') return;
     if (countdown === null || countdown <= 0) return;
     
     const timer = setInterval(() => {
@@ -160,7 +189,7 @@ const Workshop: React.FC<WorkshopProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [countdown, onMoldingComplete]);
+  }, [countdown, currentStage, onMoldingComplete]);
 
   useEffect(() => {
     if (goldParticles.length === 0) return;
