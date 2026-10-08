@@ -78,6 +78,7 @@ const InkForm: React.FC<InkFormProps> = ({
         <h2 style={{ fontSize: 28, color: '#4a2c1a' }}>制墨配方</h2>
         <div style={{ display: 'flex', gap: 12 }}>
           <button
+            data-testid="reset-btn"
             style={{
               padding: '8px 20px',
               backgroundColor: '#5c3a21',

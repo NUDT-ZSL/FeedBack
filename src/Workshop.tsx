@@ -92,12 +92,16 @@ const Workshop: React.FC<WorkshopProps> = ({
   }, [poundingCount, currentStage, onPound]);
 
   useEffect(() => {
-    if (poundingCount >= 50 && !poundingCompleteTriggered.current) {
-      poundingCompleteTriggered.current = true;
-      setTimeout(() => {
-        onPoundingComplete();
-      }, 2000);
+    if (poundingCount < 50) {
+      poundingCompleteTriggered.current = false;
+      return;
     }
+    if (poundingCompleteTriggered.current) return;
+    poundingCompleteTriggered.current = true;
+    const timer = window.setTimeout(() => {
+      onPoundingComplete();
+    }, 2000);
+    return () => window.clearTimeout(timer);
   }, [poundingCount, onPoundingComplete]);
 
   useEffect(() => {
@@ -120,46 +124,52 @@ const Workshop: React.FC<WorkshopProps> = ({
     return () => clearInterval(interval);
   }, [particles.length]);
 
+  // 选定模具后开启 10 秒倒计时；取消选择或重开时清零
   useEffect(() => {
-    if (selectedMold && countdown === null) {
-      setCountdown(10);
+    if (!selectedMold) {
+      setCountdown(null);
+      return;
     }
-  }, [selectedMold, countdown]);
+    setCountdown(10);
+  }, [selectedMold]);
 
+  // 倒计时每秒推进，归零后停止
   useEffect(() => {
     if (countdown === null || countdown <= 0) return;
-    
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          clearInterval(timer);
-          setShowMoldOpen(true);
-          
-          const newGoldParticles: GoldParticle[] = [];
-          for (let i = 0; i < 80; i++) {
-            newGoldParticles.push({
-              id: i,
-              x: 50,
-              y: 50,
-              angle: (Math.PI * 2 * i) / 80,
-              distance: 0
-            });
-          }
-          setGoldParticles(newGoldParticles);
-          
-          setTimeout(() => {
-            setShowMoldOpen(false);
-            setGoldParticles([]);
-            onMoldingComplete();
-          }, 600);
-          
-          return null;
-        }
-        return prev - 1;
-      });
+    const timer = window.setTimeout(() => {
+      setCountdown(prev => (prev === null || prev <= 0 ? prev : prev - 1));
     }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [countdown]);
 
-    return () => clearInterval(timer);
+  // 倒计时归零时触发一次开模动画与成型完成；卸载或重开时清理定时器与粒子
+  useEffect(() => {
+    if (countdown !== 0) return;
+    setShowMoldOpen(true);
+
+    const newGoldParticles: GoldParticle[] = [];
+    for (let i = 0; i < 80; i++) {
+      newGoldParticles.push({
+        id: i,
+        x: 50,
+        y: 50,
+        angle: (Math.PI * 2 * i) / 80,
+        distance: 0
+      });
+    }
+    setGoldParticles(newGoldParticles);
+
+    const timer = window.setTimeout(() => {
+      setShowMoldOpen(false);
+      setGoldParticles([]);
+      onMoldingComplete();
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+      setShowMoldOpen(false);
+      setGoldParticles([]);
+    };
   }, [countdown, onMoldingComplete]);
 
   useEffect(() => {
@@ -277,7 +287,7 @@ const Workshop: React.FC<WorkshopProps> = ({
           <div style={{ fontSize: 60, transform: 'rotate(-10deg)' }}>🎋</div>
         </div>
 
-        <div style={{ position: 'absolute', bottom: 100, left: 180, width: 180, textAlign: 'center' }}>
+        <div data-testid="material-station" style={{ position: 'absolute', bottom: 100, left: 180, width: 180, textAlign: 'center' }}>
           <Workstation
             title="选料台"
             isActive={currentStage === 'material'}
@@ -488,6 +498,7 @@ const Workshop: React.FC<WorkshopProps> = ({
                   <div
                     key={mold.id}
                     className="mold-card"
+                    data-testid={`mold-${mold.id}`}
                     style={{
                       width: 110,
                       height: 110,
@@ -739,6 +750,7 @@ const IngotThumbnail: React.FC<{
 
   return (
     <div
+      data-testid="ingot-thumb"
       style={{
         width: 60,
         height: 80,
@@ -781,6 +793,7 @@ const IngotThumbnail: React.FC<{
         }}
       >
         <div
+          data-testid="ingot-progress"
           style={{
             height: '100%',
             width: `${ingot.dryingProgress}%`,

@@ -5,9 +5,20 @@ import Workshop from './Workshop';
 import InkForm from './InkForm';
 import { Material, InkIngot, Store, MATERIALS_DATA, MoldType } from './types';
 
+const getMoldName = (type: MoldType): string => {
+  const names: Record<MoldType, string> = {
+    circle: '圆形墨锭',
+    rectangle: '长方形墨锭',
+    ruyi: '如意形墨锭',
+    dragon: '龙纹形墨锭'
+  };
+  return names[type];
+};
+
 const App: React.FC = () => {
   const [store, setStore] = useState<Store>({
     materials: MATERIALS_DATA.map(m => ({ ...m, ratio: 0 })),
+    materialsConfirmed: false,
     poundingCount: 0,
     selectedMold: null,
     currentStage: 'material',
@@ -19,7 +30,11 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [resetKey, setResetKey] = useState(0);
   const particleIdRef = useRef(0);
+  const toastTimerRef = useRef<number | null>(null);
+  const stageResetTimerRef = useRef<number | null>(null);
+  const completedIngotIdsRef = useRef<Set<string>>(new Set());
 
   const completedCount = useMemo(
     () => store.inkIngots.filter(ingot => ingot.isCompleted).length,
@@ -33,7 +48,13 @@ const App: React.FC = () => {
 
   const showToast = useCallback((message: string) => {
     setToast(message);
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      toastTimerRef.current = null;
+      setToast(null);
+    }, 3000);
   }, []);
 
   const triggerConfetti = useCallback(() => {
@@ -49,19 +70,30 @@ const App: React.FC = () => {
   }, []);
 
   const updateMaterialRatio = useCallback((materialId: string, ratio: number) => {
-    setStore(prev => ({
-      ...prev,
-      materials: prev.materials.map(m =>
-        m.id === materialId ? { ...m, ratio } : m
-      )
-    }));
+    setStore(prev => {
+      if (prev.materialsConfirmed) return prev;
+      return {
+        ...prev,
+        materials: prev.materials.map(m =>
+          m.id === materialId ? { ...m, ratio } : m
+        )
+      };
+    });
   }, []);
 
   const confirmMaterials = useCallback(() => {
     if (totalRatio > 30 || totalRatio === 0) return;
     setShowMaterialPanel(false);
-    setStore(prev => ({ ...prev, currentStage: 'pounding' }));
+    setStore(prev => {
+      if (prev.materialsConfirmed || prev.currentStage !== 'material') return prev;
+      return { ...prev, materialsConfirmed: true, currentStage: 'pounding' };
+    });
   }, [totalRatio]);
+
+  const openMaterialPanel = useCallback(() => {
+    if (store.currentStage !== 'material' || store.materialsConfirmed) return;
+    setShowMaterialPanel(true);
+  }, [store.currentStage, store.materialsConfirmed]);
 
   const addPounding = useCallback(() => {
     setStore(prev => ({
@@ -72,7 +104,9 @@ const App: React.FC = () => {
   }, []);
 
   const handlePoundingComplete = useCallback(() => {
-    setStore(prev => ({ ...prev, currentStage: 'molding' }));
+    setStore(prev =>
+      prev.currentStage === 'pounding' ? { ...prev, currentStage: 'molding' } : prev
+    );
   }, []);
 
   const selectMold = useCallback((moldType: MoldType) => {
@@ -99,7 +133,7 @@ const App: React.FC = () => {
     
     const newIngot: InkIngot = {
       id: uuidv4(),
-      materials: [...store.materials],
+      materials: store.materials.map(m => ({ ...m })),
       poundingCount: store.poundingCount,
       moldType: store.selectedMold,
       dryingProgress: 0,
@@ -113,49 +147,72 @@ const App: React.FC = () => {
       inkIngots: [...prev.inkIngots, newIngot],
       currentStage: 'drying',
       materials: MATERIALS_DATA.map(m => ({ ...m, ratio: 0 })),
+      materialsConfirmed: false,
       poundingCount: 0,
       selectedMold: null
     }));
 
-    setTimeout(() => {
-      setStore(prev => ({ ...prev, currentStage: 'material' }));
+    if (stageResetTimerRef.current !== null) {
+      window.clearTimeout(stageResetTimerRef.current);
+    }
+    stageResetTimerRef.current = window.setTimeout(() => {
+      stageResetTimerRef.current = null;
+      setStore(prev =>
+        prev.currentStage === 'drying' ? { ...prev, currentStage: 'material' } : prev
+      );
     }, 1000);
   }, [store.selectedMold, store.materials, store.poundingCount]);
 
+  // 晾晒进度按每块墨锭各自的开始时间独立推进，互不影响
   useEffect(() => {
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
+      const now = Date.now();
       setStore(prev => {
+        if (!prev.inkIngots.some(ingot => !ingot.isCompleted)) return prev;
+        let changed = false;
         const updatedIngots = prev.inkIngots.map(ingot => {
           if (ingot.isCompleted) return ingot;
-          const newProgress = Math.min(ingot.dryingProgress + 2, 100);
-          const isCompleted = newProgress >= 100;
-          if (isCompleted && !ingot.isCompleted) {
-            setTimeout(() => {
-              showToast(`【${getMoldName(ingot.moldType)}】晾晒完成！`);
-              triggerConfetti();
-            }, 0);
-          }
-          return { ...ingot, dryingProgress: newProgress, isCompleted };
+          const startTime = ingot.dryingStartTime ?? ingot.createdAt;
+          const newProgress = Math.min(100, Math.floor(((now - startTime) / 2000) * 2));
+          if (newProgress === ingot.dryingProgress) return ingot;
+          changed = true;
+          return { ...ingot, dryingProgress: newProgress, isCompleted: newProgress >= 100 };
         });
-        return { ...prev, inkIngots: updatedIngots };
+        return changed ? { ...prev, inkIngots: updatedIngots } : prev;
       });
-    }, 2000);
+    }, 250);
 
-    return () => clearInterval(interval);
-  }, [showToast, triggerConfetti]);
+    return () => window.clearInterval(interval);
+  }, []);
 
-  const getMoldName = (type: MoldType): string => {
-    const names: Record<MoldType, string> = {
-      circle: '圆形墨锭',
-      rectangle: '长方形墨锭',
-      ruyi: '如意形墨锭',
-      dragon: '龙纹形墨锭'
-    };
-    return names[type];
-  };
+  // 墨锭完成提示与彩带特效统一在这里触发，每块墨锭只触发一次
+  useEffect(() => {
+    store.inkIngots.forEach(ingot => {
+      if (ingot.isCompleted && !completedIngotIdsRef.current.has(ingot.id)) {
+        completedIngotIdsRef.current.add(ingot.id);
+        showToast(`【${getMoldName(ingot.moldType)}】晾晒完成！`);
+        triggerConfetti();
+      }
+    });
+  }, [store.inkIngots, showToast, triggerConfetti]);
 
   const resetToMaterialStage = useCallback(() => {
-    setStore(prev => ({ ...prev, currentStage: 'material' }));
+    if (stageResetTimerRef.current !== null) {
+      window.clearTimeout(stageResetTimerRef.current);
+      stageResetTimerRef.current = null;
+    }
+    setShowMaterialPanel(false);
+    setIsDragging(false);
+    setStore(prev => ({
+      ...prev,
+      materials: MATERIALS_DATA.map(m => ({ ...m, ratio: 0 })),
+      materialsConfirmed: false,
+      poundingCount: 0,
+      selectedMold: null,
+      currentStage: 'material'
+    }));
+    // 重挂载作坊场景，彻底清除倒计时、粒子等本地状态与计时器
+    setResetKey(prev => prev + 1);
   }, []);
 
   return (
@@ -221,12 +278,13 @@ const App: React.FC = () => {
         <div style={{ borderTop: '1px solid #d4c9b3', margin: '20px 0' }} />
 
         <Workshop
+          key={resetKey}
           currentStage={store.currentStage}
           materials={store.materials}
           poundingCount={store.poundingCount}
           selectedMold={store.selectedMold}
           inkIngots={store.inkIngots}
-          onOpenMaterialPanel={() => setShowMaterialPanel(true)}
+          onOpenMaterialPanel={openMaterialPanel}
           onPound={addPounding}
           onPoundingComplete={handlePoundingComplete}
           onDragStart={handleDragStart}
@@ -384,6 +442,7 @@ const MaterialPanel: React.FC<{
             取消
           </button>
           <button
+            data-testid="confirm-recipe"
             style={{
               padding: '12px 32px',
               backgroundColor: isOverLimit || isEmpty ? '#666' : '#ffd700',
@@ -512,7 +571,7 @@ const IngotDetail: React.FC<{
           <h3 style={{ fontSize: 20, marginBottom: 12, color: '#4a2c1a' }}>配方信息</h3>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {ingot.materials.filter(m => m.ratio > 0).map(m => (
-              <li key={m.id} style={{
+              <li key={m.id} data-testid="detail-material" style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 padding: '8px 0',

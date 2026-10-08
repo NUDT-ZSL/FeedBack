@@ -24,6 +24,7 @@ export type Stage = 'material' | 'pounding' | 'molding' | 'drying';
 
 export interface Store {
   materials: Material[];
+  materialsConfirmed: boolean;
   poundingCount: number;
   selectedMold: MoldType | null;
   currentStage: Stage;
