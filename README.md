@@ -55,3 +55,18 @@ export default tseslint.config({
   },
 })
 ```
+
+## 离线验证
+
+无需打开页面，本地批量验证加工、吸附、组装与重置链路：
+
+```bash
+npm install   # 首次需要
+npm run verify
+```
+
+测试位于 `tests/`，基于 Node 内置测试运行器（Node >= 22），覆盖：
+
+- `tests/assembly-flow.test.ts`：加工完成标记与可拖拽/可组装条件一致性、组装完成进入展示态、重复触发幂等
+- `tests/snap-distance.test.ts`：吸附阈值内/边界/超阈值判定，位置缺失与 NaN/Infinity 等异常输入
+- `tests/reset-reselect.test.ts`：重置后状态全量还原、重选木料不残留选择与组装结果

@@ -91,7 +91,7 @@ export function markAllProcessed(): void {
 
 export function assembleComponent(id: string): boolean {
   const component = assemblyState.components.find(c => c.id === id)
-  if (component && component.processed) {
+  if (component && component.processed && !component.assembled) {
     component.assembled = true
     component.position = [...component.targetPosition]
     checkAssemblyComplete()
@@ -111,8 +111,12 @@ export function checkAssemblyComplete(): boolean {
 }
 
 export function triggerHalo(): void {
+  if (haloTimer !== null) {
+    clearTimeout(haloTimer)
+  }
   assemblyState.showHalo = true
-  setTimeout(() => {
+  haloTimer = setTimeout(() => {
+    haloTimer = null
     assemblyState.showHalo = false
     assemblyState.autoRotate = true
   }, 1500)
@@ -147,6 +151,9 @@ export function checkSnapDistance(
   targetPosition: [number, number, number],
   threshold: number = 0.5
 ): boolean {
+  if (!isFiniteVector(position) || !isFiniteVector(targetPosition) || !Number.isFinite(threshold) || threshold < 0) {
+    return false
+  }
   const dx = position[0] - targetPosition[0]
   const dy = position[1] - targetPosition[1]
   const dz = position[2] - targetPosition[2]
@@ -154,7 +161,19 @@ export function checkSnapDistance(
   return distance < threshold
 }
 
+function isFiniteVector(value: unknown): value is [number, number, number] {
+  return Array.isArray(value)
+    && value.length === 3
+    && value.every(n => typeof n === 'number' && Number.isFinite(n))
+}
+
+let haloTimer: ReturnType<typeof setTimeout> | null = null
+
 export function resetAssembly(): void {
+  if (haloTimer !== null) {
+    clearTimeout(haloTimer)
+    haloTimer = null
+  }
   assemblyState.components = JSON.parse(JSON.stringify(initialComponents))
   assemblyState.assemblyComplete = false
   assemblyState.showHalo = false
