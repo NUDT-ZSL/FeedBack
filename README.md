@@ -1,57 +1,62 @@
-# React + TypeScript + Vite
+# 离线文档标注工作台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 React + TypeScript + Vite 的纯前端离线标注工具：在文档正文上选区创建批注，
+正文高亮与侧栏卡片联动，支持段落的插入 / 删除 / 文本修改，批注锚点在文档重排后
+始终落在原目标文本上。不依赖任何外部服务或 CDN，可完全离线运行。
 
-Currently, two official plugins are available:
+## 快速开始
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install        # 安装依赖（首次需要网络）
+npm run dev        # 启动开发服务器
+npm run verify     # 批量验证入口：类型检查 + 全部验收测试（离线可运行）
+npm run build      # 生产构建
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 架构：锚点与重排后的状态一致性
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
 ```
+src/anchor/
+  types.ts    数据模型：Paragraph / Anchor / Annotation / DocEdit / ExportEntry
+  engine.ts   锚点引擎：稳健锚点解析、增量重排、全量重算、顺序与导出（纯函数）
+  store.ts    批注存储：增量维护的正文顺序索引 + 创建/编辑/删除/导出/持久化
+  engine.test.ts / store.test.ts   验收测试
+src/components/
+  DocumentPane.tsx  正文：段落渲染、高亮、选区创建批注、段落级编辑
+  Sidebar.tsx       侧栏：批注卡片（顺序与正文高亮同源）、失效区
+src/App.tsx         组合层：store 订阅、导出下载、全量校验、重置
+```
+
+### 1. 锚点定位（不漂移、不丢失）
+
+批注不再保存全局偏移，而是保存**稳健锚点**（参考 W3C Web Annotation）：
+段落稳定 id + 段内偏移 + 引用文本 `exact` + 上下文 `prefix/suffix`。
+文档编辑后按 `原位命中 → 段内重定位 → 全文档搜索` 的优先级重解析；
+目标文本被删除时批注进入 `orphaned` 终态（保留在侧栏"已失效"区），
+绝不漂移到相邻段落，也不会静默丢失。
+
+### 2. 侧栏与正文顺序（单一事实来源）
+
+正文顺序只由一处定义：`engine.orderAnnotations`（段落序 + 段内偏移）。
+store 内以"段落桶"增量维护同一顺序，侧栏卡片、正文高亮、导出列表全部
+从该索引起源，三者顺序始终一致。
+
+### 3. 重排性能（增量 == 全量）
+
+`applyEdit` 只重解析受影响集合：插入段落零重解析；删除/改文只触碰本段锚点。
+核心不变量由测试锁定：**连续任意编辑后，增量重排结果与全量重算（reanchorAll）
+严格一致**。UI 顶栏实时显示"上次编辑重解析锚点数"，可直观验证增量行为。
+
+### 4. 导出
+
+`导出批注` 下载 JSON，每条导出条目都与当前正文锚点一一对应，
+失效批注（指向已删除文本）不出现在导出结果中。
+
+## 验收测试覆盖（`npm run verify`）
+
+- 插入段落后锚点不漂移（且零重解析）
+- 删除目标段落后批注按预期失效（不漂移、不导出）；删除非目标段落无影响
+- 段内文本编辑后锚点跟随目标文本；目标文本被删则失效
+- 连续多次编辑后：增量结果 == 全量重算；侧栏顺序 == 正文高亮扫描顺序
+- 导出结果与当前锚点一致，无指向已删除文本的条目
+- 固定种子随机编辑序列（60 步）下顺序索引三方一致；持久化往返一致
