@@ -1,28 +1,31 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, MutableRefObject } from 'react';
 import { Canvas, useFrame, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { RepairRegion, ToolType } from '@/types';
-
-interface RepairWorkshopProps {
-  regions: RepairRegion[];
-  selectedTool: ToolType | null;
-  isDragging: boolean;
-  onRepairComplete: (regionId: string, toolType: ToolType) => void;
-}
+import { useRepairStore } from '@/store/useRepairStore';
 
 interface RegionAnimation {
-  type: 'patina' | 'engraving' | 'glow' | 'error' | null;
+  type: 'glow' | 'error';
   progress: number;
   startTime: number;
 }
 
-const getStatusColor = (status: string): string => {
-  switch (status) {
-    case 'completed': return '#22c55e';
-    case 'in-progress': return '#f59e0b';
-    default: return '#ef4444';
+const PENDING_COLOR = '#ef4444';
+const PROGRESS_START_COLOR = '#f59e0b';
+const COMPLETED_COLOR = '#22c55e';
+const ERROR_COLOR = '#dc2626';
+
+const getRegionTargetColor = (region: RepairRegion): THREE.Color => {
+  if (region.status === 'completed') return new THREE.Color(COMPLETED_COLOR);
+  if (region.status === 'in-progress') {
+    return new THREE.Color().lerpColors(
+      new THREE.Color(PROGRESS_START_COLOR),
+      new THREE.Color(COMPLETED_COLOR),
+      Math.min(region.progress, 1),
+    );
   }
+  return new THREE.Color(PENDING_COLOR);
 };
 
 const Lighting = () => {
@@ -65,25 +68,21 @@ const RepairTable = () => {
 };
 
 interface BronzeDingProps {
-  animations: Map<string, RegionAnimation>;
+  patinaProgress: number;
 }
 
-const BronzeDing = ({ animations }: BronzeDingProps) => {
+const BronzeDing = ({ patinaProgress }: BronzeDingProps) => {
   const bodyRef = useRef<THREE.Mesh>(null);
   const patinaMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame(() => {
-    animations.forEach((anim) => {
-      if (anim.type === 'patina' && patinaMaterialRef.current) {
-        const progress = Math.min(anim.progress / 0.8, 1);
-        const color = new THREE.Color().lerpColors(
-          new THREE.Color('#4a7c59'),
-          new THREE.Color('#b87333'),
-          progress
-        );
-        patinaMaterialRef.current.color = color;
-      }
-    });
+    if (!patinaMaterialRef.current) return;
+    const target = new THREE.Color().lerpColors(
+      new THREE.Color('#4a7c59'),
+      new THREE.Color('#b87333'),
+      Math.min(patinaProgress, 1),
+    );
+    patinaMaterialRef.current.color = target;
   });
 
   return (
@@ -157,97 +156,83 @@ const BronzeDing = ({ animations }: BronzeDingProps) => {
 
 interface RepairRegionSphereProps {
   region: RepairRegion;
-  selectedTool: ToolType | null;
   isDragging: boolean;
-  onRegionPointerDown: (regionId: string) => void;
-  onRegionPointerUp: (regionId: string) => void;
+  onRegionEnter: (regionId: string) => void;
+  onRegionLeave: (regionId: string) => void;
   animState: RegionAnimation | undefined;
 }
 
 const RepairRegionSphere = ({
   region,
-  selectedTool,
   isDragging,
-  onRegionPointerDown,
-  onRegionPointerUp,
+  onRegionEnter,
+  onRegionLeave,
   animState,
 }: RepairRegionSphereProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const engravingRef = useRef<THREE.Mesh>(null);
 
   useFrame(() => {
     if (!meshRef.current) return;
 
-    const color = getStatusColor(region.status);
     const material = meshRef.current.material as THREE.MeshBasicMaterial;
+    const target = getRegionTargetColor(region);
 
-    if (animState) {
-      if (animState.type === 'error') {
-        const elapsed = (Date.now() - animState.startTime) / 1000;
-        const flashCount = Math.floor(elapsed / 0.3);
-        if (flashCount < 6) {
-          material.opacity = flashCount % 2 === 0 ? 0.8 : 0.1;
-          material.color.set('#dc2626');
-        } else {
-          material.opacity = 0.3;
-          material.color.set(color);
-        }
-      }
-
-      if (animState.type === 'glow' && glowRef.current) {
-        const glowMat = glowRef.current.material as THREE.MeshBasicMaterial;
-        const progress = Math.min(animState.progress / 1.0, 1);
-        glowRef.current.scale.setScalar(1 + progress * 0.6);
-        glowMat.opacity = (1 - progress) * 0.6;
-      }
-
-      if (animState.type === 'engraving' && engravingRef.current) {
-        const engMat = engravingRef.current.material as THREE.MeshBasicMaterial;
-        const progress = Math.min(animState.progress / 0.5, 1);
-        engravingRef.current.scale.setScalar(progress);
-        engMat.opacity = progress * 0.8;
+    if (animState?.type === 'error') {
+      const elapsed = (Date.now() - animState.startTime) / 1000;
+      const flashCount = Math.floor(elapsed / 0.3);
+      if (flashCount < 6) {
+        material.opacity = flashCount % 2 === 0 ? 0.8 : 0.1;
+        material.color.set(ERROR_COLOR);
+      } else {
+        material.color.copy(target);
+        material.opacity = 0.3;
       }
     } else {
-      material.opacity = 0.3;
-      material.color.set(color);
+      material.color.copy(target);
+      material.opacity =
+        region.status === 'in-progress' ? 0.3 + region.progress * 0.4 : 0.3;
+      if (isDragging) material.opacity = Math.max(material.opacity, 0.5);
     }
 
-    if (isDragging && selectedTool) {
-      material.opacity = 0.5;
+    if (glowRef.current) {
+      const glowMaterial = glowRef.current.material as THREE.MeshBasicMaterial;
+      if (animState?.type === 'glow') {
+        const progress = Math.min(animState.progress / 1.0, 1);
+        glowRef.current.visible = true;
+        glowRef.current.scale.setScalar(1 + progress * 0.6);
+        glowMaterial.opacity = (1 - progress) * 0.6;
+      } else {
+        glowRef.current.visible = false;
+      }
     }
   });
 
-  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+  const handlePointerOver = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    if (region.status !== 'completed' && selectedTool && isDragging) {
-      onRegionPointerDown(region.id);
-    }
-  }, [region.id, region.status, selectedTool, isDragging, onRegionPointerDown]);
+    onRegionEnter(region.id);
+  }, [region.id, onRegionEnter]);
 
-  const handlePointerUp = useCallback((e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation();
-    if (region.status !== 'completed' && selectedTool && isDragging) {
-      onRegionPointerUp(region.id);
-    }
-  }, [region.id, region.status, selectedTool, isDragging, onRegionPointerUp]);
+  const handlePointerOut = useCallback(() => {
+    onRegionLeave(region.id);
+  }, [region.id, onRegionLeave]);
 
   return (
     <group position={region.position}>
       <mesh
         ref={meshRef}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
       >
         <sphereGeometry args={[region.radius, 32, 32]} />
         <meshBasicMaterial
-          color={getStatusColor(region.status)}
+          color={PENDING_COLOR}
           transparent
           opacity={0.3}
         />
       </mesh>
 
-      <mesh ref={glowRef} scale={1} visible={!!(animState?.type === 'glow')}>
+      <mesh ref={glowRef} visible={false}>
         <sphereGeometry args={[region.radius, 32, 32]} />
         <meshBasicMaterial
           color="#ffd700"
@@ -256,166 +241,188 @@ const RepairRegionSphere = ({
           side={THREE.BackSide}
         />
       </mesh>
-
-      <mesh ref={engravingRef} scale={0} visible={!!(animState?.type === 'engraving')}>
-        <sphereGeometry args={[region.radius * 0.9, 32, 32]} />
-        <meshBasicMaterial
-          color="#5c3a21"
-          transparent
-          opacity={0}
-          wireframe
-        />
-      </mesh>
     </group>
   );
 };
 
 interface SceneContentProps {
-  regions: RepairRegion[];
-  selectedTool: ToolType | null;
-  isDragging: boolean;
-  onRepairComplete: (regionId: string, toolType: ToolType) => void;
   animations: Map<string, RegionAnimation>;
   setAnimations: React.Dispatch<React.SetStateAction<Map<string, RegionAnimation>>>;
-  activeRegions: Set<string>;
+  hoveredRegionsRef: MutableRefObject<Set<string>>;
+  activeToolRef: MutableRefObject<ToolType | null>;
 }
 
 const SceneContent = ({
-  regions,
-  selectedTool,
-  isDragging,
-  onRepairComplete,
   animations,
   setAnimations,
-  activeRegions,
+  hoveredRegionsRef,
+  activeToolRef,
 }: SceneContentProps) => {
-  const handleRegionPointerDown = useCallback((regionId: string) => {
-    if (!selectedTool || !isDragging) return;
-    const region = regions.find(r => r.id === regionId);
+  const regions = useRepairStore(state => state.regions);
+  const selectedTool = useRepairStore(state => state.selectedTool);
+  const isDragging = useRepairStore(state => state.isDragging);
+  const beginRegionRepair = useRepairStore(state => state.beginRegionRepair);
+  const advanceRegionRepair = useRepairStore(state => state.advanceRegionRepair);
+
+  const handleRegionEnter = useCallback((regionId: string) => {
+    hoveredRegionsRef.current.add(regionId);
+    const tool = activeToolRef.current;
+    if (!tool) return;
+
+    const region = useRepairStore.getState().regions.find(r => r.id === regionId);
     if (!region || region.status === 'completed') return;
+
+    if (region.requiredTool === tool) {
+      beginRegionRepair(regionId, tool);
+      return;
+    }
 
     setAnimations(prev => {
       const next = new Map(prev);
       next.set(regionId, {
-        type: region.type as 'patina' | 'engraving',
+        type: 'error',
         progress: 0,
         startTime: Date.now(),
       });
       return next;
     });
-  }, [selectedTool, isDragging, regions, setAnimations]);
+  }, [beginRegionRepair, hoveredRegionsRef, activeToolRef, setAnimations]);
 
-  const handleRegionPointerUp = useCallback((regionId: string) => {
-    if (!selectedTool || !isDragging) return;
-    const region = regions.find(r => r.id === regionId);
-    if (!region || region.status === 'completed') return;
-
-    if (region.requiredTool === selectedTool) {
-      setTimeout(() => {
-        setAnimations(prev => {
-          const next = new Map(prev);
-          next.set(regionId, {
-            type: 'glow',
-            progress: 0,
-            startTime: Date.now(),
-          });
-          return next;
-        });
-
-        setTimeout(() => {
-          onRepairComplete(regionId, selectedTool);
-          setAnimations(prev => {
-            const next = new Map(prev);
-            next.delete(regionId);
-            return next;
-          });
-        }, 1000);
-      }, 800);
-    } else {
-      setAnimations(prev => {
-        const next = new Map(prev);
-        next.set(regionId, {
-          type: 'error',
-          progress: 0,
-          startTime: Date.now(),
-        });
-        return next;
-      });
-
-      setTimeout(() => {
-        setAnimations(prev => {
-          const next = new Map(prev);
-          next.delete(regionId);
-          return next;
-        });
-      }, 1800);
-    }
-  }, [selectedTool, isDragging, regions, onRepairComplete, setAnimations]);
+  const handleRegionLeave = useCallback((regionId: string) => {
+    hoveredRegionsRef.current.delete(regionId);
+  }, [hoveredRegionsRef]);
 
   useFrame((_, delta) => {
+    if (useRepairStore.getState().isDragging) {
+      hoveredRegionsRef.current.forEach(regionId => {
+        advanceRegionRepair(regionId, delta);
+      });
+    }
+
     setAnimations(prev => {
       let changed = false;
       const next = new Map(prev);
       next.forEach((anim, key) => {
+        const duration = anim.type === 'glow' ? 1.0 : 1.8;
         const newProgress = anim.progress + delta;
-        const duration = anim.type === 'patina' ? 0.8 :
-                        anim.type === 'engraving' ? 0.5 :
-                        anim.type === 'glow' ? 1.0 : 1.8;
-        if (newProgress <= duration) {
+        if (newProgress > duration) {
+          next.delete(key);
+        } else {
           next.set(key, { ...anim, progress: newProgress });
-          changed = true;
         }
+        changed = true;
       });
       return changed ? next : prev;
     });
   });
 
+  const patinaRegions = regions.filter(region => region.type === 'patina');
+  const patinaProgress = patinaRegions.length === 0 ? 0 :
+    patinaRegions.reduce(
+      (sum, region) => sum + (region.status === 'completed' ? 1 : region.progress),
+      0,
+    ) / patinaRegions.length;
+
   return (
     <>
       <Lighting />
       <RepairTable />
-      <BronzeDing animations={animations} />
+      <BronzeDing patinaProgress={patinaProgress} />
       {regions.map(region => (
         <RepairRegionSphere
           key={region.id}
           region={region}
-          selectedTool={selectedTool}
           isDragging={isDragging}
-          onRegionPointerDown={handleRegionPointerDown}
-          onRegionPointerUp={handleRegionPointerUp}
+          onRegionEnter={handleRegionEnter}
+          onRegionLeave={handleRegionLeave}
           animState={animations.get(region.id)}
         />
       ))}
       <OrbitControls
+        enabled={!selectedTool}
         enablePan={false}
         minDistance={3}
         maxDistance={12}
         minPolarAngle={Math.PI / 12}
         maxPolarAngle={Math.PI * 5 / 12}
-        autoRotate={!isDragging && activeRegions.size === 0}
+        autoRotate={!selectedTool}
         autoRotateSpeed={0.5}
       />
     </>
   );
 };
 
-export const RepairWorkshop = ({
-  regions,
-  selectedTool,
-  isDragging,
-  onRepairComplete,
-}: RepairWorkshopProps) => {
+export const RepairWorkshop = () => {
+  const selectedTool = useRepairStore(state => state.selectedTool);
+  const setIsDragging = useRepairStore(state => state.setIsDragging);
+  const setDragPosition = useRepairStore(state => state.setDragPosition);
+  const settleAllRegions = useRepairStore(state => state.settleAllRegions);
+
   const [animations, setAnimations] = useState<Map<string, RegionAnimation>>(new Map());
-  const [activeRegions, setActiveRegions] = useState<Set<string>>(new Set());
+  const hoveredRegionsRef = useRef<Set<string>>(new Set());
+  const activeToolRef = useRef<ToolType | null>(null);
+  const draggingRef = useRef(false);
+
+  const endDrag = useCallback(() => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+
+    const tool = activeToolRef.current;
+    activeToolRef.current = null;
+    hoveredRegionsRef.current.clear();
+
+    if (tool) {
+      const completedRegionIds = settleAllRegions(tool);
+      if (completedRegionIds.length > 0) {
+        setAnimations(prev => {
+          const next = new Map(prev);
+          completedRegionIds.forEach(regionId => {
+            next.set(regionId, {
+              type: 'glow',
+              progress: 0,
+              startTime: Date.now(),
+            });
+          });
+          return next;
+        });
+      }
+    }
+
+    setIsDragging(false);
+    setDragPosition(null);
+  }, [settleAllRegions, setIsDragging, setDragPosition]);
 
   useEffect(() => {
-    const active = new Set<string>();
-    animations.forEach((_, key) => active.add(key));
-    setActiveRegions(active);
-  }, [animations]);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    return () => {
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
+    };
+  }, [endDrag]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!selectedTool || e.button !== 0) return;
+    activeToolRef.current = selectedTool;
+    draggingRef.current = true;
+    setIsDragging(true);
+    setDragPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    setDragPosition({ x: e.clientX, y: e.clientY });
+  };
 
   return (
-    <div className="w-full h-full">
+    <div
+      className="w-full h-full"
+      style={{ touchAction: 'none' }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerLeave={endDrag}
+    >
       <Canvas
         shadows
         camera={{ position: [5, 3, 5], fov: 50 }}
@@ -424,13 +431,10 @@ export const RepairWorkshop = ({
         <color attach="background" args={['#1a1a2e']} />
         <fog attach="fog" args={['#1a1a2e', 8, 20]} />
         <SceneContent
-          regions={regions}
-          selectedTool={selectedTool}
-          isDragging={isDragging}
-          onRepairComplete={onRepairComplete}
           animations={animations}
           setAnimations={setAnimations}
-          activeRegions={activeRegions}
+          hoveredRegionsRef={hoveredRegionsRef}
+          activeToolRef={activeToolRef}
         />
       </Canvas>
     </div>

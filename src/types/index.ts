@@ -19,6 +19,7 @@ export interface RepairRegion {
   position: [number, number, number];
   radius: number;
   status: RepairStatus;
+  progress: number;
   requiredTool: ToolType;
   description: string;
 }
@@ -42,12 +43,4 @@ export interface RepairState {
   dragPosition: { x: number; y: number } | null;
   showScrollViewer: boolean;
   completionRate: number;
-  errorRegionId: string | null;
-  glowRegionId: string | null;
-}
-
-export interface AnimationState {
-  type: 'repair' | 'glow' | 'error' | null;
-  regionId: string | null;
-  progress: number;
 }

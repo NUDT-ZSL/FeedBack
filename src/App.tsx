@@ -7,7 +7,6 @@ import { getToolName } from '@/utils/tools';
 
 export default function App() {
   const {
-    regions,
     records,
     selectedTool,
     isDragging,
@@ -29,7 +28,7 @@ export default function App() {
       </div>
 
       <div className="canvas-container">
-        <RepairWorkshop regions={regions} />
+        <RepairWorkshop />
       </div>
 
       <div className="tool-panel">
@@ -112,7 +111,14 @@ export default function App() {
         </div>
       )}
 
-      {showScrollViewer && <ScrollViewer onClose={() => setShowScrollViewer(false)} />}
+      {showScrollViewer && (
+        <ScrollViewer
+          records={records}
+          isOpen={showScrollViewer}
+          completionRate={completionRate}
+          onClose={() => setShowScrollViewer(false)}
+        />
+      )}
     </div>
   );
 }
