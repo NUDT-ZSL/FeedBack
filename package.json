@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "esbuild scripts/verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/observatory-verify.mjs --log-level=warning && node node_modules/.cache/observatory-verify.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",

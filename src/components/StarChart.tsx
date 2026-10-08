@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useStar } from '../context/StarContext';
 import { CelestialBody, PLANET_DATA, STAR_NAMES } from '../types';
 import { sphericalToCartesian, cartesianToSpherical, getStarColor, getStarSize, lerp } from '../utils';
+import { getSkyRotationDeg } from '../store/observationStore';
 
 const SKY_RADIUS = 50;
 
@@ -309,7 +310,7 @@ const StarChart: React.FC = () => {
 
   const handleStarClick = useCallback((star: CelestialBody) => {
     const { ra, dec } = cartesianToSpherical(...star.position);
-    const adjustedRa = (ra - currentRotation.current * (180 / Math.PI) + 360) % 360;
+    const adjustedRa = (ra - getSkyRotationDeg() + 360) % 360;
     const adjustedStar: CelestialBody = {
       ...star,
       position: sphericalToCartesian(SKY_RADIUS, adjustedRa, dec),
@@ -319,7 +320,7 @@ const StarChart: React.FC = () => {
     } else {
       setSelectedStar(adjustedStar);
     }
-  }, [selectedStar, setSelectedStar, currentRotation.current]);
+  }, [selectedStar, setSelectedStar]);
 
   const handleStarHover = useCallback((star: CelestialBody | null, e?: React.PointerEvent) => {
     if (star && e) {
@@ -336,7 +337,7 @@ const StarChart: React.FC = () => {
     const z = planet.orbitRadius * Math.sin(currentAngle);
     const y = Math.sin(currentAngle * 0.7) * 2;
     const { ra, dec } = cartesianToSpherical(x, y, z);
-    const adjustedRa = (ra - currentRotation.current * (180 / Math.PI) + 360) % 360;
+    const adjustedRa = (ra - getSkyRotationDeg() + 360) % 360;
     const planetBody: CelestialBody = {
       position: sphericalToCartesian(SKY_RADIUS, adjustedRa, dec),
       color: planet.color,
@@ -352,7 +353,7 @@ const StarChart: React.FC = () => {
     } else {
       setSelectedStar(planetBody);
     }
-  }, [selectedStar, setSelectedStar, currentRotation.current]);
+  }, [selectedStar, setSelectedStar]);
 
   const handleMoonClick = useCallback(() => {
     const angle = (currentHour / 24) * Math.PI * 2;
@@ -361,7 +362,7 @@ const StarChart: React.FC = () => {
     const y = radius * Math.sin(angle * 0.5) + 5;
     const z = radius * Math.sin(angle);
     const { ra, dec } = cartesianToSpherical(x, y, z);
-    const adjustedRa = (ra - currentRotation.current * (180 / Math.PI) + 360) % 360;
+    const adjustedRa = (ra - getSkyRotationDeg() + 360) % 360;
     const moonBody: CelestialBody = {
       position: sphericalToCartesian(SKY_RADIUS, adjustedRa, dec),
       color: '#f5f5dc',
@@ -377,7 +378,7 @@ const StarChart: React.FC = () => {
     } else {
       setSelectedStar(moonBody);
     }
-  }, [currentHour, selectedStar, setSelectedStar, currentRotation.current]);
+  }, [currentHour, selectedStar, setSelectedStar]);
 
   const getPlanetBody = useCallback((planet: typeof PLANET_DATA[0], angle: number): CelestialBody => {
     const x = planet.orbitRadius * Math.cos(angle);

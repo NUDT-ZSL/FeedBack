@@ -1,28 +1,27 @@
 import React, { useState } from 'react';
 import { useStar } from '../context/StarContext';
 import { formatDate } from '../utils';
+import { recordCurrentObservation, buildChartAnnotations } from '../store/observationStore';
 import { saveAs } from 'file-saver';
 
 const ControlButtons: React.FC = () => {
-  const { selectedStar, currentHour, ra, dec, addRecord, setShowToast } = useStar();
+  const { selectedStar, showToastMessage } = useStar();
   const [recordAnimating, setRecordAnimating] = useState(false);
 
   const handleRecord = () => {
     if (!selectedStar) {
-      setShowToast('请先选择一颗星体');
-      setTimeout(() => setShowToast(null), 3000);
+      showToastMessage('请先选择一颗星体');
       return;
     }
     setRecordAnimating(true);
-    addRecord(selectedStar, currentHour, ra, dec);
+    recordCurrentObservation();
     setTimeout(() => setRecordAnimating(false), 100);
   };
 
   const handlePaint = () => {
     const canvas = document.querySelector('canvas');
     if (!canvas) {
-      setShowToast('无法获取画布');
-      setTimeout(() => setShowToast(null), 3000);
+      showToastMessage('无法获取画布');
       return;
     }
 
@@ -70,19 +69,12 @@ const ControlButtons: React.FC = () => {
     }
 
     const now = new Date();
+    const { timeLine, coordLine } = buildChartAnnotations(now);
     ctx.font = '12px "Noto Serif SC", serif';
     ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
     ctx.textAlign = 'right';
-    ctx.fillText(
-      `观测时间: ${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${currentHour.toFixed(0)}时`,
-      canvas.width - 20,
-      canvas.height - 30
-    );
-    ctx.fillText(
-      `赤经: ${ra.toFixed(1)}° 赤纬: ${dec.toFixed(1)}°`,
-      canvas.width - 20,
-      canvas.height - 15
-    );
+    ctx.fillText(timeLine, canvas.width - 20, canvas.height - 30);
+    ctx.fillText(coordLine, canvas.width - 20, canvas.height - 15);
 
     overlayCanvas.toBlob((blob) => {
       if (blob) {

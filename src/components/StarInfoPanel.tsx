@@ -1,13 +1,15 @@
 import React from 'react';
 import { useStar } from '../context/StarContext';
-import { cartesianToSpherical } from '../utils';
+import { getSelectedStarCoords } from '../store/observationStore';
 
 const StarInfoPanel: React.FC = () => {
   const { selectedStar } = useStar();
 
   if (!selectedStar) return null;
 
-  const { ra, dec } = cartesianToSpherical(...selectedStar.position);
+  const coords = getSelectedStarCoords();
+  if (!coords) return null;
+  const { ra, dec } = coords;
 
   return (
     <div
